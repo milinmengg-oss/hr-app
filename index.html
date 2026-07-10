@@ -228,9 +228,9 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
     <!-- EMPLOYEES -->
     <div class="pg" id="pgEmps">
       <div class="pt">👥 ข้อมูลพนักงาน</div>
-      <div class="c">
+      <div class="c" style="overflow-x:auto">
         <div class="sb2"><input type="text" id="empSrch" placeholder="🔍 ค้นหาชื่อ แผนก ตำแหน่ง..." oninput="renderEmps()"></div>
-        <table><thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th><th>เบอร์</th><th>ใบหน้า</th><th>สถานะ</th></tr></thead>
+        <table style="min-width:600px"><thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th><th>เบอร์</th><th>ใบหน้า</th><th>สถานะ</th></tr></thead>
         <tbody id="empTable"></tbody></table>
       </div>
     </div>
@@ -339,9 +339,9 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
         <input type="month" id="payMonth" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff"></div>
         <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="renderPayroll()">🔄 คำนวณ</button>
       </div>
-      <div id="payStats" class="sg" style="grid-template-columns:repeat(4,1fr);margin-top:16px"></div>
-      <div class="c">
-        <table><thead><tr><th>พนักงาน</th><th>แผนก</th><th>เงินเดือน</th><th>วันทำงาน</th><th>ขาด</th><th>มาสาย</th><th>ลา</th><th>เบิกล่วงหน้า</th><th>สุทธิ</th></tr></thead>
+      <div id="payStats" class="sg" style="grid-template-columns:repeat(2,1fr);margin-top:16px"></div>
+      <div class="c" style="overflow-x:auto">
+        <table style="min-width:700px"><thead><tr><th>พนักงาน</th><th>แผนก</th><th>เงินเดือน</th><th>วันทำงาน</th><th>ขาด</th><th>มาสาย</th><th>ลา</th><th>เบิกล่วงหน้า</th><th>สุทธิ</th></tr></thead>
         <tbody id="payTable"></tbody></table>
       </div>
     </div>
@@ -351,10 +351,12 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
       <div class="c">
         <div class="ct">⏰ เวลาทำงานแยกตามแผนก</div>
         <p style="color:#94a3b8;font-size:12px;margin-bottom:14px">ตั้งค่าเวลาเข้า-ออกงานและผ่อนผันมาสายสำหรับแต่ละแผนก ระบบจะใช้ข้อมูลนี้คำนวณมาสายและหักเงินเดือนอัตโนมัติ</p>
-        <table>
-          <thead><tr><th>แผนก</th><th>เวลาเข้างาน</th><th>เวลาออกงาน</th><th>ผ่อนผันมาสาย (นาที)</th><th>หักมาสาย/ครั้ง (บาท)</th></tr></thead>
+        <div style="overflow-x:auto">
+        <table style="min-width:600px">
+          <thead><tr><th style="min-width:100px">แผนก</th><th>เวลาเข้างาน</th><th>เวลาออกงาน</th><th>ผ่อนผันมาสาย (นาที)</th><th>หักมาสาย/ครั้ง (บาท)</th></tr></thead>
           <tbody id="deptHoursTable"></tbody>
         </table>
+        </div>
         <button class="btn btn-s btn-sm" onclick="addDeptRow()" style="margin-top:12px">+ เพิ่มแผนก</button>
       </div>
       <div class="c">
