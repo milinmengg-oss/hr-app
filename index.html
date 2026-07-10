@@ -10,7 +10,7 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Prompt',Arial,sans-serif;background:linear-gradient(135deg,#fff1f2 0%,#fdf2f8 50%,#fce7f3 100%);color:#1e293b;font-size:14px;min-height:100vh}
+body{font-family:'Prompt',Arial,sans-serif;background:linear-gradient(135deg,#fff1f2 0%,#fdf2f8 50%,#fce7f3 100%);color:#1e293b;font-size:14px;min-height:100vh;transition:background .4s,color .3s}
 .screen{display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#f43f5e 0%,#ec4899 50%,#a855f7 100%)}
 .screen.show{display:flex}
 .card{background:rgba(255,255,255,0.97);backdrop-filter:blur(20px);border-radius:28px;padding:38px;width:420px;box-shadow:0 25px 80px rgba(236,72,153,.3),0 0 0 1px rgba(255,255,255,.6)}
@@ -97,6 +97,73 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 @media(max-width:768px){.sidebar{display:none;position:fixed;top:62px;left:0;bottom:0;width:230px;z-index:200;background:linear-gradient(180deg,#fff 0%,#fff7fb 100%);box-shadow:4px 0 24px rgba(236,72,153,.2)}.sidebar.open{display:block}.main{margin-left:0}.sg{grid-template-columns:1fr 1fr}.gr2,.gr3{grid-template-columns:1fr}.menu-btn{display:flex!important}}
 .menu-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:199;background:rgba(80,7,36,.35);backdrop-filter:blur(2px)}
 .menu-overlay.open{display:block}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideRight{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:translateX(0)}}
+@keyframes pulseRing{0%,100%{box-shadow:0 0 0 0 rgba(236,72,153,.5)}60%{box-shadow:0 0 0 14px rgba(236,72,153,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes toastIn{from{opacity:0;transform:translateX(120%)}to{opacity:1;transform:translateX(0)}}
+@keyframes toastOut{from{opacity:1;transform:translateX(0)}to{opacity:0;transform:translateX(120%)}}
+@keyframes confetti{0%{transform:translateY(0) rotate(0);opacity:1}100%{transform:translateY(80px) rotate(720deg);opacity:0}}
+@keyframes shimmer{0%{background-position:-400px 0}100%{background-position:400px 0}}
+@keyframes gradientShift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+
+.pg.act{animation:fadeUp .35s cubic-bezier(.22,1,.36,1)}
+.sc{transition:transform .2s,box-shadow .2s}
+.sc:hover{transform:translateY(-4px) scale(1.02);box-shadow:0 12px 30px rgba(0,0,0,.15)!important}
+.c{transition:box-shadow .2s}
+.btn-p{animation:none}
+.btn-p:active{transform:scale(.97)}
+#btnScan{animation:pulseRing 2s infinite}
+
+/* Toast */
+#toastContainer{position:fixed;top:76px;right:18px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:14px;font-size:13px;font-weight:600;min-width:240px;max-width:320px;backdrop-filter:blur(12px);box-shadow:0 8px 30px rgba(0,0,0,.18);animation:toastIn .35s cubic-bezier(.22,1,.36,1) forwards;pointer-events:auto}
+.toast-s{background:linear-gradient(135deg,rgba(209,250,229,.95),rgba(167,243,208,.95));color:#065f46;border:1px solid #6ee7b7}
+.toast-e{background:linear-gradient(135deg,rgba(254,226,226,.95),rgba(252,165,165,.95));color:#991b1b;border:1px solid #fca5a5}
+.toast-i{background:linear-gradient(135deg,rgba(219,234,254,.95),rgba(191,219,254,.95));color:#1e40af;border:1px solid #93c5fd}
+.toast-w{background:linear-gradient(135deg,rgba(254,243,199,.95),rgba(253,230,138,.95));color:#92400e;border:1px solid #fcd34d}
+
+/* Dark Mode */
+body.dark{background:linear-gradient(135deg,#0f0a1e 0%,#1a0a2e 50%,#0d1117 100%)!important;color:#e2e8f0}
+body.dark .sidebar{background:linear-gradient(180deg,#1a0d2e 0%,#0f0820 100%)!important;border-right-color:#2d1b4e!important}
+body.dark .ni{color:#94a3b8}
+body.dark .ni:hover,body.dark .ni.act{background:linear-gradient(135deg,rgba(236,72,153,.15),rgba(244,63,94,.1))!important;color:#f9a8d4}
+body.dark .nsec{color:#6b21a8}
+body.dark .c{background:rgba(26,13,46,.8)!important;border-color:rgba(139,92,246,.2)!important;box-shadow:0 4px 24px rgba(0,0,0,.3)!important}
+body.dark .ct{background:linear-gradient(135deg,#f9a8d4,#fda4af);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+body.dark .pt{background:linear-gradient(135deg,#f9a8d4,#fda4af,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+body.dark table th{background:rgba(139,92,246,.1)!important;color:#f9a8d4;border-bottom-color:#2d1b4e}
+body.dark table td{border-bottom-color:#1e1040;color:#cbd5e1}
+body.dark tr:hover td{background:rgba(139,92,246,.06)!important}
+body.dark .fg input,body.dark .fg select,body.dark .fg textarea{background:#1a0d2e!important;border-color:#4c1d95!important;color:#e2e8f0}
+body.dark .fg label{color:#f9a8d4}
+body.dark .modal{background:#1a0d2e!important;border-color:#4c1d95!important;color:#e2e8f0}
+body.dark .tabs{background:rgba(139,92,246,.1)!important;border-color:#4c1d95!important}
+body.dark .tab{color:#c4b5fd}
+body.dark .btn-s{background:rgba(139,92,246,.15)!important;color:#f9a8d4;border-color:#4c1d95!important}
+body.dark .btn-s:hover{background:rgba(139,92,246,.25)!important}
+body.dark .sb2 input{background:#1a0d2e!important;border-color:#4c1d95!important;color:#e2e8f0}
+body.dark .clk-time{background:linear-gradient(135deg,#f9a8d4,#fda4af,#c4b5fd);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+body.dark .clk-date{color:#f9a8d4}
+body.dark .sc{box-shadow:0 6px 20px rgba(0,0,0,.4)!important}
+body.dark .topbar{background:linear-gradient(135deg,#831843 0%,#be185d 60%,#7e22ce 100%)!important}
+
+/* Dark toggle btn */
+#darkToggle{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:.2s;font-family:inherit}
+#darkToggle:hover{background:rgba(255,255,255,.25)}
+
+/* Confetti */
+.confetti-piece{position:fixed;width:10px;height:10px;border-radius:2px;pointer-events:none;z-index:9999;animation:confetti .8s ease-out forwards}
+
+/* Skeleton loading */
+.skeleton{background:linear-gradient(90deg,#fbcfe8 25%,#fce7f3 50%,#fbcfe8 75%);background-size:400px 100%;animation:shimmer 1.2s infinite;border-radius:8px;height:16px;margin-bottom:8px}
+body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d1b4e 75%);background-size:400px 100%;animation:shimmer 1.2s infinite}
+
+/* Animated gradient login bg */
+#sLogin,#sLoading{background-size:300% 300%!important;animation:gradientShift 6s ease infinite!important}
 </style>
 </head>
 <body>
@@ -128,6 +195,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 </div>
 
 <!-- MAIN APP -->
+<div id="toastContainer"></div>
 <div id="sApp" style="display:none">
   <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
   <div class="topbar">
@@ -140,6 +208,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
       <div class="av" id="tAv">A</div>
       <span id="tName"></span>
       <span id="tRole" style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:12px;font-size:10px"></span>
+      <button id="darkToggle" onclick="toggleDark()">🌙</button>
       <button class="btn btn-s btn-sm" onclick="logout()">ออก</button>
     </div>
   </div>
@@ -590,11 +659,19 @@ async function api(action, data = {}) {
       }
       case 'getSettings': {
         const doc = await db.collection('settings').doc('hr').get();
-        return {success:true, settings: doc.exists ? doc.data() : {workStart:'09:00',workEnd:'18:00',grace:15,annual:10,sick:30,personal:3,absentPct:100,workDays:26}};
+        return {success:true, settings: doc.exists ? doc.data() : {annual:10,sick:30,personal:3,absentPct:100,workDays:26}};
       }
       case 'saveSettings': {
         await db.collection('settings').doc('hr').set(data.settings, {merge:true});
         return {success:true};
+      }
+      case 'saveBranding': {
+        await db.collection('settings').doc('branding').set({companyName:data.companyName,logo:data.logo});
+        return {success:true};
+      }
+      case 'getBranding': {
+        const doc = await db.collection('settings').doc('branding').get();
+        return {success:true, branding: doc.exists ? doc.data() : {companyName:'ABC HR System',logo:''}};
       }
       case 'submitAdvance': {
         const id = 'ADV'+Date.now();
@@ -643,6 +720,9 @@ async function initApp() {
   try {
     setLoad('กำลังเชื่อมต่อ Firebase...', 5);
     await initAdmin();
+    // โหลด branding จาก Firebase
+    const bRes = await api('getBranding',{});
+    if (bRes.success && bRes.branding) applyBranding(bRes.branding.logo, bRes.branding.companyName);
     setLoad('กำลังโหลด Face Detection (1/3)...', 20);
     await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
     setLoad('กำลังโหลด Face Landmarks (2/3)...', 55);
@@ -860,6 +940,8 @@ async function doClockIn(faceVerified) {
     attCache.unshift({id:r.id, empId:me.id, date:today, checkIn:t, checkOut:'', faceVerified:faceVerified?'yes':'no'});
     resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คอินสำเร็จ เวลา ' + t + ' น.' + (faceVerified?' (ยืนยันด้วยใบหน้า)':'') + '</div>';
     document.getElementById('camStatus').textContent = '';
+    confettiBurst();
+    showToast('เช็คอินสำเร็จ! เวลา ' + t + ' น. 🎉','s');
     setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
   } else {
     document.getElementById('camStatus').textContent = '';
@@ -888,16 +970,16 @@ async function doClockOut(faceVerified) {
 async function manualCheckout() {
   const today = todayStr();
   const idx = attCache.findIndex(a => a.empId === me.id && a.date === today && !a.checkOut);
-  if (idx < 0) { alert('ไม่พบข้อมูลเช็คอินวันนี้'); return; }
+  if (idx < 0) { showToast('ไม่พบข้อมูลเช็คอินวันนี้','w'); return; }
   if (!confirm('เช็คเอาท์โดยไม่สแกนใบหน้า?')) return;
   const t = timeStr();
   const r = await api('clockOut', {empId:me.id, date:today, time:t});
-  if (r.success) { attCache[idx].checkOut = t; renderCheckin(); }
-  else alert('เกิดข้อผิดพลาด: ' + r.error);
+  if (r.success) { attCache[idx].checkOut = t; showToast('เช็คเอาท์เรียบร้อย ✨','s'); renderCheckin(); }
+  else showToast('เกิดข้อผิดพลาด: ' + r.error,'e');
 }
 async function manualCheckin() {
   const today = todayStr();
-  if (attCache.find(a => a.empId === me.id && a.date === today)) { alert('เช็คอินวันนี้แล้ว'); return; }
+  if (attCache.find(a => a.empId === me.id && a.date === today)) { showToast('เช็คอินวันนี้แล้ว','w'); return; }
   if (!confirm('เช็คอินโดยไม่สแกนใบหน้า?')) return;
   await doClockIn(false);
   renderCheckin();
@@ -992,6 +1074,7 @@ async function submitLeave() {
   const r = await api('submitLeave',{empId:me.id,type,days:Number(days),startDate:start,endDate:end,reason,submittedAt:todayStr()});
   if (r.success) {
     leaveCache.unshift({id:r.id,empId:me.id,type,startDate:start,endDate:end,days,reason,status:'รออนุมัติ',submittedAt:todayStr()});
+    showToast('ส่งใบลาเรียบร้อยแล้ว 📤 รอการอนุมัติ','s');
     al.innerHTML='<div class="al al-s">✅ ส่งใบลาเรียบร้อย รอการอนุมัติ</div>';
     document.getElementById('lReason').value='';
   } else al.innerHTML='<div class="al al-e">❌ '+r.error+'</div>';
@@ -1029,7 +1112,11 @@ function approveTab(t,el) {
 }
 async function appLeave(id,status) {
   const r=await api('approveLeave',{id,status,approvedBy:me.id});
-  if(r.success){const idx=leaveCache.findIndex(l=>l.id===id);if(idx>=0)leaveCache[idx].status=status;}
+  if(r.success){
+    const idx=leaveCache.findIndex(l=>l.id===id);
+    if(idx>=0) leaveCache[idx].status=status;
+    showToast(status==='อนุมัติ' ? '✅ อนุมัติใบลาเรียบร้อย' : '❌ ไม่อนุมัติใบลา', status==='อนุมัติ'?'s':'w');
+  }
   renderApprove();
 }
 
@@ -1087,6 +1174,7 @@ async function saveEmp() {
   const action=editEmpId?'updateEmployee':'addEmployee';
   const r=await api(action,data);
   if(r.success){
+    showToast(editEmpId ? 'แก้ไขข้อมูลพนักงานเรียบร้อย ✅' : 'เพิ่มพนักงานใหม่เรียบร้อย ✅','s');
     closeModal('mEmp');
     const fresh=await api('getEmployees');
     if(fresh.success) empCache=fresh.employees;
@@ -1112,7 +1200,8 @@ function renderReport() {
     {lb:'อนุมัติแล้ว',vl:approved.length,sb:'ใบ',c:'#059669'},
     {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#d97706'},
     {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#7c3aed'},
-  ].map(s=>`<div class="sc"><div class="lb">${s.lb}</div><div class="vl" style="color:${s.c}">${s.vl}</div><div class="sb">${s.sb}</div></div>`).join('');
+  ].map(s=>`<div class="sc" style="animation:fadeUp .4s ease"><div class="lb">${s.lb}</div><div class="vl sc-num" data-target="${s.vl}" style="color:${s.c}">0</div><div class="sb">${s.sb}</div></div>`).join('');
+  document.querySelectorAll('.sc-num').forEach(el => animateNum(el, parseInt(el.dataset.target)||0));
   const byType={};leaveCache.forEach(l=>{byType[l.type]=(byType[l.type]||0)+Number(l.days);});
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
@@ -1143,9 +1232,11 @@ async function initSettings() {
   renderDeptHoursTable();
 }
 
-function applyBranding() {
-  const logo = localStorage.getItem('hr_logo');
-  const name = localStorage.getItem('hr_company') || 'ABC HR System';
+function applyBranding(logo, name) {
+  logo = logo || localStorage.getItem('hr_logo') || '';
+  name = name || localStorage.getItem('hr_company') || 'ABC HR System';
+  if (logo) localStorage.setItem('hr_logo', logo);
+  if (name) localStorage.setItem('hr_company', name);
   // topbar
   const titleEl = document.getElementById('topTitle');
   const logoEl = document.getElementById('topLogo');
@@ -1235,16 +1326,21 @@ async function saveSettings() {
     workDays:Number(document.getElementById('stWorkDays').value),
     deptHours
   };
-  // บันทึกโลโก้และชื่อบริษัท
-  const companyName = document.getElementById('stCompanyName').value.trim();
-  if (companyName) localStorage.setItem('hr_company', companyName);
+  // บันทึกโลโก้และชื่อบริษัทลง Firebase
+  const companyName = document.getElementById('stCompanyName').value.trim() || 'ABC HR System';
   const logoFile = document.getElementById('stLogo').files[0];
+  const saveBrandingToFirebase = async (logoBase64) => {
+    await api('saveBranding', {companyName, logo: logoBase64||localStorage.getItem('hr_logo')||''});
+    applyBranding(logoBase64||localStorage.getItem('hr_logo')||'', companyName);
+  };
   if (logoFile) {
     const reader = new FileReader();
-    reader.onload = e => { localStorage.setItem('hr_logo', e.target.result); applyBranding(); };
+    reader.onload = async e => { await saveBrandingToFirebase(e.target.result); };
     reader.readAsDataURL(logoFile);
-  } else applyBranding();
+  } else { await saveBrandingToFirebase(); }
   const r = await api('saveSettings',{settings:hrSettings});
+  if (r.success) showToast('บันทึกการตั้งค่าเรียบร้อยแล้ว ✅','s');
+  else showToast('เกิดข้อผิดพลาด: '+r.error,'e');
   document.getElementById('settingsAlert').innerHTML = r.success ? '<div class="al al-s">✅ บันทึกเรียบร้อย</div>' : '<div class="al al-e">❌ '+r.error+'</div>';
 }
 
@@ -1529,8 +1625,67 @@ async function appAdv(id, status) {
   renderAdvSum();
 }
 
+// ── DARK MODE ──
+function toggleDark() {
+  const dark = document.body.classList.toggle('dark');
+  localStorage.setItem('hr_dark', dark ? '1' : '0');
+  document.getElementById('darkToggle').textContent = dark ? '☀️' : '🌙';
+}
+function initDark() {
+  if (localStorage.getItem('hr_dark') === '1') {
+    document.body.classList.add('dark');
+    const btn = document.getElementById('darkToggle');
+    if (btn) btn.textContent = '☀️';
+  }
+}
+
+// ── TOAST ──
+function showToast(msg, type='s', dur=3000) {
+  const icons = {s:'✅',e:'❌',i:'ℹ️',w:'⚠️'};
+  const tc = document.getElementById('toastContainer');
+  if (!tc) return;
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.innerHTML = `<span style="font-size:16px">${icons[type]||'ℹ️'}</span><span>${msg}</span>`;
+  tc.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'toastOut .3s ease forwards';
+    setTimeout(() => t.remove(), 300);
+  }, dur);
+}
+
+// ── ANIMATED COUNTER ──
+function animateNum(el, target, dur=1200) {
+  if (!el) return;
+  const start = performance.now();
+  const from = parseFloat(el.textContent.replace(/[^0-9.]/g,'')) || 0;
+  const isInt = Number.isInteger(target);
+  function step(now) {
+    const p = Math.min((now - start) / dur, 1);
+    const ease = 1 - Math.pow(1 - p, 3);
+    const val = from + (target - from) * ease;
+    el.textContent = isInt ? Math.round(val).toLocaleString() : val.toFixed(1);
+    if (p < 1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+// ── CONFETTI BURST ──
+function confettiBurst() {
+  const colors = ['#ec4899','#f43f5e','#a855f7','#fbbf24','#34d399','#60a5fa'];
+  for (let i = 0; i < 20; i++) {
+    setTimeout(() => {
+      const el = document.createElement('div');
+      el.className = 'confetti-piece';
+      el.style.cssText = `left:${30+Math.random()*40}%;top:${20+Math.random()*30}%;background:${colors[Math.floor(Math.random()*colors.length)]};transform:rotate(${Math.random()*360}deg);animation-delay:${Math.random()*.3}s;animation-duration:${.6+Math.random()*.5}s`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 1200);
+    }, i * 30);
+  }
+}
+
 // ── BOOT ──
-window.addEventListener('load', () => { applyBranding(); initApp(); });
+window.addEventListener('load', () => { applyBranding(); initDark(); initApp(); });
 </script>
 </body>
 </html>
