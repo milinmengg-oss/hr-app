@@ -489,7 +489,7 @@ function nav(page, el) {
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
   if (el) el.classList.add('act');
   const renders = { dash:renderDash, checkin:renderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:renderReport };
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport };
   if (renders[page]) renders[page]();
 }
 
@@ -845,6 +845,14 @@ function renderReport() {
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
+}
+
+async function refreshAndRenderReport() {
+  const aRes = await api('getAttendance', {empId: null});
+  if (aRes.success) attCache = aRes.records;
+  const lRes = await api('getLeaves', {empId: null});
+  if (lRes.success) leaveCache = lRes.leaves;
+  renderReport();
 }
 
 // ── BOOT ──
