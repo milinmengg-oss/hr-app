@@ -93,7 +93,9 @@ tr:hover td{background:#f8fafc}
 .clk-box{text-align:center;padding:24px}
 .clk-time{font-size:48px;font-weight:700;color:#1e40af;letter-spacing:2px;font-family:monospace}
 .clk-date{color:#64748b;font-size:13px;margin:6px 0 20px}
-@media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.sg{grid-template-columns:1fr 1fr}.gr2,.gr3{grid-template-columns:1fr}}
+@media(max-width:768px){.sidebar{display:none;position:fixed;top:56px;left:0;bottom:0;width:220px;z-index:200;background:#fff;box-shadow:2px 0 8px rgba(0,0,0,.2)}.sidebar.open{display:block}.main{margin-left:0}.sg{grid-template-columns:1fr 1fr}.gr2,.gr3{grid-template-columns:1fr}.menu-btn{display:flex!important}}
+.menu-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:199;background:rgba(0,0,0,.3)}
+.menu-overlay.open{display:block}
 </style>
 </head>
 <body>
@@ -139,8 +141,12 @@ tr:hover td{background:#f8fafc}
 
 <!-- MAIN APP -->
 <div id="sApp" style="display:none">
+  <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
   <div class="topbar">
-    <h1>🏢 HR System</h1>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="menu-btn" id="menuBtn" onclick="toggleMenu()" style="display:none;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px 8px">☰</button>
+      <h1>🏢 HR System</h1>
+    </div>
     <div class="uinfo">
       <div class="av" id="tAv">A</div>
       <span id="tName"></span>
@@ -438,6 +444,12 @@ async function doLogin() {
   } catch(e) {
     alEl.innerHTML = '<div class="al al-e">ไม่สามารถเชื่อมต่อ API: ' + e.message + '</div>';
   }
+}
+function toggleMenu() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('menuOverlay');
+  sb.classList.toggle('open');
+  ov.classList.toggle('open');
 }
 function logout() {
   me = null; empCache = []; attCache = []; leaveCache = [];
