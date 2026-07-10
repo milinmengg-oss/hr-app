@@ -348,12 +348,13 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
     <div class="pg" id="pgSettings">
       <div class="pt">🔧 ตั้งค่า HR</div>
       <div class="c">
-        <div class="ct">⏰ เวลาทำงาน</div>
-        <div class="gr2">
-          <div class="fg"><label>เวลาเข้างาน</label><input type="time" id="stStart" value="09:00"></div>
-          <div class="fg"><label>เวลาออกงาน</label><input type="time" id="stEnd" value="18:00"></div>
-        </div>
-        <div class="fg"><label>ผ่อนผันมาสาย (นาที)</label><input type="number" id="stGrace" value="15" min="0" max="60"></div>
+        <div class="ct">⏰ เวลาทำงานแยกตามแผนก</div>
+        <p style="color:#94a3b8;font-size:12px;margin-bottom:14px">ตั้งค่าเวลาเข้า-ออกงานและผ่อนผันมาสายสำหรับแต่ละแผนก ระบบจะใช้ข้อมูลนี้คำนวณมาสายและหักเงินเดือนอัตโนมัติ</p>
+        <table>
+          <thead><tr><th>แผนก</th><th>เวลาเข้างาน</th><th>เวลาออกงาน</th><th>ผ่อนผันมาสาย (นาที)</th><th>หักมาสาย/ครั้ง (บาท)</th></tr></thead>
+          <tbody id="deptHoursTable"></tbody>
+        </table>
+        <button class="btn btn-s btn-sm" onclick="addDeptRow()" style="margin-top:12px">+ เพิ่มแผนก</button>
       </div>
       <div class="c">
         <div class="ct">📅 โควตาการลา (วัน/ปี)</div>
@@ -366,7 +367,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
       <div class="c">
         <div class="ct">💵 การหักเงิน</div>
         <div class="gr2">
-          <div class="fg"><label>หักต่อวันที่ขาดงาน (%ของเงินเดือน÷วันทำงาน)</label><input type="number" id="stAbsentPct" value="100" min="0" max="200"></div>
+          <div class="fg"><label>หักต่อวันที่ขาดงาน (% ของเงินเดือน ÷ วันทำงาน)</label><input type="number" id="stAbsentPct" value="100" min="0" max="200"></div>
           <div class="fg"><label>วันทำงานต่อเดือน (วัน)</label><input type="number" id="stWorkDays" value="26" min="20" max="31"></div>
         </div>
       </div>
@@ -1099,29 +1100,71 @@ function renderReport() {
 }
 
 // ── SETTINGS ──
-let hrSettings = {workStart:'09:00',workEnd:'18:00',grace:15,annual:10,sick:30,personal:3,absentPct:100,workDays:26};
+let hrSettings = {annual:10,sick:30,personal:3,absentPct:100,workDays:26,deptHours:{}};
+function toMin(t){ if(!t) return 0; const[h,m]=t.split(':').map(Number); return h*60+m; }
+const DEFAULT_DEPTS = ['การตลาด','ขาย','บัญชี','IT','HR','คลังสินค้า','ผู้บริหาร'];
+
 async function initSettings() {
   const r = await api('getSettings',{});
-  if (r.success) hrSettings = r.settings;
-  document.getElementById('stStart').value = hrSettings.workStart||'09:00';
-  document.getElementById('stEnd').value = hrSettings.workEnd||'18:00';
-  document.getElementById('stGrace').value = hrSettings.grace||15;
+  if (r.success) hrSettings = Object.assign({annual:10,sick:30,personal:3,absentPct:100,workDays:26,deptHours:{}}, r.settings);
   document.getElementById('stAnnual').value = hrSettings.annual||10;
   document.getElementById('stSick').value = hrSettings.sick||30;
   document.getElementById('stPersonal').value = hrSettings.personal||3;
   document.getElementById('stAbsentPct').value = hrSettings.absentPct||100;
   document.getElementById('stWorkDays').value = hrSettings.workDays||26;
+  renderDeptHoursTable();
 }
+
+function getDeptHours(dept) {
+  const dh = hrSettings.deptHours||{};
+  return dh[dept] || {start:'09:00',end:'18:00',grace:15,lateDeduct:0};
+}
+
+function renderDeptHoursTable() {
+  const dh = hrSettings.deptHours||{};
+  // รวม dept ที่มีในระบบ + ที่บันทึกไว้
+  const allDepts = [...new Set([...DEFAULT_DEPTS, ...Object.keys(dh)])];
+  document.getElementById('deptHoursTable').innerHTML = allDepts.map(dept => {
+    const d = dh[dept]||{start:'09:00',end:'18:00',grace:15,lateDeduct:0};
+    return `<tr>
+      <td><strong>${dept}</strong></td>
+      <td><input type="time" class="dh-start" data-dept="${dept}" value="${d.start||'09:00'}" style="padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
+      <td><input type="time" class="dh-end" data-dept="${dept}" value="${d.end||'18:00'}" style="padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
+      <td><input type="number" class="dh-grace" data-dept="${dept}" value="${d.grace||15}" min="0" max="60" style="width:80px;padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
+      <td><input type="number" class="dh-deduct" data-dept="${dept}" value="${d.lateDeduct||0}" min="0" style="width:100px;padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
+    </tr>`;
+  }).join('');
+}
+
+function addDeptRow() {
+  const name = prompt('ชื่อแผนกใหม่:');
+  if (!name || !name.trim()) return;
+  if (!hrSettings.deptHours) hrSettings.deptHours = {};
+  hrSettings.deptHours[name.trim()] = {start:'09:00',end:'18:00',grace:15,lateDeduct:0};
+  renderDeptHoursTable();
+}
+
 async function saveSettings() {
+  // อ่านค่า dept hours จาก table
+  const deptHours = {};
+  document.querySelectorAll('#deptHoursTable tr').forEach(row => {
+    const startEl = row.querySelector('.dh-start');
+    if (!startEl) return;
+    const dept = startEl.dataset.dept;
+    deptHours[dept] = {
+      start: startEl.value,
+      end: row.querySelector('.dh-end').value,
+      grace: Number(row.querySelector('.dh-grace').value),
+      lateDeduct: Number(row.querySelector('.dh-deduct').value)
+    };
+  });
   hrSettings = {
-    workStart:document.getElementById('stStart').value,
-    workEnd:document.getElementById('stEnd').value,
-    grace:Number(document.getElementById('stGrace').value),
     annual:Number(document.getElementById('stAnnual').value),
     sick:Number(document.getElementById('stSick').value),
     personal:Number(document.getElementById('stPersonal').value),
     absentPct:Number(document.getElementById('stAbsentPct').value),
-    workDays:Number(document.getElementById('stWorkDays').value)
+    workDays:Number(document.getElementById('stWorkDays').value),
+    deptHours
   };
   const r = await api('saveSettings',{settings:hrSettings});
   document.getElementById('settingsAlert').innerHTML = r.success ? '<div class="al al-s">✅ บันทึกเรียบร้อย</div>' : '<div class="al al-e">❌ '+r.error+'</div>';
@@ -1147,16 +1190,16 @@ async function renderPayroll() {
   if (advRes.success) advCache = advRes.advances;
 
   const workdays = hrSettings.workDays||26;
-  const grace = hrSettings.grace||15;
   const absentPct = hrSettings.absentPct||100;
-
-  function toMin(t){ if(!t) return 0; const[h,m]=t.split(':').map(Number); return h*60+m; }
-  const startMin = toMin(hrSettings.workStart||'09:00');
 
   const emps = empCache.filter(e=>e.status==='ทำงาน' && e.role!=='admin');
   let totalSalary=0, totalNet=0, totalAdv=0;
 
   const rows = emps.map(e => {
+    const dh = getDeptHours(e.dept);
+    const startMin = toMin(dh.start||'09:00');
+    const grace = dh.grace||15;
+    const lateDeduct = dh.lateDeduct||0;
     const attMonth = attCache.filter(a=>a.empId===e.id && String(a.date).startsWith(month));
     const worked = attMonth.length;
     const absent = Math.max(0, workdays - worked);
@@ -1169,19 +1212,21 @@ async function renderPayroll() {
     const salary = e.salary||0;
     const dailyRate = salary / workdays;
     const deductAbsent = Math.round(dailyRate * absent * (absentPct/100));
-    const net = Math.max(0, salary - deductAbsent - advAmt);
+    const deductLate = late * lateDeduct;
+    const net = Math.max(0, salary - deductAbsent - deductLate - advAmt);
     totalSalary += salary; totalNet += net; totalAdv += advAmt;
     const lateColor = late>=3?'br':late>0?'by':'bg';
+    const deptLabel = `${dh.start}–${dh.end}`;
     return `<tr>
-      <td>${e.firstName} ${e.lastName}</td>
+      <td>${e.firstName} ${e.lastName}<br><small style="color:#94a3b8">${deptLabel}</small></td>
       <td>${e.dept}</td>
       <td style="font-weight:700">${salary.toLocaleString()}</td>
       <td style="color:#059669;font-weight:600">${worked}</td>
       <td style="color:${absent>0?'#dc2626':'#059669'};font-weight:600">${absent}</td>
-      <td><span class="badge ${lateColor}">${late} ครั้ง</span></td>
+      <td><span class="badge ${lateColor}">${late} ครั้ง${deductLate>0?' (-'+deductLate.toLocaleString()+'฿)':''}</span></td>
       <td>${leaveDays}</td>
       <td style="color:#d97706;font-weight:600">${advAmt.toLocaleString()}</td>
-      <td style="font-weight:700;color:#4c1d95;font-size:14px">${net.toLocaleString()}</td>
+      <td style="font-weight:700;color:#be185d;font-size:14px">${net.toLocaleString()}</td>
     </tr>`;
   }).join('');
 
@@ -1265,10 +1310,14 @@ async function renderDept() {
     const empIds = emps.map(e=>e.id);
 
     // เช็คอินวันที่เลือก
+    const dh = getDeptHours(dept);
+    const deptStartMin = toMin(dh.start||'09:00');
+    const deptGrace = dh.grace||15;
     const deptAtt = attCache.filter(a=>empIds.includes(a.empId) && a.date===date);
     const checkedIn = deptAtt.length;
     const checkedOut = deptAtt.filter(a=>a.checkOut).length;
     const notIn = emps.length - checkedIn;
+    const lateCount = deptAtt.filter(a=>a.checkIn && toMin(a.checkIn) > deptStartMin + deptGrace).length;
 
     // ลาเดือนนี้
     const deptLeaves = leaveCache.filter(l=>empIds.includes(l.empId) && String(l.startDate).startsWith(month));
@@ -1283,6 +1332,7 @@ async function renderDept() {
     const rows = emps.map(e => {
       const att = deptAtt.find(a=>a.empId===e.id);
       const leaves = leaveCache.filter(l=>l.empId===e.id && l.status==='อนุมัติ' && l.startDate<=date && l.endDate>=date);
+      const isLate = att && att.checkIn && toMin(att.checkIn) > deptStartMin + deptGrace;
       let status, badge;
       if (leaves.length) { status=leaves[0].type; badge='by'; }
       else if (att && att.checkOut) { status='เข้า-ออกแล้ว'; badge='bg'; }
@@ -1291,7 +1341,7 @@ async function renderDept() {
       return `<tr>
         <td>${e.firstName} ${e.lastName}</td>
         <td>${e.position}</td>
-        <td>${att ? att.checkIn : '-'}</td>
+        <td>${att ? att.checkIn : '-'} ${isLate?'<span class="badge by">มาสาย</span>':''}</td>
         <td>${att ? (att.checkOut||'-') : '-'}</td>
         <td><span class="badge ${badge}">${status}</span></td>
       </tr>`;
@@ -1299,7 +1349,8 @@ async function renderDept() {
 
     return `<div class="c">
       <div class="ct">🏢 ${dept} <span style="font-weight:400;color:#94a3b8;font-size:12px">(${emps.length} คน)</span></div>
-      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
+      <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">⏰ เวลาเข้างาน ${dh.start||'09:00'} น. | ออกงาน ${dh.end||'18:00'} น. | ผ่อนผัน ${dh.grace||15} นาที</div>
+      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">
         <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#065f46">${checkedIn}</div>
           <div style="font-size:11px;color:#065f46">เช็คอินแล้ว</div>
@@ -1312,13 +1363,17 @@ async function renderDept() {
           <div style="font-size:22px;font-weight:700;color:#991b1b">${notIn}</div>
           <div style="font-size:11px;color:#991b1b">ยังไม่เข้างาน</div>
         </div>
+        <div style="background:linear-gradient(135deg,#fef9c3,#fef08a);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#a16207">${lateCount}</div>
+          <div style="font-size:11px;color:#a16207">มาสาย</div>
+        </div>
         <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#92400e">${leaveApproved.length}</div>
           <div style="font-size:11px;color:#92400e">ลาเดือนนี้</div>
         </div>
-        <div style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);border-radius:12px;padding:12px;text-align:center">
-          <div style="font-size:16px;font-weight:700;color:#4c1d95">${advTotal.toLocaleString()}฿</div>
-          <div style="font-size:11px;color:#4c1d95">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#d97706">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
+        <div style="background:linear-gradient(135deg,#fce7f3,#fbcfe8);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:16px;font-weight:700;color:#be185d">${advTotal.toLocaleString()}฿</div>
+          <div style="font-size:11px;color:#be185d">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#d97706">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
         </div>
       </div>
       <table><thead><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>เข้างาน</th><th>ออกงาน</th><th>สถานะ</th></tr></thead>
