@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>HR Face System</title>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f4f8;color:#1e293b;font-size:14px}
+.screen{display:none;min-height:100vh;align-items:center;justify-content:center}
+.screen.show{display:flex}
+.card{background:#fff;border-radius:16px;padding:32px;width:400px;box-shadow:0 20px 60px rgba(0,0,0,.15)}
+.card h1{font-size:22px;font-weight:700;color:#1e40af;margin-bottom:6px}
+.card p{color:#64748b;font-size:13px;margin-bottom:20px}
+.fg{margin-bottom:14px}
+.fg label{display:block;font-size:12px;font-weight:600;color:#374151;margin-bottom:5px}
+.fg input,.fg select,.fg textarea{width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;font-family:inherit}
+.fg input:focus,.fg select:focus{border-color:#3b82f6}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:.15s}
+.btn-p{background:#1e40af;color:#fff;width:100%;justify-content:center;padding:11px}
+.btn-p:hover{background:#1d4ed8}
+.btn-g{background:#059669;color:#fff}.btn-g:hover{background:#047857}
+.btn-r{background:#dc2626;color:#fff}.btn-r:hover{background:#b91c1c}
+.btn-o{background:#d97706;color:#fff}.btn-o:hover{background:#b45309}
+.btn-s{background:#e2e8f0;color:#374151}.btn-s:hover{background:#cbd5e1}
+.btn-sm{padding:5px 10px;font-size:11px}
+.progress-bar{width:100%;background:#e2e8f0;border-radius:8px;height:8px;margin:8px 0}
+.progress-fill{height:8px;border-radius:8px;background:#3b82f6;transition:width .3s}
+/* APP */
+.topbar{background:#1e40af;color:#fff;height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.topbar h1{font-size:15px;font-weight:700}
+.topbar .uinfo{display:flex;align-items:center;gap:10px;font-size:13px}
+.av{width:30px;height:30px;background:#3b82f6;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+.sidebar{position:fixed;top:56px;left:0;bottom:0;width:210px;background:#fff;border-right:1px solid #e2e8f0;overflow-y:auto;z-index:99}
+.ni{display:flex;align-items:center;gap:8px;padding:10px 16px;cursor:pointer;color:#475569;font-size:13px;font-weight:500;border-left:3px solid transparent;transition:.15s}
+.ni:hover{background:#f1f5f9;color:#1e40af}
+.ni.act{background:#eff6ff;color:#1e40af;border-left-color:#1e40af;font-weight:600}
+.nsec{padding:10px 16px 3px;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase}
+.main{margin-left:210px;margin-top:56px;padding:22px;min-height:calc(100vh - 56px)}
+.pg{display:none}.pg.act{display:block}
+.pt{font-size:19px;font-weight:700;margin-bottom:18px}
+.c{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:18px}
+.ct{font-size:14px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:6px}
+.sg{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+.sc{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.sc .lb{font-size:11px;color:#64748b;margin-bottom:4px}
+.sc .vl{font-size:26px;font-weight:700}
+.sc .sb{font-size:11px;color:#94a3b8;margin-top:3px}
+table{width:100%;border-collapse:collapse}
+th{background:#f8fafc;padding:9px 11px;text-align:left;font-size:11px;font-weight:700;color:#64748b;border-bottom:1px solid #e2e8f0}
+td{padding:9px 11px;border-bottom:1px solid #f1f5f9;font-size:12px;vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#f8fafc}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.bg{background:#dcfce7;color:#166534}.br{background:#fee2e2;color:#991b1b}
+.by{background:#fef9c3;color:#854d0e}.bb{background:#dbeafe;color:#1e40af}
+.bgr{background:#f1f5f9;color:#475569}
+.tabs{display:flex;gap:3px;background:#f1f5f9;padding:3px;border-radius:9px;width:fit-content;margin-bottom:16px}
+.tab{padding:6px 16px;border-radius:7px;cursor:pointer;font-size:12px;font-weight:500;color:#64748b}
+.tab.act{background:#fff;color:#1e40af;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.gr2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.gr3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.sb2{display:flex;gap:8px;margin-bottom:14px}
+.sb2 input{flex:1;padding:8px 11px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none}
+.sb2 input:focus{border-color:#3b82f6}
+.al{padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px}
+.al-e{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.al-s{background:#dcfce7;color:#166534;border:1px solid #86efac}
+.empty{text-align:center;padding:30px;color:#94a3b8;font-size:12px}
+/* CAMERA */
+.cam-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:300;align-items:center;justify-content:center}
+.cam-overlay.show{display:flex}
+.cam-box{background:#1e293b;border-radius:16px;padding:24px;width:420px;text-align:center}
+.cam-box h2{color:#fff;font-size:15px;margin-bottom:14px}
+#faceVideo{width:360px;height:270px;object-fit:cover;border-radius:10px;background:#000;display:block;margin:0 auto}
+#faceCanvas{display:none}
+.cam-status{color:#e2e8f0;font-size:13px;margin:10px 0}
+.cam-ring{width:360px;height:270px;border:3px solid;border-radius:10px;position:absolute;top:0;left:0;pointer-events:none;transition:border-color .3s}
+.cam-wrap{position:relative;display:inline-block}
+.cam-actions{display:flex;gap:10px;justify-content:center;margin-top:14px}
+/* FACE BOX */
+.face-result{padding:14px;border-radius:10px;margin-top:10px;font-size:14px;font-weight:600;text-align:center}
+.face-ok{background:#dcfce7;color:#166534}
+.face-fail{background:#fee2e2;color:#991b1b}
+/* MODAL */
+.modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:14px;padding:24px;width:460px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal h2{font-size:15px;font-weight:700;margin-bottom:16px}
+.mf{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0}
+/* CLOCK */
+.clk-box{text-align:center;padding:24px}
+.clk-time{font-size:48px;font-weight:700;color:#1e40af;letter-spacing:2px;font-family:monospace}
+.clk-date{color:#64748b;font-size:13px;margin:6px 0 20px}
+@media(max-width:768px){.sidebar{display:none}.main{margin-left:0}.sg{grid-template-columns:1fr 1fr}.gr2,.gr3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- SETUP SCREEN -->
+<div class="screen" id="sSetup">
+<div class="card" style="width:460px">
+  <h1>🔧 ตั้งค่าระบบ</h1>
+  <p>กรอก URL ของ Google Apps Script ก่อนใช้งาน</p>
+  <div id="setupAlert"></div>
+  <div class="fg">
+    <label>Google Apps Script URL</label>
+    <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/...">
+  </div>
+  <button class="btn btn-p" onclick="saveSetup()">✅ บันทึกและเริ่มใช้งาน</button>
+  <p style="margin-top:12px;font-size:11px;color:#94a3b8;text-align:center">ดูวิธีตั้งค่าใน GoogleAppsScript.gs</p>
+</div>
+</div>
+
+<!-- LOADING SCREEN -->
+<div class="screen" id="sLoading" style="background:linear-gradient(135deg,#1e40af,#3b82f6)">
+<div class="card" style="text-align:center">
+  <div style="font-size:32px;margin-bottom:12px">🤖</div>
+  <h1 style="text-align:center;margin-bottom:8px">กำลังโหลดระบบ</h1>
+  <p style="text-align:center" id="loadMsg">เริ่มต้น Face Recognition...</p>
+  <div class="progress-bar"><div class="progress-fill" id="loadBar" style="width:0%"></div></div>
+  <p style="font-size:11px;color:#94a3b8;margin-top:8px">ครั้งแรกอาจใช้เวลา 1-2 นาที (โหลดโมเดล AI)</p>
+</div>
+</div>
+
+<!-- LOGIN SCREEN -->
+<div class="screen" id="sLogin" style="background:linear-gradient(135deg,#1e40af,#3b82f6)">
+<div class="card">
+  <h1>🏢 HR System</h1>
+  <p>ระบบบริหารบุคคลพร้อมสแกนใบหน้า</p>
+  <div id="loginAlert"></div>
+  <div class="fg"><label>Username</label><input type="text" id="lu" placeholder="username" onkeydown="if(event.key==='Enter')doLogin()"></div>
+  <div class="fg"><label>Password</label><input type="password" id="lp" placeholder="password" onkeydown="if(event.key==='Enter')doLogin()"></div>
+  <button class="btn btn-p" onclick="doLogin()">เข้าสู่ระบบ</button>
+  <button class="btn btn-s" style="width:100%;margin-top:8px" onclick="clearSetup()">⚙️ เปลี่ยน API URL</button>
+</div>
+</div>
+
+<!-- MAIN APP -->
+<div id="sApp" style="display:none">
+  <div class="topbar">
+    <h1>🏢 HR System</h1>
+    <div class="uinfo">
+      <div class="av" id="tAv">A</div>
+      <span id="tName"></span>
+      <span id="tRole" style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:12px;font-size:10px"></span>
+      <button class="btn btn-s btn-sm" onclick="logout()">ออก</button>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="nsec">เมนูหลัก</div>
+    <div class="ni act" onclick="nav('dash',this)">🏠 หน้าหลัก</div>
+    <div class="ni" onclick="nav('checkin',this)">📷 เช็คอินสแกนหน้า</div>
+    <div class="ni" onclick="nav('leave',this)">📅 ขอลา</div>
+    <div class="ni" onclick="nav('emps',this)">👥 พนักงาน</div>
+    <div class="nsec" id="adSec" style="display:none">HR / Admin</div>
+    <div class="ni" id="niApprove" onclick="nav('approve',this)" style="display:none">✅ อนุมัติการลา</div>
+    <div class="ni" id="niRegFace" onclick="nav('regface',this)" style="display:none">🔐 ลงทะเบียนใบหน้า</div>
+    <div class="ni" id="niManage" onclick="nav('manage',this)" style="display:none">⚙️ จัดการพนักงาน</div>
+    <div class="ni" id="niReport" onclick="nav('report',this)" style="display:none">📊 รายงาน</div>
+  </div>
+  <div class="main">
+    <!-- DASHBOARD -->
+    <div class="pg act" id="pgDash">
+      <div class="pt">🏠 หน้าหลัก</div>
+      <div class="sg" id="dashStats"></div>
+      <div class="gr2">
+        <div class="c"><div class="ct">⏰ สถานะวันนี้</div><div id="dashToday"></div></div>
+        <div class="c"><div class="ct">📅 การลาล่าสุด</div><div id="dashLeave"></div></div>
+      </div>
+      <div class="c" id="dashPend" style="display:none"><div class="ct">🔔 รอการอนุมัติ</div><div id="dashPendList"></div></div>
+    </div>
+    <!-- CHECKIN -->
+    <div class="pg" id="pgCheckin">
+      <div class="pt">📷 เช็คอินสแกนใบหน้า</div>
+      <div class="gr2">
+        <div class="c">
+          <div class="clk-box">
+            <div class="clk-time" id="clkDisp">00:00:00</div>
+            <div class="clk-date" id="clkDate"></div>
+            <div id="clkStatus" style="margin-bottom:16px"></div>
+            <button class="btn btn-g" id="btnCkIn" onclick="openCamera('checkin')" style="padding:12px 32px;font-size:14px">📷 สแกนใบหน้า เช็คอิน</button>
+            <button class="btn btn-r" id="btnCkOut" onclick="openCamera('checkout')" style="display:none;padding:12px 32px;font-size:14px">📷 สแกนใบหน้า เช็คเอาท์</button>
+            <br><br>
+            <button class="btn btn-s btn-sm" onclick="manualCheckin()" id="btnManual">✏️ เช็คอินแบบธรรมดา (ไม่สแกนหน้า)</button>
+          </div>
+        </div>
+        <div class="c">
+          <div class="ct">📋 บันทึกวันนี้</div>
+          <div id="todayRec"></div>
+          <div class="ct" style="margin-top:16px">📊 ประวัติ 30 วัน</div>
+          <table><thead><tr><th>วันที่</th><th>เข้า</th><th>ออก</th><th>ชั่วโมง</th><th>หน้า</th></tr></thead>
+          <tbody id="attTable"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- LEAVE -->
+    <div class="pg" id="pgLeave">
+      <div class="pt">📅 ขอลา</div>
+      <div class="tabs">
+        <div class="tab act" onclick="leaveTab('req',this)">ขอลาใหม่</div>
+        <div class="tab" onclick="leaveTab('hist',this)">ประวัติ</div>
+      </div>
+      <div id="ltReq">
+        <div class="c">
+          <div class="ct">📝 ยื่นใบลา</div>
+          <div id="leaveAlert"></div>
+          <div class="gr2">
+            <div class="fg"><label>ประเภทการลา</label>
+              <select id="lType"><option>ลาป่วย</option><option>ลากิจ</option><option>ลาพักร้อน</option><option>ลาคลอด</option><option>ลาบวช</option></select>
+            </div>
+            <div class="fg"><label>จำนวนวัน</label><input type="number" id="lDays" min="1" max="60" value="1"></div>
+          </div>
+          <div class="gr2">
+            <div class="fg"><label>วันที่เริ่ม</label><input type="date" id="lStart"></div>
+            <div class="fg"><label>วันที่สิ้นสุด</label><input type="date" id="lEnd"></div>
+          </div>
+          <div class="fg"><label>เหตุผล</label><input type="text" id="lReason" placeholder="ระบุเหตุผล"></div>
+          <button class="btn btn-p" onclick="submitLeave()">📤 ส่งใบลา</button>
+        </div>
+      </div>
+      <div id="ltHist" style="display:none">
+        <div class="c">
+          <table><thead><tr><th>ประเภท</th><th>วันที่ลา</th><th>วัน</th><th>เหตุผล</th><th>สถานะ</th></tr></thead>
+          <tbody id="leaveHistTable"></tbody></table>
+        </div>
+      </div>
+    </div>
+    <!-- EMPLOYEES -->
+    <div class="pg" id="pgEmps">
+      <div class="pt">👥 ข้อมูลพนักงาน</div>
+      <div class="c">
+        <div class="sb2"><input type="text" id="empSrch" placeholder="🔍 ค้นหาชื่อ แผนก ตำแหน่ง..." oninput="renderEmps()"></div>
+        <table><thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th><th>เบอร์</th><th>ใบหน้า</th><th>สถานะ</th></tr></thead>
+        <tbody id="empTable"></tbody></table>
+      </div>
+    </div>
+    <!-- APPROVE -->
+    <div class="pg" id="pgApprove">
+      <div class="pt">✅ อนุมัติการลา</div>
+      <div class="tabs">
+        <div class="tab act" onclick="approveTab('pend',this)">รอดำเนินการ <span id="pendCnt" style="background:#ef4444;color:#fff;padding:1px 5px;border-radius:10px;font-size:10px;margin-left:3px"></span></div>
+        <div class="tab" onclick="approveTab('all',this)">ทั้งหมด</div>
+      </div>
+      <div class="c">
+        <table><thead><tr><th>พนักงาน</th><th>ประเภท</th><th>วันที่</th><th>วัน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody id="approveTable"></tbody></table>
+      </div>
+    </div>
+    <!-- REGISTER FACE -->
+    <div class="pg" id="pgRegFace">
+      <div class="pt">🔐 ลงทะเบียนใบหน้าพนักงาน</div>
+      <div class="c">
+        <p style="color:#64748b;font-size:13px;margin-bottom:14px">เลือกพนักงานแล้วกด "ลงทะเบียน" เพื่อสแกนใบหน้าของพนักงานคนนั้น</p>
+        <div class="sb2"><input type="text" id="rfSrch" placeholder="🔍 ค้นหาพนักงาน..." oninput="renderRegFace()"></div>
+        <table><thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>แผนก</th><th>สถานะใบหน้า</th><th>จัดการ</th></tr></thead>
+        <tbody id="rfTable"></tbody></table>
+      </div>
+    </div>
+    <!-- MANAGE -->
+    <div class="pg" id="pgManage">
+      <div class="pt">⚙️ จัดการพนักงาน</div>
+      <div class="c">
+        <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center">
+          <div class="sb2" style="margin:0;flex:1"><input type="text" id="mgSrch" placeholder="🔍 ค้นหา..." oninput="renderManage()"></div>
+          <button class="btn btn-p" onclick="openAddEmp()">+ เพิ่มพนักงาน</button>
+        </div>
+        <table><thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>ตำแหน่ง</th><th>แผนก</th><th>สิทธิ์</th><th>ใบหน้า</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+        <tbody id="mgTable"></tbody></table>
+      </div>
+    </div>
+    <!-- REPORT -->
+    <div class="pg" id="pgReport">
+      <div class="pt">📊 รายงาน</div>
+      <div class="sg" id="rptStats"></div>
+      <div class="gr2">
+        <div class="c"><div class="ct">📅 สรุปการลาตามประเภท</div><div id="rptLeaveType"></div></div>
+        <div class="c"><div class="ct">⏰ เช็คอินวันนี้</div>
+          <table><thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>สแกนหน้า</th></tr></thead>
+          <tbody id="rptAtt"></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMERA OVERLAY -->
+<div class="cam-overlay" id="camOverlay">
+  <div class="cam-box">
+    <h2 id="camTitle">📷 สแกนใบหน้า</h2>
+    <div class="cam-wrap">
+      <video id="faceVideo" autoplay muted playsinline></video>
+      <canvas id="faceCanvas" style="position:absolute;top:0;left:0;display:none"></canvas>
+    </div>
+    <div class="cam-status" id="camStatus">กำลังเปิดกล้อง...</div>
+    <div id="camResult"></div>
+    <div class="cam-actions">
+      <button class="btn btn-g" id="btnScan" onclick="scanFace()" style="display:none">📷 สแกน</button>
+      <button class="btn btn-s" onclick="closeCamera()">ยกเลิก</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: ADD/EDIT EMPLOYEE -->
+<div class="modal-bg" id="mEmp">
+  <div class="modal">
+    <h2 id="mEmpTitle">เพิ่มพนักงาน</h2>
+    <div id="mEmpAlert"></div>
+    <div class="gr2">
+      <div class="fg"><label>รหัสพนักงาน</label><input type="text" id="eId" placeholder="เช่น emp101"></div>
+      <div class="fg"><label>Username</label><input type="text" id="eUser" placeholder="สำหรับล็อกอิน"></div>
+    </div>
+    <div class="gr2">
+      <div class="fg"><label>ชื่อ</label><input type="text" id="eFirst" placeholder="ชื่อ"></div>
+      <div class="fg"><label>นามสกุล</label><input type="text" id="eLast" placeholder="นามสกุล"></div>
+    </div>
+    <div class="gr2">
+      <div class="fg"><label>ตำแหน่ง</label><input type="text" id="ePos" placeholder="ตำแหน่ง"></div>
+      <div class="fg"><label>แผนก</label>
+        <select id="eDept"><option>การตลาด</option><option>ขาย</option><option>บัญชี</option><option>IT</option><option>HR</option><option>คลังสินค้า</option><option>ผู้บริหาร</option></select>
+      </div>
+    </div>
+    <div class="gr2">
+      <div class="fg"><label>เบอร์โทร</label><input type="text" id="ePhone" placeholder="0xx-xxx-xxxx"></div>
+      <div class="fg"><label>สิทธิ์</label>
+        <select id="eRole"><option value="employee">พนักงาน</option><option value="admin">HR/Admin</option></select>
+      </div>
+    </div>
+    <div class="gr2">
+      <div class="fg"><label>รหัสผ่าน <span id="ePwNote" style="color:#94a3b8;font-weight:400"></span></label><input type="password" id="ePw" placeholder="รหัสผ่าน"></div>
+      <div class="fg"><label>สถานะ</label>
+        <select id="eStat"><option value="ทำงาน">ทำงาน</option><option value="ลาออก">ลาออก</option></select>
+      </div>
+    </div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('mEmp')">ยกเลิก</button>
+      <button class="btn btn-p" onclick="saveEmp()">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──
+const API_STORE_KEY = 'hr_api_url';
+let API_URL = localStorage.getItem(API_STORE_KEY) || '';
+const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
+const THRESHOLD = 0.50; // face matching threshold
+
+// ── STATE ──
+let me = null;        // current user
+let empCache = [];    // all employees (with face descriptors)
+let attCache = [];    // attendance records
+let leaveCache = [];  // leave records
+let faceReady = false;
+let videoStream = null;
+let cameraMode = ''; // 'checkin'|'checkout'|'register'
+let regEmpId = '';
+let editEmpId = null;
+let approvFilter = 'pend';
+
+// ── SCREEN UTILS ──
+function showScreen(id) {
+  ['sSetup','sLoading','sLogin'].forEach(s => {
+    const el = document.getElementById(s);
+    el.classList.remove('show');
+  });
+  document.getElementById('sApp').style.display = 'none';
+  if (id === 'sApp') document.getElementById('sApp').style.display = 'block';
+  else document.getElementById(id).classList.add('show');
+}
+
+// ── SETUP ──
+function saveSetup() {
+  const url = document.getElementById('apiUrlInput').value.trim();
+  if (!url.startsWith('https://script.google.com')) {
+    document.getElementById('setupAlert').innerHTML = '<div class="al al-e">URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย https://script.google.com</div>';
+    return;
+  }
+  API_URL = url;
+  localStorage.setItem(API_STORE_KEY, url);
+  initApp();
+}
+function clearSetup() { localStorage.removeItem(API_STORE_KEY); API_URL = ''; showScreen('sSetup'); }
+
+// ── INIT ──
+async function initApp() {
+  if (!API_URL) { showScreen('sSetup'); return; }
+  showScreen('sLoading');
+  try {
+    setLoad('กำลังโหลด Face Detection (1/3)...', 10);
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    setLoad('กำลังโหลด Face Landmarks (2/3)...', 50);
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    setLoad('กำลังโหลด Face Recognition (3/3)...', 80);
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    setLoad('พร้อมใช้งาน!', 100);
+    faceReady = true;
+    setTimeout(() => showScreen('sLogin'), 500);
+  } catch(e) {
+    setLoad('❌ เกิดข้อผิดพลาด: ' + e.message, 0);
+  }
+}
+function setLoad(msg, pct) {
+  document.getElementById('loadMsg').textContent = msg;
+  document.getElementById('loadBar').style.width = pct + '%';
+}
+
+// ── API ──
+async function api(action, data = {}) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    body: JSON.stringify({ action, ...data })
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch(e) { return { success: false, error: text }; }
+}
+
+// ── AUTH ──
+async function doLogin() {
+  const u = document.getElementById('lu').value.trim();
+  const p = document.getElementById('lp').value.trim();
+  const alEl = document.getElementById('loginAlert');
+  if (!u || !p) { alEl.innerHTML = '<div class="al al-e">กรุณากรอก username และ password</div>'; return; }
+  alEl.innerHTML = '<div class="al" style="background:#f1f5f9">กำลังตรวจสอบ...</div>';
+  try {
+    const r = await api('login', { username: u, password: p });
+    if (!r.success) { alEl.innerHTML = '<div class="al al-e">' + (r.error || 'ไม่พบผู้ใช้') + '</div>'; return; }
+    me = r.employee;
+    alEl.innerHTML = '';
+    await loadAllData();
+    setupApp();
+    showScreen('sApp');
+    nav('dash');
+    startClock();
+  } catch(e) {
+    alEl.innerHTML = '<div class="al al-e">ไม่สามารถเชื่อมต่อ API: ' + e.message + '</div>';
+  }
+}
+function logout() {
+  me = null; empCache = []; attCache = []; leaveCache = [];
+  if (videoStream) stopCamera();
+  showScreen('sLogin');
+}
+function setupApp() {
+  document.getElementById('tAv').textContent = me.firstName[0];
+  document.getElementById('tName').textContent = me.firstName + ' ' + me.lastName;
+  document.getElementById('tRole').textContent = me.role === 'admin' ? 'HR/Admin' : 'พนักงาน';
+  const isAdmin = me.role === 'admin';
+  ['adSec','niApprove','niRegFace','niManage','niReport'].forEach(id => {
+    document.getElementById(id).style.display = isAdmin ? '' : 'none';
+  });
+}
+
+// ── DATA ──
+async function loadAllData() {
+  const [eRes, aRes, lRes] = await Promise.all([
+    api('getEmployees'),
+    api('getAttendance', { empId: me.role === 'admin' ? null : me.id }),
+    api('getLeaves', { empId: me.role === 'admin' ? null : me.id })
+  ]);
+  if (eRes.success) empCache = eRes.employees;
+  if (aRes.success) attCache = aRes.records;
+  if (lRes.success) leaveCache = lRes.leaves;
+}
+
+// ── NAV ──
+function nav(page, el) {
+  document.querySelectorAll('.pg').forEach(p => p.classList.remove('act'));
+  document.querySelectorAll('.ni').forEach(n => n.classList.remove('act'));
+  document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
+  if (el) el.classList.add('act');
+  const renders = { dash:renderDash, checkin:renderCheckin, leave:renderLeave,
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:renderReport };
+  if (renders[page]) renders[page]();
+}
+
+// ── CLOCK ──
+let clockInt;
+function startClock() {
+  if (clockInt) clearInterval(clockInt);
+  clockInt = setInterval(() => {
+    const el = document.getElementById('clkDisp');
+    if (el) el.textContent = new Date().toTimeString().split(' ')[0];
+  }, 1000);
+}
+function todayStr() { return new Date().toISOString().split('T')[0]; }
+function timeStr() { return new Date().toTimeString().split(' ')[0].substring(0,5); }
+function getTodayAtt() { return attCache.find(a => a.empId === me.id && a.date === todayStr()); }
+function fmtDate(d) {
+  if (!d) return '-';
+  const [y,m,day] = d.split('-');
+  const ms = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  return parseInt(day) + ' ' + ms[parseInt(m)-1] + ' ' + (parseInt(y)+543);
+}
+function calcH(i,o) {
+  if (!i||!o) return '-';
+  const [ih,im]=i.split(':').map(Number), [oh,om]=o.split(':').map(Number);
+  const d=(oh*60+om)-(ih*60+im);
+  return d>0 ? (d/60).toFixed(1)+' ชม.' : '-';
+}
+
+// ── CAMERA ──
+function openCamera(mode, empId='') {
+  cameraMode = mode; regEmpId = empId;
+  const titles = { checkin:'📷 สแกนใบหน้า เช็คอิน', checkout:'📷 สแกนใบหน้า เช็คเอาท์', register:'📷 ลงทะเบียนใบหน้า: ' + (empCache.find(e=>e.id===empId)||{}).firstName };
+  document.getElementById('camTitle').textContent = titles[mode] || '📷 สแกนใบหน้า';
+  document.getElementById('camResult').innerHTML = '';
+  document.getElementById('camStatus').textContent = 'กำลังเปิดกล้อง...';
+  document.getElementById('btnScan').style.display = 'none';
+  document.getElementById('camOverlay').classList.add('show');
+  startCameraStream();
+}
+async function startCameraStream() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width:360, height:270 } });
+    const v = document.getElementById('faceVideo');
+    v.srcObject = videoStream;
+    await new Promise(res => v.onloadedmetadata = res);
+    document.getElementById('camStatus').textContent = 'พร้อมสแกน — กด "สแกน" เมื่อหน้าตรงกล้อง';
+    document.getElementById('btnScan').style.display = '';
+  } catch(e) {
+    document.getElementById('camStatus').textContent = '❌ ไม่สามารถเปิดกล้องได้: ' + e.message;
+  }
+}
+function stopCamera() {
+  if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+}
+function closeCamera() { stopCamera(); document.getElementById('camOverlay').classList.remove('show'); }
+
+async function scanFace() {
+  const v = document.getElementById('faceVideo');
+  const statusEl = document.getElementById('camStatus');
+  const resultEl = document.getElementById('camResult');
+  statusEl.textContent = '🔍 กำลังตรวจจับใบหน้า...';
+  resultEl.innerHTML = '';
+  try {
+    const det = await faceapi.detectSingleFace(v, new faceapi.SsdMobilenetv1Options({minConfidenceScore:0.5}))
+      .withFaceLandmarks().withFaceDescriptor();
+    if (!det) {
+      statusEl.textContent = '⚠️ ไม่พบใบหน้า กรุณาจัดตำแหน่งใหม่';
+      return;
+    }
+    if (cameraMode === 'register') {
+      await doRegisterFace(det.descriptor);
+    } else {
+      await doVerifyAndClock(det.descriptor, cameraMode);
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ เกิดข้อผิดพลาด: ' + e.message;
+  }
+}
+
+async function doRegisterFace(descriptor) {
+  const statusEl = document.getElementById('camStatus');
+  const resultEl = document.getElementById('camResult');
+  statusEl.textContent = '💾 กำลังบันทึกใบหน้า...';
+  const r = await api('saveFaceDescriptor', { empId: regEmpId, descriptor: Array.from(descriptor) });
+  if (r.success) {
+    resultEl.innerHTML = '<div class="face-result face-ok">✅ ลงทะเบียนใบหน้าสำเร็จ!</div>';
+    // Update cache
+    const emp = empCache.find(e => e.id === regEmpId);
+    if (emp) { emp.hasFace = true; emp.faceDescriptor = Array.from(descriptor); }
+    statusEl.textContent = 'ลงทะเบียนเรียบร้อย';
+    setTimeout(() => { closeCamera(); renderRegFace(); }, 1500);
+  } else {
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ บันทึกไม่สำเร็จ: ' + r.error + '</div>';
+    statusEl.textContent = '';
+  }
+}
+
+async function doVerifyAndClock(descriptor, mode) {
+  const statusEl = document.getElementById('camStatus');
+  const resultEl = document.getElementById('camResult');
+  // Get my stored descriptor
+  const myEmp = empCache.find(e => e.id === me.id);
+  if (!myEmp || !myEmp.faceDescriptor) {
+    resultEl.innerHTML = '<div class="face-result face-fail">⚠️ ยังไม่ได้ลงทะเบียนใบหน้า กรุณาติดต่อ HR</div>';
+    return;
+  }
+  statusEl.textContent = '🔍 กำลังตรวจสอบใบหน้า...';
+  const stored = new Float32Array(myEmp.faceDescriptor);
+  const dist = faceapi.euclideanDistance(descriptor, stored);
+  const verified = dist < THRESHOLD;
+  if (verified) {
+    statusEl.textContent = '✅ ยืนยันตัวตนสำเร็จ กำลังบันทึก...';
+    if (mode === 'checkin') await doClockIn(true);
+    else await doClockOut(true);
+  } else {
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ใบหน้าไม่ตรง กรุณาลองใหม่ (dist: '+dist.toFixed(2)+')</div>';
+    statusEl.textContent = 'ลองใหม่อีกครั้ง';
+  }
+}
+
+async function doClockIn(faceVerified) {
+  const resultEl = document.getElementById('camResult');
+  const today = todayStr();
+  if (attCache.find(a => a.empId === me.id && a.date === today)) {
+    resultEl.innerHTML = '<div class="face-result face-fail">⚠️ เช็คอินวันนี้แล้ว</div>';
+    return;
+  }
+  const t = timeStr();
+  const r = await api('clockIn', { empId: me.id, date: today, time: t, faceVerified });
+  if (r.success) {
+    attCache.unshift({ id: r.id, empId: me.id, date: today, checkIn: t, checkOut: '', faceVerified: faceVerified?'yes':'no' });
+    resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คอินสำเร็จ เวลา ' + t + ' น.' + (faceVerified?' (ยืนยันด้วยใบหน้า)':'') + '</div>';
+    setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
+  } else {
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + r.error + '</div>';
+  }
+}
+async function doClockOut(faceVerified) {
+  const resultEl = document.getElementById('camResult');
+  const today = todayStr();
+  const idx = attCache.findIndex(a => a.empId === me.id && a.date === today && !a.checkOut);
+  if (idx < 0) { resultEl.innerHTML = '<div class="face-result face-fail">⚠️ ไม่พบข้อมูลเช็คอินวันนี้</div>'; return; }
+  const t = timeStr();
+  const r = await api('clockOut', { empId: me.id, date: today, time: t });
+  if (r.success) {
+    attCache[idx].checkOut = t;
+    resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คเอาท์สำเร็จ เวลา ' + t + ' น.</div>';
+    setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
+  }
+}
+async function manualCheckin() {
+  const today = todayStr();
+  if (attCache.find(a => a.empId === me.id && a.date === today)) { alert('เช็คอินวันนี้แล้ว'); return; }
+  if (!confirm('เช็คอินโดยไม่สแกนใบหน้า?')) return;
+  await doClockIn(false);
+  renderCheckin();
+}
+
+// ── RENDER: CHECKIN ──
+function renderCheckin() {
+  const rec = getTodayAtt();
+  const now = new Date();
+  document.getElementById('clkDate').textContent = now.toLocaleDateString('th-TH',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const statusEl = document.getElementById('clkStatus');
+  const inBtn = document.getElementById('btnCkIn');
+  const outBtn = document.getElementById('btnCkOut');
+  const manBtn = document.getElementById('btnManual');
+  if (!rec) {
+    statusEl.innerHTML = '<span class="badge bgr">ยังไม่ได้เช็คอิน</span>';
+    inBtn.style.display=''; outBtn.style.display='none'; manBtn.style.display='';
+  } else if (!rec.checkOut) {
+    statusEl.innerHTML = '<span class="badge bg">เช็คอินแล้ว ' + rec.checkIn + ' น.</span>';
+    inBtn.style.display='none'; outBtn.style.display=''; manBtn.style.display='none';
+  } else {
+    statusEl.innerHTML = '<span class="badge bb">เสร็จงาน ' + rec.checkIn + '–' + rec.checkOut + ' น.</span>';
+    inBtn.style.display='none'; outBtn.style.display='none'; manBtn.style.display='none';
+  }
+  // today record
+  const tr = document.getElementById('todayRec');
+  tr.innerHTML = rec ? `<table><tr><td>เข้างาน</td><td><strong>${rec.checkIn||'-'}</strong></td></tr><tr><td>ออกงาน</td><td><strong>${rec.checkOut||'-'}</strong></td></tr><tr><td>ชั่วโมง</td><td><strong>${calcH(rec.checkIn,rec.checkOut)}</strong></td></tr><tr><td>ยืนยันหน้า</td><td><span class="badge ${rec.faceVerified==='yes'?'bg':'by'}">${rec.faceVerified==='yes'?'✅ ผ่าน':'⚠️ ไม่ผ่าน'}</span></td></tr></table>` : '<p style="color:#94a3b8;padding:12px">ยังไม่มีข้อมูลวันนี้</p>';
+  // history
+  const mine = attCache.filter(a=>a.empId===me.id).slice(0,30);
+  document.getElementById('attTable').innerHTML = mine.length ? mine.map(a=>`<tr><td>${fmtDate(a.date)}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td>${calcH(a.checkIn,a.checkOut)}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`).join('') : '<tr><td colspan="5" class="empty">ไม่มีข้อมูล</td></tr>';
+}
+
+// ── RENDER: DASHBOARD ──
+function renderDash() {
+  const isAdmin = me.role === 'admin';
+  const today = todayStr();
+  const todayAtt = attCache.filter(a=>a.date===today);
+  const pendLeaves = leaveCache.filter(l=>l.status==='รออนุมัติ');
+  const stats = isAdmin ? [
+    {lb:'พนักงานทั้งหมด',vl:empCache.filter(e=>e.status==='ทำงาน').length,sb:'คน',c:'#1e40af'},
+    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#059669'},
+    {lb:'รอการอนุมัติ',vl:pendLeaves.length,sb:'ใบลา',c:'#d97706'},
+    {lb:'ลงทะเบียนหน้าแล้ว',vl:empCache.filter(e=>e.hasFace).length,sb:'คน',c:'#7c3aed'},
+  ] : [
+    {lb:'เช็คอินเดือนนี้',vl:attCache.filter(a=>a.empId===me.id&&a.date.startsWith(today.substring(0,7))).length,sb:'วัน',c:'#059669'},
+    {lb:'วันลาที่ใช้',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='อนุมัติ').reduce((s,l)=>s+Number(l.days),0),sb:'วันปีนี้',c:'#d97706'},
+    {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='รออนุมัติ').length,sb:'ใบลา',c:'#7c3aed'},
+    {lb:'ยืนยันใบหน้า',vl:(empCache.find(e=>e.id===me.id)||{}).hasFace?'✅':'❌',sb:(empCache.find(e=>e.id===me.id)||{}).hasFace?'ลงทะเบียนแล้ว':'ยังไม่ลงทะเบียน',c:'#1e40af'},
+  ];
+  document.getElementById('dashStats').innerHTML = stats.map(s=>`<div class="sc"><div class="lb">${s.lb}</div><div class="vl" style="color:${s.c}">${s.vl}</div><div class="sb">${s.sb}</div></div>`).join('');
+  const rec = getTodayAtt();
+  document.getElementById('dashToday').innerHTML = rec ? `<p>เข้างาน: <strong>${rec.checkIn}</strong></p><p style="margin-top:6px">ออกงาน: <strong>${rec.checkOut||'ยังไม่ออก'}</strong></p><p style="margin-top:6px">ยืนยันหน้า: <span class="badge ${rec.faceVerified==='yes'?'bg':'by'}">${rec.faceVerified==='yes'?'✅ ผ่าน':'⚠️ ไม่ผ่าน'}</span></p>` : '<p style="color:#94a3b8">ยังไม่ได้เช็คอิน</p><br><button class="btn btn-g btn-sm" onclick="nav(\'checkin\')">ไปเช็คอิน</button>';
+  const myLeaves = leaveCache.filter(l=>l.empId===me.id).slice(0,3);
+  const bdg = {อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
+  document.getElementById('dashLeave').innerHTML = myLeaves.length ? myLeaves.map(l=>`<div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid #f1f5f9"><span>${l.type} (${l.days} วัน)</span><span class="badge ${bdg[l.status]||'bgr'}">${l.status}</span></div>`).join('') : '<p style="color:#94a3b8">ไม่มีประวัติการลา</p>';
+  if (isAdmin && pendLeaves.length > 0) {
+    document.getElementById('dashPend').style.display = '';
+    const empMap = Object.fromEntries(empCache.map(e=>[e.id,e]));
+    document.getElementById('dashPendList').innerHTML = pendLeaves.slice(0,5).map(l=>{
+      const e=empMap[l.empId]||{};
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9"><span>${e.firstName||l.empId} ${e.lastName||''} — ${l.type} ${l.days} วัน</span><div style="display:flex;gap:6px"><button class="btn btn-g btn-sm" onclick="appLeave('${l.id}','อนุมัติ')">✓</button><button class="btn btn-r btn-sm" onclick="appLeave('${l.id}','ไม่อนุมัติ')">✗</button></div></div>`;
+    }).join('');
+  } else document.getElementById('dashPend').style.display = 'none';
+}
+
+// ── RENDER: LEAVE ──
+function renderLeave() {
+  document.getElementById('lStart').value = todayStr();
+  document.getElementById('lEnd').value = todayStr();
+}
+function leaveTab(t, el) {
+  document.querySelectorAll('#pgLeave .tab').forEach((e,i)=>e.classList.toggle('act',i===(t==='req'?0:1)));
+  document.getElementById('ltReq').style.display = t==='req'?'':'none';
+  document.getElementById('ltHist').style.display = t==='hist'?'':'none';
+  if (t==='hist') renderLeaveHist();
+}
+async function submitLeave() {
+  const type=document.getElementById('lType').value, days=document.getElementById('lDays').value,
+    start=document.getElementById('lStart').value, end=document.getElementById('lEnd').value,
+    reason=document.getElementById('lReason').value.trim();
+  const al=document.getElementById('leaveAlert');
+  if (!reason) { al.innerHTML='<div class="al al-e">กรุณาระบุเหตุผล</div>'; return; }
+  const r = await api('submitLeave',{empId:me.id,type,days:Number(days),startDate:start,endDate:end,reason,submittedAt:todayStr()});
+  if (r.success) {
+    leaveCache.unshift({id:r.id,empId:me.id,type,startDate:start,endDate:end,days,reason,status:'รออนุมัติ',submittedAt:todayStr()});
+    al.innerHTML='<div class="al al-s">✅ ส่งใบลาเรียบร้อย รอการอนุมัติ</div>';
+    document.getElementById('lReason').value='';
+  } else al.innerHTML='<div class="al al-e">❌ '+r.error+'</div>';
+}
+function renderLeaveHist() {
+  const mine=leaveCache.filter(l=>l.empId===me.id);
+  const bdg={อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
+  document.getElementById('leaveHistTable').innerHTML=mine.length?mine.map(l=>`<tr><td>${l.type}</td><td>${fmtDate(l.startDate)}${l.startDate!==l.endDate?' – '+fmtDate(l.endDate):''}</td><td>${l.days}</td><td>${l.reason}</td><td><span class="badge ${bdg[l.status]||'bgr'}">${l.status}</span></td></tr>`).join(''):'<tr><td colspan="5" class="empty">ไม่มีประวัติ</td></tr>';
+}
+
+// ── RENDER: EMPLOYEES ──
+function renderEmps() {
+  const q=(document.getElementById('empSrch')||{}).value||'';
+  const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
+  document.getElementById('empTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}</td><td>${e.phone||'-'}</td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td></tr>`).join(''):'<tr><td colspan="7" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+
+// ── RENDER: APPROVE ──
+function renderApprove() {
+  const pending=leaveCache.filter(l=>l.status==='รออนุมัติ');
+  const pcEl=document.getElementById('pendCnt');
+  if(pcEl) pcEl.textContent=pending.length||'';
+  const list=approvFilter==='pend'?pending:[...leaveCache].sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+  const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
+  const bdg={อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
+  document.getElementById('approveTable').innerHTML=list.length?list.map(l=>{
+    const e=empMap[l.empId]||{};
+    return `<tr><td>${e.firstName||l.empId} ${e.lastName||''}<br><small style="color:#94a3b8">${e.dept||''}</small></td><td>${l.type}</td><td>${fmtDate(l.startDate)}${l.startDate!==l.endDate?' – '+fmtDate(l.endDate):''}</td><td>${l.days}</td><td>${l.reason}</td><td><span class="badge ${bdg[l.status]||'bgr'}">${l.status}</span></td><td>${l.status==='รออนุมัติ'?`<button class="btn btn-g btn-sm" onclick="appLeave('${l.id}','อนุมัติ')">✓</button> <button class="btn btn-r btn-sm" onclick="appLeave('${l.id}','ไม่อนุมัติ')">✗</button>`:'-'}</td></tr>`;
+  }).join(''):'<tr><td colspan="7" class="empty">ไม่มีรายการ</td></tr>';
+}
+function approveTab(t,el) {
+  approvFilter=t;
+  document.querySelectorAll('#pgApprove .tab').forEach((e,i)=>e.classList.toggle('act',i===(t==='pend'?0:1)));
+  renderApprove();
+}
+async function appLeave(id,status) {
+  const r=await api('approveLeave',{id,status,approvedBy:me.id});
+  if(r.success){const idx=leaveCache.findIndex(l=>l.id===id);if(idx>=0)leaveCache[idx].status=status;}
+  renderApprove();
+}
+
+// ── RENDER: REGISTER FACE ──
+function renderRegFace() {
+  const q=(document.getElementById('rfSrch')||{}).value||'';
+  const list=empCache.filter(e=>e.status==='ทำงาน'&&(!q||(e.firstName+e.lastName+e.dept).toLowerCase().includes(q.toLowerCase())));
+  document.getElementById('rfTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.dept}</td><td><span class="badge ${e.hasFace?'bg':'by'}">${e.hasFace?'✅ ลงทะเบียนแล้ว':'⚠️ ยังไม่ลง'}</span></td><td><button class="btn btn-p btn-sm" onclick="openCamera('register','${e.id}')">📷 ลงทะเบียน</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+
+// ── RENDER: MANAGE ──
+function renderManage() {
+  const q=(document.getElementById('mgSrch')||{}).value||'';
+  const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
+  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}</td><td><span class="badge ${e.role==='admin'?'bb':'bgr'}">${e.role==='admin'?'Admin':'พนักงาน'}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+function openAddEmp() {
+  editEmpId=null;
+  document.getElementById('mEmpTitle').textContent='เพิ่มพนักงานใหม่';
+  document.getElementById('ePwNote').textContent='';
+  ['eId','eUser','eFirst','eLast','ePos','ePhone','ePw'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('eDept').value='การตลาด';
+  document.getElementById('eRole').value='employee';
+  document.getElementById('eStat').value='ทำงาน';
+  document.getElementById('eId').disabled=false;
+  document.getElementById('eUser').disabled=false;
+  document.getElementById('mEmpAlert').innerHTML='';
+  document.getElementById('mEmp').classList.add('show');
+}
+function openEditEmp(id) {
+  editEmpId=id;
+  const e=empCache.find(x=>x.id===id); if(!e) return;
+  document.getElementById('mEmpTitle').textContent='แก้ไขข้อมูล';
+  document.getElementById('ePwNote').textContent='(ปล่อยว่างไม่เปลี่ยน)';
+  document.getElementById('eId').value=e.id; document.getElementById('eUser').value=e.username;
+  document.getElementById('eFirst').value=e.firstName; document.getElementById('eLast').value=e.lastName;
+  document.getElementById('ePos').value=e.position; document.getElementById('eDept').value=e.dept;
+  document.getElementById('ePhone').value=e.phone||''; document.getElementById('eRole').value=e.role;
+  document.getElementById('eStat').value=e.status; document.getElementById('ePw').value='';
+  document.getElementById('eId').disabled=true; document.getElementById('eUser').disabled=true;
+  document.getElementById('mEmpAlert').innerHTML='';
+  document.getElementById('mEmp').classList.add('show');
+}
+async function saveEmp() {
+  const data={id:document.getElementById('eId').value.trim(),username:document.getElementById('eUser').value.trim(),
+    firstName:document.getElementById('eFirst').value.trim(),lastName:document.getElementById('eLast').value.trim(),
+    position:document.getElementById('ePos').value.trim(),dept:document.getElementById('eDept').value,
+    phone:document.getElementById('ePhone').value.trim(),role:document.getElementById('eRole').value,
+    status:document.getElementById('eStat').value,password:document.getElementById('ePw').value};
+  const al=document.getElementById('mEmpAlert');
+  if(!data.firstName||!data.lastName||!data.position){al.innerHTML='<div class="al al-e">กรุณากรอกข้อมูลให้ครบ</div>';return;}
+  if(!editEmpId&&!data.password){al.innerHTML='<div class="al al-e">กรุณาตั้งรหัสผ่าน</div>';return;}
+  const action=editEmpId?'updateEmployee':'addEmployee';
+  const r=await api(action,data);
+  if(r.success){
+    closeModal('mEmp');
+    const fresh=await api('getEmployees');
+    if(fresh.success) empCache=fresh.employees;
+    renderManage();
+  } else al.innerHTML='<div class="al al-e">❌ '+r.error+'</div>';
+}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+
+// ── RENDER: REPORT ──
+function renderReport() {
+  const today=todayStr();
+  const todayAtt=attCache.filter(a=>a.date===today);
+  const approved=leaveCache.filter(l=>l.status==='อนุมัติ');
+  document.getElementById('rptStats').innerHTML=[
+    {lb:'ใบลาทั้งหมด',vl:leaveCache.length,sb:'ทุกสถานะ',c:'#1e40af'},
+    {lb:'อนุมัติแล้ว',vl:approved.length,sb:'ใบ',c:'#059669'},
+    {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#d97706'},
+    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#7c3aed'},
+  ].map(s=>`<div class="sc"><div class="lb">${s.lb}</div><div class="vl" style="color:${s.c}">${s.vl}</div><div class="sb">${s.sb}</div></div>`).join('');
+  const byType={};leaveCache.forEach(l=>{byType[l.type]=(byType[l.type]||0)+Number(l.days);});
+  document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
+  const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
+  document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
+}
+
+// ── BOOT ──
+window.addEventListener('load', initApp);
+</script>
+</body>
+</html>
