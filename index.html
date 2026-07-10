@@ -343,7 +343,7 @@ tr:hover td{background:#f8fafc}
 <script>
 // ── CONFIG ──
 const API_STORE_KEY = 'hr_api_url';
-let API_URL = localStorage.getItem(API_STORE_KEY) || '';
+let API_URL = localStorage.getItem(API_STORE_KEY) || 'https://script.google.com/macros/s/AKfycbzp3WIqg6Yx6q2jV_fUSYC2-_4dPiLx_1BUcze8ZFN36Fgg9XLQ9_PnUtv0KZ6XEkbV/exec';
 const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
 const THRESHOLD = 0.50; // face matching threshold
 
@@ -410,6 +410,7 @@ function setLoad(msg, pct) {
 async function api(action, data = {}) {
   const res = await fetch(API_URL, {
     method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
     body: JSON.stringify({ action, ...data })
   });
   const text = await res.text();
