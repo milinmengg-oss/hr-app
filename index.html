@@ -799,6 +799,7 @@ async function loadAllData() {
 
 // ── NAV ──
 function nav(page, el) {
+  window.scrollTo({top:0, behavior:'smooth'});
   document.querySelectorAll('.pg').forEach(p => p.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('act'));
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
