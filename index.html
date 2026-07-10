@@ -180,6 +180,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
             <button class="btn btn-r" id="btnCkOut" onclick="openCamera('checkout')" style="display:none;padding:12px 32px;font-size:14px">📷 สแกนใบหน้า เช็คเอาท์</button>
             <br><br>
             <button class="btn btn-s btn-sm" onclick="manualCheckin()" id="btnManual">✏️ เช็คอินแบบธรรมดา (ไม่สแกนหน้า)</button>
+            <button class="btn btn-s btn-sm" onclick="manualCheckout()" id="btnManualOut" style="display:none">✏️ เช็คเอาท์แบบธรรมดา (ไม่สแกนหน้า)</button>
           </div>
         </div>
         <div class="c">
@@ -863,6 +864,16 @@ async function doClockOut(faceVerified) {
   }
 }
 
+async function manualCheckout() {
+  const today = todayStr();
+  const idx = attCache.findIndex(a => a.empId === me.id && a.date === today && !a.checkOut);
+  if (idx < 0) { alert('ไม่พบข้อมูลเช็คอินวันนี้'); return; }
+  if (!confirm('เช็คเอาท์โดยไม่สแกนใบหน้า?')) return;
+  const t = timeStr();
+  const r = await api('clockOut', {empId:me.id, date:today, time:t});
+  if (r.success) { attCache[idx].checkOut = t; renderCheckin(); }
+  else alert('เกิดข้อผิดพลาด: ' + r.error);
+}
 async function manualCheckin() {
   const today = todayStr();
   if (attCache.find(a => a.empId === me.id && a.date === today)) { alert('เช็คอินวันนี้แล้ว'); return; }
@@ -889,15 +900,16 @@ function renderCheckin() {
   const inBtn = document.getElementById('btnCkIn');
   const outBtn = document.getElementById('btnCkOut');
   const manBtn = document.getElementById('btnManual');
+  const manOutBtn = document.getElementById('btnManualOut');
   if (!rec) {
     statusEl.innerHTML = '<span class="badge bgr">ยังไม่ได้เช็คอิน</span>';
-    inBtn.style.display=''; outBtn.style.display='none'; manBtn.style.display='';
+    inBtn.style.display=''; outBtn.style.display='none'; manBtn.style.display=''; manOutBtn.style.display='none';
   } else if (!rec.checkOut) {
     statusEl.innerHTML = '<span class="badge bg">เช็คอินแล้ว ' + rec.checkIn + ' น.</span>';
-    inBtn.style.display='none'; outBtn.style.display=''; manBtn.style.display='none';
+    inBtn.style.display='none'; outBtn.style.display=''; manBtn.style.display='none'; manOutBtn.style.display='';
   } else {
     statusEl.innerHTML = '<span class="badge bb">เสร็จงาน ' + rec.checkIn + '–' + rec.checkOut + ' น.</span>';
-    inBtn.style.display='none'; outBtn.style.display='none'; manBtn.style.display='none';
+    inBtn.style.display='none'; outBtn.style.display='none'; manBtn.style.display='none'; manOutBtn.style.display='none';
   }
   const tr = document.getElementById('todayRec');
   tr.innerHTML = rec ? `<table><tr><td>เข้างาน</td><td><strong>${rec.checkIn||'-'}</strong></td></tr><tr><td>ออกงาน</td><td><strong>${rec.checkOut||'-'}</strong></td></tr><tr><td>ชั่วโมง</td><td><strong>${calcH(rec.checkIn,rec.checkOut)}</strong></td></tr><tr><td>ยืนยันหน้า</td><td><span class="badge ${rec.faceVerified==='yes'?'bg':'by'}">${rec.faceVerified==='yes'?'✅ ผ่าน':'⚠️ ไม่ผ่าน'}</span></td></tr></table>` : '<p style="color:#94a3b8;padding:12px">ยังไม่มีข้อมูลวันนี้</p>';
