@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>HR Face System</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Prompt',Arial,sans-serif;background:linear-gradient(135deg,#f5f7ff 0%,#ede9fe 50%,#fce7f3 100%);color:#1e293b;font-size:14px;min-height:100vh}
-/* LOGIN */
 .screen{display:none;min-height:100vh;align-items:center;justify-content:center;background:linear-gradient(135deg,#667eea 0%,#764ba2 50%,#f64f59 100%)}
 .screen.show{display:flex}
 .card{background:rgba(255,255,255,0.95);backdrop-filter:blur(20px);border-radius:24px;padding:36px;width:420px;box-shadow:0 25px 80px rgba(118,75,162,.35),0 0 0 1px rgba(255,255,255,.5)}
@@ -29,7 +30,6 @@ body{font-family:'Prompt',Arial,sans-serif;background:linear-gradient(135deg,#f5
 .btn-sm{padding:5px 12px;font-size:11px}
 .progress-bar{width:100%;background:#e9d5ff;border-radius:8px;height:6px;margin:8px 0}
 .progress-fill{height:6px;border-radius:8px;background:linear-gradient(90deg,#667eea,#764ba2);transition:width .3s}
-/* APP */
 .topbar{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 4px 20px rgba(118,75,162,.4)}
 .topbar h1{font-size:16px;font-weight:700;letter-spacing:.3px}
 .topbar .uinfo{display:flex;align-items:center;gap:10px;font-size:13px}
@@ -73,7 +73,6 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
 .al-e{background:linear-gradient(135deg,#fee2e2,#fecaca);color:#991b1b;border:1px solid #fca5a5}
 .al-s{background:linear-gradient(135deg,#d1fae5,#a7f3d0);color:#065f46;border:1px solid #6ee7b7}
 .empty{text-align:center;padding:36px;color:#a78bfa;font-size:12px}
-/* CAMERA */
 .cam-overlay{display:none;position:fixed;inset:0;background:rgba(15,3,30,.9);backdrop-filter:blur(4px);z-index:300;align-items:center;justify-content:center}
 .cam-overlay.show{display:flex}
 .cam-box{background:linear-gradient(135deg,#1e1b4b,#312e81);border:1px solid rgba(167,139,250,.3);border-radius:20px;padding:26px;width:430px;text-align:center;box-shadow:0 25px 60px rgba(0,0,0,.5)}
@@ -81,19 +80,16 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
 #faceVideo{width:360px;height:270px;object-fit:cover;border-radius:12px;background:#000;display:block;margin:0 auto;border:2px solid rgba(167,139,250,.4)}
 #faceCanvas{display:none}
 .cam-status{color:#c4b5fd;font-size:13px;margin:12px 0}
-.cam-ring{width:360px;height:270px;border:3px solid;border-radius:12px;position:absolute;top:0;left:0;pointer-events:none;transition:border-color .3s}
 .cam-wrap{position:relative;display:inline-block}
 .cam-actions{display:flex;gap:10px;justify-content:center;margin-top:16px}
 .face-result{padding:14px;border-radius:10px;margin-top:10px;font-size:14px;font-weight:600;text-align:center}
 .face-ok{background:linear-gradient(135deg,#d1fae5,#a7f3d0);color:#065f46}
 .face-fail{background:linear-gradient(135deg,#fee2e2,#fecaca);color:#991b1b}
-/* MODAL */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(15,3,30,.5);backdrop-filter:blur(4px);z-index:200;align-items:center;justify-content:center}
 .modal-bg.show{display:flex}
 .modal{background:#fff;border-radius:18px;padding:26px;width:460px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 25px 60px rgba(118,75,162,.25);border:1px solid #e9d5ff}
 .modal h2{font-size:15px;font-weight:700;margin-bottom:16px;color:#4c1d95}
 .mf{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #e9d5ff}
-/* CLOCK */
 .clk-box{text-align:center;padding:28px}
 .clk-time{font-size:52px;font-weight:700;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:3px;font-family:monospace}
 .clk-date{color:#7c3aed;font-size:13px;margin:8px 0 22px;font-weight:500}
@@ -104,33 +100,18 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
 </head>
 <body>
 
-<!-- SETUP SCREEN -->
-<div class="screen" id="sSetup">
-<div class="card" style="width:460px">
-  <h1>🔧 ตั้งค่าระบบ</h1>
-  <p>กรอก URL ของ Google Apps Script ก่อนใช้งาน</p>
-  <div id="setupAlert"></div>
-  <div class="fg">
-    <label>Google Apps Script URL</label>
-    <input type="text" id="apiUrlInput" placeholder="https://script.google.com/macros/s/...">
-  </div>
-  <button class="btn btn-p" onclick="saveSetup()">✅ บันทึกและเริ่มใช้งาน</button>
-  <p style="margin-top:12px;font-size:11px;color:#94a3b8;text-align:center">ดูวิธีตั้งค่าใน GoogleAppsScript.gs</p>
-</div>
-</div>
-
-<!-- LOADING SCREEN -->
+<!-- LOADING -->
 <div class="screen" id="sLoading" style="background:linear-gradient(135deg,#1e40af,#3b82f6)">
 <div class="card" style="text-align:center">
   <div style="font-size:32px;margin-bottom:12px">🤖</div>
   <h1 style="text-align:center;margin-bottom:8px">กำลังโหลดระบบ</h1>
-  <p style="text-align:center" id="loadMsg">เริ่มต้น Face Recognition...</p>
+  <p style="text-align:center" id="loadMsg">กำลังเชื่อมต่อ Firebase...</p>
   <div class="progress-bar"><div class="progress-fill" id="loadBar" style="width:0%"></div></div>
   <p style="font-size:11px;color:#94a3b8;margin-top:8px">ครั้งแรกอาจใช้เวลา 1-2 นาที (โหลดโมเดล AI)</p>
 </div>
 </div>
 
-<!-- LOGIN SCREEN -->
+<!-- LOGIN -->
 <div class="screen" id="sLogin" style="background:linear-gradient(135deg,#1e40af,#3b82f6)">
 <div class="card">
   <h1>🏢 HR System</h1>
@@ -139,7 +120,6 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
   <div class="fg"><label>Username</label><input type="text" id="lu" placeholder="username" onkeydown="if(event.key==='Enter')doLogin()"></div>
   <div class="fg"><label>Password</label><input type="password" id="lp" placeholder="password" onkeydown="if(event.key==='Enter')doLogin()"></div>
   <button class="btn btn-p" onclick="doLogin()">เข้าสู่ระบบ</button>
-  <button class="btn btn-s" style="width:100%;margin-top:8px" onclick="clearSetup()">⚙️ เปลี่ยน API URL</button>
 </div>
 </div>
 
@@ -295,7 +275,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
   </div>
 </div>
 
-<!-- CAMERA OVERLAY -->
+<!-- CAMERA -->
 <div class="cam-overlay" id="camOverlay">
   <div class="cam-box">
     <h2 id="camTitle">📷 สแกนใบหน้า</h2>
@@ -312,7 +292,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
   </div>
 </div>
 
-<!-- MODAL: ADD/EDIT EMPLOYEE -->
+<!-- MODAL -->
 <div class="modal-bg" id="mEmp">
   <div class="modal">
     <h2 id="mEmpTitle">เพิ่มพนักงาน</h2>
@@ -351,60 +331,172 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
 </div>
 
 <script>
+// ── FIREBASE ──
+const firebaseConfig = {
+  apiKey: "AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g",
+  authDomain: "abc-hr-online.firebaseapp.com",
+  projectId: "abc-hr-online",
+  storageBucket: "abc-hr-online.firebasestorage.app",
+  messagingSenderId: "689470252290",
+  appId: "1:689470252290:web:ac7dca259ffc49dafe8e1b",
+  measurementId: "G-KV3RT1DGLZ"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
 // ── CONFIG ──
-const API_STORE_KEY = 'hr_api_url';
-let API_URL = localStorage.getItem(API_STORE_KEY) || 'https://script.google.com/macros/s/AKfycbz7t2DmbfGFkzEva8N5D0uIJVYzgSzb02onHA2YkUrZHLn9UsQjpQjiHkgAuvKHqRI1/exec';
 const MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights';
-const THRESHOLD = 0.50; // face matching threshold
+const THRESHOLD = 0.50;
 
 // ── STATE ──
-let me = null;        // current user
-let empCache = [];    // all employees (with face descriptors)
-let attCache = [];    // attendance records
-let leaveCache = [];  // leave records
+let me = null;
+let empCache = [];
+let attCache = [];
+let leaveCache = [];
 let faceReady = false;
 let videoStream = null;
-let cameraMode = ''; // 'checkin'|'checkout'|'register'
+let cameraMode = '';
 let regEmpId = '';
 let editEmpId = null;
 let approvFilter = 'pend';
 
-// ── SCREEN UTILS ──
+// ── SCREEN ──
 function showScreen(id) {
-  ['sSetup','sLoading','sLogin'].forEach(s => {
+  ['sLoading','sLogin'].forEach(s => {
     const el = document.getElementById(s);
-    el.classList.remove('show');
+    if (el) el.classList.remove('show');
   });
   document.getElementById('sApp').style.display = 'none';
   if (id === 'sApp') document.getElementById('sApp').style.display = 'block';
   else document.getElementById(id).classList.add('show');
 }
 
-// ── SETUP ──
-function saveSetup() {
-  const url = document.getElementById('apiUrlInput').value.trim();
-  if (!url.startsWith('https://script.google.com')) {
-    document.getElementById('setupAlert').innerHTML = '<div class="al al-e">URL ไม่ถูกต้อง ต้องขึ้นต้นด้วย https://script.google.com</div>';
-    return;
+// ── FIREBASE API ──
+async function api(action, data = {}) {
+  try {
+    switch(action) {
+      case 'login': {
+        const q = await db.collection('employees')
+          .where('username','==',data.username)
+          .where('password','==',data.password).get();
+        if (q.empty) return {success:false,error:'Username หรือ Password ไม่ถูกต้อง'};
+        const empDoc = q.docs.find(d => d.data().status === 'ทำงาน');
+        if (!empDoc) return {success:false,error:'บัญชีถูกระงับ'};
+        const e = empDoc.data();
+        return {success:true,employee:{id:e.id,username:e.username,firstName:e.firstName,lastName:e.lastName,position:e.position,dept:e.dept,phone:e.phone,role:e.role,status:e.status,hasFace:!!e.faceDescriptor}};
+      }
+      case 'getEmployees': {
+        const snap = await db.collection('employees').get();
+        const employees = snap.docs.map(d => {
+          const e = d.data();
+          return {id:e.id,username:e.username,firstName:e.firstName,lastName:e.lastName,position:e.position,dept:e.dept,phone:e.phone||'',role:e.role,status:e.status,hasFace:!!e.faceDescriptor,faceDescriptor:e.faceDescriptor||null};
+        });
+        return {success:true,employees};
+      }
+      case 'addEmployee': {
+        const existDoc = await db.collection('employees').doc(data.id).get();
+        if (existDoc.exists) return {success:false,error:'รหัสพนักงานซ้ำ'};
+        const userSnap = await db.collection('employees').where('username','==',data.username).get();
+        if (!userSnap.empty) return {success:false,error:'Username ซ้ำ'};
+        await db.collection('employees').doc(data.id).set({
+          id:data.id,username:data.username,password:data.password,
+          firstName:data.firstName,lastName:data.lastName,position:data.position,
+          dept:data.dept,phone:data.phone||'',role:data.role,status:data.status,
+          faceDescriptor:null,createdAt:new Date().toISOString()
+        });
+        return {success:true};
+      }
+      case 'updateEmployee': {
+        const upd = {firstName:data.firstName,lastName:data.lastName,position:data.position,dept:data.dept,phone:data.phone||'',role:data.role,status:data.status};
+        if (data.password) upd.password = data.password;
+        await db.collection('employees').doc(data.id).update(upd);
+        return {success:true};
+      }
+      case 'saveFaceDescriptor': {
+        await db.collection('employees').doc(data.empId).update({faceDescriptor:data.descriptor});
+        return {success:true};
+      }
+      case 'clockIn': {
+        const q = await db.collection('attendance')
+          .where('empId','==',data.empId).where('date','==',data.date).get();
+        if (!q.empty) return {success:false,error:'เช็คอินวันนี้แล้ว'};
+        const id = 'A'+Date.now();
+        await db.collection('attendance').doc(id).set({
+          id,empId:data.empId,date:data.date,checkIn:data.time,
+          checkOut:'',faceVerified:data.faceVerified?'yes':'no'
+        });
+        return {success:true,id};
+      }
+      case 'clockOut': {
+        const q = await db.collection('attendance')
+          .where('empId','==',data.empId).where('date','==',data.date).get();
+        const doc = q.docs.find(d => !d.data().checkOut);
+        if (!doc) return {success:false,error:'ไม่พบข้อมูลเช็คอิน'};
+        await doc.ref.update({checkOut:data.time});
+        return {success:true};
+      }
+      case 'getAttendance': {
+        let q = db.collection('attendance');
+        if (data.empId) q = q.where('empId','==',data.empId);
+        const snap = await q.get();
+        const records = snap.docs.map(d=>d.data()).sort((a,b)=>b.date.localeCompare(a.date));
+        return {success:true,records};
+      }
+      case 'submitLeave': {
+        const id = 'L'+Date.now();
+        await db.collection('leaves').doc(id).set({
+          id,empId:data.empId,type:data.type,startDate:data.startDate,
+          endDate:data.endDate,days:data.days,reason:data.reason,
+          status:'รออนุมัติ',submittedAt:data.submittedAt,approvedBy:''
+        });
+        return {success:true,id};
+      }
+      case 'getLeaves': {
+        let q = db.collection('leaves');
+        if (data.empId) q = q.where('empId','==',data.empId);
+        const snap = await q.get();
+        const leaves = snap.docs.map(d=>d.data()).sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+        return {success:true,leaves};
+      }
+      case 'approveLeave': {
+        await db.collection('leaves').doc(data.id).update({status:data.status,approvedBy:data.approvedBy||''});
+        return {success:true};
+      }
+      default: return {success:false,error:'Unknown action'};
+    }
+  } catch(e) {
+    return {success:false,error:e.message};
   }
-  API_URL = url;
-  localStorage.setItem(API_STORE_KEY, url);
-  initApp();
 }
-function clearSetup() { localStorage.removeItem(API_STORE_KEY); API_URL = ''; showScreen('sSetup'); }
+
+// ── INIT ADMIN ──
+async function initAdmin() {
+  try {
+    const snap = await db.collection('employees').limit(1).get();
+    if (snap.empty) {
+      await db.collection('employees').doc('admin').set({
+        id:'admin',username:'admin',password:'admin123',
+        firstName:'ผู้ดูแล',lastName:'ระบบ',position:'HR Manager',
+        dept:'HR',phone:'',role:'admin',status:'ทำงาน',
+        faceDescriptor:null,createdAt:new Date().toISOString()
+      });
+    }
+  } catch(e) { console.warn('initAdmin:', e.message); }
+}
 
 // ── INIT ──
 async function initApp() {
-  if (!API_URL) { showScreen('sSetup'); return; }
   showScreen('sLoading');
   try {
-    setLoad('กำลังโหลด Face Detection (1/3)...', 10);
+    setLoad('กำลังเชื่อมต่อ Firebase...', 5);
+    await initAdmin();
+    setLoad('กำลังโหลด Face Detection (1/3)...', 20);
     await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-    setLoad('กำลังโหลด Face Landmarks (2/3)...', 50);
+    setLoad('กำลังโหลด Face Landmarks (2/3)...', 55);
     await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    setLoad('กำลังโหลด Face Recognition (3/3)...', 80);
+    setLoad('กำลังโหลด Face Recognition (3/3)...', 85);
     await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
-    setLoad('พร้อมใช้งาน!', 100);
+    setLoad('พร้อมใช้งาน! ⚡', 100);
     faceReady = true;
     setTimeout(() => showScreen('sLogin'), 500);
   } catch(e) {
@@ -416,38 +508,16 @@ function setLoad(msg, pct) {
   document.getElementById('loadBar').style.width = pct + '%';
 }
 
-// ── API ──
-async function api(action, data = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35000);
-  try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action, ...data }),
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
-    const text = await res.text();
-    try { return JSON.parse(text); }
-    catch(e) { return { success: false, error: text }; }
-  } catch(e) {
-    clearTimeout(timeout);
-    if (e.name === 'AbortError') return { success: false, error: 'หมดเวลา (timeout) กรุณาลองใหม่' };
-    return { success: false, error: e.message };
-  }
-}
-
 // ── AUTH ──
 async function doLogin() {
   const u = document.getElementById('lu').value.trim();
   const p = document.getElementById('lp').value.trim();
   const alEl = document.getElementById('loginAlert');
   if (!u || !p) { alEl.innerHTML = '<div class="al al-e">กรุณากรอก username และ password</div>'; return; }
-  alEl.innerHTML = '<div class="al" style="background:#f1f5f9">กำลังตรวจสอบ...</div>';
+  alEl.innerHTML = '<div class="al" style="background:#f1f5f9">⏳ กำลังตรวจสอบ...</div>';
   try {
-    const r = await api('login', { username: u, password: p });
-    if (!r.success) { alEl.innerHTML = '<div class="al al-e">' + (r.error || 'ไม่พบผู้ใช้') + '</div>'; return; }
+    const r = await api('login', {username:u, password:p});
+    if (!r.success) { alEl.innerHTML = '<div class="al al-e">' + (r.error||'ไม่พบผู้ใช้') + '</div>'; return; }
     me = r.employee;
     alEl.innerHTML = '';
     await loadAllData();
@@ -456,7 +526,7 @@ async function doLogin() {
     nav('dash');
     startClock();
   } catch(e) {
-    alEl.innerHTML = '<div class="al al-e">ไม่สามารถเชื่อมต่อ API: ' + e.message + '</div>';
+    alEl.innerHTML = '<div class="al al-e">❌ ' + e.message + '</div>';
   }
 }
 function toggleMenu() {
@@ -484,8 +554,8 @@ function setupApp() {
 async function loadAllData() {
   const [eRes, aRes, lRes] = await Promise.all([
     api('getEmployees'),
-    api('getAttendance', { empId: me.role === 'admin' ? null : me.id }),
-    api('getLeaves', { empId: me.role === 'admin' ? null : me.id })
+    api('getAttendance', {empId: me.role==='admin' ? null : me.id}),
+    api('getLeaves', {empId: me.role==='admin' ? null : me.id})
   ]);
   if (eRes.success) empCache = eRes.employees;
   if (aRes.success) attCache = aRes.records;
@@ -498,8 +568,8 @@ function nav(page, el) {
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('act'));
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
   if (el) el.classList.add('act');
-  const renders = { dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport };
+  const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport};
   if (renders[page]) renders[page]();
 }
 
@@ -517,7 +587,7 @@ function timeStr() { return new Date().toTimeString().split(' ')[0].substring(0,
 function getTodayAtt() { return attCache.find(a => a.empId === me.id && a.date === todayStr()); }
 function fmtDate(d) {
   if (!d) return '-';
-  const [y,m,day] = d.split('-');
+  const [y,m,day] = String(d).split('-');
   const ms = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
   return parseInt(day) + ' ' + ms[parseInt(m)-1] + ' ' + (parseInt(y)+543);
 }
@@ -531,7 +601,7 @@ function calcH(i,o) {
 // ── CAMERA ──
 function openCamera(mode, empId='') {
   cameraMode = mode; regEmpId = empId;
-  const titles = { checkin:'📷 สแกนใบหน้า เช็คอิน', checkout:'📷 สแกนใบหน้า เช็คเอาท์', register:'📷 ลงทะเบียนใบหน้า: ' + (empCache.find(e=>e.id===empId)||{}).firstName };
+  const titles = {checkin:'📷 สแกนใบหน้า เช็คอิน', checkout:'📷 สแกนใบหน้า เช็คเอาท์', register:'📷 ลงทะเบียนใบหน้า: ' + (empCache.find(e=>e.id===empId)||{}).firstName};
   document.getElementById('camTitle').textContent = titles[mode] || '📷 สแกนใบหน้า';
   document.getElementById('camResult').innerHTML = '';
   document.getElementById('camStatus').textContent = 'กำลังเปิดกล้อง...';
@@ -541,7 +611,7 @@ function openCamera(mode, empId='') {
 }
 async function startCameraStream() {
   try {
-    videoStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width:360, height:270 } });
+    videoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:360,height:270}});
     const v = document.getElementById('faceVideo');
     v.srcObject = videoStream;
     await new Promise(res => v.onloadedmetadata = res);
@@ -565,10 +635,7 @@ async function scanFace() {
   try {
     const det = await faceapi.detectSingleFace(v, new faceapi.SsdMobilenetv1Options({minConfidenceScore:0.5}))
       .withFaceLandmarks().withFaceDescriptor();
-    if (!det) {
-      statusEl.textContent = '⚠️ ไม่พบใบหน้า กรุณาจัดตำแหน่งใหม่';
-      return;
-    }
+    if (!det) { statusEl.textContent = '⚠️ ไม่พบใบหน้า กรุณาจัดตำแหน่งใหม่'; return; }
     if (cameraMode === 'register') {
       await doRegisterFace(det.descriptor);
     } else {
@@ -583,10 +650,9 @@ async function doRegisterFace(descriptor) {
   const statusEl = document.getElementById('camStatus');
   const resultEl = document.getElementById('camResult');
   statusEl.textContent = '💾 กำลังบันทึกใบหน้า...';
-  const r = await api('saveFaceDescriptor', { empId: regEmpId, descriptor: Array.from(descriptor) });
+  const r = await api('saveFaceDescriptor', {empId:regEmpId, descriptor:Array.from(descriptor)});
   if (r.success) {
     resultEl.innerHTML = '<div class="face-result face-ok">✅ ลงทะเบียนใบหน้าสำเร็จ!</div>';
-    // Update cache
     const emp = empCache.find(e => e.id === regEmpId);
     if (emp) { emp.hasFace = true; emp.faceDescriptor = Array.from(descriptor); }
     statusEl.textContent = 'ลงทะเบียนเรียบร้อย';
@@ -600,7 +666,6 @@ async function doRegisterFace(descriptor) {
 async function doVerifyAndClock(descriptor, mode) {
   const statusEl = document.getElementById('camStatus');
   const resultEl = document.getElementById('camResult');
-  // Get my stored descriptor
   const myEmp = empCache.find(e => e.id === me.id);
   if (!myEmp || !myEmp.faceDescriptor) {
     resultEl.innerHTML = '<div class="face-result face-fail">⚠️ ยังไม่ได้ลงทะเบียนใบหน้า กรุณาติดต่อ HR</div>';
@@ -611,9 +676,16 @@ async function doVerifyAndClock(descriptor, mode) {
   const dist = faceapi.euclideanDistance(descriptor, stored);
   const verified = dist < THRESHOLD;
   if (verified) {
-    statusEl.textContent = '✅ ยืนยันตัวตนสำเร็จ กำลังบันทึก...';
+    document.getElementById('btnScan').disabled = true;
+    let dots = 0;
+    const loadingInterval = setInterval(() => {
+      dots = (dots + 1) % 4;
+      statusEl.textContent = '⏳ กำลังบันทึก' + '.'.repeat(dots);
+    }, 400);
     if (mode === 'checkin') await doClockIn(true);
     else await doClockOut(true);
+    clearInterval(loadingInterval);
+    document.getElementById('btnScan').disabled = false;
   } else {
     resultEl.innerHTML = '<div class="face-result face-fail">❌ ใบหน้าไม่ตรง กรุณาลองใหม่ (dist: '+dist.toFixed(2)+')</div>';
     statusEl.textContent = 'ลองใหม่อีกครั้ง';
@@ -628,33 +700,36 @@ async function doClockIn(faceVerified) {
     return;
   }
   const t = timeStr();
-  const r = await api('clockIn', { empId: me.id, date: today, time: t, faceVerified });
+  const r = await api('clockIn', {empId:me.id, date:today, time:t, faceVerified});
   if (r.success) {
-    attCache.unshift({ id: r.id, empId: me.id, date: today, checkIn: t, checkOut: '', faceVerified: faceVerified?'yes':'no' });
+    attCache.unshift({id:r.id, empId:me.id, date:today, checkIn:t, checkOut:'', faceVerified:faceVerified?'yes':'no'});
     resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คอินสำเร็จ เวลา ' + t + ' น.' + (faceVerified?' (ยืนยันด้วยใบหน้า)':'') + '</div>';
+    document.getElementById('camStatus').textContent = '';
     setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
   } else {
     document.getElementById('camStatus').textContent = '';
-    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error || 'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error||'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
   }
 }
+
 async function doClockOut(faceVerified) {
   const resultEl = document.getElementById('camResult');
-  const statusEl = document.getElementById('camStatus');
   const today = todayStr();
   const idx = attCache.findIndex(a => a.empId === me.id && a.date === today && !a.checkOut);
   if (idx < 0) { resultEl.innerHTML = '<div class="face-result face-fail">⚠️ ไม่พบข้อมูลเช็คอินวันนี้</div>'; return; }
   const t = timeStr();
-  const r = await api('clockOut', { empId: me.id, date: today, time: t });
+  const r = await api('clockOut', {empId:me.id, date:today, time:t});
   if (r.success) {
     attCache[idx].checkOut = t;
     resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คเอาท์สำเร็จ เวลา ' + t + ' น.</div>';
+    document.getElementById('camStatus').textContent = '';
     setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
   } else {
-    statusEl.textContent = '';
-    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error || 'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
+    document.getElementById('camStatus').textContent = '';
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error||'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
   }
 }
+
 async function manualCheckin() {
   const today = todayStr();
   if (attCache.find(a => a.empId === me.id && a.date === today)) { alert('เช็คอินวันนี้แล้ว'); return; }
@@ -667,9 +742,9 @@ async function manualCheckin() {
 async function refreshAndRenderCheckin() {
   const attTable = document.getElementById('attTable');
   const todayRec = document.getElementById('todayRec');
-  if (attTable) attTable.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a78bfa;padding:16px">⏳ กำลังโหลดข้อมูล...</td></tr>';
+  if (attTable) attTable.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a78bfa;padding:16px">⏳ กำลังโหลด...</td></tr>';
   if (todayRec) todayRec.innerHTML = '<p style="color:#a78bfa;padding:12px">⏳ กำลังโหลด...</p>';
-  const aRes = await api('getAttendance', { empId: me.role === 'admin' ? null : me.id });
+  const aRes = await api('getAttendance', {empId: me.role==='admin' ? null : me.id});
   if (aRes.success) attCache = aRes.records;
   renderCheckin();
 }
@@ -691,10 +766,8 @@ function renderCheckin() {
     statusEl.innerHTML = '<span class="badge bb">เสร็จงาน ' + rec.checkIn + '–' + rec.checkOut + ' น.</span>';
     inBtn.style.display='none'; outBtn.style.display='none'; manBtn.style.display='none';
   }
-  // today record
   const tr = document.getElementById('todayRec');
   tr.innerHTML = rec ? `<table><tr><td>เข้างาน</td><td><strong>${rec.checkIn||'-'}</strong></td></tr><tr><td>ออกงาน</td><td><strong>${rec.checkOut||'-'}</strong></td></tr><tr><td>ชั่วโมง</td><td><strong>${calcH(rec.checkIn,rec.checkOut)}</strong></td></tr><tr><td>ยืนยันหน้า</td><td><span class="badge ${rec.faceVerified==='yes'?'bg':'by'}">${rec.faceVerified==='yes'?'✅ ผ่าน':'⚠️ ไม่ผ่าน'}</span></td></tr></table>` : '<p style="color:#94a3b8;padding:12px">ยังไม่มีข้อมูลวันนี้</p>';
-  // history
   const mine = attCache.filter(a=>a.empId===me.id).slice(0,30);
   document.getElementById('attTable').innerHTML = mine.length ? mine.map(a=>`<tr><td>${fmtDate(a.date)}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td>${calcH(a.checkIn,a.checkOut)}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`).join('') : '<tr><td colspan="5" class="empty">ไม่มีข้อมูล</td></tr>';
 }
@@ -706,15 +779,15 @@ function renderDash() {
   const todayAtt = attCache.filter(a=>a.date===today);
   const pendLeaves = leaveCache.filter(l=>l.status==='รออนุมัติ');
   const stats = isAdmin ? [
-    {lb:'พนักงานทั้งหมด',vl:empCache.filter(e=>e.status==='ทำงาน').length,sb:'คน',c:'#1e40af'},
-    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#059669'},
-    {lb:'รอการอนุมัติ',vl:pendLeaves.length,sb:'ใบลา',c:'#d97706'},
-    {lb:'ลงทะเบียนหน้าแล้ว',vl:empCache.filter(e=>e.hasFace).length,sb:'คน',c:'#7c3aed'},
+    {lb:'พนักงานทั้งหมด',vl:empCache.filter(e=>e.status==='ทำงาน').length,sb:'คน'},
+    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน'},
+    {lb:'รอการอนุมัติ',vl:pendLeaves.length,sb:'ใบลา'},
+    {lb:'ลงทะเบียนหน้าแล้ว',vl:empCache.filter(e=>e.hasFace).length,sb:'คน'},
   ] : [
-    {lb:'เช็คอินเดือนนี้',vl:attCache.filter(a=>a.empId===me.id&&a.date.startsWith(today.substring(0,7))).length,sb:'วัน',c:'#059669'},
-    {lb:'วันลาที่ใช้',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='อนุมัติ').reduce((s,l)=>s+Number(l.days),0),sb:'วันปีนี้',c:'#d97706'},
-    {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='รออนุมัติ').length,sb:'ใบลา',c:'#7c3aed'},
-    {lb:'ยืนยันใบหน้า',vl:(empCache.find(e=>e.id===me.id)||{}).hasFace?'✅':'❌',sb:(empCache.find(e=>e.id===me.id)||{}).hasFace?'ลงทะเบียนแล้ว':'ยังไม่ลงทะเบียน',c:'#1e40af'},
+    {lb:'เช็คอินเดือนนี้',vl:attCache.filter(a=>a.empId===me.id&&a.date.startsWith(today.substring(0,7))).length,sb:'วัน'},
+    {lb:'วันลาที่ใช้',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='อนุมัติ').reduce((s,l)=>s+Number(l.days),0),sb:'วันปีนี้'},
+    {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='รออนุมัติ').length,sb:'ใบลา'},
+    {lb:'ยืนยันใบหน้า',vl:(empCache.find(e=>e.id===me.id)||{}).hasFace?'✅':'❌',sb:(empCache.find(e=>e.id===me.id)||{}).hasFace?'ลงทะเบียนแล้ว':'ยังไม่ลงทะเบียน'},
   ];
   const gradients = ['linear-gradient(135deg,#667eea,#764ba2)','linear-gradient(135deg,#11998e,#38ef7d)','linear-gradient(135deg,#f6d365,#fda085)','linear-gradient(135deg,#f64f59,#c0392b)'];
   document.getElementById('dashStats').innerHTML = stats.map((s,i)=>`<div class="sc" style="background:${gradients[i]};color:#fff"><div class="lb">${s.lb}</div><div class="vl">${s.vl}</div><div class="sb">${s.sb}</div></div>`).join('');
@@ -855,6 +928,13 @@ async function saveEmp() {
 function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 // ── RENDER: REPORT ──
+async function refreshAndRenderReport() {
+  const aRes = await api('getAttendance', {empId:null});
+  if (aRes.success) attCache = aRes.records;
+  const lRes = await api('getLeaves', {empId:null});
+  if (lRes.success) leaveCache = lRes.leaves;
+  renderReport();
+}
 function renderReport() {
   const today=todayStr();
   const todayAtt=attCache.filter(a=>a.date===today);
@@ -869,14 +949,6 @@ function renderReport() {
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
-}
-
-async function refreshAndRenderReport() {
-  const aRes = await api('getAttendance', {empId: null});
-  if (aRes.success) attCache = aRes.records;
-  const lRes = await api('getLeaves', {empId: null});
-  if (lRes.success) leaveCache = lRes.leaves;
-  renderReport();
 }
 
 // ── BOOT ──
