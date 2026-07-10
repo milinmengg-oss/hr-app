@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>HR Face System</title>
+<title>ABC HR System</title>
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -115,7 +115,10 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 <!-- LOGIN -->
 <div class="screen" id="sLogin" style="background:linear-gradient(135deg,#f43f5e,#ec4899,#a855f7)">
 <div class="card">
-  <h1>🏢 HR System</h1>
+  <div id="loginLogoWrap" style="text-align:center;margin-bottom:14px;display:none">
+    <img id="loginLogo" src="" alt="Logo" style="height:70px;object-fit:contain;border-radius:10px">
+  </div>
+  <h1 id="loginTitle">🏢 ABC HR System</h1>
   <p>ระบบบริหารบุคคลพร้อมสแกนใบหน้า</p>
   <div id="loginAlert"></div>
   <div class="fg"><label>Username</label><input type="text" id="lu" placeholder="username" onkeydown="if(event.key==='Enter')doLogin()"></div>
@@ -1142,13 +1145,23 @@ async function initSettings() {
 
 function applyBranding() {
   const logo = localStorage.getItem('hr_logo');
-  const name = localStorage.getItem('hr_company') || 'HR System';
+  const name = localStorage.getItem('hr_company') || 'ABC HR System';
+  // topbar
   const titleEl = document.getElementById('topTitle');
   const logoEl = document.getElementById('topLogo');
   if (titleEl) titleEl.textContent = name;
   if (logoEl) {
     if (logo) { logoEl.src = logo; logoEl.style.display = ''; }
     else logoEl.style.display = 'none';
+  }
+  // login screen
+  const loginTitle = document.getElementById('loginTitle');
+  const loginLogo = document.getElementById('loginLogo');
+  const loginLogoWrap = document.getElementById('loginLogoWrap');
+  if (loginTitle) loginTitle.textContent = '🏢 ' + name;
+  if (loginLogo && loginLogoWrap) {
+    if (logo) { loginLogo.src = logo; loginLogoWrap.style.display = ''; }
+    else loginLogoWrap.style.display = 'none';
   }
 }
 function previewLogo(input) {
@@ -1517,7 +1530,7 @@ async function appAdv(id, status) {
 }
 
 // ── BOOT ──
-window.addEventListener('load', initApp);
+window.addEventListener('load', () => { applyBranding(); initApp(); });
 </script>
 </body>
 </html>
