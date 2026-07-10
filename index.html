@@ -149,6 +149,11 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
     <div class="ni" id="niRegFace" onclick="nav('regface',this)" style="display:none">🔐 ลงทะเบียนใบหน้า</div>
     <div class="ni" id="niManage" onclick="nav('manage',this)" style="display:none">⚙️ จัดการพนักงาน</div>
     <div class="ni" id="niReport" onclick="nav('report',this)" style="display:none">📊 รายงาน</div>
+    <div class="ni" id="niDept" onclick="nav('dept',this)" style="display:none">🏢 สรุปตามแผนก</div>
+    <div class="ni" id="niPayroll" onclick="nav('payroll',this)" style="display:none">💵 เงินเดือน</div>
+    <div class="ni" id="niSettings" onclick="nav('settings',this)" style="display:none">🔧 ตั้งค่า HR</div>
+    <div class="ni" onclick="nav('advance',this)">💰 เบิกเงินล่วงหน้า</div>
+    <div class="ni" onclick="nav('myquota',this)">📊 โควตาลาของฉัน</div>
   </div>
   <div class="main">
     <!-- DASHBOARD -->
@@ -260,6 +265,54 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
         <tbody id="mgTable"></tbody></table>
       </div>
     </div>
+    <!-- DEPT SUMMARY -->
+    <div class="pg" id="pgDept">
+      <div class="pt">🏢 สรุปตามแผนก</div>
+      <div class="c" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div><label style="font-size:12px;font-weight:600;color:#374151;margin-right:6px">วันที่:</label>
+        <input type="date" id="deptDate" onchange="renderDept()" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff"></div>
+        <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="renderDept()">🔄 โหลดข้อมูล</button>
+      </div>
+      <div id="deptCards"></div>
+    </div>
+    <!-- ADVANCE -->
+    <div class="pg" id="pgAdvance">
+      <div class="pt">💰 เบิกเงินล่วงหน้า</div>
+      <div class="tabs">
+        <div class="tab act" onclick="advTab('req',this)">ขอเบิกใหม่</div>
+        <div class="tab" onclick="advTab('hist',this)">ประวัติของฉัน</div>
+        <div class="tab" id="tabAdvSum" onclick="advTab('sum',this)" style="display:none">สรุปรายเดือน</div>
+      </div>
+      <div id="atReq">
+        <div class="c">
+          <div class="ct">📝 ยื่นขอเบิกเงิน</div>
+          <div id="advAlert"></div>
+          <div class="gr2">
+            <div class="fg"><label>จำนวนเงิน (บาท)</label><input type="number" id="advAmt" placeholder="เช่น 5000" min="1"></div>
+            <div class="fg"><label>วันที่ต้องการ</label><input type="date" id="advDate"></div>
+          </div>
+          <div class="fg"><label>เหตุผล</label><input type="text" id="advReason" placeholder="ระบุเหตุผล"></div>
+          <button class="btn btn-p" onclick="submitAdvance()">📤 ส่งคำขอ</button>
+        </div>
+      </div>
+      <div id="atHist" style="display:none">
+        <div class="c">
+          <table><thead><tr><th>วันที่ขอ</th><th>จำนวน</th><th>เหตุผล</th><th>สถานะ</th></tr></thead>
+          <tbody id="advHistTable"></tbody></table>
+        </div>
+      </div>
+      <div id="atSum" style="display:none">
+        <div class="c">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+            <label style="font-size:13px;font-weight:600">เดือน:</label>
+            <input type="month" id="advMonth" onchange="renderAdvSum()" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff">
+          </div>
+          <div id="advSumStats" class="sg" style="grid-template-columns:repeat(3,1fr)"></div>
+          <table><thead><tr><th>พนักงาน</th><th>แผนก</th><th>ยอดขอ</th><th>อนุมัติแล้ว</th><th>รออนุมัติ</th><th>จัดการ</th></tr></thead>
+          <tbody id="advSumTable"></tbody></table>
+        </div>
+      </div>
+    </div>
     <!-- REPORT -->
     <div class="pg" id="pgReport">
       <div class="pt">📊 รายงาน</div>
@@ -275,7 +328,55 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
   </div>
 </div>
 
-<!-- CAMERA -->
+    <!-- PAYROLL -->
+    <div class="pg" id="pgPayroll">
+      <div class="pt">💵 สรุปเงินเดือน</div>
+      <div class="c" style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <div><label style="font-size:12px;font-weight:600;color:#374151;margin-right:6px">เดือน:</label>
+        <input type="month" id="payMonth" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff"></div>
+        <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="renderPayroll()">🔄 คำนวณ</button>
+      </div>
+      <div id="payStats" class="sg" style="grid-template-columns:repeat(4,1fr);margin-top:16px"></div>
+      <div class="c">
+        <table><thead><tr><th>พนักงาน</th><th>แผนก</th><th>เงินเดือน</th><th>วันทำงาน</th><th>ขาด</th><th>มาสาย</th><th>ลา</th><th>เบิกล่วงหน้า</th><th>สุทธิ</th></tr></thead>
+        <tbody id="payTable"></tbody></table>
+      </div>
+    </div>
+    <!-- SETTINGS -->
+    <div class="pg" id="pgSettings">
+      <div class="pt">🔧 ตั้งค่า HR</div>
+      <div class="c">
+        <div class="ct">⏰ เวลาทำงาน</div>
+        <div class="gr2">
+          <div class="fg"><label>เวลาเข้างาน</label><input type="time" id="stStart" value="09:00"></div>
+          <div class="fg"><label>เวลาออกงาน</label><input type="time" id="stEnd" value="18:00"></div>
+        </div>
+        <div class="fg"><label>ผ่อนผันมาสาย (นาที)</label><input type="number" id="stGrace" value="15" min="0" max="60"></div>
+      </div>
+      <div class="c">
+        <div class="ct">📅 โควตาการลา (วัน/ปี)</div>
+        <div class="gr3">
+          <div class="fg"><label>ลาพักร้อน</label><input type="number" id="stAnnual" value="10" min="0"></div>
+          <div class="fg"><label>ลาป่วย</label><input type="number" id="stSick" value="30" min="0"></div>
+          <div class="fg"><label>ลากิจ</label><input type="number" id="stPersonal" value="3" min="0"></div>
+        </div>
+      </div>
+      <div class="c">
+        <div class="ct">💵 การหักเงิน</div>
+        <div class="gr2">
+          <div class="fg"><label>หักต่อวันที่ขาดงาน (%ของเงินเดือน÷วันทำงาน)</label><input type="number" id="stAbsentPct" value="100" min="0" max="200"></div>
+          <div class="fg"><label>วันทำงานต่อเดือน (วัน)</label><input type="number" id="stWorkDays" value="26" min="20" max="31"></div>
+        </div>
+      </div>
+      <div id="settingsAlert"></div>
+      <button class="btn btn-p" onclick="saveSettings()" style="width:auto;padding:12px 32px">💾 บันทึกการตั้งค่า</button>
+    </div>
+    <!-- MY QUOTA -->
+    <div class="pg" id="pgMyquota">
+      <div class="pt">📊 โควตาการลาของฉัน</div>
+      <div id="quotaContent"></div>
+    </div>
+    <!-- CAMERA -->
 <div class="cam-overlay" id="camOverlay">
   <div class="cam-box">
     <h2 id="camTitle">📷 สแกนใบหน้า</h2>
@@ -323,6 +424,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(102,126,234,.04),rgba(118,75,
         <select id="eStat"><option value="ทำงาน">ทำงาน</option><option value="ลาออก">ลาออก</option></select>
       </div>
     </div>
+    <div class="fg"><label>เงินเดือน (บาท)</label><input type="number" id="eSalary" placeholder="เช่น 20000" min="0"></div>
     <div class="mf">
       <button class="btn btn-s" onclick="closeModal('mEmp')">ยกเลิก</button>
       <button class="btn btn-p" onclick="saveEmp()">บันทึก</button>
@@ -359,6 +461,7 @@ let cameraMode = '';
 let regEmpId = '';
 let editEmpId = null;
 let approvFilter = 'pend';
+let advCache = [];
 
 // ── SCREEN ──
 function showScreen(id) {
@@ -389,7 +492,7 @@ async function api(action, data = {}) {
         const snap = await db.collection('employees').get();
         const employees = snap.docs.map(d => {
           const e = d.data();
-          return {id:e.id,username:e.username,firstName:e.firstName,lastName:e.lastName,position:e.position,dept:e.dept,phone:e.phone||'',role:e.role,status:e.status,hasFace:!!e.faceDescriptor,faceDescriptor:e.faceDescriptor||null};
+          return {id:e.id,username:e.username,firstName:e.firstName,lastName:e.lastName,position:e.position,dept:e.dept,phone:e.phone||'',role:e.role,status:e.status,salary:e.salary||0,hasFace:!!e.faceDescriptor,faceDescriptor:e.faceDescriptor||null};
         });
         return {success:true,employees};
       }
@@ -402,12 +505,13 @@ async function api(action, data = {}) {
           id:data.id,username:data.username,password:data.password,
           firstName:data.firstName,lastName:data.lastName,position:data.position,
           dept:data.dept,phone:data.phone||'',role:data.role,status:data.status,
+          salary:Number(data.salary)||0,
           faceDescriptor:null,createdAt:new Date().toISOString()
         });
         return {success:true};
       }
       case 'updateEmployee': {
-        const upd = {firstName:data.firstName,lastName:data.lastName,position:data.position,dept:data.dept,phone:data.phone||'',role:data.role,status:data.status};
+        const upd = {firstName:data.firstName,lastName:data.lastName,position:data.position,dept:data.dept,phone:data.phone||'',role:data.role,status:data.status,salary:Number(data.salary)||0};
         if (data.password) upd.password = data.password;
         await db.collection('employees').doc(data.id).update(upd);
         return {success:true};
@@ -460,6 +564,33 @@ async function api(action, data = {}) {
       }
       case 'approveLeave': {
         await db.collection('leaves').doc(data.id).update({status:data.status,approvedBy:data.approvedBy||''});
+        return {success:true};
+      }
+      case 'getSettings': {
+        const doc = await db.collection('settings').doc('hr').get();
+        return {success:true, settings: doc.exists ? doc.data() : {workStart:'09:00',workEnd:'18:00',grace:15,annual:10,sick:30,personal:3,absentPct:100,workDays:26}};
+      }
+      case 'saveSettings': {
+        await db.collection('settings').doc('hr').set(data.settings, {merge:true});
+        return {success:true};
+      }
+      case 'submitAdvance': {
+        const id = 'ADV'+Date.now();
+        await db.collection('advances').doc(id).set({
+          id,empId:data.empId,amount:data.amount,date:data.date,
+          reason:data.reason,status:'รออนุมัติ',submittedAt:data.submittedAt,approvedBy:''
+        });
+        return {success:true,id};
+      }
+      case 'getAdvances': {
+        let q = db.collection('advances');
+        if (data.empId) q = q.where('empId','==',data.empId);
+        const snap = await q.get();
+        const advances = snap.docs.map(d=>d.data()).sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+        return {success:true,advances};
+      }
+      case 'approveAdvance': {
+        await db.collection('advances').doc(data.id).update({status:data.status,approvedBy:data.approvedBy||''});
         return {success:true};
       }
       default: return {success:false,error:'Unknown action'};
@@ -545,9 +676,10 @@ function setupApp() {
   document.getElementById('tName').textContent = me.firstName + ' ' + me.lastName;
   document.getElementById('tRole').textContent = me.role === 'admin' ? 'HR/Admin' : 'พนักงาน';
   const isAdmin = me.role === 'admin';
-  ['adSec','niApprove','niRegFace','niManage','niReport'].forEach(id => {
+  ['adSec','niApprove','niRegFace','niManage','niReport','niDept','niPayroll','niSettings'].forEach(id => {
     document.getElementById(id).style.display = isAdmin ? '' : 'none';
   });
+  document.getElementById('tabAdvSum').style.display = isAdmin ? '' : 'none';
 }
 
 // ── DATA ──
@@ -569,7 +701,7 @@ function nav(page, el) {
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
   if (el) el.classList.add('act');
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport};
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota};
   if (renders[page]) renders[page]();
 }
 
@@ -903,6 +1035,7 @@ function openEditEmp(id) {
   document.getElementById('ePos').value=e.position; document.getElementById('eDept').value=e.dept;
   document.getElementById('ePhone').value=e.phone||''; document.getElementById('eRole').value=e.role;
   document.getElementById('eStat').value=e.status; document.getElementById('ePw').value='';
+  document.getElementById('eSalary').value=e.salary||'';
   document.getElementById('eId').disabled=true; document.getElementById('eUser').disabled=true;
   document.getElementById('mEmpAlert').innerHTML='';
   document.getElementById('mEmp').classList.add('show');
@@ -912,7 +1045,8 @@ async function saveEmp() {
     firstName:document.getElementById('eFirst').value.trim(),lastName:document.getElementById('eLast').value.trim(),
     position:document.getElementById('ePos').value.trim(),dept:document.getElementById('eDept').value,
     phone:document.getElementById('ePhone').value.trim(),role:document.getElementById('eRole').value,
-    status:document.getElementById('eStat').value,password:document.getElementById('ePw').value};
+    status:document.getElementById('eStat').value,password:document.getElementById('ePw').value,
+    salary:document.getElementById('eSalary').value};
   const al=document.getElementById('mEmpAlert');
   if(!data.firstName||!data.lastName||!data.position){al.innerHTML='<div class="al al-e">กรุณากรอกข้อมูลให้ครบ</div>';return;}
   if(!editEmpId&&!data.password){al.innerHTML='<div class="al al-e">กรุณาตั้งรหัสผ่าน</div>';return;}
@@ -949,6 +1083,304 @@ function renderReport() {
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
+}
+
+// ── SETTINGS ──
+let hrSettings = {workStart:'09:00',workEnd:'18:00',grace:15,annual:10,sick:30,personal:3,absentPct:100,workDays:26};
+async function initSettings() {
+  const r = await api('getSettings',{});
+  if (r.success) hrSettings = r.settings;
+  document.getElementById('stStart').value = hrSettings.workStart||'09:00';
+  document.getElementById('stEnd').value = hrSettings.workEnd||'18:00';
+  document.getElementById('stGrace').value = hrSettings.grace||15;
+  document.getElementById('stAnnual').value = hrSettings.annual||10;
+  document.getElementById('stSick').value = hrSettings.sick||30;
+  document.getElementById('stPersonal').value = hrSettings.personal||3;
+  document.getElementById('stAbsentPct').value = hrSettings.absentPct||100;
+  document.getElementById('stWorkDays').value = hrSettings.workDays||26;
+}
+async function saveSettings() {
+  hrSettings = {
+    workStart:document.getElementById('stStart').value,
+    workEnd:document.getElementById('stEnd').value,
+    grace:Number(document.getElementById('stGrace').value),
+    annual:Number(document.getElementById('stAnnual').value),
+    sick:Number(document.getElementById('stSick').value),
+    personal:Number(document.getElementById('stPersonal').value),
+    absentPct:Number(document.getElementById('stAbsentPct').value),
+    workDays:Number(document.getElementById('stWorkDays').value)
+  };
+  const r = await api('saveSettings',{settings:hrSettings});
+  document.getElementById('settingsAlert').innerHTML = r.success ? '<div class="al al-s">✅ บันทึกเรียบร้อย</div>' : '<div class="al al-e">❌ '+r.error+'</div>';
+}
+
+// ── PAYROLL ──
+async function initPayroll() {
+  document.getElementById('payMonth').value = todayStr().substring(0,7);
+  const r = await api('getSettings',{});
+  if (r.success) hrSettings = r.settings;
+  renderPayroll();
+}
+async function renderPayroll() {
+  const month = document.getElementById('payMonth').value;
+  if (!month) return;
+  const [aRes, lRes, advRes] = await Promise.all([
+    api('getAttendance',{empId:null}),
+    api('getLeaves',{empId:null}),
+    api('getAdvances',{empId:null})
+  ]);
+  if (aRes.success) attCache = aRes.records;
+  if (lRes.success) leaveCache = lRes.records||lRes.leaves;
+  if (advRes.success) advCache = advRes.advances;
+
+  const workdays = hrSettings.workDays||26;
+  const grace = hrSettings.grace||15;
+  const absentPct = hrSettings.absentPct||100;
+
+  function toMin(t){ if(!t) return 0; const[h,m]=t.split(':').map(Number); return h*60+m; }
+  const startMin = toMin(hrSettings.workStart||'09:00');
+
+  const emps = empCache.filter(e=>e.status==='ทำงาน' && e.role!=='admin');
+  let totalSalary=0, totalNet=0, totalAdv=0;
+
+  const rows = emps.map(e => {
+    const attMonth = attCache.filter(a=>a.empId===e.id && String(a.date).startsWith(month));
+    const worked = attMonth.length;
+    const absent = Math.max(0, workdays - worked);
+    const late = attMonth.filter(a=>{
+      if(!a.checkIn) return false;
+      return toMin(a.checkIn) > startMin + grace;
+    }).length;
+    const leaveDays = leaveCache.filter(l=>l.empId===e.id && l.status==='อนุมัติ' && String(l.startDate).startsWith(month)).reduce((s,l)=>s+Number(l.days),0);
+    const advAmt = advCache.filter(a=>a.empId===e.id && a.status==='อนุมัติ' && String(a.submittedAt).startsWith(month)).reduce((s,a)=>s+Number(a.amount),0);
+    const salary = e.salary||0;
+    const dailyRate = salary / workdays;
+    const deductAbsent = Math.round(dailyRate * absent * (absentPct/100));
+    const net = Math.max(0, salary - deductAbsent - advAmt);
+    totalSalary += salary; totalNet += net; totalAdv += advAmt;
+    const lateColor = late>=3?'br':late>0?'by':'bg';
+    return `<tr>
+      <td>${e.firstName} ${e.lastName}</td>
+      <td>${e.dept}</td>
+      <td style="font-weight:700">${salary.toLocaleString()}</td>
+      <td style="color:#059669;font-weight:600">${worked}</td>
+      <td style="color:${absent>0?'#dc2626':'#059669'};font-weight:600">${absent}</td>
+      <td><span class="badge ${lateColor}">${late} ครั้ง</span></td>
+      <td>${leaveDays}</td>
+      <td style="color:#d97706;font-weight:600">${advAmt.toLocaleString()}</td>
+      <td style="font-weight:700;color:#4c1d95;font-size:14px">${net.toLocaleString()}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('payStats').innerHTML = [
+    {lb:'เงินเดือนรวม',vl:totalSalary.toLocaleString()+' ฿',c:'#1e40af'},
+    {lb:'จ่ายจริงสุทธิ',vl:totalNet.toLocaleString()+' ฿',c:'#059669'},
+    {lb:'หักเบิกล่วงหน้า',vl:totalAdv.toLocaleString()+' ฿',c:'#d97706'},
+    {lb:'จำนวนพนักงาน',vl:emps.length+' คน',c:'#7c3aed'},
+  ].map(s=>`<div class="sc" style="background:#f8f5ff;border:2px solid #e9d5ff"><div class="lb" style="color:#64748b">${s.lb}</div><div class="vl" style="color:${s.c};font-size:20px">${s.vl}</div></div>`).join('');
+  document.getElementById('payTable').innerHTML = rows || '<tr><td colspan="9" class="empty">ไม่มีข้อมูล</td></tr>';
+}
+
+// ── QUOTA ──
+async function renderMyQuota() {
+  const r = await api('getSettings',{});
+  if (r.success) hrSettings = r.settings;
+  const year = new Date().getFullYear();
+  const myLeaves = leaveCache.filter(l=>l.empId===me.id && l.status==='อนุมัติ' && String(l.startDate).startsWith(String(year)));
+  const used = {ลาพักร้อน:0,ลาป่วย:0,ลากิจ:0};
+  myLeaves.forEach(l=>{
+    if(l.type==='ลาพักร้อน') used['ลาพักร้อน']+=Number(l.days);
+    else if(l.type==='ลาป่วย') used['ลาป่วย']+=Number(l.days);
+    else if(l.type==='ลากิจ') used['ลากิจ']+=Number(l.days);
+  });
+  const quotas = [
+    {type:'ลาพักร้อน',max:hrSettings.annual||10,icon:'🌴'},
+    {type:'ลาป่วย',max:hrSettings.sick||30,icon:'🏥'},
+    {type:'ลากิจ',max:hrSettings.personal||3,icon:'📋'},
+  ];
+  document.getElementById('quotaContent').innerHTML = `<div class="c"><div class="ct">📊 โควตาการลาปี ${year+543}</div>
+    ${quotas.map(q=>{
+      const u=used[q.type]||0; const left=Math.max(0,q.max-u); const pct=Math.min(100,Math.round(u/q.max*100));
+      return `<div style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:600">${q.icon} ${q.type}</span>
+          <span style="color:#64748b;font-size:13px">ใช้ไป <strong style="color:#7c3aed">${u}</strong> / ${q.max} วัน (เหลือ <strong style="color:#059669">${left}</strong> วัน)</span>
+        </div>
+        <div class="progress-bar" style="height:10px;background:#f1f5f9">
+          <div class="progress-fill" style="width:${pct}%;background:${pct>80?'linear-gradient(90deg,#f64f59,#c0392b)':pct>50?'linear-gradient(90deg,#f6d365,#fda085)':'linear-gradient(90deg,#11998e,#38ef7d)'}"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+  <div class="c"><div class="ct">📋 ประวัติการลาปีนี้</div>
+    <table><thead><tr><th>ประเภท</th><th>วันที่</th><th>จำนวน</th><th>เหตุผล</th></tr></thead>
+    <tbody>${myLeaves.length?myLeaves.map(l=>`<tr><td>${l.type}</td><td>${fmtDate(l.startDate)}</td><td>${l.days} วัน</td><td>${l.reason}</td></tr>`).join(''):'<tr><td colspan="4" class="empty">ยังไม่มีการลา</td></tr>'}</tbody>
+    </table>
+  </div>`;
+}
+
+// ── DEPT SUMMARY ──
+function initDept() {
+  document.getElementById('deptDate').value = todayStr();
+  renderDept();
+}
+async function renderDept() {
+  const date = document.getElementById('deptDate').value || todayStr();
+  document.getElementById('deptCards').innerHTML = '<div style="text-align:center;padding:30px;color:#a78bfa">⏳ กำลังโหลด...</div>';
+
+  // โหลดข้อมูลล่าสุด
+  const [aRes, lRes, advRes] = await Promise.all([
+    api('getAttendance', {empId:null}),
+    api('getLeaves', {empId:null}),
+    api('getAdvances', {empId:null})
+  ]);
+  if (aRes.success) attCache = aRes.records;
+  if (lRes.success) leaveCache = lRes.records || lRes.leaves;
+  if (advRes.success) advCache = advRes.advances;
+
+  // จัดกลุ่มพนักงานตามแผนก
+  const depts = {};
+  empCache.filter(e=>e.status==='ทำงาน').forEach(e => {
+    if (!depts[e.dept]) depts[e.dept] = [];
+    depts[e.dept].push(e);
+  });
+
+  const month = date.substring(0,7);
+  const bdg = {อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
+
+  const cards = Object.entries(depts).map(([dept, emps]) => {
+    const empIds = emps.map(e=>e.id);
+
+    // เช็คอินวันที่เลือก
+    const deptAtt = attCache.filter(a=>empIds.includes(a.empId) && a.date===date);
+    const checkedIn = deptAtt.length;
+    const checkedOut = deptAtt.filter(a=>a.checkOut).length;
+    const notIn = emps.length - checkedIn;
+
+    // ลาเดือนนี้
+    const deptLeaves = leaveCache.filter(l=>empIds.includes(l.empId) && String(l.startDate).startsWith(month));
+    const leaveApproved = deptLeaves.filter(l=>l.status==='อนุมัติ');
+
+    // เบิกเงินเดือนนี้
+    const deptAdv = advCache.filter(a=>empIds.includes(a.empId) && String(a.submittedAt).startsWith(month));
+    const advTotal = deptAdv.filter(a=>a.status==='อนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
+    const advPend = deptAdv.filter(a=>a.status==='รออนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
+
+    // ตารางพนักงาน
+    const rows = emps.map(e => {
+      const att = deptAtt.find(a=>a.empId===e.id);
+      const leaves = leaveCache.filter(l=>l.empId===e.id && l.status==='อนุมัติ' && l.startDate<=date && l.endDate>=date);
+      let status, badge;
+      if (leaves.length) { status=leaves[0].type; badge='by'; }
+      else if (att && att.checkOut) { status='เข้า-ออกแล้ว'; badge='bg'; }
+      else if (att) { status='เข้างานแล้ว'; badge='bb'; }
+      else { status='ยังไม่เช็คอิน'; badge='br'; }
+      return `<tr>
+        <td>${e.firstName} ${e.lastName}</td>
+        <td>${e.position}</td>
+        <td>${att ? att.checkIn : '-'}</td>
+        <td>${att ? (att.checkOut||'-') : '-'}</td>
+        <td><span class="badge ${badge}">${status}</span></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="c">
+      <div class="ct">🏢 ${dept} <span style="font-weight:400;color:#94a3b8;font-size:12px">(${emps.length} คน)</span></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px">
+        <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#065f46">${checkedIn}</div>
+          <div style="font-size:11px;color:#065f46">เช็คอินแล้ว</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#1e40af">${checkedOut}</div>
+          <div style="font-size:11px;color:#1e40af">เช็คเอาท์แล้ว</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#991b1b">${notIn}</div>
+          <div style="font-size:11px;color:#991b1b">ยังไม่เข้างาน</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;color:#92400e">${leaveApproved.length}</div>
+          <div style="font-size:11px;color:#92400e">ลาเดือนนี้</div>
+        </div>
+        <div style="background:linear-gradient(135deg,#ede9fe,#ddd6fe);border-radius:12px;padding:12px;text-align:center">
+          <div style="font-size:16px;font-weight:700;color:#4c1d95">${advTotal.toLocaleString()}฿</div>
+          <div style="font-size:11px;color:#4c1d95">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#d97706">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
+        </div>
+      </div>
+      <table><thead><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>เข้างาน</th><th>ออกงาน</th><th>สถานะ</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+    </div>`;
+  }).join('');
+
+  document.getElementById('deptCards').innerHTML = cards || '<div class="empty">ไม่มีข้อมูล</div>';
+}
+
+// ── ADVANCE ──
+async function renderAdvance() {
+  document.getElementById('advDate').value = todayStr();
+  const res = await api('getAdvances', {empId: me.role==='admin' ? null : me.id});
+  if (res.success) advCache = res.advances;
+  renderAdvHist();
+}
+function advTab(t, el) {
+  const tabs = ['req','hist','sum'];
+  tabs.forEach((name,i) => {
+    document.getElementById('at'+name.charAt(0).toUpperCase()+name.slice(1)).style.display = name===t ? '' : 'none';
+  });
+  document.querySelectorAll('#pgAdvance .tab').forEach((e,i) => e.classList.toggle('act', i===tabs.indexOf(t)));
+  if (t==='hist') renderAdvHist();
+  if (t==='sum') { document.getElementById('advMonth').value = todayStr().substring(0,7); renderAdvSum(); }
+}
+async function submitAdvance() {
+  const amt = document.getElementById('advAmt').value;
+  const date = document.getElementById('advDate').value;
+  const reason = document.getElementById('advReason').value.trim();
+  const al = document.getElementById('advAlert');
+  if (!amt || !reason) { al.innerHTML='<div class="al al-e">กรุณากรอกข้อมูลให้ครบ</div>'; return; }
+  const r = await api('submitAdvance',{empId:me.id,amount:Number(amt),date,reason,submittedAt:todayStr()});
+  if (r.success) {
+    advCache.unshift({id:r.id,empId:me.id,amount:Number(amt),date,reason,status:'รออนุมัติ',submittedAt:todayStr()});
+    al.innerHTML='<div class="al al-s">✅ ส่งคำขอเรียบร้อย รอการอนุมัติ</div>';
+    document.getElementById('advAmt').value='';
+    document.getElementById('advReason').value='';
+  } else al.innerHTML='<div class="al al-e">❌ '+r.error+'</div>';
+}
+function renderAdvHist() {
+  const mine = advCache.filter(a=>a.empId===me.id);
+  const bdg={อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
+  document.getElementById('advHistTable').innerHTML = mine.length ? mine.map(a=>`<tr><td>${fmtDate(a.submittedAt)}</td><td style="font-weight:700;color:#7c3aed">${Number(a.amount).toLocaleString()} ฿</td><td>${a.reason}</td><td><span class="badge ${bdg[a.status]||'bgr'}">${a.status}</span></td></tr>`).join('') : '<tr><td colspan="4" class="empty">ไม่มีประวัติ</td></tr>';
+}
+function renderAdvSum() {
+  const month = document.getElementById('advMonth').value;
+  const filtered = advCache.filter(a => String(a.submittedAt).startsWith(month));
+  const empMap = Object.fromEntries(empCache.map(e=>[e.id,e]));
+  const byEmp = {};
+  filtered.forEach(a => {
+    if (!byEmp[a.empId]) byEmp[a.empId] = {total:0,approved:0,pending:0,items:[]};
+    byEmp[a.empId].total += Number(a.amount);
+    if (a.status==='อนุมัติ') byEmp[a.empId].approved += Number(a.amount);
+    if (a.status==='รออนุมัติ') byEmp[a.empId].pending += Number(a.amount);
+    byEmp[a.empId].items.push(a);
+  });
+  const totalAll = filtered.reduce((s,a)=>s+Number(a.amount),0);
+  const approvedAll = filtered.filter(a=>a.status==='อนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
+  const pendAll = filtered.filter(a=>a.status==='รออนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
+  document.getElementById('advSumStats').innerHTML = [
+    {lb:'ยอดขอทั้งหมด',vl:totalAll.toLocaleString()+' ฿',c:'#7c3aed'},
+    {lb:'อนุมัติแล้ว',vl:approvedAll.toLocaleString()+' ฿',c:'#059669'},
+    {lb:'รออนุมัติ',vl:pendAll.toLocaleString()+' ฿',c:'#d97706'},
+  ].map(s=>`<div class="sc" style="background:#f8f5ff;border:1px solid #e9d5ff"><div class="lb" style="color:#64748b">${s.lb}</div><div class="vl" style="color:${s.c};font-size:22px">${s.vl}</div></div>`).join('');
+  document.getElementById('advSumTable').innerHTML = Object.keys(byEmp).length ? Object.entries(byEmp).map(([empId,d])=>{
+    const e=empMap[empId]||{};
+    const pendItems = d.items.filter(a=>a.status==='รออนุมัติ');
+    return `<tr><td>${e.firstName||empId} ${e.lastName||''}</td><td>${e.dept||'-'}</td><td style="font-weight:700">${d.total.toLocaleString()} ฿</td><td style="color:#059669;font-weight:700">${d.approved.toLocaleString()} ฿</td><td style="color:#d97706;font-weight:700">${d.pending.toLocaleString()} ฿</td><td>${pendItems.map(a=>`<button class="btn btn-g btn-sm" onclick="appAdv('${a.id}','อนุมัติ')">✓ ${Number(a.amount).toLocaleString()}฿</button>`).join(' ')}</td></tr>`;
+  }).join('') : '<tr><td colspan="6" class="empty">ไม่มีข้อมูลเดือนนี้</td></tr>';
+}
+async function appAdv(id, status) {
+  const r = await api('approveAdvance',{id,status,approvedBy:me.id});
+  if (r.success) { const idx=advCache.findIndex(a=>a.id===id); if(idx>=0) advCache[idx].status=status; }
+  renderAdvSum();
 }
 
 // ── BOOT ──
