@@ -130,7 +130,8 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
   <div class="topbar">
     <div style="display:flex;align-items:center;gap:10px">
       <button class="menu-btn" id="menuBtn" onclick="toggleMenu()" style="display:none;background:none;border:none;color:#fff;font-size:22px;cursor:pointer;padding:4px 8px">☰</button>
-      <h1>🏢 HR System</h1>
+      <img id="topLogo" src="" alt="" style="height:38px;border-radius:8px;display:none;object-fit:contain">
+      <h1 id="topTitle">🏢 HR System</h1>
     </div>
     <div class="uinfo">
       <div class="av" id="tAv">A</div>
@@ -369,6 +370,19 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
         <div class="gr2">
           <div class="fg"><label>หักต่อวันที่ขาดงาน (% ของเงินเดือน ÷ วันทำงาน)</label><input type="number" id="stAbsentPct" value="100" min="0" max="200"></div>
           <div class="fg"><label>วันทำงานต่อเดือน (วัน)</label><input type="number" id="stWorkDays" value="26" min="20" max="31"></div>
+        </div>
+      </div>
+      <div class="c">
+        <div class="ct">🏢 ข้อมูลบริษัท</div>
+        <div class="gr2">
+          <div class="fg"><label>ชื่อบริษัท</label><input type="text" id="stCompanyName" placeholder="เช่น ABC Company"></div>
+          <div class="fg"><label>โลโก้บริษัท</label>
+            <input type="file" id="stLogo" accept="image/*" onchange="previewLogo(this)" style="padding:6px">
+            <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+              <img id="logoPreview" src="" alt="" style="height:48px;border-radius:8px;display:none;object-fit:contain;border:1px solid #fbcfe8">
+              <button class="btn btn-r btn-sm" onclick="removeLogo()" id="btnRemoveLogo" style="display:none">ลบโลโก้</button>
+            </div>
+          </div>
         </div>
       </div>
       <div id="settingsAlert"></div>
@@ -656,6 +670,7 @@ async function doLogin() {
     alEl.innerHTML = '';
     await loadAllData();
     setupApp();
+    applyBranding();
     showScreen('sApp');
     nav('dash');
     startClock();
@@ -1112,9 +1127,48 @@ async function initSettings() {
   document.getElementById('stPersonal').value = hrSettings.personal||3;
   document.getElementById('stAbsentPct').value = hrSettings.absentPct||100;
   document.getElementById('stWorkDays').value = hrSettings.workDays||26;
+  // โหลดข้อมูลบริษัท
+  document.getElementById('stCompanyName').value = localStorage.getItem('hr_company')||'';
+  const savedLogo = localStorage.getItem('hr_logo');
+  if (savedLogo) {
+    document.getElementById('logoPreview').src = savedLogo;
+    document.getElementById('logoPreview').style.display = '';
+    document.getElementById('btnRemoveLogo').style.display = '';
+  }
   renderDeptHoursTable();
 }
 
+function applyBranding() {
+  const logo = localStorage.getItem('hr_logo');
+  const name = localStorage.getItem('hr_company') || 'HR System';
+  const titleEl = document.getElementById('topTitle');
+  const logoEl = document.getElementById('topLogo');
+  if (titleEl) titleEl.textContent = name;
+  if (logoEl) {
+    if (logo) { logoEl.src = logo; logoEl.style.display = ''; }
+    else logoEl.style.display = 'none';
+  }
+}
+function previewLogo(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const prev = document.getElementById('logoPreview');
+    prev.src = e.target.result;
+    prev.style.display = '';
+    document.getElementById('btnRemoveLogo').style.display = '';
+  };
+  reader.readAsDataURL(file);
+}
+function removeLogo() {
+  document.getElementById('stLogo').value = '';
+  document.getElementById('logoPreview').src = '';
+  document.getElementById('logoPreview').style.display = 'none';
+  document.getElementById('btnRemoveLogo').style.display = 'none';
+  localStorage.removeItem('hr_logo');
+  applyBranding();
+}
 function getDeptHours(dept) {
   const dh = hrSettings.deptHours||{};
   return dh[dept] || {start:'09:00',end:'18:00',grace:15,lateDeduct:0};
@@ -1166,6 +1220,15 @@ async function saveSettings() {
     workDays:Number(document.getElementById('stWorkDays').value),
     deptHours
   };
+  // บันทึกโลโก้และชื่อบริษัท
+  const companyName = document.getElementById('stCompanyName').value.trim();
+  if (companyName) localStorage.setItem('hr_company', companyName);
+  const logoFile = document.getElementById('stLogo').files[0];
+  if (logoFile) {
+    const reader = new FileReader();
+    reader.onload = e => { localStorage.setItem('hr_logo', e.target.result); applyBranding(); };
+    reader.readAsDataURL(logoFile);
+  } else applyBranding();
   const r = await api('saveSettings',{settings:hrSettings});
   document.getElementById('settingsAlert').innerHTML = r.success ? '<div class="al al-s">✅ บันทึกเรียบร้อย</div>' : '<div class="al al-e">❌ '+r.error+'</div>';
 }
