@@ -418,14 +418,24 @@ function setLoad(msg, pct) {
 
 // ── API ──
 async function api(action, data = {}) {
-  const res = await fetch(API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify({ action, ...data })
-  });
-  const text = await res.text();
-  try { return JSON.parse(text); }
-  catch(e) { return { success: false, error: text }; }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 35000);
+  try {
+    const res = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, ...data }),
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    const text = await res.text();
+    try { return JSON.parse(text); }
+    catch(e) { return { success: false, error: text }; }
+  } catch(e) {
+    clearTimeout(timeout);
+    if (e.name === 'AbortError') return { success: false, error: 'หมดเวลา (timeout) กรุณาลองใหม่' };
+    return { success: false, error: e.message };
+  }
 }
 
 // ── AUTH ──
@@ -488,7 +498,7 @@ function nav(page, el) {
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('act'));
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
   if (el) el.classList.add('act');
-  const renders = { dash:renderDash, checkin:renderCheckin, leave:renderLeave,
+  const renders = { dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
     emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport };
   if (renders[page]) renders[page]();
 }
@@ -624,11 +634,13 @@ async function doClockIn(faceVerified) {
     resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คอินสำเร็จ เวลา ' + t + ' น.' + (faceVerified?' (ยืนยันด้วยใบหน้า)':'') + '</div>';
     setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
   } else {
-    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + r.error + '</div>';
+    document.getElementById('camStatus').textContent = '';
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error || 'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
   }
 }
 async function doClockOut(faceVerified) {
   const resultEl = document.getElementById('camResult');
+  const statusEl = document.getElementById('camStatus');
   const today = todayStr();
   const idx = attCache.findIndex(a => a.empId === me.id && a.date === today && !a.checkOut);
   if (idx < 0) { resultEl.innerHTML = '<div class="face-result face-fail">⚠️ ไม่พบข้อมูลเช็คอินวันนี้</div>'; return; }
@@ -638,6 +650,9 @@ async function doClockOut(faceVerified) {
     attCache[idx].checkOut = t;
     resultEl.innerHTML = '<div class="face-result face-ok">✅ เช็คเอาท์สำเร็จ เวลา ' + t + ' น.</div>';
     setTimeout(() => { closeCamera(); renderCheckin(); }, 1800);
+  } else {
+    statusEl.textContent = '';
+    resultEl.innerHTML = '<div class="face-result face-fail">❌ ' + (r.error || 'เกิดข้อผิดพลาด กรุณาลองใหม่') + '</div>';
   }
 }
 async function manualCheckin() {
@@ -649,6 +664,15 @@ async function manualCheckin() {
 }
 
 // ── RENDER: CHECKIN ──
+async function refreshAndRenderCheckin() {
+  const attTable = document.getElementById('attTable');
+  const todayRec = document.getElementById('todayRec');
+  if (attTable) attTable.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a78bfa;padding:16px">⏳ กำลังโหลดข้อมูล...</td></tr>';
+  if (todayRec) todayRec.innerHTML = '<p style="color:#a78bfa;padding:12px">⏳ กำลังโหลด...</p>';
+  const aRes = await api('getAttendance', { empId: me.role === 'admin' ? null : me.id });
+  if (aRes.success) attCache = aRes.records;
+  renderCheckin();
+}
 function renderCheckin() {
   const rec = getTodayAtt();
   const now = new Date();
