@@ -956,11 +956,18 @@ function nav(page, el) {
   const pgEl = document.getElementById(pgId);
   pgEl.classList.add('act');
   if (el) el.classList.add('act');
+  pgEl.style.overflowY = 'hidden';
   pgEl.scrollTop = 0;
-  requestAnimationFrame(() => { pgEl.scrollTop = 0; });
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
     emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, kpi:renderKPI};
-  if (renders[page]) renders[page]();
+  if (renders[page]) {
+    Promise.resolve(renders[page]()).finally(() => {
+      pgEl.scrollTop = 0;
+      pgEl.style.overflowY = '';
+    });
+  } else {
+    pgEl.style.overflowY = '';
+  }
 }
 
 // ── CLOCK ──
@@ -1394,7 +1401,7 @@ async function initSettings() {
   } catch(e) { console.error('initSettings:',e); }
   finally {
     const pgEl = document.querySelector('.pg.act');
-    if (pgEl) { pgEl.scrollTop = 0; setTimeout(()=>{ if(pgEl) pgEl.scrollTop=0; }, 150); }
+    if (pgEl) { pgEl.scrollTop = 0; pgEl.style.overflowY = ''; }
   }
 }
 
@@ -1520,7 +1527,7 @@ async function initPayroll() {
   } catch(e) { console.error('initPayroll:',e); }
   finally {
     const pgEl = document.querySelector('.pg.act');
-    if (pgEl) { pgEl.scrollTop = 0; setTimeout(()=>{ if(pgEl) pgEl.scrollTop=0; }, 150); }
+    if (pgEl) { pgEl.scrollTop = 0; pgEl.style.overflowY = ''; }
   }
 }
 async function renderPayroll() {
@@ -1986,7 +1993,7 @@ async function renderKPI() {
   } catch(e) { console.error('renderKPI:',e); }
   finally {
     const pgEl = document.querySelector('.pg.act');
-    if (pgEl) { pgEl.scrollTop = 0; setTimeout(()=>{ if(pgEl) pgEl.scrollTop=0; }, 150); }
+    if (pgEl) { pgEl.scrollTop = 0; pgEl.style.overflowY = ''; }
   }
 }
 
