@@ -1,4 +1,4 @@
-  <!DOCTYPE html>
+   <!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -442,6 +442,17 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
           <table><thead><tr><th>พนักงาน</th><th>เข้า</th><th>ออก</th><th>สแกนหน้า</th></tr></thead>
           <tbody id="rptAtt"></tbody></table>
         </div>
+      </div>
+      <div class="c" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+          <div class="ct" style="margin:0">📋 สถิติรายเดือน</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <input type="month" id="rptMonth" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff">
+            <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="refreshMonthlyStats()">🔄 ดูสถิติ</button>
+          </div>
+        </div>
+        <div id="monthlyStatsSum" class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px"></div>
+        <div style="overflow-x:auto"><table style="min-width:700px"><thead><tr><th>พนักงาน</th><th>แผนก</th><th>วันทำงาน</th><th>ขาด</th><th>มาสาย</th><th>ลาพักร้อน</th><th>ลาป่วย</th><th>ลากิจ</th></tr></thead><tbody id="monthlyStatsBody"></tbody></table></div>
       </div>
     </div>
   </div>
@@ -1382,6 +1393,41 @@ function renderReport() {
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
+  const mon=document.getElementById('rptMonth');if(mon&&!mon.value)mon.value=todayStr().substring(0,7);renderMonthlyStats();
+}
+function renderMonthlyStats(){
+  const month=document.getElementById('rptMonth')?.value;
+  if(!month)return;
+  const grace=hrSettings.grace||15;
+  function toMin(t){if(!t)return 0;const[h,m]=t.split(':').map(Number);return h*60+m;}
+  const startMin=toMin(hrSettings.workStart||'09:00');
+  const workdays=hrSettings.workDays||26;
+  const emps=empCache.filter(e=>e.status==='ทำงาน'&&e.role!=='admin');
+  let totalAbsent=0,totalLate=0,totalLeave=0;
+  const rows=emps.map(e=>{
+    const attMonth=attCache.filter(a=>a.empId===e.id&&String(a.date).startsWith(month));
+    const worked=attMonth.length;
+    const absent=Math.max(0,workdays-worked);
+    const late=attMonth.filter(a=>a.checkIn&&toMin(a.checkIn)>startMin+grace).length;
+    const lv={'ลาพักร้อน':0,'ลาป่วย':0,'ลากิจ':0};
+    leaveCache.filter(l=>l.empId===e.id&&l.status==='อนุมัติ'&&String(l.startDate).startsWith(month)).forEach(l=>{if(lv[l.type]!==undefined)lv[l.type]+=Number(l.days);});
+    const totalLv=lv['ลาพักร้อน']+lv['ลาป่วย']+lv['ลากิจ'];
+    totalAbsent+=absent;totalLate+=late;totalLeave+=totalLv;
+    const abColor=absent>0?'#dc2626':'#059669';
+    const lateBadge=late>=3?'br':late>0?'by':'bg';
+    return '<tr><td>'+e.firstName+' '+e.lastName+'</td><td>'+e.dept+'</td><td style="color:#059669;font-weight:600">'+worked+'</td><td style="color:'+abColor+';font-weight:700">'+absent+'</td><td><span class="badge '+lateBadge+'">'+late+'</span></td><td>'+(lv['ลาพักร้อน']||'-')+'</td><td>'+(lv['ลาป่วย']||'-')+'</td><td>'+(lv['ลากิจ']||'-')+'</td></tr>';
+  }).join('');
+  const sumEl=document.getElementById('monthlyStatsSum');
+  const bodyEl=document.getElementById('monthlyStatsBody');
+  if(!sumEl||!bodyEl)return;
+  sumEl.innerHTML=[{lb:'ขาดงาน',vl:totalAbsent+' วัน',c:'#dc2626'},{lb:'มาสาย',vl:totalLate+' ครั้ง',c:'#d97706'},{lb:'ลา',vl:totalLeave+' วัน',c:'#1e40af'},{lb:'พนักงาน',vl:emps.length+' คน',c:'#7c3aed'}].map(s=>'<div class="sc" style="background:#f8f5ff;border:2px solid #e9d5ff"><div class="lb" style="color:#64748b">'+s.lb+'</div><div class="vl" style="color:'+s.c+';font-size:20px">'+s.vl+'</div></div>').join('');
+  bodyEl.innerHTML=rows||'<tr><td colspan="8" class="empty">ไม่มีข้อมูลเดือนนี้</td></tr>';
+}
+async function refreshMonthlyStats(){
+  const[aRes,lRes]=await Promise.all([api('getAttendance',{empId:null}),api('getLeaves',{empId:null})]);
+  if(aRes.success)attCache=aRes.records;
+  if(lRes.success)leaveCache=lRes.records||lRes.leaves;
+  renderMonthlyStats();
 }
 
 // ── SETTINGS ──
