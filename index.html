@@ -1,4 +1,4 @@
-   <!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -516,6 +516,16 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
       </div>
       <div id="settingsAlert"></div>
       <button class="btn btn-p" onclick="saveSettings()" style="width:auto;padding:12px 32px">💾 บันทึกการตั้งค่า</button>
+      <div class="c" style="margin-top:16px">
+        <div class="ct">🔑 เปลี่ยนรหัสผ่าน</div>
+        <div class="gr2">
+          <div class="fg"><label>รหัสผ่านปัจจุบัน</label><input type="password" id="pwCurrent" placeholder="รหัสผ่านปัจจุบัน"></div>
+          <div class="fg"><label>รหัสผ่านใหม่</label><input type="password" id="pwNew" placeholder="รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)"></div>
+        </div>
+        <div class="fg"><label>ยืนยันรหัสผ่านใหม่</label><input type="password" id="pwConfirm" placeholder="ยืนยันรหัสผ่านใหม่"></div>
+        <div id="pwAlert"></div>
+        <button class="btn btn-p" onclick="changePassword()" style="width:auto;padding:12px 32px;margin-top:8px">🔑 เปลี่ยนรหัสผ่าน</button>
+      </div>
     </div>
     <!-- MY QUOTA -->
     <div class="pg" id="pgMyquota">
@@ -1577,6 +1587,27 @@ async function saveSettings() {
   if (r.success) showToast('บันทึกการตั้งค่าเรียบร้อยแล้ว ✅','s');
   else showToast('เกิดข้อผิดพลาด: '+r.error,'e');
   document.getElementById('settingsAlert').innerHTML = r.success ? '<div class="al al-s">✅ บันทึกเรียบร้อย</div>' : '<div class="al al-e">❌ '+r.error+'</div>';
+}
+async function changePassword(){
+  const cur=document.getElementById('pwCurrent').value;
+  const nw=document.getElementById('pwNew').value;
+  const cf=document.getElementById('pwConfirm').value;
+  const al=document.getElementById('pwAlert');
+  if(!cur||!nw||!cf){al.innerHTML='<div class="al al-e">กรุณากรอกข้อมูลให้ครบ</div>';return;}
+  if(nw!==cf){al.innerHTML='<div class="al al-e">รหัสผ่านใหม่ไม่ตรงกัน</div>';return;}
+  if(nw.length<6){al.innerHTML='<div class="al al-e">รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร</div>';return;}
+  al.innerHTML='<div class="al" style="background:#f1f5f9">⏳ กำลังตรวจสอบ...</div>';
+  const chk=await api('login',{username:me.username,password:cur});
+  if(!chk.success){al.innerHTML='<div class="al al-e">❌ รหัสผ่านปัจจุบันไม่ถูกต้อง</div>';return;}
+  const r=await api('updateEmployee',{...me,password:nw});
+  if(r.success){
+    al.innerHTML='<div class="al al-s">✅ เปลี่ยนรหัสผ่านเรียบร้อย</div>';
+    document.getElementById('pwCurrent').value='';
+    document.getElementById('pwNew').value='';
+    document.getElementById('pwConfirm').value='';
+  } else {
+    al.innerHTML='<div class="al al-e">❌ '+(r.error||'เกิดข้อผิดพลาด')+'</div>';
+  }
 }
 
 // ── PAYROLL ──
