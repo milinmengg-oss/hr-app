@@ -449,7 +449,7 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
         <input type="month" id="payMonth" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff"></div>
         <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="renderPayroll()">🔄 คำนวณ</button>
       </div>
-      <div id="payStats" class="sg" style="grid-template-columns:repeat(2,1fr);margin-top:16px"></div>
+      <div id="payStats" class="sg" style="margin-top:16px"></div>
       <div class="c" style="overflow-x:auto">
         <table style="min-width:700px"><thead><tr><th>พนักงาน</th><th>แผนก</th><th>เงินเดือน</th><th>วันทำงาน</th><th>ขาด</th><th>มาสาย</th><th>ลา</th><th>เบิกล่วงหน้า</th><th>สุทธิ</th><th>สลิป</th></tr></thead>
         <tbody id="payTable"></tbody></table>
@@ -1457,10 +1457,12 @@ function renderDeptHoursTable() {
   const dh = hrSettings.deptHours||{};
   // รวม dept ที่มีในระบบ + ที่บันทึกไว้
   const allDepts = [...new Set([...DEFAULT_DEPTS, ...Object.keys(dh)])];
+  const tblWrap = document.getElementById('deptHoursTable').closest('[style*="overflow-x"]');
+  if (tblWrap) tblWrap.scrollLeft = 0;
   document.getElementById('deptHoursTable').innerHTML = allDepts.map(dept => {
     const d = dh[dept]||{start:'09:00',end:'18:00',grace:15,lateDeduct:0};
     return `<tr>
-      <td><strong>${dept}</strong></td>
+      <td style="font-weight:700;color:#1e293b;white-space:nowrap">${dept}</td>
       <td><input type="time" class="dh-start" tabindex="-1" data-dept="${dept}" value="${d.start||'09:00'}" style="padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
       <td><input type="time" class="dh-end" tabindex="-1" data-dept="${dept}" value="${d.end||'18:00'}" style="padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
       <td><input type="number" class="dh-grace" tabindex="-1" data-dept="${dept}" value="${d.grace||15}" min="0" max="60" style="width:80px;padding:6px 10px;border:2px solid #fbcfe8;border-radius:8px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></td>
@@ -1589,11 +1591,11 @@ async function renderPayroll() {
   }).join('');
 
   document.getElementById('payStats').innerHTML = [
-    {lb:'เงินเดือนรวม',vl:totalSalary.toLocaleString()+' ฿',c:'#1e40af'},
-    {lb:'จ่ายจริงสุทธิ',vl:totalNet.toLocaleString()+' ฿',c:'#059669'},
-    {lb:'หักเบิกล่วงหน้า',vl:totalAdv.toLocaleString()+' ฿',c:'#d97706'},
-    {lb:'จำนวนพนักงาน',vl:emps.length+' คน',c:'#7c3aed'},
-  ].map(s=>`<div class="sc" style="background:#f8f5ff;border:2px solid #e9d5ff"><div class="lb" style="color:#64748b">${s.lb}</div><div class="vl" style="color:${s.c};font-size:20px">${s.vl}</div></div>`).join('');
+    {lb:'เงินเดือนรวม',vl:totalSalary.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#667eea,#764ba2)'},
+    {lb:'จ่ายจริงสุทธิ',vl:totalNet.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#11998e,#38ef7d)'},
+    {lb:'หักเบิกล่วงหน้า',vl:totalAdv.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#f64f59,#c0392b)'},
+    {lb:'จำนวนพนักงาน',vl:emps.length+' คน',bg:'linear-gradient(135deg,#a855f7,#ec4899)'},
+  ].map(s=>`<div class="sc" style="background:${s.bg};color:#fff"><div class="lb">${s.lb}</div><div class="vl" style="font-size:20px">${s.vl}</div></div>`).join('');
   document.getElementById('payTable').innerHTML = rows || '<tr><td colspan="9" class="empty">ไม่มีข้อมูล</td></tr>';
 }
 
