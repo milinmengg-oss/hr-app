@@ -951,7 +951,6 @@ async function loadAllData() {
 
 // ── NAV ──
 function nav(page, el) {
-  // ปิด sidebar บนมือถือ
   const sb = document.querySelector('.sidebar');
   const ov = document.getElementById('menuOverlay');
   if (sb) sb.classList.remove('open');
@@ -964,19 +963,24 @@ function nav(page, el) {
   if (el) el.classList.add('act');
   pgEl.scrollTop = 0;
   pgEl.style.overflowY = 'hidden';
+  // Scroll lock: ป้องกัน browser auto-scroll จาก input focus
+  let lockActive = true;
+  const lockFn = () => { if (lockActive) pgEl.scrollTop = 0; };
+  pgEl.addEventListener('scroll', lockFn);
+  const releaseLock = () => {
+    setTimeout(() => {
+      lockActive = false;
+      pgEl.removeEventListener('scroll', lockFn);
+      pgEl.scrollTop = 0;
+      pgEl.style.overflowY = '';
+    }, 600);
+  };
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
     emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, kpi:renderKPI};
   if (renders[page]) {
-    Promise.resolve(renders[page]()).finally(() => {
-      pgEl.scrollTop = 0;
-      pgEl.style.overflowY = '';
-      requestAnimationFrame(() => { pgEl.scrollTop = 0;
-        requestAnimationFrame(() => { pgEl.scrollTop = 0; });
-      });
-    });
+    Promise.resolve(renders[page]()).finally(releaseLock);
   } else {
-    pgEl.scrollTop = 0;
-    pgEl.style.overflowY = '';
+    releaseLock();
   }
 }
 
@@ -1411,7 +1415,7 @@ async function initSettings() {
   } catch(e) { console.error('initSettings:',e); }
   finally {
     const _pg = document.querySelector('.pg.act');
-    if (_pg) { _pg.scrollTop = 0; _pg.style.overflowY = ''; }
+    if (_pg) _pg.scrollTop = 0;
   }
 }
 
@@ -1539,7 +1543,7 @@ async function initPayroll() {
   } catch(e) { console.error('initPayroll:',e); }
   finally {
     const _pg = document.querySelector('.pg.act');
-    if (_pg) { _pg.scrollTop = 0; _pg.style.overflowY = ''; }
+    if (_pg) _pg.scrollTop = 0;
   }
 }
 async function renderPayroll() {
@@ -2005,7 +2009,7 @@ async function renderKPI() {
   } catch(e) { console.error('renderKPI:',e); }
   finally {
     const _pg = document.querySelector('.pg.act');
-    if (_pg) { _pg.scrollTop = 0; _pg.style.overflowY = ''; }
+    if (_pg) _pg.scrollTop = 0;
   }
 }
 
