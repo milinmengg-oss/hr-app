@@ -177,6 +177,9 @@ body.dark .topbar{background:linear-gradient(135deg,#831843 0%,#be185d 60%,#7e22
 /* Dark toggle btn */
 #darkToggle{background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer;transition:.2s;font-family:inherit}
 #darkToggle:hover{background:rgba(255,255,255,.25)}
+/* KPI */
+.kpi-card{padding:16px;border-radius:14px;border:1.5px solid #fce7f3;background:#fff7fb;margin-bottom:12px}
+body.dark .kpi-card{background:rgba(26,13,46,.6)!important;border-color:rgba(139,92,246,.2)!important}
 
 /* Confetti */
 .confetti-piece{position:fixed;width:10px;height:10px;border-radius:2px;pointer-events:none;z-index:9999;animation:confetti .8s ease-out forwards}
@@ -249,7 +252,9 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
     <div class="ni" id="niDept" onclick="nav('dept',this)" style="display:none">🏢 สรุปตามแผนก</div>
     <div class="ni" id="niPayroll" onclick="nav('payroll',this)" style="display:none">💵 เงินเดือน</div>
     <div class="ni" id="niSettings" onclick="nav('settings',this)" style="display:none">🔧 ตั้งค่า HR</div>
+    <div class="ni" id="niKpi" onclick="nav('kpi',this)" style="display:none">🎯 ระบบ KPI</div>
     <div class="ni" onclick="nav('advance',this)">💰 เบิกเงินล่วงหน้า</div>
+    <div class="ni" onclick="nav('kpi',this)">📈 KPI ของฉัน</div>
     <div class="ni" onclick="nav('myquota',this)">📊 โควตาลาของฉัน</div>
   </div>
   <div class="main">
@@ -490,6 +495,62 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
       <div class="pt">📊 โควตาการลาของฉัน</div>
       <div id="quotaContent"></div>
     </div>
+    <!-- KPI -->
+    <div class="pg" id="pgKpi">
+      <div class="pt">🎯 ระบบ KPI</div>
+      <!-- Admin panel -->
+      <div id="kpiAdminArea" style="display:none">
+        <div class="tabs" id="kpiTabs">
+          <div class="tab act" onclick="switchKpiTab('overview',this)">📊 ภาพรวม</div>
+          <div class="tab" onclick="switchKpiTab('manage',this)">⚙️ จัดการ KPI</div>
+        </div>
+        <!-- Overview -->
+        <div id="kpiOverview">
+          <div class="sg" id="kpiStatCards"></div>
+          <div class="c">
+            <div class="ct">📋 KPI ทั้งหมด</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+              <select id="kpiFilterPeriod" onchange="renderKPIOverview()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></select>
+              <select id="kpiFilterDept" onchange="renderKPIOverview()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"><option value="">ทุกแผนก</option></select>
+            </div>
+            <div id="kpiOverviewList"></div>
+          </div>
+        </div>
+        <!-- Manage -->
+        <div id="kpiManagePanel" style="display:none">
+          <div class="c">
+            <div class="ct">➕ เพิ่ม KPI ใหม่</div>
+            <div class="gr2">
+              <div class="fg"><label>พนักงาน</label><select id="kpiEmpSelect" style="width:100%;padding:10px 14px;border:2px solid #fbcfe8;border-radius:12px;font-size:13px;outline:none;font-family:inherit;background:#fff7fb"></select></div>
+              <div class="fg"><label>งวด (เดือน)</label><select id="kpiPeriodSelect" style="width:100%;padding:10px 14px;border:2px solid #fbcfe8;border-radius:12px;font-size:13px;outline:none;font-family:inherit;background:#fff7fb"></select></div>
+            </div>
+            <div class="gr3">
+              <div class="fg"><label>ชื่อ KPI</label><input type="text" id="kpiTitle" placeholder="เช่น ยอดขาย, ความพึงพอใจ"></div>
+              <div class="fg"><label>เป้าหมาย</label><input type="number" id="kpiTarget" placeholder="เช่น 500000"></div>
+              <div class="fg"><label>หน่วย</label><input type="text" id="kpiUnit" placeholder="เช่น บาท, ราย, %"></div>
+            </div>
+            <button class="btn btn-p" style="width:auto;padding:10px 28px" onclick="addKPI()">➕ เพิ่ม KPI</button>
+          </div>
+          <div class="c">
+            <div class="ct">📋 รายการ KPI</div>
+            <div style="margin-bottom:12px">
+              <select id="kpiManagePeriod" onchange="renderKPIManage()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></select>
+            </div>
+            <div id="kpiManageList"></div>
+          </div>
+        </div>
+      </div>
+      <!-- My KPIs (all users) -->
+      <div id="kpiMyArea">
+        <div class="c">
+          <div class="ct">📈 KPI ของฉัน</div>
+          <div style="margin-bottom:12px">
+            <select id="kpiMyPeriod" onchange="renderMyKPIs()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></select>
+          </div>
+          <div id="kpiMyList"></div>
+        </div>
+      </div>
+    </div>
     <!-- CAMERA -->
 <div class="cam-overlay" id="camOverlay">
   <div class="cam-box">
@@ -508,6 +569,19 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
 </div>
 
 <!-- MODAL -->
+<!-- KPI SCORE MODAL -->
+<div class="modal-bg" id="mKpiScore">
+  <div class="modal">
+    <h2>✏️ บันทึกผลงานจริง</h2>
+    <div id="mKpiScoreInfo" style="margin-bottom:14px;padding:12px;background:#fff7fb;border-radius:12px;font-size:13px;line-height:1.6"></div>
+    <div class="fg"><label>ผลงานจริง</label><input type="number" id="kpiActual" placeholder="ใส่ตัวเลขผลจริง" oninput="previewKPIScore()"></div>
+    <div id="kpiScorePreview" style="margin:8px 0 14px;font-size:14px;font-weight:700;color:#7c3aed;min-height:20px"></div>
+    <div class="mf">
+      <button class="btn btn-s" onclick="closeModal('mKpiScore')">ยกเลิก</button>
+      <button class="btn btn-p" style="width:auto" onclick="submitKPIScore()">💾 บันทึก</button>
+    </div>
+  </div>
+</div>
 <div class="modal-bg" id="mEmp">
   <div class="modal">
     <h2 id="mEmpTitle">เพิ่มพนักงาน</h2>
@@ -715,6 +789,26 @@ async function api(action, data = {}) {
         await db.collection('advances').doc(data.id).update({status:data.status,approvedBy:data.approvedBy||''});
         return {success:true};
       }
+      case 'getKPIs': {
+        let q = db.collection('kpis');
+        if (data.empId) q = q.where('empId','==',data.empId);
+        if (data.period) q = q.where('period','==',data.period);
+        const snap = await q.get();
+        return {success:true, kpis: snap.docs.map(d=>d.data())};
+      }
+      case 'saveKPI': {
+        const id = data.id || ('KPI'+Date.now());
+        await db.collection('kpis').doc(id).set({...data, id}, {merge:true});
+        return {success:true, id};
+      }
+      case 'scoreKPI': {
+        await db.collection('kpis').doc(data.id).update({actual:data.actual,score:data.score,scoredBy:data.scoredBy,scoredAt:data.scoredAt});
+        return {success:true};
+      }
+      case 'deleteKPI': {
+        await db.collection('kpis').doc(data.id).delete();
+        return {success:true};
+      }
       default: return {success:false,error:'Unknown action'};
     }
   } catch(e) {
@@ -802,7 +896,7 @@ function setupApp() {
   document.getElementById('tName').textContent = me.firstName + ' ' + me.lastName;
   document.getElementById('tRole').textContent = me.role === 'admin' ? 'HR/Admin' : 'พนักงาน';
   const isAdmin = me.role === 'admin';
-  ['adSec','niApprove','niRegFace','niManage','niReport','niDept','niPayroll','niSettings'].forEach(id => {
+  ['adSec','niApprove','niRegFace','niManage','niReport','niDept','niPayroll','niSettings','niKpi'].forEach(id => {
     document.getElementById(id).style.display = isAdmin ? '' : 'none';
   });
   document.getElementById('tabAdvSum').style.display = isAdmin ? '' : 'none';
@@ -834,7 +928,7 @@ function nav(page, el) {
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
   if (el) el.classList.add('act');
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota};
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, kpi:renderKPI};
   if (renders[page]) renders[page]();
 }
 
@@ -1719,6 +1813,182 @@ function confettiBurst() {
       setTimeout(() => el.remove(), 1200);
     }, i * 30);
   }
+}
+
+// ── KPI ──
+let kpiCache = [];
+let kpiScoreTarget = null;
+const THAI_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+
+function getPeriodOptions() {
+  const opts = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = `${THAI_MONTHS[d.getMonth()]} ${d.getFullYear()+543}`;
+    opts.push({val, label});
+  }
+  return opts;
+}
+
+function fillPeriodSelect(id, selectedVal) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = getPeriodOptions().map(o=>`<option value="${o.val}" ${o.val===selectedVal?'selected':''}>${o.label}</option>`).join('');
+}
+
+function kpiScoreColor(s) {
+  if (s===null||s===undefined) return '#94a3b8';
+  return s>=90?'#059669':s>=70?'#3b82f6':s>=50?'#f59e0b':'#ef4444';
+}
+
+function kpiScoreBadge(s) {
+  if (s===null||s===undefined) return '<span class="badge by">รอประเมิน</span>';
+  return s>=90?'<span class="badge bg">เยี่ยม</span>':s>=70?'<span class="badge bb">ดี</span>':s>=50?'<span class="badge by">พอใช้</span>':'<span class="badge br">ปรับปรุง</span>';
+}
+
+async function renderKPI() {
+  const isAdmin = me.role==='admin';
+  document.getElementById('kpiAdminArea').style.display = isAdmin?'':'none';
+  const now = new Date();
+  const curPeriod = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  ['kpiFilterPeriod','kpiPeriodSelect','kpiManagePeriod','kpiMyPeriod'].forEach(id=>fillPeriodSelect(id,curPeriod));
+  if (isAdmin) {
+    const depts = [...new Set(empCache.map(e=>e.dept).filter(Boolean))];
+    const df = document.getElementById('kpiFilterDept');
+    df.innerHTML = '<option value="">ทุกแผนก</option>'+depts.map(d=>`<option value="${d}">${d}</option>`).join('');
+    const es = document.getElementById('kpiEmpSelect');
+    es.innerHTML = '<option value="">-- เลือกพนักงาน --</option>'+empCache.filter(e=>e.status==='ทำงาน').map(e=>`<option value="${e.id}">${e.firstName} ${e.lastName} (${e.dept})</option>`).join('');
+    await loadKPIData(curPeriod);
+    renderKPIOverview();
+    renderKPIManage();
+  }
+  renderMyKPIs();
+}
+
+async function loadKPIData(period) {
+  const r = await api('getKPIs',{period});
+  kpiCache = r.success?r.kpis:[];
+}
+
+function switchKpiTab(tab, el) {
+  document.querySelectorAll('#kpiTabs .tab').forEach(t=>t.classList.remove('act'));
+  if(el) el.classList.add('act');
+  document.getElementById('kpiOverview').style.display = tab==='overview'?'':'none';
+  document.getElementById('kpiManagePanel').style.display = tab==='manage'?'':'none';
+}
+
+async function renderKPIOverview() {
+  const period = document.getElementById('kpiFilterPeriod').value;
+  const dept = document.getElementById('kpiFilterDept').value;
+  await loadKPIData(period);
+  let list = kpiCache;
+  if (dept) list = list.filter(k=>k.dept===dept);
+  const scored = list.filter(k=>k.score!==null&&k.score!==undefined);
+  const avgScore = scored.length?Math.round(scored.reduce((s,k)=>s+k.score,0)/scored.length):0;
+  document.getElementById('kpiStatCards').innerHTML = [
+    {lb:'KPI ทั้งหมด',vl:list.length,cl:'background:linear-gradient(135deg,#667eea,#764ba2)',ic:'🎯'},
+    {lb:'ประเมินแล้ว',vl:scored.length,cl:'background:linear-gradient(135deg,#11998e,#38ef7d)',ic:'✅'},
+    {lb:'รอประเมิน',vl:list.length-scored.length,cl:'background:linear-gradient(135deg,#f6d365,#fda085)',ic:'⏳'},
+    {lb:'คะแนนเฉลี่ย',vl:(avgScore||0)+'%',cl:'background:linear-gradient(135deg,#f43f5e,#ec4899)',ic:'📊'},
+  ].map(s=>`<div class="sc" style="${s.cl};color:#fff"><div class="lb">${s.ic} ${s.lb}</div><div class="vl">${s.vl}</div></div>`).join('');
+  if (!list.length) { document.getElementById('kpiOverviewList').innerHTML='<div class="empty">ยังไม่มีข้อมูล KPI สำหรับงวดนี้</div>'; return; }
+  const rows = list.sort((a,b)=>(b.score||0)-(a.score||0)).map(k=>{
+    const pct = k.score!==null&&k.score!==undefined?k.score:0;
+    const bar = pct>=90?'#059669':pct>=70?'#3b82f6':pct>=50?'#f59e0b':'#ef4444';
+    return `<tr><td><strong>${k.empName}</strong><br><span style="color:#94a3b8;font-size:11px">${k.dept||''}</span></td><td>${k.title}</td><td>${Number(k.target).toLocaleString()} ${k.unit}</td><td>${k.actual!==null&&k.actual!==undefined?Number(k.actual).toLocaleString()+' '+k.unit:'-'}</td><td>${kpiScoreBadge(k.score)}${k.score!==null&&k.score!==undefined?`<div style="margin-top:4px;background:#fce7f3;border-radius:4px;height:5px;overflow:hidden"><div style="height:5px;width:${pct}%;background:${bar};border-radius:4px"></div></div>`:''}</td></tr>`;
+  }).join('');
+  document.getElementById('kpiOverviewList').innerHTML=`<div style="overflow-x:auto"><table><thead><tr><th>พนักงาน</th><th>KPI</th><th>เป้าหมาย</th><th>ผลจริง</th><th>คะแนน</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function renderKPIManage() {
+  const period = document.getElementById('kpiManagePeriod').value;
+  await loadKPIData(period);
+  if (!kpiCache.length) { document.getElementById('kpiManageList').innerHTML='<div class="empty">ยังไม่มี KPI สำหรับงวดนี้</div>'; return; }
+  const rows = kpiCache.map(k=>`<tr><td><strong>${k.empName}</strong><br><span style="color:#94a3b8;font-size:11px">${k.dept||''}</span></td><td>${k.title}<br><span style="color:#94a3b8;font-size:11px">เป้า: ${Number(k.target).toLocaleString()} ${k.unit}</span></td><td>${kpiScoreBadge(k.score)}${k.score!==null&&k.score!==undefined?` <span style="font-size:11px;color:#64748b">${k.score}%</span>`:''}</td><td style="white-space:nowrap"><button class="btn btn-s btn-sm" onclick="openKPIScore('${k.id}')">✏️ ประเมิน</button> <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:none;padding:5px 10px;border-radius:8px;font-weight:700;cursor:pointer;font-size:11px" onclick="deleteKPI('${k.id}')">🗑️</button></td></tr>`).join('');
+  document.getElementById('kpiManageList').innerHTML=`<div style="overflow-x:auto"><table><thead><tr><th>พนักงาน</th><th>KPI</th><th>สถานะ</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+async function addKPI() {
+  const empId = document.getElementById('kpiEmpSelect').value;
+  const title = document.getElementById('kpiTitle').value.trim();
+  const target = document.getElementById('kpiTarget').value;
+  const unit = document.getElementById('kpiUnit').value.trim();
+  const period = document.getElementById('kpiPeriodSelect').value;
+  if (!empId||!title||!target||!unit) { showToast('กรุณากรอกข้อมูลให้ครบ','e'); return; }
+  const emp = empCache.find(e=>e.id===empId);
+  const r = await api('saveKPI',{id:'KPI'+Date.now(),empId,empName:`${emp.firstName} ${emp.lastName}`,dept:emp.dept,title,target:Number(target),unit,period,actual:null,score:null,scoredBy:null,scoredAt:null,createdBy:me.id,createdAt:new Date().toISOString()});
+  if (r.success) {
+    showToast('เพิ่ม KPI สำเร็จ ✅','s');
+    document.getElementById('kpiTitle').value='';
+    document.getElementById('kpiTarget').value='';
+    document.getElementById('kpiUnit').value='';
+    await loadKPIData(period);
+    renderKPIManage();
+    renderKPIOverview();
+  } else showToast('เกิดข้อผิดพลาด: '+r.error,'e');
+}
+
+function openKPIScore(kpiId) {
+  const k = kpiCache.find(x=>x.id===kpiId);
+  if (!k) return;
+  kpiScoreTarget = k;
+  document.getElementById('mKpiScoreInfo').innerHTML=`<strong>${k.empName}</strong> — ${k.title}<br><span style="color:#64748b">เป้าหมาย: <strong>${Number(k.target).toLocaleString()} ${k.unit}</strong></span>`;
+  document.getElementById('kpiActual').value = k.actual!==null&&k.actual!==undefined?k.actual:'';
+  document.getElementById('kpiScorePreview').textContent='';
+  document.getElementById('mKpiScore').classList.add('show');
+}
+
+function previewKPIScore() {
+  if (!kpiScoreTarget) return;
+  const actual = parseFloat(document.getElementById('kpiActual').value);
+  if (!isNaN(actual) && kpiScoreTarget.target > 0) {
+    const s = Math.min(100,Math.round(actual/kpiScoreTarget.target*100));
+    document.getElementById('kpiScorePreview').textContent=`คะแนนที่คำนวณได้: ${s}% — ${s>=90?'เยี่ยม 🌟':s>=70?'ดี 👍':s>=50?'พอใช้ ⚡':'ควรปรับปรุง ⚠️'}`;
+    document.getElementById('kpiScorePreview').style.color = kpiScoreColor(s);
+  }
+}
+
+async function submitKPIScore() {
+  if (!kpiScoreTarget) return;
+  const actual = parseFloat(document.getElementById('kpiActual').value);
+  if (isNaN(actual)) { showToast('กรุณากรอกผลงานจริง','e'); return; }
+  const score = Math.min(100,Math.round(actual/kpiScoreTarget.target*100));
+  const r = await api('scoreKPI',{id:kpiScoreTarget.id,actual,score,scoredBy:me.id,scoredAt:new Date().toISOString()});
+  if (r.success) {
+    showToast('บันทึกผลสำเร็จ ✅','s');
+    closeModal('mKpiScore');
+    const period = document.getElementById('kpiManagePeriod').value;
+    await loadKPIData(period);
+    renderKPIManage();
+    renderKPIOverview();
+    renderMyKPIs();
+  } else showToast('เกิดข้อผิดพลาด','e');
+}
+
+async function deleteKPI(id) {
+  if (!confirm('ลบ KPI นี้?')) return;
+  const r = await api('deleteKPI',{id});
+  if (r.success) { showToast('ลบสำเร็จ','s'); const period=document.getElementById('kpiManagePeriod').value; await loadKPIData(period); renderKPIManage(); }
+}
+
+async function renderMyKPIs() {
+  const el = document.getElementById('kpiMyList');
+  const periodEl = document.getElementById('kpiMyPeriod');
+  if (!periodEl||!el) return;
+  const period = periodEl.value;
+  const r = await api('getKPIs',{empId:me.id,period});
+  const myKPIs = r.success?r.kpis:[];
+  if (!myKPIs.length) { el.innerHTML='<div class="empty">ยังไม่มี KPI สำหรับงวดนี้<br><span style="font-size:11px">HR จะเพิ่ม KPI ให้ต้นงวด</span></div>'; return; }
+  const scored = myKPIs.filter(k=>k.score!==null&&k.score!==undefined);
+  const avg = scored.length?Math.round(scored.reduce((s,k)=>s+k.score,0)/scored.length):null;
+  el.innerHTML = (avg!==null?`<div style="text-align:center;padding:18px 0;margin-bottom:16px;border-bottom:1.5px solid #fce7f3"><div style="font-size:40px;font-weight:800;color:${kpiScoreColor(avg)}">${avg}%</div><div style="font-size:13px;color:#64748b;margin-top:4px">คะแนนเฉลี่ย (${scored.length}/${myKPIs.length} KPI)</div></div>`:'') +
+  myKPIs.map(k=>{
+    const pct=k.score!==null&&k.score!==undefined?k.score:0;
+    const c=kpiScoreColor(k.score);
+    return `<div class="kpi-card"><div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-weight:700;font-size:14px">${k.title}</div><div style="font-size:12px;color:#94a3b8;margin-top:2px">เป้า: ${Number(k.target).toLocaleString()} ${k.unit}</div></div><div style="text-align:right">${kpiScoreBadge(k.score)}${k.score!==null&&k.score!==undefined?`<div style="font-size:20px;font-weight:800;color:${c};margin-top:4px">${k.score}%</div>`:''}</div></div>${k.score!==null&&k.score!==undefined?`<div style="margin-top:10px;background:#fce7f3;border-radius:6px;height:8px;overflow:hidden"><div style="height:8px;border-radius:6px;width:${pct}%;background:${c};transition:width .8s"></div></div><div style="font-size:11px;color:#64748b;margin-top:4px">ผลจริง: ${Number(k.actual).toLocaleString()} ${k.unit}</div>`:'<div style="font-size:11px;color:#94a3b8;margin-top:8px">⏳ รอการประเมินจาก HR</div>'}</div>`;
+  }).join('');
 }
 
 // ── BOOT ──
