@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -962,7 +962,7 @@ function nav(page, el) {
   pgEl.classList.add('act');
   if (el) el.classList.add('act');
   pgEl.scrollTop = 0;
-  pgEl.style.overflowY = 'hidden';
+  pgEl.style.overflowY = 'clip';
   // Scroll lock: ป้องกัน browser auto-scroll จาก input focus
   let lockActive = true;
   const lockFn = () => { if (lockActive) pgEl.scrollTop = 0; };
