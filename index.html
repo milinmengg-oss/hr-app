@@ -94,7 +94,30 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 .clk-box{text-align:center;padding:28px}
 .clk-time{font-size:54px;font-weight:800;background:linear-gradient(135deg,#f43f5e,#ec4899,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:4px;font-family:monospace}
 .clk-date{color:#ec4899;font-size:13px;margin:8px 0 22px;font-weight:600}
-@media(max-width:768px){.sidebar{display:none;position:fixed;top:62px;left:0;bottom:0;width:230px;z-index:200;background:linear-gradient(180deg,#fff 0%,#fff7fb 100%);box-shadow:4px 0 24px rgba(236,72,153,.2)}.sidebar.open{display:block}.main{margin-left:0}.sg{grid-template-columns:1fr 1fr}.gr2,.gr3{grid-template-columns:1fr}.menu-btn{display:flex!important}}
+@media(max-width:768px){
+.sidebar{display:none;position:fixed;top:56px;left:0;bottom:0;width:230px;z-index:200;background:linear-gradient(180deg,#fff 0%,#fff7fb 100%);box-shadow:4px 0 24px rgba(236,72,153,.2)}
+.sidebar.open{display:block}
+.main{margin-left:0;padding:14px}
+.sg{grid-template-columns:1fr 1fr}
+.gr2,.gr3{grid-template-columns:1fr}
+.menu-btn{display:flex!important}
+.topbar{padding:0 12px;height:56px}
+.topbar h1{font-size:14px}
+#topLogo{height:28px!important}
+#tName,#tRole{display:none!important}
+.topbar .uinfo{gap:6px}
+.av{width:28px;height:28px;font-size:11px}
+#darkToggle{padding:4px 8px;font-size:11px}
+.btn-s.btn-sm{padding:4px 8px;font-size:11px}
+.main{margin-top:56px}
+.sg{grid-template-columns:1fr 1fr;gap:10px}
+.sc{padding:14px}
+.c{padding:16px}
+.pt{font-size:18px}
+.clk-time{font-size:38px}
+.card{width:95%;padding:24px}
+.modal{width:95%!important;max-width:95vw!important}
+}
 .menu-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:199;background:rgba(80,7,36,.35);backdrop-filter:blur(2px)}
 .menu-overlay.open{display:block}
 
@@ -801,6 +824,11 @@ async function loadAllData() {
 function nav(page, el) {
   window.scrollTo(0, 0);
   document.querySelector('.main')?.scrollTo(0, 0);
+  // ปิด sidebar บนมือถือ
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('menuOverlay');
+  if (sb) sb.classList.remove('open');
+  if (ov) ov.classList.remove('open');
   document.querySelectorAll('.pg').forEach(p => p.classList.remove('act'));
   document.querySelectorAll('.ni').forEach(n => n.classList.remove('act'));
   document.getElementById('pg' + page.charAt(0).toUpperCase() + page.slice(1)).classList.add('act');
@@ -1215,15 +1243,12 @@ let hrSettings = {annual:10,sick:30,personal:3,absentPct:100,workDays:26,deptHou
 function toMin(t){ if(!t) return 0; const[h,m]=t.split(':').map(Number); return h*60+m; }
 const DEFAULT_DEPTS = ['การตลาด','ขาย','บัญชี','IT','HR','คลังสินค้า','ผู้บริหาร'];
 
-async function initSettings() {
-  const r = await api('getSettings',{});
-  if (r.success) hrSettings = Object.assign({annual:10,sick:30,personal:3,absentPct:100,workDays:26,deptHours:{}}, r.settings);
+function applySettingsUI() {
   document.getElementById('stAnnual').value = hrSettings.annual||10;
   document.getElementById('stSick').value = hrSettings.sick||30;
   document.getElementById('stPersonal').value = hrSettings.personal||3;
   document.getElementById('stAbsentPct').value = hrSettings.absentPct||100;
   document.getElementById('stWorkDays').value = hrSettings.workDays||26;
-  // โหลดข้อมูลบริษัท
   document.getElementById('stCompanyName').value = localStorage.getItem('hr_company')||'';
   const savedLogo = localStorage.getItem('hr_logo');
   if (savedLogo) {
@@ -1232,6 +1257,16 @@ async function initSettings() {
     document.getElementById('btnRemoveLogo').style.display = '';
   }
   renderDeptHoursTable();
+}
+async function initSettings() {
+  // แสดงข้อมูล cache ทันที (ไม่รอ Firebase)
+  applySettingsUI();
+  // โหลดจาก Firebase แล้วอัพเดต
+  const r = await api('getSettings',{});
+  if (r.success) {
+    hrSettings = Object.assign({annual:10,sick:30,personal:3,absentPct:100,workDays:26,deptHours:{}}, r.settings);
+    applySettingsUI();
+  }
 }
 
 function applyBranding(logo, name) {
