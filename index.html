@@ -39,7 +39,7 @@ body{font-family:'Prompt',Arial,sans-serif;background:linear-gradient(135deg,#ff
 .ni:hover{background:linear-gradient(135deg,rgba(236,72,153,.08),rgba(244,63,94,.06));color:#ec4899;border-left-color:#ec4899}
 .ni.act{background:linear-gradient(135deg,rgba(236,72,153,.15),rgba(244,63,94,.1));color:#ec4899;border-left-color:#f43f5e;font-weight:700}
 .nsec{padding:14px 18px 4px;font-size:10px;font-weight:800;color:#f9a8d4;text-transform:uppercase;letter-spacing:1px}
-.main{margin-left:218px;margin-top:62px;padding:24px;min-height:calc(100vh - 62px)}
+.main{margin-left:218px;margin-top:62px;padding:24px;height:calc(100vh - 62px);overflow-y:auto}
 .pg{display:none}.pg.act{display:block}
 .pt{font-size:22px;font-weight:800;margin-bottom:20px;background:linear-gradient(135deg,#f43f5e,#ec4899,#a855f7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .c{background:rgba(255,255,255,.9);backdrop-filter:blur(10px);border-radius:20px;padding:22px;box-shadow:0 4px 24px rgba(236,72,153,.08);border:1.5px solid rgba(251,207,232,.6);margin-bottom:20px}
@@ -97,7 +97,7 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 @media(max-width:768px){
 .sidebar{display:none;position:fixed;top:56px;left:0;bottom:0;width:230px;z-index:200;background:linear-gradient(180deg,#fff 0%,#fff7fb 100%);box-shadow:4px 0 24px rgba(236,72,153,.2)}
 .sidebar.open{display:block}
-.main{margin-left:0;padding:14px}
+.main{margin-left:0;padding:14px;height:calc(100vh - 56px);overflow-y:auto;margin-top:56px!important}
 .sg{grid-template-columns:1fr 1fr}
 .gr2,.gr3{grid-template-columns:1fr}
 .menu-btn{display:flex!important}
@@ -109,7 +109,6 @@ tr:hover td{background:linear-gradient(135deg,rgba(236,72,153,.04),rgba(244,63,9
 .av{width:28px;height:28px;font-size:11px}
 #darkToggle{padding:4px 8px;font-size:11px}
 .btn-s.btn-sm{padding:4px 8px;font-size:11px}
-.main{margin-top:56px}
 .sg{grid-template-columns:1fr 1fr;gap:10px}
 .sc{padding:14px}
 .c{padding:16px}
@@ -916,8 +915,8 @@ async function loadAllData() {
 
 // ── NAV ──
 function nav(page, el) {
-  window.scrollTo(0, 0);
-  document.querySelector('.main')?.scrollTo(0, 0);
+  const mainEl = document.querySelector('.main');
+  if (mainEl) mainEl.scrollTop = 0;
   // ปิด sidebar บนมือถือ
   const sb = document.querySelector('.sidebar');
   const ov = document.getElementById('menuOverlay');
