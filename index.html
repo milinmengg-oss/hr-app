@@ -1451,7 +1451,7 @@ function exportMonthlyStats(){
     const cells=Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim());
     if(cells.length>1)rows.push(cells);
   });
-  const csv='﻿'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
+  const csv='\uFEFF'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
 ');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
@@ -1471,7 +1471,7 @@ function exportKPIData(){
     const pct=k.target>0?Math.round((k.score||0)/k.target*100):0;
     rows.push([(emp.firstName||'')+' '+(emp.lastName||''),emp.dept||'-',k.title||'-',k.period||'-',k.target||0,k.unit||'-',k.score||0,pct+'%']);
   });
-  const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
+  const csv='\uFEFF'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
 ');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
@@ -1486,7 +1486,7 @@ function exportMonthlyStats(){
     const cells=Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim());
     if(cells.length>1)rows.push(cells);
   });
-  const csv='﻿'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
+  const csv='\uFEFF'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
 ');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
@@ -1506,7 +1506,7 @@ function exportKPIData(){
     const pct=k.target>0?Math.round((k.score||0)/k.target*100):0;
     rows.push([(emp.firstName||'')+' '+(emp.lastName||''),emp.dept||'-',k.title||'-',k.period||'-',k.target||0,k.unit||'-',k.score||0,pct+'%']);
   });
-  const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
+  const csv='\uFEFF'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
 ');
   const a=document.createElement('a');
   a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
