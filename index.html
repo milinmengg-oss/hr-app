@@ -59,7 +59,7 @@ body{overflow:hidden}
 .sc::before{content:'';position:absolute;top:-15px;right:-15px;width:60px;height:60px;border-radius:50%;background:rgba(232,121,160,.07)}
 .sc::after{content:'';position:absolute;bottom:-10px;right:-10px;width:36px;height:36px;border-radius:50%;background:rgba(232,121,160,.04)}
 .sc .lb{font-size:11px;color:#5a5a70;margin-bottom:8px;font-weight:500}
-.sc .vl{font-size:26px;font-weight:700;color:#f1f1f3;line-height:1}
+.sc .vl{font-size:26px;font-weight:700;color:#e879a0;line-height:1}
 .sc .sb{font-size:11px;color:#5a5a70;margin-top:6px}
 table{width:100%;border-collapse:collapse}
 th{font-size:10px;font-weight:600;color:#4a4a5a;letter-spacing:.8px;padding:12px 14px;text-align:left;border-bottom:1px solid #22222c;background:#1c1c22;text-transform:uppercase}
@@ -559,7 +559,7 @@ a{color:#e879a0;text-decoration:none}
     <h2>✏️ บันทึกผลงานจริง</h2>
     <div id="mKpiScoreInfo" style="margin-bottom:14px;padding:12px;background:#fff7fb;border-radius:12px;font-size:13px;line-height:1.6"></div>
     <div class="fg"><label>ผลงานจริง</label><input type="number" id="kpiActual" placeholder="ใส่ตัวเลขผลจริง" oninput="previewKPIScore()"></div>
-    <div id="kpiScorePreview" style="margin:8px 0 14px;font-size:14px;font-weight:700;color:#7c3aed;min-height:20px"></div>
+    <div id="kpiScorePreview" style="margin:8px 0 14px;font-size:14px;font-weight:700;color:#e879a0;min-height:20px"></div>
     <div class="mf">
       <button class="btn btn-s" onclick="closeModal('mKpiScore')">ยกเลิก</button>
       <button class="btn btn-p" style="width:auto" onclick="submitKPIScore()">💾 บันทึก</button>
@@ -1362,10 +1362,10 @@ function renderReport() {
   const vLeaves=visibleLeaves();
   const approved=vLeaves.filter(l=>l.status==='อนุมัติ');
   document.getElementById('rptStats').innerHTML=[
-    {lb:'ใบลาทั้งหมด',vl:vLeaves.length,sb:'ทุกสถานะ',c:'#1e40af'},
-    {lb:'อนุมัติแล้ว',vl:approved.length,sb:'ใบ',c:'#059669'},
-    {lb:'รออนุมัติ',vl:vLeaves.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#d97706'},
-    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#7c3aed'},
+    {lb:'ใบลาทั้งหมด',vl:vLeaves.length,sb:'ทุกสถานะ',c:'#e879a0'},
+    {lb:'อนุมัติแล้ว',vl:approved.length,sb:'ใบ',c:'#e879a0'},
+    {lb:'รออนุมัติ',vl:vLeaves.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#e879a0'},
+    {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#e879a0'},
   ].map(s=>`<div class="sc" style="animation:fadeUp .4s ease"><div class="lb">${s.lb}</div><div class="vl sc-num" data-target="${s.vl}" style="color:${s.c}">0</div><div class="sb">${s.sb}</div></div>`).join('');
   document.querySelectorAll('.sc-num').forEach(el => animateNum(el, parseInt(el.dataset.target)||0));
   const byType={};vLeaves.forEach(l=>{byType[l.type]=(byType[l.type]||0)+Number(l.days);});
@@ -1392,14 +1392,14 @@ function renderMonthlyStats(){
     leaveCache.filter(l=>l.empId===e.id&&l.status==='อนุมัติ'&&String(l.startDate).startsWith(month)).forEach(l=>{if(lv[l.type]!==undefined)lv[l.type]+=Number(l.days);});
     const totalLv=lv['ลาพักร้อน']+lv['ลาป่วย']+lv['ลากิจ'];
     totalAbsent+=absent;totalLate+=late;totalLeave+=totalLv;
-    const abColor=absent>0?'#dc2626':'#059669';
+    const abColor=absent>0?'#dc2626':'#e879a0';
     const lateBadge=late>=3?'br':late>0?'by':'bg';
-    return '<tr><td>'+e.firstName+' '+e.lastName+'</td><td>'+e.dept+'</td><td style="color:#059669;font-weight:600">'+worked+'</td><td style="color:'+abColor+';font-weight:700">'+absent+'</td><td><span class="badge '+lateBadge+'">'+late+'</span></td><td>'+(lv['ลาพักร้อน']||'-')+'</td><td>'+(lv['ลาป่วย']||'-')+'</td><td>'+(lv['ลากิจ']||'-')+'</td></tr>';
+    return '<tr><td>'+e.firstName+' '+e.lastName+'</td><td>'+e.dept+'</td><td style="color:#e879a0;font-weight:600">'+worked+'</td><td style="color:'+abColor+';font-weight:700">'+absent+'</td><td><span class="badge '+lateBadge+'">'+late+'</span></td><td>'+(lv['ลาพักร้อน']||'-')+'</td><td>'+(lv['ลาป่วย']||'-')+'</td><td>'+(lv['ลากิจ']||'-')+'</td></tr>';
   }).join('');
   const sumEl=document.getElementById('monthlyStatsSum');
   const bodyEl=document.getElementById('monthlyStatsBody');
   if(!sumEl||!bodyEl)return;
-  sumEl.innerHTML=[{lb:'ขาดงาน',vl:totalAbsent+' วัน',c:'#dc2626'},{lb:'มาสาย',vl:totalLate+' ครั้ง',c:'#d97706'},{lb:'ลา',vl:totalLeave+' วัน',c:'#1e40af'},{lb:'พนักงาน',vl:emps.length+' คน',c:'#7c3aed'}].map(s=>'<div class="sc" style="background:#f8f5ff;border:2px solid #e9d5ff"><div class="lb" style="color:#64748b">'+s.lb+'</div><div class="vl" style="color:'+s.c+';font-size:20px">'+s.vl+'</div></div>').join('');
+  sumEl.innerHTML=[{lb:'ขาดงาน',vl:totalAbsent+' วัน',c:'#dc2626'},{lb:'มาสาย',vl:totalLate+' ครั้ง',c:'#e879a0'},{lb:'ลา',vl:totalLeave+' วัน',c:'#e879a0'},{lb:'พนักงาน',vl:emps.length+' คน',c:'#e879a0'}].map(s=>'<div class="sc" style="background:#f8f5ff;border:2px solid #e9d5ff"><div class="lb" style="color:#64748b">'+s.lb+'</div><div class="vl" style="color:'+s.c+';font-size:20px">'+s.vl+'</div></div>').join('');
   bodyEl.innerHTML=rows||'<tr><td colspan="8" class="empty">ไม่มีข้อมูลเดือนนี้</td></tr>';
 }
 async function refreshMonthlyStats(){
@@ -1706,11 +1706,11 @@ async function renderPayroll() {
       <td>${e.firstName} ${e.lastName}<br><small style="color:#94a3b8">${deptLabel}</small></td>
       <td>${e.dept}</td>
       <td style="font-weight:700">${salary.toLocaleString()}</td>
-      <td style="color:#059669;font-weight:600">${worked}</td>
-      <td style="color:${absent>0?'#dc2626':'#059669'};font-weight:600">${absent}</td>
+      <td style="color:#e879a0;font-weight:600">${worked}</td>
+      <td style="color:${absent>0?'#dc2626':'#e879a0'};font-weight:600">${absent}</td>
       <td><span class="badge ${lateColor}">${late} ครั้ง${deductLate>0?' (-'+deductLate.toLocaleString()+'฿)':''}</span></td>
       <td>${leaveDays}</td>
-      <td style="color:#d97706;font-weight:600">${advAmt.toLocaleString()}</td>
+      <td style="color:#e879a0;font-weight:600">${advAmt.toLocaleString()}</td>
       <td style="font-weight:700;color:#be185d;font-size:14px">${net.toLocaleString()}</td>
       <td><button class="btn btn-s btn-sm" onclick="printSlip('${slipData}')">🖨️ สลิป</button></td>
     </tr>`;
@@ -1819,7 +1819,7 @@ async function renderMyQuota() {
       return `<div style="margin-bottom:20px">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px">
           <span style="font-weight:600">${q.icon} ${q.type}</span>
-          <span style="color:#64748b;font-size:13px">ใช้ไป <strong style="color:#7c3aed">${u}</strong> / ${q.max} วัน (เหลือ <strong style="color:#059669">${left}</strong> วัน)</span>
+          <span style="color:#64748b;font-size:13px">ใช้ไป <strong style="color:#e879a0">${u}</strong> / ${q.max} วัน (เหลือ <strong style="color:#e879a0">${left}</strong> วัน)</span>
         </div>
         <div class="progress-bar" style="height:10px;background:#f1f5f9">
           <div class="progress-fill" style="width:${pct}%;background:${pct>80?'#1c1c22':pct>50?'#1c1c22':'#1c1c22'}"></div>
@@ -1913,8 +1913,8 @@ async function renderDept() {
           <div style="font-size:11px;color:#065f46">เช็คอินแล้ว</div>
         </div>
         <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
-          <div style="font-size:22px;font-weight:700;color:#1e40af">${checkedOut}</div>
-          <div style="font-size:11px;color:#1e40af">เช็คเอาท์แล้ว</div>
+          <div style="font-size:22px;font-weight:700;color:#e879a0">${checkedOut}</div>
+          <div style="font-size:11px;color:#e879a0">เช็คเอาท์แล้ว</div>
         </div>
         <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#991b1b">${notIn}</div>
@@ -1930,7 +1930,7 @@ async function renderDept() {
         </div>
         <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:16px;font-weight:700;color:#be185d">${advTotal.toLocaleString()}฿</div>
-          <div style="font-size:11px;color:#be185d">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#d97706">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
+          <div style="font-size:11px;color:#be185d">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#e879a0">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
         </div>
       </div>
       <table><thead><tr><th>ชื่อ</th><th>ตำแหน่ง</th><th>เข้างาน</th><th>ออกงาน</th><th>สถานะ</th></tr></thead>
@@ -1974,7 +1974,7 @@ async function submitAdvance() {
 function renderAdvHist() {
   const mine = advCache.filter(a=>a.empId===me.id);
   const bdg={อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
-  document.getElementById('advHistTable').innerHTML = mine.length ? mine.map(a=>`<tr><td>${fmtDate(a.submittedAt)}</td><td style="font-weight:700;color:#7c3aed">${Number(a.amount).toLocaleString()} ฿</td><td>${a.reason}</td><td><span class="badge ${bdg[a.status]||'bgr'}">${a.status}</span></td></tr>`).join('') : '<tr><td colspan="4" class="empty">ไม่มีประวัติ</td></tr>';
+  document.getElementById('advHistTable').innerHTML = mine.length ? mine.map(a=>`<tr><td>${fmtDate(a.submittedAt)}</td><td style="font-weight:700;color:#e879a0">${Number(a.amount).toLocaleString()} ฿</td><td>${a.reason}</td><td><span class="badge ${bdg[a.status]||'bgr'}">${a.status}</span></td></tr>`).join('') : '<tr><td colspan="4" class="empty">ไม่มีประวัติ</td></tr>';
 }
 function renderAdvSum() {
   const month = document.getElementById('advMonth').value;
@@ -1992,14 +1992,14 @@ function renderAdvSum() {
   const approvedAll = filtered.filter(a=>a.status==='อนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
   const pendAll = filtered.filter(a=>a.status==='รออนุมัติ').reduce((s,a)=>s+Number(a.amount),0);
   document.getElementById('advSumStats').innerHTML = [
-    {lb:'ยอดขอทั้งหมด',vl:totalAll.toLocaleString()+' ฿',c:'#7c3aed'},
-    {lb:'อนุมัติแล้ว',vl:approvedAll.toLocaleString()+' ฿',c:'#059669'},
-    {lb:'รออนุมัติ',vl:pendAll.toLocaleString()+' ฿',c:'#d97706'},
+    {lb:'ยอดขอทั้งหมด',vl:totalAll.toLocaleString()+' ฿',c:'#e879a0'},
+    {lb:'อนุมัติแล้ว',vl:approvedAll.toLocaleString()+' ฿',c:'#e879a0'},
+    {lb:'รออนุมัติ',vl:pendAll.toLocaleString()+' ฿',c:'#e879a0'},
   ].map(s=>`<div class="sc" style="background:#f8f5ff;border:1px solid #e9d5ff"><div class="lb" style="color:#64748b">${s.lb}</div><div class="vl" style="color:${s.c};font-size:22px">${s.vl}</div></div>`).join('');
   document.getElementById('advSumTable').innerHTML = Object.keys(byEmp).length ? Object.entries(byEmp).map(([empId,d])=>{
     const e=empMap[empId]||{};
     const pendItems = d.items.filter(a=>a.status==='รออนุมัติ');
-    return `<tr><td>${e.firstName||empId} ${e.lastName||''}</td><td>${e.dept||'-'}</td><td style="font-weight:700">${d.total.toLocaleString()} ฿</td><td style="color:#059669;font-weight:700">${d.approved.toLocaleString()} ฿</td><td style="color:#d97706;font-weight:700">${d.pending.toLocaleString()} ฿</td><td>${pendItems.map(a=>`<button class="btn btn-g btn-sm" onclick="appAdv('${a.id}','อนุมัติ')">✓ ${Number(a.amount).toLocaleString()}฿</button>`).join(' ')}</td></tr>`;
+    return `<tr><td>${e.firstName||empId} ${e.lastName||''}</td><td>${e.dept||'-'}</td><td style="font-weight:700">${d.total.toLocaleString()} ฿</td><td style="color:#e879a0;font-weight:700">${d.approved.toLocaleString()} ฿</td><td style="color:#e879a0;font-weight:700">${d.pending.toLocaleString()} ฿</td><td>${pendItems.map(a=>`<button class="btn btn-g btn-sm" onclick="appAdv('${a.id}','อนุมัติ')">✓ ${Number(a.amount).toLocaleString()}฿</button>`).join(' ')}</td></tr>`;
   }).join('') : '<tr><td colspan="6" class="empty">ไม่มีข้อมูลเดือนนี้</td></tr>';
 }
 async function appAdv(id, status) {
@@ -2092,7 +2092,7 @@ function fillPeriodSelect(id, selectedVal) {
 
 function kpiScoreColor(s) {
   if (s===null||s===undefined) return '#94a3b8';
-  return s>=90?'#059669':s>=70?'#3b82f6':s>=50?'#f59e0b':'#ef4444';
+  return s>=90?'#e879a0':s>=70?'#3b82f6':s>=50?'#f59e0b':'#ef4444';
 }
 
 function kpiScoreBadge(s) {
@@ -2154,7 +2154,7 @@ async function renderKPIOverview() {
   if (!list.length) { document.getElementById('kpiOverviewList').innerHTML='<div class="empty">ยังไม่มีข้อมูล KPI สำหรับงวดนี้</div>'; return; }
   const rows = list.sort((a,b)=>(b.score||0)-(a.score||0)).map(k=>{
     const pct = k.score!==null&&k.score!==undefined?k.score:0;
-    const bar = pct>=90?'#059669':pct>=70?'#3b82f6':pct>=50?'#f59e0b':'#ef4444';
+    const bar = pct>=90?'#e879a0':pct>=70?'#3b82f6':pct>=50?'#f59e0b':'#ef4444';
     return `<tr><td><strong>${k.empName}</strong><br><span style="color:#94a3b8;font-size:11px">${k.dept||''}</span></td><td>${k.title}</td><td>${Number(k.target).toLocaleString()} ${k.unit}</td><td>${k.actual!==null&&k.actual!==undefined?Number(k.actual).toLocaleString()+' '+k.unit:'-'}</td><td>${kpiScoreBadge(k.score)}${k.score!==null&&k.score!==undefined?`<div style="margin-top:4px;background:#fce7f3;border-radius:4px;height:5px;overflow:hidden"><div style="height:5px;width:${pct}%;background:${bar};border-radius:4px"></div></div>`:''}</td></tr>`;
   }).join('');
   document.getElementById('kpiOverviewList').innerHTML=`<div style="overflow-x:auto"><table><thead><tr><th>พนักงาน</th><th>KPI</th><th>เป้าหมาย</th><th>ผลจริง</th><th>คะแนน</th></tr></thead><tbody>${rows}</tbody></table></div>`;
