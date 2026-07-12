@@ -263,6 +263,7 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
     <div class="ni" id="niDept" onclick="nav('dept',this)" style="display:none">🏢 สรุปตามแผนก</div>
     <div class="ni" id="niPayroll" onclick="nav('payroll',this)" style="display:none">💵 เงินเดือน</div>
     <div class="ni" id="niSettings" onclick="nav('settings',this)" style="display:none">🔧 ตั้งค่า HR</div>
+    <div class="ni" id="niManualAttend" onclick="nav('manualattend',this)" style="display:none">🕐 บันทึกเวลา</div>
     <div class="ni" id="niKpi" onclick="nav('kpi',this)" style="display:none">🎯 ระบบ KPI</div>
     <div class="ni" onclick="nav('advance',this)">💰 เบิกเงินล่วงหน้า</div>
     <div class="ni" onclick="nav('kpi',this)">📈 KPI ของฉัน</div>
@@ -671,6 +672,26 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
   </div>
 </div>
 
+
+    <!-- MANUAL ATTEND -->
+    <div class="pg" id="pgManualattend">
+      <div class="pt">🕐 บันทึกเวลาพนักงาน</div>
+      <div class="gr2">
+        <div class="c">
+          <div class="ct">กรอกเวลาเข้า-ออก</div>
+          <div id="maAlert"></div>
+          <div class="fg"><label>พนักงาน</label><select id="maEmp" style="width:100%;padding:10px 14px;border:2px solid #fbcfe8;border-radius:12px;font-size:13px;outline:none;background:#fff7fb"></select></div>
+          <div class="fg"><label>วันที่</label><input type="date" id="maDate"></div>
+          <div class="fg"><label>เวลาเข้างาน</label><input type="time" id="maIn"></div>
+          <div class="fg"><label>เวลาออกงาน (ไม่บังคับ)</label><input type="time" id="maOut"></div>
+          <button class="btn btn-p" onclick="saveManualAttend()">💾 บันทึก</button>
+        </div>
+        <div class="c">
+          <div class="ct">ประวัติที่บันทึกด้วยมือ (20 รายการล่าสุด)</div>
+          <table><thead><tr><th>พนักงาน</th><th>วันที่</th><th>เข้า</th><th>ออก</th><th></th></tr></thead><tbody id="maTable"></tbody></table>
+        </div>
+      </div>
+    </div>
 <script>
 // Fix orphaned pages into .main
 document.addEventListener('DOMContentLoaded',()=>{
@@ -794,6 +815,11 @@ async function api(action, data = {}) {
       }
       case 'deleteEmployee': {
         await db.collection('employees').doc(data.id).delete();
+        return {success:true};
+      }
+      case 'manualAttend': {
+        const aid=data.empId+'_'+data.date;
+        await db.collection('attendance').doc(aid).set({empId:data.empId,date:data.date,checkIn:data.checkIn,checkOut:data.checkOut||'',faceVerified:'manual'});
         return {success:true};
       }
       case 'saveFaceDescriptor': {
@@ -996,6 +1022,7 @@ function setupApp() {
   document.getElementById('niDept').style.display = rk>=2?'':'none';
   document.getElementById('niPayroll').style.display = rk>=3?'':'none';
   document.getElementById('niSettings').style.display = rk>=5?'':'none';
+  document.getElementById('niManualAttend').style.display = rk>=5?'':'none';
   document.getElementById('tabAdvSum').style.display = rk>=4?'':'none';
 }
 
@@ -1039,7 +1066,7 @@ function nav(page, el) {
     }, 600);
   };
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, kpi:renderKPI};
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, manualattend:renderManualAttend, kpi:renderKPI};
   if (renders[page]) {
     Promise.resolve(renders[page]()).finally(releaseLock);
   } else {
@@ -1388,6 +1415,41 @@ function renderManage() {
   const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
 const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
   document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button> <button class="btn btn-r btn-sm" onclick="deleteEmp('${e.id}','${e.firstName} ${e.lastName}')">🗑️ ลบ</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+function renderManualAttend() {
+  var sel=document.getElementById('maEmp');
+  sel.innerHTML=empCache.filter(function(e){return e.status==='ทำงาน';}).map(function(e){return '<option value="'+e.id+'">'+e.firstName+' '+e.lastName+' ('+e.dept+')</option>';}).join('');
+  document.getElementById('maDate').value=todayStr();
+  renderManualTable();
+}
+function renderManualTable() {
+  var manual=attCache.filter(function(a){return a.faceVerified==='manual';}).sort(function(a,b){return b.date.localeCompare(a.date);}).slice(0,20);
+  var em=Object.fromEntries(empCache.map(function(e){return [e.id,e];}));
+  document.getElementById('maTable').innerHTML=manual.length?manual.map(function(a){
+    var e=em[a.empId]||{};
+    return '<tr><td>'+(e.firstName||a.empId)+' '+(e.lastName||'')+'</td><td>'+fmtDate(a.date)+'</td><td>'+(a.checkIn||'-')+'</td><td>'+(a.checkOut||'-')+'</td><td><button class="btn btn-r btn-sm" onclick="delManualAtt(\''+a.empId+'\',\''+a.date+'\')">ลบ</button></td></tr>';
+  }).join(''):'<tr><td colspan="5" class="empty">ไม่มีประวัติ</td></tr>';
+}
+async function saveManualAttend() {
+  var empId=document.getElementById('maEmp').value,date=document.getElementById('maDate').value,
+    checkIn=document.getElementById('maIn').value,checkOut=document.getElementById('maOut').value;
+  var al=document.getElementById('maAlert');
+  if(!empId||!date||!checkIn){al.innerHTML='<div class="al al-e">กรุณากรอกข้อมูลให้ครบ</div>';return;}
+  var r=await api('manualAttend',{empId:empId,date:date,checkIn:checkIn,checkOut:checkOut});
+  if(r.success){
+    var idx=attCache.findIndex(function(a){return a.empId===empId&&a.date===date;});
+    var rec={empId:empId,date:date,checkIn:checkIn,checkOut:checkOut,faceVerified:'manual'};
+    if(idx>=0)attCache[idx]=rec;else attCache.unshift(rec);
+    al.innerHTML='<div class="al al-s">✅ บันทึกสำเร็จ</div>';
+    renderManualTable();
+    setTimeout(function(){al.innerHTML='';},2500);
+  }
+}
+async function delManualAtt(empId,date) {
+  if(!confirm('ลบรายการวันที่ '+date+'?'))return;
+  await db.collection('attendance').doc(empId+'_'+date).delete();
+  attCache=attCache.filter(function(a){return !(a.empId===empId&&a.date===date);});
+  renderManualTable();
 }
 async function deleteEmp(id,name) {
   if(!confirm('ลบ "'+name+'" ออกจากระบบถาวร?\nข้อมูลจะไม่สามารถกู้คืนได้')) return;
