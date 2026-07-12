@@ -605,6 +605,14 @@ a{color:#e879a0;text-decoration:none}
 </div>
 
 <script>
+// Fix orphaned pages into .main
+document.addEventListener('DOMContentLoaded',()=>{
+  const main=document.querySelector('.main');
+  if(main){['pgPayroll','pgSettings','pgMyquota','pgKpi'].forEach(id=>{
+    const pg=document.getElementById(id);
+    if(pg&&pg.parentElement!==main)main.appendChild(pg);
+  });}
+});
 // ── FIREBASE ──
 const firebaseConfig = {
   apiKey: "AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g",
