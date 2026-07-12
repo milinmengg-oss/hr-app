@@ -12,9 +12,9 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:'Prompt',sans-serif;background:#141418;color:#f1f1f3}
 body{overflow:hidden}
-.screen{display:none;position:fixed;inset:0;background:radial-gradient(ellipse at 50% 40%,#1c1220 0%,#141418 65%);z-index:100;align-items:center;justify-content:center;flex-direction:column}
+.screen{display:none;position:fixed;inset:0;background:#141418;z-index:100;align-items:center;justify-content:center;flex-direction:column}
 .screen.show{display:flex}
-.card{background:#1c1c22;border:1px solid #3d1a2a;border-radius:16px;padding:36px;width:380px;max-width:92vw;box-shadow:0 0 40px rgba(232,121,160,.15)}
+.card{background:#1c1c22;border:1px solid #2a2a32;border-radius:16px;padding:36px;width:380px;max-width:92vw;box-shadow:none}
 .card h1{font-size:22px;font-weight:700;color:#f1f1f3;margin-bottom:6px}
 .card p{font-size:13px;color:#5a5a70;margin-bottom:24px}
 .fg{margin-bottom:16px}
@@ -148,7 +148,7 @@ a{color:#e879a0;text-decoration:none}
 <body>
 
 <!-- LOADING -->
-<div class="screen" id="sLoading" style="background:linear-gradient(135deg,#f43f5e,#ec4899,#a855f7)">
+<div class="screen" id="sLoading" style="background:#1c1c22;border:1px solid #2a2a32;border-radius:10px">
 <div class="card" style="text-align:center">
   <div style="font-size:32px;margin-bottom:12px">🤖</div>
   <h1 style="text-align:center;margin-bottom:8px">กำลังโหลดระบบ</h1>
@@ -159,7 +159,7 @@ a{color:#e879a0;text-decoration:none}
 </div>
 
 <!-- LOGIN -->
-<div class="screen" id="sLogin" style="background:linear-gradient(135deg,#f43f5e,#ec4899,#a855f7)">
+<div class="screen" id="sLogin" style="background:#1c1c22;border:1px solid #2a2a32;border-radius:10px">
 <div class="card">
   <div id="loginLogoWrap" style="text-align:center;margin-bottom:14px;display:none">
     <img id="loginLogo" src="" alt="Logo" style="height:70px;object-fit:contain;border-radius:10px">
@@ -1198,7 +1198,7 @@ function renderDash() {
     {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='รออนุมัติ').length,sb:'ใบลา'},
     {lb:'ยืนยันใบหน้า',vl:(empCache.find(e=>e.id===me.id)||{}).hasFace?'✅':'❌',sb:(empCache.find(e=>e.id===me.id)||{}).hasFace?'ลงทะเบียนแล้ว':'ยังไม่ลงทะเบียน'},
   ];
-  const gradients = ['linear-gradient(135deg,#667eea,#764ba2)','linear-gradient(135deg,#11998e,#38ef7d)','linear-gradient(135deg,#f6d365,#fda085)','linear-gradient(135deg,#f64f59,#c0392b)'];
+  const gradients = ['#1c1c22','#1c1c22','#1c1c22','#1c1c22'];
   document.getElementById('dashStats').innerHTML = stats.map((s,i)=>`<div class="sc" style="background:${gradients[i]};color:#fff"><div class="lb">${s.lb}</div><div class="vl">${s.vl}</div><div class="sb">${s.sb}</div></div>`).join('');
   const rec = getTodayAtt();
   document.getElementById('dashToday').innerHTML = rec ? `<p>เข้างาน: <strong>${rec.checkIn}</strong></p><p style="margin-top:6px">ออกงาน: <strong>${rec.checkOut||'ยังไม่ออก'}</strong></p><p style="margin-top:6px">ยืนยันหน้า: <span class="badge ${rec.faceVerified==='yes'?'bg':'by'}">${rec.faceVerified==='yes'?'✅ ผ่าน':'⚠️ ไม่ผ่าน'}</span></p>` : '<p style="color:#94a3b8">ยังไม่ได้เช็คอิน</p><br><button class="btn btn-g btn-sm" onclick="nav(\'checkin\')">ไปเช็คอิน</button>';
@@ -1717,10 +1717,10 @@ async function renderPayroll() {
   }).join('');
 
   document.getElementById('payStats').innerHTML = [
-    {lb:'เงินเดือนรวม',vl:totalSalary.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#667eea,#764ba2)'},
-    {lb:'จ่ายจริงสุทธิ',vl:totalNet.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#11998e,#38ef7d)'},
-    {lb:'หักเบิกล่วงหน้า',vl:totalAdv.toLocaleString()+' ฿',bg:'linear-gradient(135deg,#f64f59,#c0392b)'},
-    {lb:'จำนวนพนักงาน',vl:emps.length+' คน',bg:'linear-gradient(135deg,#a855f7,#ec4899)'},
+    {lb:'เงินเดือนรวม',vl:totalSalary.toLocaleString()+' ฿',bg:'#1c1c22'},
+    {lb:'จ่ายจริงสุทธิ',vl:totalNet.toLocaleString()+' ฿',bg:'#1c1c22'},
+    {lb:'หักเบิกล่วงหน้า',vl:totalAdv.toLocaleString()+' ฿',bg:'#1c1c22'},
+    {lb:'จำนวนพนักงาน',vl:emps.length+' คน',bg:'#1c1c22'},
   ].map(s=>`<div class="sc" style="background:${s.bg};color:#fff"><div class="lb">${s.lb}</div><div class="vl" style="font-size:20px">${s.vl}</div></div>`).join('');
   document.getElementById('payTable').innerHTML = rows || '<tr><td colspan="9" class="empty">ไม่มีข้อมูล</td></tr>';
 }
@@ -1752,7 +1752,7 @@ td{padding:9px 12px;border-bottom:1px solid #fce7f3;font-size:12px}
 .amount{text-align:right}
 .deduct{color:#dc2626}
 .total-row td{font-weight:800;font-size:14px;color:#be185d;background:#fff1f2;border-top:2px solid #ec4899}
-.net-box{background:linear-gradient(135deg,#f43f5e,#ec4899);color:#fff;text-align:center;padding:18px;border-radius:12px;margin-bottom:16px}
+.net-box{background:#1c1c22;color:#fff;text-align:center;padding:18px;border-radius:12px;margin-bottom:16px}
 .net-label{font-size:12px;opacity:.9;margin-bottom:4px}
 .net-amount{font-size:28px;font-weight:800}
 .footer{text-align:center;font-size:11px;color:#94a3b8;border-top:1px solid #fce7f3;padding-top:12px}
@@ -1822,7 +1822,7 @@ async function renderMyQuota() {
           <span style="color:#64748b;font-size:13px">ใช้ไป <strong style="color:#7c3aed">${u}</strong> / ${q.max} วัน (เหลือ <strong style="color:#059669">${left}</strong> วัน)</span>
         </div>
         <div class="progress-bar" style="height:10px;background:#f1f5f9">
-          <div class="progress-fill" style="width:${pct}%;background:${pct>80?'linear-gradient(90deg,#f64f59,#c0392b)':pct>50?'linear-gradient(90deg,#f6d365,#fda085)':'linear-gradient(90deg,#11998e,#38ef7d)'}"></div>
+          <div class="progress-fill" style="width:${pct}%;background:${pct>80?'#1c1c22':pct>50?'#1c1c22':'#1c1c22'}"></div>
         </div>
       </div>`;
     }).join('')}
@@ -1908,27 +1908,27 @@ async function renderDept() {
       <div class="ct">🏢 ${dept} <span style="font-weight:400;color:#94a3b8;font-size:12px">(${emps.length} คน)</span></div>
       <div style="font-size:11px;color:#94a3b8;margin-bottom:10px">⏰ เวลาเข้างาน ${dh.start||'09:00'} น. | ออกงาน ${dh.end||'18:00'} น. | ผ่อนผัน ${dh.grace||15} นาที</div>
       <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:16px">
-        <div style="background:linear-gradient(135deg,#d1fae5,#a7f3d0);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#065f46">${checkedIn}</div>
           <div style="font-size:11px;color:#065f46">เช็คอินแล้ว</div>
         </div>
-        <div style="background:linear-gradient(135deg,#dbeafe,#bfdbfe);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#1e40af">${checkedOut}</div>
           <div style="font-size:11px;color:#1e40af">เช็คเอาท์แล้ว</div>
         </div>
-        <div style="background:linear-gradient(135deg,#fee2e2,#fecaca);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#991b1b">${notIn}</div>
           <div style="font-size:11px;color:#991b1b">ยังไม่เข้างาน</div>
         </div>
-        <div style="background:linear-gradient(135deg,#fef9c3,#fef08a);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#a16207">${lateCount}</div>
           <div style="font-size:11px;color:#a16207">มาสาย</div>
         </div>
-        <div style="background:linear-gradient(135deg,#fef3c7,#fde68a);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:22px;font-weight:700;color:#92400e">${leaveApproved.length}</div>
           <div style="font-size:11px;color:#92400e">ลาเดือนนี้</div>
         </div>
-        <div style="background:linear-gradient(135deg,#fce7f3,#fbcfe8);border-radius:12px;padding:12px;text-align:center">
+        <div style="background:#1c1c22;border-radius:12px;padding:12px;text-align:center">
           <div style="font-size:16px;font-weight:700;color:#be185d">${advTotal.toLocaleString()}฿</div>
           <div style="font-size:11px;color:#be185d">เบิกแล้วเดือนนี้${advPend>0?' <span style="color:#d97706">(รอ '+advPend.toLocaleString()+'฿)</span>':''}</div>
         </div>
@@ -2146,10 +2146,10 @@ async function renderKPIOverview() {
   const scored = list.filter(k=>k.score!==null&&k.score!==undefined);
   const avgScore = scored.length?Math.round(scored.reduce((s,k)=>s+k.score,0)/scored.length):0;
   document.getElementById('kpiStatCards').innerHTML = [
-    {lb:'KPI ทั้งหมด',vl:list.length,cl:'background:linear-gradient(135deg,#667eea,#764ba2)',ic:'🎯'},
-    {lb:'ประเมินแล้ว',vl:scored.length,cl:'background:linear-gradient(135deg,#11998e,#38ef7d)',ic:'✅'},
-    {lb:'รอประเมิน',vl:list.length-scored.length,cl:'background:linear-gradient(135deg,#f6d365,#fda085)',ic:'⏳'},
-    {lb:'คะแนนเฉลี่ย',vl:(avgScore||0)+'%',cl:'background:linear-gradient(135deg,#f43f5e,#ec4899)',ic:'📊'},
+    {lb:'KPI ทั้งหมด',vl:list.length,cl:'background:#1c1c22',ic:'🎯'},
+    {lb:'ประเมินแล้ว',vl:scored.length,cl:'background:#1c1c22',ic:'✅'},
+    {lb:'รอประเมิน',vl:list.length-scored.length,cl:'background:#1c1c22',ic:'⏳'},
+    {lb:'คะแนนเฉลี่ย',vl:(avgScore||0)+'%',cl:'background:#1c1c22',ic:'📊'},
   ].map(s=>`<div class="sc" style="${s.cl};color:#fff"><div class="lb">${s.ic} ${s.lb}</div><div class="vl">${s.vl}</div></div>`).join('');
   if (!list.length) { document.getElementById('kpiOverviewList').innerHTML='<div class="empty">ยังไม่มีข้อมูล KPI สำหรับงวดนี้</div>'; return; }
   const rows = list.sort((a,b)=>(b.score||0)-(a.score||0)).map(k=>{
