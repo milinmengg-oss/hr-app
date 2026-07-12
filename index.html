@@ -129,11 +129,20 @@ hr{border:none;border-top:1px solid #2a2a32;margin:16px 0}
 a{color:#e879a0;text-decoration:none}
 .spinner{width:20px;height:20px;border:2px solid #2a2a32;border-top-color:#e879a0;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 
-.menu-btn{display:none;align-items:center;justify-content:center;background:transparent;border:none;color:#f1f1f3;font-size:20px;cursor:pointer;padding:6px;border-radius:6px;margin-right:4px}
+.menu-btn{display:none;align-items:center;justify-content:center;background:transparent;border:none;color:#f1f1f3;font-size:22px;cursor:pointer;padding:6px 10px;border-radius:6px}
 .menu-btn:hover{background:#22222c}
 #darkToggle{background:transparent;border:1px solid #2a2a32;border-radius:6px;padding:5px 8px;color:#8888a0;cursor:pointer;font-size:14px}
 #darkToggle:hover{background:#22222c}
-@media(max-width:768px){.menu-btn{display:flex}.sidebar{transform:translateX(-100%);transition:transform .25s}.sidebar.open{display:flex;transform:translateX(0)}}
+@media(max-width:768px){
+  .menu-btn{display:flex!important}
+  .sidebar{position:fixed;z-index:65;top:0;bottom:0;left:0;transform:translateX(-100%);transition:transform .25s ease;display:flex!important}
+  .sidebar.open{transform:translateX(0)}
+  .topbar{left:0!important}
+  .main{margin-left:0!important}
+  .gr2,.gr3{grid-template-columns:1fr!important}
+  .sg{grid-template-columns:1fr 1fr!important}
+  .modal{width:95vw!important;padding:20px!important}
+}
 </style>
 </head>
 <body>
