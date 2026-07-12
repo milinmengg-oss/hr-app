@@ -265,6 +265,7 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
     <div class="ni" id="niSettings" onclick="nav('settings',this)" style="display:none">🔧 ตั้งค่า HR</div>
     <div class="ni" id="niManualAttend" onclick="nav('manualattend',this)" style="display:none">🕐 บันทึกเวลา</div>
     <div class="ni" id="niKpi" onclick="nav('kpi',this)" style="display:none">🎯 ระบบ KPI</div>
+    <div class="ni" id="niSchedule" onclick="nav('schedule',this)">📅 ตารางกะ</div>
     <div class="ni" onclick="nav('advance',this)">💰 เบิกเงินล่วงหน้า</div>
     <div class="ni" onclick="nav('kpi',this)">📈 KPI ของฉัน</div>
     <div class="ni" onclick="nav('myquota',this)">📊 โควตาลาของฉัน</div>
@@ -692,6 +693,21 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
         </div>
       </div>
     </div>
+
+    <!-- SCHEDULE -->
+    <div class="pg" id="pgSchedule">
+      <div class="pt">📅 ตารางกะพนักงาน</div>
+      <div class="c">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="btn btn-s btn-sm" onclick="weekNav(-1)">◀ สัปดาห์ก่อน</button>
+          <span id="weekLabel" style="font-weight:700;font-size:14px;color:#be185d"></span>
+          <button class="btn btn-s btn-sm" onclick="weekNav(1)">สัปดาห์ถัดไป ▶</button>
+          <select id="schedDept" onchange="renderSchedule()" style="padding:6px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb"></select>
+        </div>
+        <div style="overflow-x:auto" id="schedGrid"></div>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap" id="shiftLegend"></div>
+      </div>
+    </div>
 <script>
 // Fix orphaned pages into .main
 document.addEventListener('DOMContentLoaded',()=>{
@@ -815,6 +831,20 @@ async function api(action, data = {}) {
       }
       case 'deleteEmployee': {
         await db.collection('employees').doc(data.id).delete();
+        return {success:true};
+      }
+      case 'getShiftAssign': {
+        var sa={};
+        for(var sd=0;sd<data.dates.length;sd++){
+          var sq=await db.collection('shiftAssign').where('date','==',data.dates[sd]).get();
+          sq.forEach(function(doc){sa[doc.id]=doc.data().shift;});
+        }
+        return {success:true,assigns:sa};
+      }
+      case 'setShiftAssign': {
+        var sid=data.empId+'_'+data.date;
+        if(data.shift)await db.collection('shiftAssign').doc(sid).set({empId:data.empId,date:data.date,shift:data.shift});
+        else await db.collection('shiftAssign').doc(sid).delete();
         return {success:true};
       }
       case 'manualAttend': {
@@ -1066,7 +1096,7 @@ function nav(page, el) {
     }, 600);
   };
   const renders = {dash:renderDash, checkin:refreshAndRenderCheckin, leave:renderLeave,
-    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, manualattend:renderManualAttend, kpi:renderKPI};
+    emps:renderEmps, approve:renderApprove, regface:renderRegFace, manage:renderManage, report:refreshAndRenderReport, advance:renderAdvance, dept:initDept, payroll:initPayroll, settings:initSettings, myquota:renderMyQuota, manualattend:renderManualAttend, schedule:initSchedule, kpi:renderKPI};
   if (renders[page]) {
     Promise.resolve(renders[page]()).finally(releaseLock);
   } else {
@@ -1415,6 +1445,71 @@ function renderManage() {
   const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
 const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
   document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button> <button class="btn btn-r btn-sm" onclick="deleteEmp('${e.id}','${e.firstName} ${e.lastName}')">🗑️ ลบ</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+var SHIFTS=[{k:'',lb:'-',bg:'#e2e8f0',cl:'#64748b'},{k:'เช้า',lb:'เช้า 08-16',bg:'#dbeafe',cl:'#1d4ed8'},{k:'บ่าย',lb:'บ่าย 14-22',bg:'#ffedd5',cl:'#c2410c'},{k:'ดึก',lb:'ดึก 22-06',bg:'#ede9fe',cl:'#6d28d9'},{k:'หยุด',lb:'วันหยุด',bg:'#fee2e2',cl:'#dc2626'}];
+var schedWeekStart=null,schedCache={};
+function initSchedule(){
+  var today=new Date(),day=today.getDay(),diff=today.getDate()-day+(day===0?-6:1);
+  schedWeekStart=new Date(today.getFullYear(),today.getMonth(),today.getDate()-day+(day===0?-6:1));
+  var sel=document.getElementById('schedDept');
+  var depts=[...new Set(empCache.filter(function(e){return e.status==='ทำงาน';}).map(function(e){return e.dept||'ไม่ระบุ';}))];
+  if(me.role==='admin'){sel.innerHTML='<option value="">ทุกแผนก</option>'+depts.map(function(d){return '<option>'+d+'</option>';}).join('');sel.style.display='';}
+  else{sel.innerHTML='<option>'+(me.dept||'ไม่ระบุ')+'</option>';sel.style.display='none';}
+  document.getElementById('shiftLegend').innerHTML=SHIFTS.filter(function(s){return s.k;}).map(function(s){return '<span style="padding:4px 10px;border-radius:8px;font-size:11px;font-weight:600;background:'+s.bg+';color:'+s.cl+'">'+s.lb+'</span>';}).join('');
+  renderSchedule();
+}
+async function renderSchedule(){
+  var dates=Array.from({length:7},function(_,i){var d=new Date(schedWeekStart);d.setDate(d.getDate()+i);return d.toISOString().split('T')[0];});
+  document.getElementById('weekLabel').textContent=fmtDate(dates[0])+' – '+fmtDate(dates[6]);
+  var dept=document.getElementById('schedDept').value;
+  var emps=empCache.filter(function(e){return e.status==='ทำงาน';});
+  if(dept)emps=emps.filter(function(e){return (e.dept||'ไม่ระบุ')===dept;});
+  else if(me.role!=='admin')emps=emps.filter(function(e){return e.dept===me.dept;});
+  var r=await api('getShiftAssign',{dates:dates});
+  schedCache=r.assigns||{};
+  var dayN=['จ','อ','พ','พฤ','ศ','ส','อา'];
+  var canEdit=(me.role==='admin'||me.role==='manager'||me.role==='supervisor'||me.role==='hr');
+  var html='<table style="width:100%;border-collapse:collapse;font-size:12px">';
+  html+='<thead><tr><th style="text-align:left;padding:8px 12px;background:#fdf2f8;border-radius:8px 0 0 0">พนักงาน</th>';
+  dates.forEach(function(d,i){var dd=new Date(d+'T00:00:00');html+='<th style="padding:8px;background:#fdf2f8;text-align:center;min-width:70px">'+dayN[i]+'<br><small style="font-weight:400;color:#94a3b8">'+(dd.getDate())+'/'+(dd.getMonth()+1)+'</small></th>';});
+  html+='</tr></thead><tbody>';
+  emps.forEach(function(e){
+    html+='<tr><td style="padding:8px 12px;border-bottom:1px solid #f1f5f9;white-space:nowrap;font-weight:500">'+e.firstName+' '+e.lastName+'<br><small style="color:#94a3b8;font-weight:400">'+( e.dept||'')+'</small></td>';
+    dates.forEach(function(d){
+      var key=e.id+'_'+d;var sh=schedCache[key]||'';
+      var s=SHIFTS.find(function(x){return x.k===sh;})||SHIFTS[0];
+      var oc=canEdit?'onclick="pickShift(\''+e.id+'\',\''+d+'\',this)"':'';
+      html+='<td style="padding:4px;border-bottom:1px solid #f1f5f9;text-align:center"><span data-k="'+sh+'" style="display:inline-block;padding:5px 8px;border-radius:8px;font-size:11px;font-weight:600;background:'+s.bg+';color:'+s.cl+';cursor:'+(canEdit?'pointer':'default')+';transition:.15s" '+oc+'>'+s.lb+'</span></td>';
+    });
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('schedGrid').innerHTML=html;
+}
+function weekNav(dir){schedWeekStart.setDate(schedWeekStart.getDate()+dir*7);renderSchedule();}
+function pickShift(empId,date,el){
+  var old=document.getElementById('shiftPicker');if(old)old.remove();
+  var pk=document.createElement('div');pk.id='shiftPicker';
+  pk.style.cssText='position:fixed;background:#fff;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.18);padding:8px;z-index:9999;min-width:140px;';
+  var rect=el.getBoundingClientRect();
+  pk.style.left=Math.min(rect.left,window.innerWidth-160)+'px';
+  pk.style.top=(rect.bottom+6)+'px';
+  SHIFTS.forEach(function(s){
+    var btn=document.createElement('div');
+    btn.style.cssText='padding:8px 14px;border-radius:8px;margin:2px;cursor:pointer;font-size:12px;font-weight:600;background:'+s.bg+';color:'+s.cl+';transition:.1s';
+    btn.textContent=s.lb||'ไม่กำหนด';
+    btn.onmouseenter=function(){this.style.opacity='.8';};
+    btn.onmouseleave=function(){this.style.opacity='1';};
+    btn.onclick=async function(){
+      pk.remove();
+      await api('setShiftAssign',{empId:empId,date:date,shift:s.k});
+      schedCache[empId+'_'+date]=s.k;
+      el.style.background=s.bg;el.style.color=s.cl;el.textContent=s.lb||'-';el.dataset.k=s.k;
+    };
+    pk.appendChild(btn);
+  });
+  document.body.appendChild(pk);
+  setTimeout(function(){document.addEventListener('click',function h(){pk.remove();document.removeEventListener('click',h);},{once:true});},50);
 }
 function renderManualAttend() {
   var sel=document.getElementById('maEmp');
