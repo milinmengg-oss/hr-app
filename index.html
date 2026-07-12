@@ -642,10 +642,11 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
       </div>
     </div>
     <div class="gr2">
+      <div class="fg"><label>ทีม/กลุ่ม <small style="color:#94a3b8">(สำหรับหัวหน้าทีม)</small></label><input type="text" id="eTeam" placeholder="เช่น กะเช้า, ทีม A"></div>
       <div class="fg"><label>เบอร์โทร</label><input type="text" id="ePhone" placeholder="0xx-xxx-xxxx"></div>
-      <div class="fg"><label>สิทธิ์</label>
-        <select id="eRole"><option value="employee">พนักงาน</option><option value="admin">HR/Admin</option></select>
-      </div>
+    </div>
+    <div class="fg"><label>สิทธิ์</label>
+      <select id="eRole"><option value="employee">พนักงาน</option><option value="supervisor">หัวหน้าทีม</option><option value="manager">ผู้จัดการแผนก</option><option value="hr">HR</option><option value="superadmin">Super Admin</option></select>
     </div>
     <div class="gr2">
       <div class="fg"><label>รหัสผ่าน <span id="ePwNote" style="color:#94a3b8;font-weight:400"></span></label><input type="password" id="ePw" placeholder="รหัสผ่าน"></div>
@@ -691,6 +692,16 @@ let regEmpId = '';
 let editEmpId = null;
 let approvFilter = 'pend';
 let advCache = [];
+
+// ── ROLE HELPERS ──
+function roleRank(){const r=(me||{}).role;if(r==='superadmin'||r==='admin')return 5;if(r==='hr')return 4;if(r==='manager')return 3;if(r==='supervisor')return 2;return 1;}
+function canSeeAllDepts(){return roleRank()>=4;}
+function canSeeWholeDept(){return roleRank()>=3;}
+function canSeeTeam(){return roleRank()>=2;}
+function visibleEmps(list){list=list||empCache;if(canSeeAllDepts())return list;if(canSeeWholeDept())return list.filter(e=>e.dept===me.dept);if(canSeeTeam())return list.filter(e=>e.dept===me.dept&&e.team===me.team);return list.filter(e=>e.id===me.id);}
+function visibleLeaves(list){list=list||leaveCache;const ids=new Set(visibleEmps().map(e=>e.id));return list.filter(l=>ids.has(l.empId));}
+function visibleAtt(list){list=list||attCache;const ids=new Set(visibleEmps().map(e=>e.id));return list.filter(a=>ids.has(a.empId));}
+function roleName(r){return({superadmin:'Super Admin',admin:'Super Admin',hr:'HR',manager:'ผู้จัดการ',supervisor:'หัวหน้าทีม',employee:'พนักงาน'})[r]||r;}
 
 // ── SCREEN ──
 function showScreen(id) {
@@ -954,20 +965,26 @@ function logout() {
 function setupApp() {
   document.getElementById('tAv').textContent = me.firstName[0];
   document.getElementById('tName').textContent = me.firstName + ' ' + me.lastName;
-  document.getElementById('tRole').textContent = me.role === 'admin' ? 'HR/Admin' : 'พนักงาน';
-  const isAdmin = me.role === 'admin';
-  ['adSec','niApprove','niRegFace','niManage','niReport','niDept','niPayroll','niSettings','niKpi'].forEach(id => {
-    document.getElementById(id).style.display = isAdmin ? '' : 'none';
-  });
-  document.getElementById('tabAdvSum').style.display = isAdmin ? '' : 'none';
+  document.getElementById('tRole').textContent = roleName(me.role);
+  const rk = roleRank();
+  document.getElementById('adSec').style.display = rk>=2?'':'none';
+  document.getElementById('niApprove').style.display = rk>=2?'':'none';
+  document.getElementById('niRegFace').style.display = rk>=4?'':'none';
+  document.getElementById('niManage').style.display = rk>=4?'':'none';
+  document.getElementById('niReport').style.display = rk>=2?'':'none';
+  document.getElementById('niDept').style.display = rk>=2?'':'none';
+  document.getElementById('niPayroll').style.display = rk>=3?'':'none';
+  document.getElementById('niSettings').style.display = rk>=5?'':'none';
+  document.getElementById('tabAdvSum').style.display = rk>=4?'':'none';
 }
 
 // ── DATA ──
 async function loadAllData() {
+  const needAll = canSeeTeam();
   const [eRes, aRes, lRes] = await Promise.all([
     api('getEmployees'),
-    api('getAttendance', {empId: me.role==='admin' ? null : me.id}),
-    api('getLeaves', {empId: me.role==='admin' ? null : me.id})
+    api('getAttendance', {empId: needAll ? null : me.id}),
+    api('getLeaves', {empId: needAll ? null : me.id})
   ]);
   if (eRes.success) empCache = eRes.employees;
   if (aRes.success) attCache = aRes.records;
@@ -1223,15 +1240,15 @@ function renderCheckin() {
 
 // ── RENDER: DASHBOARD ──
 function renderDash() {
-  const isAdmin = me.role === 'admin';
+  const isAdmin = canSeeTeam();
   const today = todayStr();
-  const todayAtt = attCache.filter(a=>a.date===today);
-  const pendLeaves = leaveCache.filter(l=>l.status==='รออนุมัติ');
+  const todayAtt = visibleAtt().filter(a=>a.date===today);
+  const pendLeaves = visibleLeaves().filter(l=>l.status==='รออนุมัติ');
   const stats = isAdmin ? [
-    {lb:'พนักงานทั้งหมด',vl:empCache.filter(e=>e.status==='ทำงาน').length,sb:'คน'},
+    {lb:'พนักงาน'+(canSeeAllDepts()?'ทั้งหมด':canSeeWholeDept()?'ในแผนก':'ในทีม'),vl:visibleEmps().filter(e=>e.status==='ทำงาน').length,sb:'คน'},
     {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน'},
     {lb:'รอการอนุมัติ',vl:pendLeaves.length,sb:'ใบลา'},
-    {lb:'ลงทะเบียนหน้าแล้ว',vl:empCache.filter(e=>e.hasFace).length,sb:'คน'},
+    {lb:'ลงทะเบียนหน้าแล้ว',vl:visibleEmps().filter(e=>e.hasFace).length,sb:'คน'},
   ] : [
     {lb:'เช็คอินเดือนนี้',vl:attCache.filter(a=>a.empId===me.id&&a.date.startsWith(today.substring(0,7))).length,sb:'วัน'},
     {lb:'วันลาที่ใช้',vl:leaveCache.filter(l=>l.empId===me.id&&l.status==='อนุมัติ').reduce((s,l)=>s+Number(l.days),0),sb:'วันปีนี้'},
@@ -1289,16 +1306,17 @@ function renderLeaveHist() {
 // ── RENDER: EMPLOYEES ──
 function renderEmps() {
   const q=(document.getElementById('empSrch')||{}).value||'';
-  const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
+  const list=visibleEmps().filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
   document.getElementById('empTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}</td><td>${e.phone||'-'}</td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td></tr>`).join(''):'<tr><td colspan="7" class="empty">ไม่พบข้อมูล</td></tr>';
 }
 
 // ── RENDER: APPROVE ──
 function renderApprove() {
-  const pending=leaveCache.filter(l=>l.status==='รออนุมัติ');
+  const myLeaves=visibleLeaves();
+  const pending=myLeaves.filter(l=>l.status==='รออนุมัติ');
   const pcEl=document.getElementById('pendCnt');
   if(pcEl) pcEl.textContent=pending.length||'';
-  const list=approvFilter==='pend'?pending:[...leaveCache].sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
+  const list=approvFilter==='pend'?pending:[...myLeaves].sort((a,b)=>String(b.submittedAt).localeCompare(String(a.submittedAt)));
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   const bdg={อนุมัติ:'bg',รออนุมัติ:'by',ไม่อนุมัติ:'br'};
   document.getElementById('approveTable').innerHTML=list.length?list.map(l=>{
@@ -1332,7 +1350,8 @@ function renderRegFace() {
 function renderManage() {
   const q=(document.getElementById('mgSrch')||{}).value||'';
   const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
-  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}</td><td><span class="badge ${e.role==='admin'?'bb':'bgr'}">${e.role==='admin'?'Admin':'พนักงาน'}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
+  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):
 }
 function openAddEmp() {
   editEmpId=null;
@@ -1340,6 +1359,7 @@ function openAddEmp() {
   document.getElementById('ePwNote').textContent='';
   ['eId','eUser','eFirst','eLast','ePos','ePhone','ePw'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('eDept').value='การตลาด';
+  document.getElementById('eTeam').value='';
   document.getElementById('eRole').value='employee';
   document.getElementById('eStat').value='ทำงาน';
   document.getElementById('eId').disabled=false;
@@ -1355,7 +1375,7 @@ function openEditEmp(id) {
   document.getElementById('eId').value=e.id; document.getElementById('eUser').value=e.username;
   document.getElementById('eFirst').value=e.firstName; document.getElementById('eLast').value=e.lastName;
   document.getElementById('ePos').value=e.position; document.getElementById('eDept').value=e.dept;
-  document.getElementById('ePhone').value=e.phone||''; document.getElementById('eRole').value=e.role;
+  document.getElementById('eTeam').value=e.team||''; document.getElementById('ePhone').value=e.phone||''; document.getElementById('eRole').value=e.role;
   document.getElementById('eStat').value=e.status; document.getElementById('ePw').value='';
   document.getElementById('eSalary').value=e.salary||'';
   document.getElementById('eId').disabled=true; document.getElementById('eUser').disabled=true;
@@ -1366,7 +1386,7 @@ async function saveEmp() {
   const data={id:document.getElementById('eId').value.trim(),username:document.getElementById('eUser').value.trim(),
     firstName:document.getElementById('eFirst').value.trim(),lastName:document.getElementById('eLast').value.trim(),
     position:document.getElementById('ePos').value.trim(),dept:document.getElementById('eDept').value,
-    phone:document.getElementById('ePhone').value.trim(),role:document.getElementById('eRole').value,
+    phone:document.getElementById('ePhone').value.trim(),team:document.getElementById('eTeam').value.trim(),role:document.getElementById('eRole').value,
     status:document.getElementById('eStat').value,password:document.getElementById('ePw').value,
     salary:document.getElementById('eSalary').value};
   const al=document.getElementById('mEmpAlert');
@@ -1386,24 +1406,26 @@ function closeModal(id){document.getElementById(id).classList.remove('show');}
 
 // ── RENDER: REPORT ──
 async function refreshAndRenderReport() {
-  const aRes = await api('getAttendance', {empId:null});
+  const needAll = canSeeTeam();
+  const aRes = await api('getAttendance', {empId: needAll ? null : me.id});
   if (aRes.success) attCache = aRes.records;
-  const lRes = await api('getLeaves', {empId:null});
+  const lRes = await api('getLeaves', {empId: needAll ? null : me.id});
   if (lRes.success) leaveCache = lRes.leaves;
   renderReport();
 }
 function renderReport() {
   const today=todayStr();
-  const todayAtt=attCache.filter(a=>a.date===today);
-  const approved=leaveCache.filter(l=>l.status==='อนุมัติ');
+  const todayAtt=visibleAtt().filter(a=>a.date===today);
+  const vLeaves=visibleLeaves();
+  const approved=vLeaves.filter(l=>l.status==='อนุมัติ');
   document.getElementById('rptStats').innerHTML=[
-    {lb:'ใบลาทั้งหมด',vl:leaveCache.length,sb:'ทุกสถานะ',c:'#1e40af'},
+    {lb:'ใบลาทั้งหมด',vl:vLeaves.length,sb:'ทุกสถานะ',c:'#1e40af'},
     {lb:'อนุมัติแล้ว',vl:approved.length,sb:'ใบ',c:'#059669'},
-    {lb:'รออนุมัติ',vl:leaveCache.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#d97706'},
+    {lb:'รออนุมัติ',vl:vLeaves.filter(l=>l.status==='รออนุมัติ').length,sb:'ใบ',c:'#d97706'},
     {lb:'เช็คอินวันนี้',vl:todayAtt.length,sb:'คน',c:'#7c3aed'},
   ].map(s=>`<div class="sc" style="animation:fadeUp .4s ease"><div class="lb">${s.lb}</div><div class="vl sc-num" data-target="${s.vl}" style="color:${s.c}">0</div><div class="sb">${s.sb}</div></div>`).join('');
   document.querySelectorAll('.sc-num').forEach(el => animateNum(el, parseInt(el.dataset.target)||0));
-  const byType={};leaveCache.forEach(l=>{byType[l.type]=(byType[l.type]||0)+Number(l.days);});
+  const byType={};vLeaves.forEach(l=>{byType[l.type]=(byType[l.type]||0)+Number(l.days);});
   document.getElementById('rptLeaveType').innerHTML=Object.keys(byType).length?Object.entries(byType).sort((a,b)=>b[1]-a[1]).map(([t,d])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9"><span>${t}</span><strong>${d} วัน</strong></div>`).join(''):'<p class="empty">ยังไม่มีข้อมูล</p>';
   const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
   document.getElementById('rptAtt').innerHTML=todayAtt.length?todayAtt.map(a=>{const e=empMap[a.empId]||{};return`<tr><td>${e.firstName||a.empId} ${e.lastName||''}</td><td>${a.checkIn||'-'}</td><td>${a.checkOut||'-'}</td><td><span class="badge ${a.faceVerified==='yes'?'bg':'by'}">${a.faceVerified==='yes'?'✅':'⚠️'}</span></td></tr>`}).join(''):'<tr><td colspan="4" class="empty">ไม่มีข้อมูลวันนี้</td></tr>';
@@ -1708,7 +1730,7 @@ async function renderPayroll() {
   const workdays = hrSettings.workDays||26;
   const absentPct = hrSettings.absentPct||100;
 
-  const emps = empCache.filter(e=>e.status==='ทำงาน' && e.role!=='admin');
+  const emps = visibleEmps().filter(e=>e.status==='ทำงาน');
   let totalSalary=0, totalNet=0, totalAdv=0;
 
   const rows = emps.map(e => {
@@ -1890,7 +1912,7 @@ async function renderDept() {
 
   // จัดกลุ่มพนักงานตามแผนก
   const depts = {};
-  empCache.filter(e=>e.status==='ทำงาน').forEach(e => {
+  visibleEmps().filter(e=>e.status==='ทำงาน').forEach(e => {
     if (!depts[e.dept]) depts[e.dept] = [];
     depts[e.dept].push(e);
   });
@@ -1979,7 +2001,7 @@ async function renderDept() {
 // ── ADVANCE ──
 async function renderAdvance() {
   document.getElementById('advDate').value = todayStr();
-  const res = await api('getAdvances', {empId: me.role==='admin' ? null : me.id});
+  const res = await api('getAdvances', {empId: canSeeWholeDept() ? null : me.id});
   if (res.success) advCache = res.advances;
   renderAdvHist();
 }
