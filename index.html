@@ -792,6 +792,10 @@ async function api(action, data = {}) {
         await db.collection('employees').doc(data.id).update(upd);
         return {success:true};
       }
+      case 'deleteEmployee': {
+        await db.collection('employees').doc(data.id).delete();
+        return {success:true};
+      }
       case 'saveFaceDescriptor': {
         await db.collection('employees').doc(data.empId).update({faceDescriptor:data.descriptor});
         return {success:true};
@@ -1383,7 +1387,12 @@ function renderManage() {
   const q=(document.getElementById('mgSrch')||{}).value||'';
   const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
 const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
-  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button> <button class="btn btn-r btn-sm" onclick="deleteEmp('${e.id}','${e.firstName} ${e.lastName}')">🗑️ ลบ</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
+}
+async function deleteEmp(id,name) {
+  if(!confirm('ลบ "'+name+'" ออกจากระบบถาวร?\nข้อมูลจะไม่สามารถกู้คืนได้')) return;
+  const r=await api('deleteEmployee',{id});
+  if(r.success){empCache=empCache.filter(e=>e.id!==id);renderManage();}
 }
 function openAddEmp() {
   editEmpId=null;
