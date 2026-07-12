@@ -1,4 +1,4 @@
-    <!DOCTYPE html>
+     <!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -449,6 +449,8 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
           <div style="display:flex;align-items:center;gap:10px">
             <input type="month" id="rptMonth" style="padding:8px 12px;border:2px solid #e9d5ff;border-radius:10px;font-size:13px;outline:none;background:#faf5ff">
             <button class="btn btn-p" style="width:auto;padding:9px 20px" onclick="refreshMonthlyStats()">🔄 ดูสถิติ</button>
+            <button class="btn btn-g" style="width:auto;padding:9px 20px" onclick="exportMonthlyStats()">📥 Export Excel</button>
+            <button class="btn btn-g" style="width:auto;padding:9px 20px" onclick="exportMonthlyStats()">📥 Export Excel</button>
           </div>
         </div>
         <div id="monthlyStatsSum" class="sg" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px"></div>
@@ -550,7 +552,9 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
               <select id="kpiFilterPeriod" onchange="renderKPIOverview()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"></select>
               <select id="kpiFilterDept" onchange="renderKPIOverview()" style="padding:8px 12px;border:2px solid #fbcfe8;border-radius:10px;font-size:12px;outline:none;background:#fff7fb;font-family:inherit"><option value="">ทุกแผนก</option></select>
             </div>
-            <div id="kpiOverviewList"></div>
+            <button class="btn btn-g" style="width:auto;padding:9px 16px;margin:8px 0" onclick="exportKPIData()">📥 Export Excel</button>
+        <button class="btn btn-g" style="width:auto;padding:9px 16px;margin:8px 0" onclick="exportKPIData()">📥 Export Excel</button>
+        <div id="kpiOverviewList"></div>
           </div>
         </div>
         <!-- Manage -->
@@ -1438,6 +1442,76 @@ async function refreshMonthlyStats(){
   if(aRes.success)attCache=aRes.records;
   if(lRes.success)leaveCache=lRes.records||lRes.leaves;
   renderMonthlyStats();
+}
+function exportMonthlyStats(){
+  const month=document.getElementById('rptMonth')?.value||'รายเดือน';
+  const headers=['ชื่อ-นามสกุล','แผนก','วันทำงาน','ขาด','มาสาย','ลาพักร้อน','ลาป่วย','ลากิจ'];
+  const rows=[headers];
+  document.querySelectorAll('#monthlyStatsBody tr').forEach(tr=>{
+    const cells=Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim());
+    if(cells.length>1)rows.push(cells);
+  });
+  const csv='﻿'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
+');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='สถิติรายเดือน_'+month+'.csv';
+  a.click();
+}
+function exportKPIData(){
+  const period=document.getElementById('kpiFilterPeriod')?.value||'';
+  const dept=document.getElementById('kpiFilterDept')?.value||'';
+  const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
+  const filtered=kpiCache.filter(k=>(!period||k.period===period)&&(!dept||(empMap[k.empId]||{}).dept===dept));
+  if(!filtered.length){alert('ไม่มีข้อมูล KPI กรุณากดดูข้อมูลก่อน');return;}
+  const headers=['ชื่อพนักงาน','แผนก','หัวข้อ KPI','ช่วงเวลา','เป้าหมาย','หน่วย','คะแนน','% บรรลุ'];
+  const rows=[headers];
+  filtered.forEach(k=>{
+    const emp=empMap[k.empId]||{};
+    const pct=k.target>0?Math.round((k.score||0)/k.target*100):0;
+    rows.push([(emp.firstName||'')+' '+(emp.lastName||''),emp.dept||'-',k.title||'-',k.period||'-',k.target||0,k.unit||'-',k.score||0,pct+'%']);
+  });
+  const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
+');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='KPI_'+(period||'ทั้งหมด')+'.csv';
+  a.click();
+}
+function exportMonthlyStats(){
+  const month=document.getElementById('rptMonth')?.value||'รายเดือน';
+  const headers=['ชื่อ-นามสกุล','แผนก','วันทำงาน','ขาด','มาสาย','ลาพักร้อน','ลาป่วย','ลากิจ'];
+  const rows=[headers];
+  document.querySelectorAll('#monthlyStatsBody tr').forEach(tr=>{
+    const cells=Array.from(tr.querySelectorAll('td')).map(td=>td.textContent.trim());
+    if(cells.length>1)rows.push(cells);
+  });
+  const csv='﻿'+rows.map(r=>r.map(c=>'"'+c.replace(/"/g,'""')+'"').join(',')).join('
+');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='สถิติรายเดือน_'+month+'.csv';
+  a.click();
+}
+function exportKPIData(){
+  const period=document.getElementById('kpiFilterPeriod')?.value||'';
+  const dept=document.getElementById('kpiFilterDept')?.value||'';
+  const empMap=Object.fromEntries(empCache.map(e=>[e.id,e]));
+  const filtered=kpiCache.filter(k=>(!period||k.period===period)&&(!dept||(empMap[k.empId]||{}).dept===dept));
+  if(!filtered.length){alert('ไม่มีข้อมูล KPI กรุณากดดูข้อมูลก่อน');return;}
+  const headers=['ชื่อพนักงาน','แผนก','หัวข้อ KPI','ช่วงเวลา','เป้าหมาย','หน่วย','คะแนน','% บรรลุ'];
+  const rows=[headers];
+  filtered.forEach(k=>{
+    const emp=empMap[k.empId]||{};
+    const pct=k.target>0?Math.round((k.score||0)/k.target*100):0;
+    rows.push([(emp.firstName||'')+' '+(emp.lastName||''),emp.dept||'-',k.title||'-',k.period||'-',k.target||0,k.unit||'-',k.score||0,pct+'%']);
+  });
+  const csv='﻿'+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('
+');
+  const a=document.createElement('a');
+  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  a.download='KPI_'+(period||'ทั้งหมด')+'.csv';
+  a.click();
 }
 
 // ── SETTINGS ──
