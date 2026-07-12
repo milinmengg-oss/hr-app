@@ -279,12 +279,13 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
       </div>
       <div class="c" id="dashPend" style="display:none"><div class="ct">🔔 รอการอนุมัติ</div><div id="dashPendList"></div></div>
       <div class="gr2" id="dashChartsRow" style="margin-top:16px">
-        <div class="c"><div class="ct" style="font-size:13px;font-weight:700;margin-bottom:12px">📈 เช็คอินรายวัน (7 วัน)</div><canvas id="chartAtt"></canvas></div>
-        <div class="c"><div class="ct" style="font-size:13px;font-weight:700;margin-bottom:12px">📋 สถานะการลา</div><canvas id="chartLeave"></canvas></div>
+        <div class="c"><div class="ct" style="font-size:13px;font-weight:700;margin-bottom:2px">📈 เช็คอินรายวัน (7 วัน)</div><div id="attChartLabel" style="font-size:11px;color:#94a3b8;margin-bottom:8px"></div><div style="height:160px;position:relative"><canvas id="chartAtt"></canvas></div></div>
+        <div class="c"><div class="ct" style="font-size:13px;font-weight:700;margin-bottom:2px">📋 สถานะการลา</div><div id="leaveChartLabel" style="font-size:11px;color:#94a3b8;margin-bottom:8px"></div><div style="height:160px;position:relative"><canvas id="chartLeave"></canvas></div></div>
       </div>
       <div class="c" id="dashDeptCard" style="margin-top:16px;display:none">
-        <div class="ct" style="font-size:13px;font-weight:700;margin-bottom:12px">🏢 พนักงานแต่ละแผนก</div>
-        <canvas id="chartDept"></canvas>
+        <div class="ct" style="font-size:13px;font-weight:700;margin-bottom:2px">🏢 พนักงานแต่ละแผนก</div>
+        <div id="deptChartLabel" style="font-size:11px;color:#94a3b8;margin-bottom:8px"></div>
+        <div style="height:140px;position:relative"><canvas id="chartDept"></canvas></div>
       </div>
     </div>
     <!-- CHECKIN -->
@@ -1294,10 +1295,13 @@ function renderDash() {
   if(window._cDept)window._cDept.destroy();
   const days7=Array.from({length:7},(_,i)=>{const d=new Date();d.setDate(d.getDate()-6+i);return d.toISOString().split('T')[0];});
   const d7L=days7.map(d=>{const dd=new Date(d+'T00:00:00');return (dd.getDate())+'/'+(dd.getMonth()+1);});
-  window._cAtt=new Chart(document.getElementById('chartAtt'),{type:'bar',data:{labels:d7L,datasets:[{label:'เช็คอิน',data:days7.map(d=>attCache.filter(a=>a.date===d).length),backgroundColor:'rgba(236,72,153,0.75)',borderColor:'#ec4899',borderWidth:2,borderRadius:8}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,precision:0}}}}});
+  const attD=days7.map(d=>attCache.filter(a=>a.date===d).length);
+  document.getElementById('attChartLabel').textContent='รวม '+attD.reduce((s,v)=>s+v,0)+' ครั้งใน 7 วัน';
+  window._cAtt=new Chart(document.getElementById('chartAtt'),{type:'bar',data:{labels:d7L,datasets:[{label:'คนเช็คอิน',data:attD,backgroundColor:'rgba(236,72,153,0.75)',borderColor:'#ec4899',borderWidth:2,borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>'เช็คอิน '+c.raw+' คน'}}},scales:{y:{beginAtZero:true,max:Math.max(...attD,2)+1,ticks:{stepSize:1,precision:0,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});
   const lA=leaveCache.filter(l=>(isAdmin||l.empId===me.id)&&l.status==='อนุมัติ').length,lP=leaveCache.filter(l=>(isAdmin||l.empId===me.id)&&l.status==='รออนุมัติ').length,lR=leaveCache.filter(l=>(isAdmin||l.empId===me.id)&&l.status==='ไม่อนุมัติ').length;
-  window._cLeave=new Chart(document.getElementById('chartLeave'),{type:'doughnut',data:{labels:['อนุมัติ','รออนุมัติ','ไม่อนุมัติ'],datasets:[{data:[lA,lP,lR],backgroundColor:['#10b981','#f59e0b','#ef4444'],borderWidth:3,borderColor:'#fff'}]},options:{responsive:true,plugins:{legend:{position:'bottom',labels:{font:{size:12},padding:16}}},cutout:'62%'}});
-  if(isAdmin){document.getElementById('dashDeptCard').style.display='';const dpts=[...new Set(empCache.filter(e=>e.status==='ทำงาน').map(e=>e.dept||'ไม่ระบุ'))];window._cDept=new Chart(document.getElementById('chartDept'),{type:'bar',data:{labels:dpts,datasets:[{data:dpts.map(d=>empCache.filter(e=>e.status==='ทำงาน'&&(e.dept||'ไม่ระบุ')===d).length),backgroundColor:_cc.slice(0,dpts.length),borderRadius:8}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,precision:0}}},indexAxis:'y'}});}else{document.getElementById('dashDeptCard').style.display='none';}
+  document.getElementById('leaveChartLabel').textContent='ทั้งหมด '+(lA+lP+lR)+' ใบ — รออนุมัติ '+lP+' ใบ';
+  window._cLeave=new Chart(document.getElementById('chartLeave'),{type:'doughnut',data:{labels:['อนุมัติ ('+lA+')','รออนุมัติ ('+lP+')','ไม่อนุมัติ ('+lR+')'],datasets:[{data:[lA,lP,lR],backgroundColor:['#10b981','#f59e0b','#ef4444'],borderWidth:3,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:10},padding:8,boxWidth:10}}},cutout:'62%'}});
+  if(isAdmin){document.getElementById('dashDeptCard').style.display='';const dpts=[...new Set(empCache.filter(e=>e.status==='ทำงาน').map(e=>e.dept||'ไม่ระบุ'))];const dptD=dpts.map(d=>empCache.filter(e=>e.status==='ทำงาน'&&(e.dept||'ไม่ระบุ')===d).length);document.getElementById('deptChartLabel').textContent='รวม '+dptD.reduce((s,v)=>s+v,0)+' คน ใน '+dpts.length+' แผนก';window._cDept=new Chart(document.getElementById('chartDept'),{type:'bar',data:{labels:dpts,datasets:[{label:'จำนวนพนักงาน',data:dptD,backgroundColor:_cc.slice(0,dpts.length),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>c.label+': '+c.raw+' คน'}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,precision:0,font:{size:10}},grid:{color:'rgba(0,0,0,0.05)'}},x:{ticks:{font:{size:10}},grid:{display:false}}}}});}else{document.getElementById('dashDeptCard').style.display='none';}
 }
 
 // ── RENDER: LEAVE ──
