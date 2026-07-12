@@ -1351,7 +1351,7 @@ function renderManage() {
   const q=(document.getElementById('mgSrch')||{}).value||'';
   const list=empCache.filter(e=>!q||(e.firstName+e.lastName+e.position+e.dept).toLowerCase().includes(q.toLowerCase()));
 const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
-  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):
+  document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
 }
 function openAddEmp() {
   editEmpId=null;
