@@ -1446,7 +1446,7 @@ function renderManage() {
 const roleCls={superadmin:'bb',admin:'bb',hr:'bb',manager:'by',supervisor:'bg',employee:'bgr'};
   document.getElementById('mgTable').innerHTML=list.length?list.map(e=>`<tr><td><code>${e.id}</code></td><td>${e.firstName} ${e.lastName}</td><td>${e.position}</td><td>${e.dept}${e.team?' / '+e.team:''}</td><td><span class="badge ${roleCls[e.role]||'bgr'}">${roleName(e.role)}</span></td><td><span class="badge ${e.hasFace?'bg':'bgr'}">${e.hasFace?'✅':'ยังไม่ลง'}</span></td><td><span class="badge ${e.status==='ทำงาน'?'bg':'bgr'}">${e.status}</span></td><td><button class="btn btn-s btn-sm" onclick="openEditEmp('${e.id}')">✏️ แก้ไข</button> <button class="btn btn-r btn-sm" onclick="deleteEmp('${e.id}','${e.firstName} ${e.lastName}')">🗑️ ลบ</button></td></tr>`).join(''):'<tr><td colspan="8" class="empty">ไม่พบข้อมูล</td></tr>';
 }
-var SHIFTS=[{k:'',lb:'-',bg:'#e2e8f0',cl:'#64748b'},{k:'เช้า',lb:'เช้า 08-16',bg:'#dbeafe',cl:'#1d4ed8'},{k:'เช้า2',lb:'เช้า 08-17',bg:'#93c5fd',cl:'#1e40af'},{k:'บ่าย',lb:'บ่าย 14-22',bg:'#ffedd5',cl:'#c2410c'},{k:'บ่าย2',lb:'บ่าย 12-21',bg:'#fdba74',cl:'#9a3412'},{k:'ดึก',lb:'ดึก 22-06',bg:'#ede9fe',cl:'#6d28d9'},{k:'ดึก2',lb:'ดึก 17-02',bg:'#c4b5fd',cl:'#5b21b6'},{k:'หยุด',lb:'วันหยุด',bg:'#fee2e2',cl:'#dc2626'}];
+var SHIFTS=[{k:'เช้า',lb:'เช้า 08-17',bg:'#93c5fd',cl:'#1e40af'},{k:'บ่าย',lb:'บ่าย 12-21',bg:'#fdba74',cl:'#9a3412'},{k:'ดึก',lb:'ดึก 17-02',bg:'#c4b5fd',cl:'#5b21b6'},{k:'หยุด',lb:'วันหยุด',bg:'#fee2e2',cl:'#dc2626'}];
 var schedWeekStart=null,schedCache={};
 function initSchedule(){
   var today=new Date(),day=today.getDay(),diff=today.getDate()-day+(day===0?-6:1);
