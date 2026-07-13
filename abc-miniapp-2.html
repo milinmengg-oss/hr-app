@@ -743,6 +743,77 @@
     .si-title { font-size: 14px; font-weight: 900; margin-bottom: 8px; }
     .si-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--sub); padding: 5px 0; }
     .si-row b { color: var(--text); font-weight: 600; text-align: right; }
+    /* ═══ GLASSMORPHISM ═══ */
+    body::before {
+      content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+      background:
+        radial-gradient(620px 420px at 88% -6%, rgba(189,251,0,.075), transparent 62%),
+        radial-gradient(520px 400px at -12% 42%, rgba(93,200,176,.055), transparent 62%),
+        radial-gradient(560px 420px at 110% 85%, rgba(189,251,0,.05), transparent 60%);
+    }
+    #app { position: relative; z-index: 1; }
+    .header, .filter-bar {
+      background: rgba(12,12,12,.72) !important;
+      backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+    }
+    .p-card {
+      background: rgba(255,255,255,.045) !important;
+      border: 1px solid rgba(255,255,255,.085) !important;
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
+    }
+    .bnav {
+      background: rgba(18,18,18,.6) !important;
+      border-color: rgba(255,255,255,.1) !important;
+      backdrop-filter: blur(22px); -webkit-backdrop-filter: blur(22px);
+      box-shadow: 0 10px 34px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+    }
+    .h-btn {
+      background: rgba(255,255,255,.055) !important;
+      border-color: rgba(255,255,255,.09) !important;
+      backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    }
+    .ord-card, .coupon-card, .shop-info {
+      background: rgba(255,255,255,.04) !important;
+      border-color: rgba(255,255,255,.08) !important;
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    }
+    .drawer, .pd-sheet {
+      background: rgba(16,16,16,.82) !important;
+      backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    }
+    .addr-row { background: rgba(255,255,255,.045) !important; }
+    .flavor-chip { background: rgba(255,255,255,.06); }
+    .nic-btn:not(.active), .pill:not(.active) {
+      background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.08);
+    }
+    .browse-toggle { background: rgba(255,255,255,.05); }
+    /* ═══ ORDER CODE / FAQ / PAY METHODS ═══ */
+    .copy-btn {
+      background: rgba(255,255,255,.06); border: 1px solid var(--border);
+      border-radius: 8px; width: 24px; height: 24px; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .copy-btn svg { stroke: var(--sub); }
+    .report-btn {
+      width: 100%; margin-top: 12px; background: transparent;
+      border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+      color: var(--sub); font-size: 12.5px; font-weight: 700;
+      font-family: inherit; cursor: pointer;
+    }
+    .report-btn:active { background: rgba(255,255,255,.05); }
+    .faq-wrap { padding: 16px; }
+    .faq-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 16px; padding: 16px; margin-bottom: 10px;
+    }
+    .faq-t { font-size: 14px; font-weight: 900; margin-bottom: 8px; color: var(--lime); }
+    .faq-b { font-size: 12.5px; color: var(--sub); line-height: 2; }
+    .pay-methods {
+      display: flex; justify-content: center; align-items: center; gap: 7px;
+      font-size: 11px; color: var(--sub); padding: 10px 0 2px; flex-wrap: wrap;
+    }
+    .pay-methods svg { stroke: var(--sub); }
   </style>
 </head>
 <body>
@@ -959,7 +1030,7 @@
       <div class="coupon-card">
         <div class="coupon-left"><div class="coupon-icon">🚚</div><div class="coupon-pct">FREE</div></div>
         <div class="coupon-body">
-          <div class="coupon-title" data-i18n="c3_title">ส่งฟรีครบ ฿500</div>
+          <div class="coupon-title" data-i18n="c3_title">ครบ 4 แท่งส่งฟรี</div>
           <div class="coupon-desc" data-i18n="c3_desc"></div>
           <div class="coupon-tag" data-i18n="c3_tag">ไม่จำกัดครั้ง</div>
         </div>
@@ -1025,6 +1096,14 @@
         </div>
         <div class="benefit-arrow">›</div>
       </div>
+      <div class="benefit-item" onclick="nav('faq',4)" style="cursor:pointer;">
+        <div class="benefit-icon">📄</div>
+        <div class="benefit-text">
+          <div class="benefit-title" data-i18n="b5_title">เงื่อนไขการบริการ</div>
+          <div class="benefit-desc" data-i18n="b5_desc">จัดส่ง · เปลี่ยน-คืน · ชำระเงิน</div>
+        </div>
+        <div class="benefit-arrow">›</div>
+      </div>
       <div class="benefit-item" onclick="openContact()" style="cursor:pointer;">
         <div class="benefit-icon">💬</div>
         <div class="benefit-text">
@@ -1039,6 +1118,29 @@
       <div class="si-row"><span data-i18n="si_hours_l"></span><b data-i18n="si_hours_v"></b></div>
       <div class="si-row"><span data-i18n="si_ship_l"></span><b data-i18n="si_ship_v"></b></div>
       <div class="si-row"><span data-i18n="si_pay_l"></span><b data-i18n="si_pay_v"></b></div>
+    </div>
+  </div>
+
+  <!-- ══════ PAGE: FAQ ══════ -->
+  <div class="page" id="pageFaq">
+    <div class="header">
+      <div class="h-actions"><button class="h-btn" onclick="nav('member',4)">‹</button></div>
+      <div class="logo-text" style="font-size:17px;" data-i18n="faq_title">เงื่อนไขการบริการ</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="faq-wrap">
+      <div class="faq-card">
+        <div class="faq-t" data-i18n="f1_t">การจัดส่ง</div>
+        <div class="faq-b" data-i18n="f1_b"></div>
+      </div>
+      <div class="faq-card">
+        <div class="faq-t" data-i18n="f2_t">การเปลี่ยน / คืนสินค้า</div>
+        <div class="faq-b" data-i18n="f2_b"></div>
+      </div>
+      <div class="faq-card">
+        <div class="faq-t" data-i18n="f3_t">การชำระเงิน</div>
+        <div class="faq-b" data-i18n="f3_b"></div>
+      </div>
     </div>
   </div>
 
@@ -1080,14 +1182,14 @@
     // ── ระบบภาษา TH/EN ──
     const I18N = {
       th: {
-        ticker: `🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ส่งฟรีครบ ฿500 <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span> 🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ส่งฟรีครบ ฿500 <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span>`,
+        ticker: `🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ครบ 4 แท่งส่งฟรี <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span> 🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ครบ 4 แท่งส่งฟรี <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span>`,
         sec_cats:'หมวดหมู่สินค้า', sec_brands:'แบรนด์สินค้า', sec_featured:'สินค้าแนะนำ 🔥', see_all:'ดูทั้งหมด ›',
         all:'ทั้งหมด', menu_title:'เมนูสินค้า', toggle_cat:'หมวดหมู่', toggle_brand:'แบรนด์',
         order_title:'ออเดอร์ของฉัน', promo_title:'โปรโมชั่น', member_title:'บัตรสมาชิก',
         nav_home:'หน้าหลัก', nav_menu:'เมนูสินค้า', nav_order:'ออเดอร์', nav_promo:'โปร', nav_member:'สมาชิก',
         cart_title:'ตะกร้าสินค้า', ship_to:'จัดส่งที่', ship_sub:'คลิกเพื่อเลือกหรือเพิ่มที่อยู่จัดส่ง',
         cart_items:'รายการในตะกร้า', cart_empty:'ตะกร้าของคุณว่างเปล่า',
-        sum_sub:'ยอดรวมสินค้า', sum_ship:'ค่าจัดส่ง (ส่งฟรีเมื่อครบ ฿500)', net:'ยอดสุทธิ', pay:'ชำระเงิน',
+        sum_sub:'ยอดรวมสินค้า', sum_ship:'ค่าจัดส่ง (ครบ 4 แท่งส่งฟรี)', net:'ยอดสุทธิ', pay:'ชำระเงิน',
         added:'เพิ่มลงตะกร้าแล้ว 🛒', added_flavor:'เพิ่ม "{f}" ลงตะกร้าแล้ว 🛒', cleared:'ล้างตะกร้าแล้ว',
         addr_toast:'เชื่อมระบบที่อยู่จัดส่งในเวอร์ชันจริง 🏠',
         choose_flavor:'เลือกกลิ่น', add:'เพิ่ม', flavors_unit:'กลิ่น', items_unit:'รายการ',
@@ -1096,7 +1198,7 @@
         promo_hero_title:'ดีลพิเศษสำหรับคุณ', promo_hero_sub:'อัพเดทโปรโมชั่นทุกสัปดาห์<br>อย่าพลาดข้อเสนอสุดคุ้ม!',
         c1_title:'ซื้อ 3 แถม 1', c1_desc:'ซื้อ Pod Pro ครบ 3 ชิ้น รับฟรีอีก 1 ชิ้น ราคาเท่ากัน', c1_tag:'Pod Pro เท่านั้น',
         c2_title:'สมาชิกใหม่ลด 10%', c2_desc:'สำหรับลูกค้าใหม่ที่สั่งซื้อครั้งแรก ลดทันที 10%', c2_tag:'ใช้ได้ครั้งเดียว',
-        c3_title:'ส่งฟรีครบ ฿500', c3_desc:'สั่งครบ 500 บาทขึ้นไป จัดส่งฟรีทั่วกรุงเทพฯ', c3_tag:'ไม่จำกัดครั้ง',
+        c3_title:'ซื้อครบ 4 แท่งส่งฟรี', c3_desc:'สั่งสินค้าครบ 4 แท่งขึ้นไป จัดส่งฟรีทันที', c3_tag:'ไม่จำกัดครั้ง',
         c4_title:'สะสมแต้มทุกการซื้อ', c4_desc:'ซื้อครบ ฿100 = 1 แต้ม · ครบ 50 แต้ม = ส่วนลด ฿50', c4_tag:'สะสมได้ตลอด',
         mem_orders:'ออเดอร์', mem_spend:'ยอดสะสม', mem_points:'แต้ม',
         b1_title:'ประวัติการสั่งซื้อ', b1_desc:'ดูออเดอร์ทั้งหมดของคุณ',
@@ -1109,17 +1211,22 @@
         sold:'ขายแล้ว', trust1:'ของแท้ 100%', trust2:'ส่งไว 1-3 ชม.', trust3:'เก็บเงินปลายทาง',
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
-        si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอน · พร้อมเพย์ · ปลายทาง'
+        si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร',
+        faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
+        f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
+        f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
+        f3_t:'การชำระเงิน', f3_b:'• โอนผ่านธนาคาร หรือพร้อมเพย์<br>• ไม่มีบริการเก็บเงินปลายทาง'
       },
       en: {
-        ticker: `🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Free shipping over ฿500 <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span> 🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Free shipping over ฿500 <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span>`,
+        ticker: `🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Buy 4+ items, free delivery <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span> 🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Buy 4+ items, free delivery <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span>`,
         sec_cats:'Categories', sec_brands:'Brands', sec_featured:'Featured 🔥', see_all:'See all ›',
         all:'All', menu_title:'Product menu', toggle_cat:'Categories', toggle_brand:'Brands',
         order_title:'My orders', promo_title:'Promotions', member_title:'Member card',
         nav_home:'Home', nav_menu:'Menu', nav_order:'Orders', nav_promo:'Deals', nav_member:'Member',
         cart_title:'My cart', ship_to:'Deliver to', ship_sub:'Tap to select or add a delivery address',
         cart_items:'Items in cart', cart_empty:'Your cart is empty',
-        sum_sub:'Subtotal', sum_ship:'Shipping (free over ฿500)', net:'Total', pay:'Checkout',
+        sum_sub:'Subtotal', sum_ship:'Shipping (free on 4+ items)', net:'Total', pay:'Checkout',
         added:'Added to cart 🛒', added_flavor:'Added "{f}" to cart 🛒', cleared:'Cart cleared',
         addr_toast:'Delivery address will be available in the live version 🏠',
         choose_flavor:'Choose flavor', add:'Add', flavors_unit:'flavors', items_unit:'items',
@@ -1128,7 +1235,7 @@
         promo_hero_title:'Special deals for you', promo_hero_sub:'New promotions every week<br>Do not miss out!',
         c1_title:'Buy 3 get 1 free', c1_desc:'Buy 3 Pod Pro and get 1 more free (same price)', c1_tag:'Pod Pro only',
         c2_title:'New member 10% off', c2_desc:'10% off instantly on your first order', c2_tag:'One time only',
-        c3_title:'Free shipping over ฿500', c3_desc:'Orders of ฿500+ ship free across Bangkok', c3_tag:'Unlimited',
+        c3_title:'Buy 4 get free delivery', c3_desc:'Order 4 or more items and delivery is free', c3_tag:'Unlimited',
         c4_title:'Earn points every order', c4_desc:'Every ฿100 = 1 point · 50 points = ฿50 off', c4_tag:'Always on',
         mem_orders:'Orders', mem_spend:'Total spent', mem_points:'Points',
         b1_title:'Order history', b1_desc:'See all your orders',
@@ -1141,7 +1248,12 @@
         sold:'sold', trust1:'100% authentic', trust2:'Fast 1-3 hr delivery', trust3:'Cash on delivery',
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
-        si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Transfer · PromptPay · COD'
+        si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer',
+        faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
+        f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
+        f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
+        f3_t:'Payment', f3_b:'• Bank transfer or PromptPay<br>• Cash on delivery is not available'
       }
     };
     let lang = 'th';
@@ -1543,11 +1655,16 @@
             const STL = [t('st0'), t('st1'), t('st2'), t('st3')];
             return `
             <div class="ord-card">
-              <div class="ord-id">${t('ord_no')} #${String(i+1).padStart(4,'0')} · ${o.time}</div>
+              <div class="ord-id" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <b style="color:var(--text);font-size:12.5px;letter-spacing:.5px;">${o.code || (t('ord_no')+' #'+String(i+1).padStart(4,'0'))}</b>
+                <button class="copy-btn" onclick="copyOrd('${o.code||''}')" aria-label="copy"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
+                <span>· ${o.time}</span>
+              </div>
               <div class="ord-status">${idx === 3 ? '✅ ' : '⏳ '}${STL[idx]}</div>
               <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
+              <button class="report-btn" onclick="openContact()">${t('report')}</button>
             </div>`;}).join('');
     }
 
@@ -1643,8 +1760,28 @@
           </div>
           <button class="trash-btn" onclick="clearCart()">🗑</button>
           <button class="checkout-btn" style="flex:1;" onclick="checkout()">${t('pay')}</button>
+        </div>
+        <div class="pay-methods">
+          <span>${t('pay_via')}:</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke-width="2"><path d="M3 10h18L12 4z"/><path d="M5 10v7M12 10v7M19 10v7M3 20h18"/></svg><span>${t('pay_bank')}</span>
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><path d="M13 13h3v3h-3zM18 18h3v3h-3z"/></svg><span>PromptPay</span>
         </div>`;
     }
+    function genOrderCode() {
+      const d = new Date();
+      const ymd = d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
+      const ch = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+      let s = '';
+      for (let i = 0; i < 4; i++) s += ch[Math.floor(Math.random()*ch.length)];
+      return `ABC-${ymd}-${s}`;
+    }
+    function copyOrd(c) {
+      if (!c) return;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(c).then(() => toast(t('copied'))).catch(() => toast(c));
+      } else toast(c);
+    }
+
     function clearCart() {
       cart = {}; updateUI(); renderDrawer();
       toast(t('cleared'));
@@ -1675,7 +1812,7 @@
       if (tg?.sendData) {
         tg.sendData(JSON.stringify({ shop:SHOP, items, total, time }));
       } else {
-        orders.unshift({ items, total, time, ts: Date.now() });
+        orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
         totalOrders++; totalSpend += total;
         document.getElementById('memOrders').textContent = totalOrders;
         document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
