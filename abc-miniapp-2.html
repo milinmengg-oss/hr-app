@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ABC Shop</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg:      #0c0c0c;
@@ -24,7 +27,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     body {
-      font-family: -apple-system, 'Noto Sans Thai', BlinkMacSystemFont, sans-serif;
+      font-family: 'Kanit', -apple-system, 'Noto Sans Thai', BlinkMacSystemFont, sans-serif;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -654,10 +657,113 @@
     .pd-add-btn:disabled {
       background: var(--card3); color: var(--sub); cursor: not-allowed;
     }
+    /* ═══ LUXURY POLISH ═══ */
+    .page.active { animation: pageIn .3s ease; }
+    @keyframes pageIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .p-grid .p-card { animation: cardIn .4s cubic-bezier(.2,.7,.3,1) backwards; }
+    .p-grid .p-card:nth-child(1) { animation-delay: .03s; }
+    .p-grid .p-card:nth-child(2) { animation-delay: .07s; }
+    .p-grid .p-card:nth-child(3) { animation-delay: .11s; }
+    .p-grid .p-card:nth-child(4) { animation-delay: .15s; }
+    .p-grid .p-card:nth-child(5) { animation-delay: .19s; }
+    .p-grid .p-card:nth-child(6) { animation-delay: .23s; }
+    @keyframes cardIn { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+    .bump { animation: bump .3s ease; }
+    @keyframes bump { 50% { transform: scale(1.4); } }
+    .hero { box-shadow: 0 14px 44px rgba(189,251,0,.10), 0 8px 26px rgba(0,0,0,.55); }
+    .checkout-btn, .pd-add-btn { box-shadow: 0 4px 18px rgba(189,251,0,.30); }
+    .member-card { box-shadow: 0 10px 34px rgba(189,251,0,.14); }
+    .n-icon { height: 22px; display: flex; align-items: center; }
+    .n-icon svg { stroke: var(--sub); transition: stroke .2s; }
+    .n-item.active .n-icon svg { stroke: var(--lime); }
+    .h-btn svg { stroke: var(--text); }
+    .card-shine {
+      position: absolute; top: -60%; left: -80%;
+      width: 45%; height: 220%;
+      background: linear-gradient(105deg, transparent 0%, rgba(255,255,255,.16) 50%, transparent 100%);
+      transform: rotate(12deg);
+      animation: shine 3.6s ease-in-out infinite;
+      pointer-events: none;
+    }
+    @keyframes shine { 0% { left: -80%; } 55% { left: 150%; } 100% { left: 150%; } }
+    .splash {
+      position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 16px; transition: opacity .45s ease;
+    }
+    .splash.hide { opacity: 0; pointer-events: none; }
+    .splash-logo {
+      width: 88px; height: 88px; background: var(--lime); border-radius: 26px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 44px; font-weight: 900; color: #111; padding: 16px;
+      animation: pop .55s cubic-bezier(.175,.885,.32,1.275);
+      box-shadow: 0 10px 40px rgba(189,251,0,.35);
+    }
+    .splash-name {
+      font-size: 22px; font-weight: 900; color: var(--lime);
+      animation: pageIn .6s ease .15s backwards;
+    }
+    /* ═══ TRUST ═══ */
+    .rate-row { font-size: 11px; color: #e8b53a; font-weight: 600; margin-top: 3px; }
+    .rate-row span { color: var(--sub); font-weight: 500; }
+    .agegate {
+      position: fixed; inset: 0; background: rgba(0,0,0,.84);
+      backdrop-filter: blur(8px); z-index: 9998;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .age-box {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 22px; padding: 28px 22px; text-align: center;
+      max-width: 320px; width: 100%;
+    }
+    .age-badge {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--lime); color: #111;
+      font-weight: 900; font-size: 20px;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 14px; box-shadow: 0 6px 24px rgba(189,251,0,.3);
+    }
+    .age-title { font-size: 17px; font-weight: 900; margin-bottom: 8px; }
+    .age-sub { font-size: 12.5px; color: var(--sub); line-height: 1.6; margin-bottom: 18px; }
+    .age-no {
+      width: 100%; background: transparent; border: none;
+      color: var(--sub); font-size: 13px; margin-top: 12px;
+      cursor: pointer; font-family: inherit;
+    }
+    .ord-steps { display: flex; margin: 10px 0 4px; }
+    .ostep { flex: 1; text-align: center; }
+    .odot { width: 10px; height: 10px; border-radius: 50%; background: var(--card3); margin: 0 auto 4px; }
+    .ostep.on .odot { background: var(--lime); box-shadow: 0 0 8px rgba(189,251,0,.5); }
+    .olabel { font-size: 9.5px; color: var(--sub); }
+    .ostep.on .olabel { color: var(--lime); }
+    .shop-info {
+      margin: 0 16px 24px; background: var(--card);
+      border: 1px solid var(--border); border-radius: 16px; padding: 16px;
+    }
+    .si-title { font-size: 14px; font-weight: 900; margin-bottom: 8px; }
+    .si-row { display: flex; justify-content: space-between; gap: 10px; font-size: 12.5px; color: var(--sub); padding: 5px 0; }
+    .si-row b { color: var(--text); font-weight: 600; text-align: right; }
   </style>
 </head>
 <body>
 <div id="app">
+
+  <!-- Splash -->
+  <div class="splash" id="splash">
+    <div class="splash-logo" id="splashLogo">A</div>
+    <div class="splash-name">ABC Shop <span style="color:var(--text);">✦</span></div>
+  </div>
+
+  <!-- Age gate 20+ -->
+  <div class="agegate" id="agegate" style="display:none;">
+    <div class="age-box">
+      <div class="age-badge">20+</div>
+      <div class="age-title" data-i18n="age_title">สำหรับผู้มีอายุ 20 ปีขึ้นไป</div>
+      <div class="age-sub" data-i18n="age_sub"></div>
+      <button class="checkout-btn" onclick="ageOk()" data-i18n="age_yes">ฉันอายุ 20 ปีขึ้นไป</button>
+      <button class="age-no" onclick="ageNo()" data-i18n="age_no">ยังไม่ถึง 20 ปี</button>
+    </div>
+  </div>
 
   <div class="toast" id="toast"></div>
 
@@ -683,6 +789,14 @@
     </div>
     <div class="pd-flavor-head" id="pdFlavHead">เลือกกลิ่น</div>
     <div class="flavor-grid" id="pdFlavorGrid"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 0;flex-shrink:0;border-top:1px solid var(--border);">
+      <div style="font-size:14px;font-weight:800;" data-i18n="qty">จำนวน</div>
+      <div class="qty-ctrl">
+        <button class="q-btn" onclick="pdQty(-1)">−</button>
+        <div class="q-num" id="pdQtyNum">1</div>
+        <button class="q-btn plus" onclick="pdQty(1)">+</button>
+      </div>
+    </div>
     <div class="pd-foot">
       <button class="pd-add-btn" data-i18n="pick_first" id="pdAddBtn" disabled onclick="addCartFromDetail()">กรุณาเลือกกลิ่นก่อน</button>
     </div>
@@ -709,7 +823,7 @@
 
   <!-- Float Cart -->
   <div class="float-cart" id="floatCart" onclick="openCart()">
-    🛒
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#111" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h7a2 2 0 0 0 2-1.5L21 7H6"/></svg>
     <div class="f-count" id="fCount">0</div>
   </div>
 
@@ -718,16 +832,16 @@
     <div class="header h-home">
       <div class="h-actions">
         <button class="h-btn th-pill" id="langBtn" onclick="toggleLang()">🌐 TH</button>
-        <button class="h-btn" onclick="nav('menu',1)">🔍</button>
+        <button class="h-btn" onclick="nav('menu',1);setTimeout(()=>{const s=document.getElementById('searchBox');if(s)s.focus();},60)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg></button>
       </div>
       <div class="logo-wrap">
         <div class="logo-icon" id="logoIcon">A</div>
         <div class="logo-text">ABC Shop<span class="logo-plus"> ✦</span></div>
       </div>
       <div class="h-actions">
-        <button class="h-btn" onclick="nav('order',2)">📋</button>
+        <button class="h-btn" onclick="nav('order',2)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg></button>
         <button class="h-btn" id="cartBtn1" onclick="openCart()">
-          🛒<div class="cart-dot" id="dot1">0</div>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h7a2 2 0 0 0 2-1.5L21 7H6"/></svg><div class="cart-dot" id="dot1">0</div>
         </button>
       </div>
     </div>
@@ -783,7 +897,7 @@
       </div>
       <div class="h-actions">
         <button class="h-btn" id="cartBtn2" onclick="openCart()">
-          🛒<div class="cart-dot" id="dot2">0</div>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h7a2 2 0 0 0 2-1.5L21 7H6"/></svg><div class="cart-dot" id="dot2">0</div>
         </button>
       </div>
     </div>
@@ -792,6 +906,7 @@
       <button class="toggle-btn" id="toggleBrand" onclick="setBrowseMode('brand',this)" data-i18n="toggle_brand">🏪 แบรนด์</button>
     </div>
     <div class="filter-bar">
+      <input id="searchBox" oninput="setSearch(this.value)" placeholder="ค้นหาสินค้า..." style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 14px;color:var(--text);font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
       <div class="frow" id="catPills"></div>
       <div class="frow">
         <button class="nic-btn active" data-i18n="all" id="nicAll" onclick="setMenuNic('all',this)">ทั้งหมด</button>
@@ -866,6 +981,7 @@
       <div class="logo-text" style="font-size:17px;" data-i18n="member_title">บัตรสมาชิก</div>
     </div>
     <div class="member-card">
+      <div class="card-shine"></div>
       <div class="member-logo">ABC Shop ✦</div>
       <div class="member-type">MEMBER CARD</div>
       <div class="member-name" id="memberName">ลูกค้า ABC Shop</div>
@@ -885,7 +1001,7 @@
       </div>
     </div>
     <div class="member-benefits">
-      <div class="benefit-item">
+      <div class="benefit-item" onclick="nav('order',2)" style="cursor:pointer;">
         <div class="benefit-icon">📦</div>
         <div class="benefit-text">
           <div class="benefit-title" data-i18n="b1_title">ประวัติการสั่งซื้อ</div>
@@ -893,7 +1009,7 @@
         </div>
         <div class="benefit-arrow">›</div>
       </div>
-      <div class="benefit-item">
+      <div class="benefit-item" onclick="toast(t('soon'))" style="cursor:pointer;">
         <div class="benefit-icon">🎁</div>
         <div class="benefit-text">
           <div class="benefit-title" data-i18n="b2_title">แลกของรางวัล</div>
@@ -901,7 +1017,7 @@
         </div>
         <div class="benefit-arrow">›</div>
       </div>
-      <div class="benefit-item">
+      <div class="benefit-item" onclick="toast(t('soon'))" style="cursor:pointer;">
         <div class="benefit-icon">👥</div>
         <div class="benefit-text">
           <div class="benefit-title" data-i18n="b3_title">แนะนำเพื่อน</div>
@@ -909,7 +1025,7 @@
         </div>
         <div class="benefit-arrow">›</div>
       </div>
-      <div class="benefit-item">
+      <div class="benefit-item" onclick="openContact()" style="cursor:pointer;">
         <div class="benefit-icon">💬</div>
         <div class="benefit-text">
           <div class="benefit-title" data-i18n="b4_title">ติดต่อร้าน</div>
@@ -918,32 +1034,38 @@
         <div class="benefit-arrow">›</div>
       </div>
     </div>
+    <div class="shop-info">
+      <div class="si-title" data-i18n="si_title">ข้อมูลร้าน</div>
+      <div class="si-row"><span data-i18n="si_hours_l"></span><b data-i18n="si_hours_v"></b></div>
+      <div class="si-row"><span data-i18n="si_ship_l"></span><b data-i18n="si_ship_v"></b></div>
+      <div class="si-row"><span data-i18n="si_pay_l"></span><b data-i18n="si_pay_v"></b></div>
+    </div>
   </div>
 
   <!-- ══════ BOTTOM NAV ══════ -->
   <div class="bnav">
     <div class="n-item active" id="n0" onclick="nav('home',0)">
-      <div class="n-icon">🏠</div>
+      <div class="n-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></div>
       <div class="n-icon-active-dot"></div>
       <div class="n-label" data-i18n="nav_home">หน้าหลัก</div>
     </div>
     <div class="n-item" id="n1" onclick="nav('menu',1)">
-      <div class="n-icon">🛍️</div>
+      <div class="n-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 14H5z"/><path d="M9 10V5a3 3 0 0 1 6 0v5"/></svg></div>
       <div class="n-icon-active-dot"></div>
       <div class="n-label" data-i18n="nav_menu">เมนูสินค้า</div>
     </div>
     <div class="n-item" id="n2" onclick="nav('order',2)">
-      <div class="n-icon">📋</div>
+      <div class="n-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg></div>
       <div class="n-icon-active-dot"></div>
       <div class="n-label" data-i18n="nav_order">ออเดอร์</div>
     </div>
     <div class="n-item" id="n3" onclick="nav('promo',3)">
-      <div class="n-icon">🎁</div>
+      <div class="n-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8"/><line x1="12" y1="8" x2="12" y2="21"/><path d="M12 8c-1.5-3-5-3.5-5-1.5S10.5 8 12 8zm0 0c1.5-3 5-3.5 5-1.5S13.5 8 12 8z"/></svg></div>
       <div class="n-icon-active-dot"></div>
       <div class="n-label" data-i18n="nav_promo">โปร</div>
     </div>
     <div class="n-item" id="n4" onclick="nav('member',4)">
-      <div class="n-icon">🎫</div>
+      <div class="n-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="7" y1="15" x2="11" y2="15"/></svg></div>
       <div class="n-icon-active-dot"></div>
       <div class="n-label" data-i18n="nav_member">สมาชิก</div>
     </div>
@@ -959,11 +1081,11 @@
     const I18N = {
       th: {
         ticker: `🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ส่งฟรีครบ ฿500 <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span> 🛺 ABC Shop ยินดีต้อนรับ <span class="ticker-sep">•</span> ซื้อ 3 แถม 1 Pod Pro <span class="ticker-sep">•</span> ส่งฟรีครบ ฿500 <span class="ticker-sep">•</span> สมาชิกใหม่ลด 10% <span class="ticker-sep">•</span>`,
-        sec_cats:'หมวดหมู่สินค้า', sec_brands:'แบรนด์สินค้า 🏪', sec_featured:'สินค้าแนะนำ 🔥', see_all:'ดูทั้งหมด ›',
-        all:'ทั้งหมด', menu_title:'เมนูสินค้า', toggle_cat:'🏷️ หมวดหมู่', toggle_brand:'🏪 แบรนด์',
+        sec_cats:'หมวดหมู่สินค้า', sec_brands:'แบรนด์สินค้า', sec_featured:'สินค้าแนะนำ 🔥', see_all:'ดูทั้งหมด ›',
+        all:'ทั้งหมด', menu_title:'เมนูสินค้า', toggle_cat:'หมวดหมู่', toggle_brand:'แบรนด์',
         order_title:'ออเดอร์ของฉัน', promo_title:'โปรโมชั่น', member_title:'บัตรสมาชิก',
         nav_home:'หน้าหลัก', nav_menu:'เมนูสินค้า', nav_order:'ออเดอร์', nav_promo:'โปร', nav_member:'สมาชิก',
-        cart_title:'🛒 ตะกร้าสินค้า', ship_to:'จัดส่งที่', ship_sub:'คลิกเพื่อเลือกหรือเพิ่มที่อยู่จัดส่ง',
+        cart_title:'ตะกร้าสินค้า', ship_to:'จัดส่งที่', ship_sub:'คลิกเพื่อเลือกหรือเพิ่มที่อยู่จัดส่ง',
         cart_items:'รายการในตะกร้า', cart_empty:'ตะกร้าของคุณว่างเปล่า',
         sum_sub:'ยอดรวมสินค้า', sum_ship:'ค่าจัดส่ง (ส่งฟรีเมื่อครบ ฿500)', net:'ยอดสุทธิ', pay:'ชำระเงิน',
         added:'เพิ่มลงตะกร้าแล้ว 🛒', added_flavor:'เพิ่ม "{f}" ลงตะกร้าแล้ว 🛒', cleared:'ล้างตะกร้าแล้ว',
@@ -982,15 +1104,20 @@
         b3_title:'แนะนำเพื่อน', b3_desc:'รับแต้มโบนัสเมื่อเพื่อนสมัคร',
         b4_title:'ติดต่อร้าน', b4_desc:'Line / โทร / แชทโดยตรง',
         ord_empty_title:'ยังไม่มีออเดอร์', ord_empty_sub:'กดเมนูสินค้าเพื่อเริ่มสั่งได้เลย',
-        ord_no:'ออเดอร์', ord_status:'✅ ส่งแล้ว', ord_total:'รวม'
+        ord_no:'ออเดอร์', ord_status:'✅ ส่งแล้ว', ord_total:'รวม',
+        search_ph:'ค้นหาสินค้า...', qty:'จำนวน', soon:'ฟีเจอร์นี้จะเปิดในเวอร์ชันจริง 🎁',
+        sold:'ขายแล้ว', trust1:'ของแท้ 100%', trust2:'ส่งไว 1-3 ชม.', trust3:'เก็บเงินปลายทาง',
+        age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
+        st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
+        si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอน · พร้อมเพย์ · ปลายทาง'
       },
       en: {
         ticker: `🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Free shipping over ฿500 <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span> 🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Free shipping over ฿500 <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span>`,
-        sec_cats:'Categories', sec_brands:'Brands 🏪', sec_featured:'Featured 🔥', see_all:'See all ›',
-        all:'All', menu_title:'Product menu', toggle_cat:'🏷️ Categories', toggle_brand:'🏪 Brands',
+        sec_cats:'Categories', sec_brands:'Brands', sec_featured:'Featured 🔥', see_all:'See all ›',
+        all:'All', menu_title:'Product menu', toggle_cat:'Categories', toggle_brand:'Brands',
         order_title:'My orders', promo_title:'Promotions', member_title:'Member card',
         nav_home:'Home', nav_menu:'Menu', nav_order:'Orders', nav_promo:'Deals', nav_member:'Member',
-        cart_title:'🛒 My cart', ship_to:'Deliver to', ship_sub:'Tap to select or add a delivery address',
+        cart_title:'My cart', ship_to:'Deliver to', ship_sub:'Tap to select or add a delivery address',
         cart_items:'Items in cart', cart_empty:'Your cart is empty',
         sum_sub:'Subtotal', sum_ship:'Shipping (free over ฿500)', net:'Total', pay:'Checkout',
         added:'Added to cart 🛒', added_flavor:'Added "{f}" to cart 🛒', cleared:'Cart cleared',
@@ -1009,7 +1136,12 @@
         b3_title:'Refer friends', b3_desc:'Earn bonus points when friends join',
         b4_title:'Contact us', b4_desc:'Line / call / direct chat',
         ord_empty_title:'No orders yet', ord_empty_sub:'Tap Menu to start your first order',
-        ord_no:'Order', ord_status:'✅ Delivered', ord_total:'Total'
+        ord_no:'Order', ord_status:'✅ Delivered', ord_total:'Total',
+        search_ph:'Search products...', qty:'Qty', soon:'Coming soon in the live version 🎁',
+        sold:'sold', trust1:'100% authentic', trust2:'Fast 1-3 hr delivery', trust3:'Cash on delivery',
+        age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
+        st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
+        si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Transfer · PromptPay · COD'
       }
     };
     let lang = 'th';
@@ -1027,8 +1159,18 @@
       document.querySelectorAll('[data-i18n]').forEach(el => { el.innerHTML = t(el.dataset.i18n); });
       const lb = document.getElementById('langBtn');
       if (lb) lb.textContent = '🌐 ' + (lang === 'th' ? 'TH' : 'EN');
+      const sb = document.getElementById('searchBox');
+      if (sb) sb.placeholder = t('search_ph');
       renderHome(); renderMenu(); renderOrder(); renderDrawer();
     }
+    function ageOk() {
+      try { localStorage.setItem('abc_age_ok', '1'); } catch(e) {}
+      const g = document.getElementById('agegate');
+      g.style.transition = 'opacity .3s'; g.style.opacity = 0;
+      setTimeout(() => g.remove(), 320);
+    }
+    function ageNo() { toast(t('age_sorry')); }
+
     function toggleLang() {
       lang = lang === 'th' ? 'en' : 'th';
       try { localStorage.setItem('abc_lang', lang); } catch(e) {}
@@ -1037,7 +1179,7 @@
     }
 
     // 🖼️ รูปแบนเนอร์ถูกฝังไว้ในไฟล์แล้ว (แก้ที่ id="heroSlide0/1" ด้านบน)
-    const SHOP_LOGO  = '';   // URL โลโก้ร้าน
+    const SHOP_LOGO  = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAB4CAYAAAA5ZDbSAAAE50lEQVR42u3cSYgcVRzH8W/31EyWmRgUhKAgBo0LaAJBYg6CFxENeBIUES96cUWESEDJAkERIooQorgEUTx6EI8iLiG4K3FwC2JyEIJeRCSZ9PR0Vw55D2uaWt6rflVdNfl9oOk43V31Xv36X69eVbUgIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiISUqeBbdoH7AaWgMj8zf77EuDfxHsjYB6YBoZAN8D6B+b5LuB4wH49Bjxplj8daJlD4Jo2feF2AjHQN8/xyH+vH3n/9Mj7Qj4WgI2B+vVQhe1sjWcTGzb2CHjBVEXfPId42GXFwFVj9uvhRL8GgR/9toV7OuNbmhdwz7w2CFwZ/cR6ry7Zr0cK+jXuY9CGcPc4bARbUXUGHCeqJAY2lRhzqwy3FQHvddwINsSLaw7YLteuw/WA5okawm18wPs8wz2ZcvTpEnDPjH9Fj55jyNcW9Otxh34NHNtU9Djd1HD3e4b7BzCXspzQFTxw3F1fn9Gvrtnw/Zxlhd7T5IomEO5zwDPAGWBtzvsWgRngBHBjiW+rnTvfC/xi5vxxxrkAO8a+b9Ybpcypu2aZQ+Bn8+VaSlneKTO9Gua06QRwj1nXOFOdxk2Tns+ZCqVV7u/AbM7y8irY/n2dR/u2j0xp0g70esDlORX8Z0Z77B5gvqBPrfWCZ7jHCyrcNeBLPdu5LSXkZLiX5Xw2L+AFzwO1VjlQQbhVBZys5J5HuK4BX7HSwn3RM9zfgDWOy3YJ+KKS7d48csS7weEzLgFfWefGr/og6yXgKeAssNrhgOpXYKvZGOOyB0m7zVjecTwoic1n3zBToqPADcBfyDIve1buTx6VW8eJjmNm+VOeX6pGVXAVOsArnuHOlwg39ImO0RMIsZlezSjg5eEe9Az3WMHue1IV3EuEvLqtAUcVhPuox5j7I3CzeX8E3FKwjiM1nn+dMe28DvgOuCnQsUFrK/dVz8r9AViVWMY6h6qaq7GC0yp5TdsqOFS4r3mG+/1IuJizO3b8SxsTF1Lmxj5jcNZY3EucP3aZwq29kALuAK97hvttxoHLbE5Q9m+zFVewS8h5J2FW1BjcAd4EHvQYc78x4+xiDX2zN+Ed4vzJ/ax58JQJYzPwQE5f7Ji8yRw7bKHBl+tCVO5hz8r9smDKEbqCy5zJepriy5jJCyFzK3EX3QHe9gz3C4pvFa0qYN9z0TsdQravHV5pAXeAdzzDPYrbfcBNCRhgV8GY3DPre6tEwBubHO67nuEewf0m7ybsopPuZ/mdlWnLLhPwhjpDizzCfQ+4z+OA6nPgNiZ376692HCrmcN2Sb/LIu1zQ+Brcwp1C8t/ZRGiPV95tKfIyRAbyrdyPy2xQZowTfI9+eFTwRP5ZYNLCB8CO0xlulTuJ8DtpN+vNAmLJSuli9+FBldLAbfNMETAO0yD8jprd9sfA3c0KFwqCmncYTGqK2CXX+OdLWhQk8O94HUdv3FF4X6kcJtpnF3FYiLcO2nJD6FUwe77/hnggwrC7Xq2MxqzL+MUxlROW7tNyM+lgpcyBvbPgLsDhhsDf5vnTsprWRcLTvH/D8Hr+j8W9M06/0l57T/OX9se1hDyEBEREREREREREREREREREREREREREREREREREREREREREREREREREZFwzgFxCOvnTdlhUwAAAABJRU5ErkJggg==';   // โลโก้ร้าน (ฝังในไฟล์)
 
     // หมวดหมู่
     const CATS = [
@@ -1149,6 +1291,36 @@
       return `radial-gradient(circle at 30% 25%, ${g[0]} 0%, ${g[1]} 82%)`;
     };
 
+    // ── ไอคอนลายเส้นหมวดหมู่ (แทนอีโมจิ) ──
+    const _ic = p => `<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="#1c2a05" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+    const CAT_ICONS = {
+      all: _ic('<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'),
+      head: _ic('<path d="M12 3c3 4 6 7 6 10a6 6 0 0 1-12 0c0-3 3-6 6-10z"/>'),
+      bigpod: _ic('<rect x="7" y="5" width="10" height="16" rx="2"/><line x1="10" y1="2.5" x2="14" y2="2.5"/>'),
+      disposable: _ic('<rect x="9" y="3" width="6" height="18" rx="3"/><line x1="12" y1="7" x2="12" y2="9.5"/>'),
+      saltnic: _ic('<path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>'),
+      freebase: _ic('<path d="M9 8h6l1 11a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z"/><path d="M10 8V5h4v3"/>'),
+      pod_device: _ic('<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>'),
+      bigpod_dev: _ic('<rect x="7" y="3" width="10" height="18" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/>'),
+      bigpod_kit: _ic('<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/><line x1="12" y1="13" x2="12" y2="21"/>'),
+      iqos: _ic('<rect x="2" y="10" width="16" height="4" rx="1"/><line x1="14" y1="10" x2="14" y2="14"/><line x1="21" y1="10" x2="21" y2="14"/>'),
+      iqos_dev: _ic('<path d="M9 3v5M15 3v5"/><path d="M6 8h12l-1 6a5 5 0 0 1-10 0z"/><line x1="12" y1="19" x2="12" y2="22"/>'),
+      nicpouch: _ic('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>')
+    };
+    const brandInit = b => {
+      const w = b.name.replace(/[^A-Za-z0-9ก-๙ ]/g,'').trim().split(/\s+/);
+      return (w.length > 1 ? w[0][0]+w[1][0] : w[0].slice(0,2)).toUpperCase();
+    };
+    const brandFallback = b => `<span style="font-size:22px;font-weight:900;color:#1c2a05;letter-spacing:-1px;">${brandInit(b)}</span>`;
+
+    // ── เรตติ้ง/ยอดขาย (mock — เดฟต่อข้อมูลจริงภายหลัง) ──
+    const rateOf = p => (4.5 + ((p.id * 37) % 50) / 100).toFixed(1);
+    const soldOf = p => {
+      const s = (p.id * 173) % 2000 + 120;
+      const k = lang === 'en' ? 'k' : 'พัน';
+      return s >= 1000 ? (s / 1000).toFixed(1) + k : s;
+    };
+
     // ── State ──
     let cart = {};
     let orders = [];
@@ -1158,6 +1330,7 @@
     let menuNic = 'all';
     let browseMode = 'category';
     let activeBrand = 'all';
+    let searchQ = '';
     let totalOrders = 0, totalSpend = 0;
 
     // ── Telegram ──
@@ -1211,6 +1384,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}${hasFlav?` · ${p.flavors.length} ${t('flavors_unit')}`:''}</div>
+          <div class="rate-row">★ ${rateOf(p)} <span>· ${t('sold')} ${soldOf(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}</div>
@@ -1233,6 +1407,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}</div>
+          <div class="rate-row" style="font-size:10px;">★ ${rateOf(p)}<span> · ${soldOf(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}</div>
@@ -1248,8 +1423,8 @@
           <div class="cat-circle-wrap" onclick="goMenuCat('${c.id}')">
             <div class="cat-circle">
               ${c.img
-                ? `<img src="${c.img}" alt="${c.name}" onerror="this.parentElement.innerHTML='${c.emoji}'">`
-                : c.emoji}
+                ? `<img src="${c.img}" alt="${c.name}">`
+                : (CAT_ICONS[c.id] || c.emoji)}
             </div>
             <div class="cat-label">${catName(c)}</div>
           </div>`).join('');
@@ -1259,8 +1434,8 @@
           <div class="cat-circle-wrap" onclick="goMenuBrand('${b.id}')">
             <div class="cat-circle">
               ${b.img
-                ? `<img src="${b.img}" alt="${b.name}" onerror="this.parentElement.innerHTML='${b.emoji}'">`
-                : b.emoji}
+                ? `<img src="${b.img}" alt="${b.name}">`
+                : brandFallback(b)}
             </div>
             <div class="cat-label">${catName(b)}</div>
           </div>`).join('');
@@ -1284,10 +1459,10 @@
     function renderMenu() {
       if (browseMode === 'category') {
         document.getElementById('catPills').innerHTML =
-          CATS.map(c=>`<button class="pill${activeCat===c.id?' active':''}" onclick="setCat('${c.id}',this)">${c.emoji} ${catName(c)}</button>`).join('');
+          CATS.map(c=>`<button class="pill${activeCat===c.id?' active':''}" onclick="setCat('${c.id}',this)">${catName(c)}</button>`).join('');
       } else {
         document.getElementById('catPills').innerHTML =
-          BRANDS.map(b=>`<button class="pill${activeBrand===b.id?' active':''}" onclick="setBrand('${b.id}',this)">${b.emoji} ${catName(b)}</button>`).join('');
+          BRANDS.map(b=>`<button class="pill${activeBrand===b.id?' active':''}" onclick="setBrand('${b.id}',this)">${catName(b)}</button>`).join('');
       }
 
       let list = PRODUCTS.filter(p => {
@@ -1298,12 +1473,15 @@
         }
         if (menuNic !== 'all' && !p.sub.includes(menuNic)) return false;
         if (activeTags.size > 0 && ![...activeTags].some(t => p.tags.includes(t))) return false;
+        if (searchQ && !(p.name.toLowerCase().includes(searchQ) || p.sub.toLowerCase().includes(searchQ))) return false;
         return true;
       });
 
       document.getElementById('iCount').textContent = `[${list.length} ${t('items_unit')}]`;
       document.getElementById('menuGrid').innerHTML = list.map(pCardMini).join('');
     }
+
+    function setSearch(v) { searchQ = v.trim().toLowerCase(); renderMenu(); }
 
     function setBrowseMode(mode, btn) {
       browseMode = mode;
@@ -1360,13 +1538,17 @@
     function renderOrder() {
       document.getElementById('ordContent').innerHTML = orders.length === 0
         ? `<div class="ord-empty"><div class="oe">📋</div><h3>${t('ord_empty_title')}</h3><p>${t('ord_empty_sub')}</p></div>`
-        : orders.map((o,i)=>`
+        : orders.map((o,i)=>{
+            const idx = o.ts ? Math.min(3, Math.floor((Date.now() - o.ts) / 120000)) : 3;
+            const STL = [t('st0'), t('st1'), t('st2'), t('st3')];
+            return `
             <div class="ord-card">
               <div class="ord-id">${t('ord_no')} #${String(i+1).padStart(4,'0')} · ${o.time}</div>
-              <div class="ord-status">${t('ord_status')}</div>
+              <div class="ord-status">${idx === 3 ? '✅ ' : '⏳ '}${STL[idx]}</div>
+              <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
-            </div>`).join('');
+            </div>`;}).join('');
     }
 
     // ── Cart ──
@@ -1399,6 +1581,7 @@
       }, 0);
     }
 
+    let _prevCart = 0;
     function updateUI() {
       const n = cartCount();
       const fc = document.getElementById('floatCart');
@@ -1409,6 +1592,13 @@
         el.style.display = n > 0 ? 'flex' : 'none';
         el.textContent = n;
       });
+      if (n > _prevCart) {
+        ['fCount','dot1','dot2'].forEach(id => {
+          const el = document.getElementById(id);
+          el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump');
+        });
+      }
+      _prevCart = n;
     }
 
     function renderDrawer() {
@@ -1485,7 +1675,7 @@
       if (tg?.sendData) {
         tg.sendData(JSON.stringify({ shop:SHOP, items, total, time }));
       } else {
-        orders.unshift({ items, total, time });
+        orders.unshift({ items, total, time, ts: Date.now() });
         totalOrders++; totalSpend += total;
         document.getElementById('memOrders').textContent = totalOrders;
         document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
@@ -1502,19 +1692,24 @@
     }
 
     // ── Product Detail Sheet ──
-    let pdProduct = null, selFlavor = null;
+    let pdProduct = null, selFlavor = null, pdQtyN = 1;
+    function pdQty(d) {
+      pdQtyN = Math.max(1, Math.min(99, pdQtyN + d));
+      document.getElementById('pdQtyNum').textContent = pdQtyN;
+    }
 
     function openProduct(id) {
       const p = PRODUCTS.find(x => x.id === id);
       if (!p) return;
       if (!p.flavors || p.flavors.length === 0) { addCart(id); return; }
       pdProduct = p; selFlavor = null;
+      pdQtyN = 1; document.getElementById('pdQtyNum').textContent = 1;
       const thumb = p.img
         ? `<img src="${p.img}" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none'">`
         : `<div style="width:100%;height:100%;background:${gradOf(p)}"></div>`;
       document.getElementById('pdThumb').innerHTML = thumb;
       document.getElementById('pdName').textContent = p.name;
-      document.getElementById('pdSub').textContent = subTxt(p);
+      document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:#e8b53a;font-weight:600;\">★ ${rateOf(p)}</span> <span style=\"color:var(--sub);\">${t('sold')} ${soldOf(p)}</span>`;
       document.getElementById('pdPrice').textContent = `฿${p.price.toLocaleString()}`;
       document.getElementById('pdFlavHead').innerHTML = `${t('choose_flavor')} <span>(${p.flavors.length} ${t('flavors_unit')})</span>`;
       document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f =>
@@ -1544,11 +1739,18 @@
     function addCartFromDetail() {
       if (!pdProduct || !selFlavor) return;
       const key = `${pdProduct.id}|${selFlavor}`;
-      cart[key] = (cart[key]||0) + 1;
+      cart[key] = (cart[key]||0) + pdQtyN;
       updateUI();
       toast(t('added_flavor').replace('{f}', flavName(selFlavor)));
       if (tg?.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
       closeProduct();
+    }
+
+    // ── ติดต่อร้าน ──
+    const CONTACT_LINE = 'https://lin.ee/nw1x5lg'; // ลิงก์ Line ร้าน ABC
+    function openContact() {
+      if (tg?.openLink) tg.openLink(CONTACT_LINE);
+      else window.open(CONTACT_LINE, '_blank');
     }
 
     // ── Fav ──
@@ -1580,6 +1782,15 @@
 
     // ── Init ──
     applyLang();
+    (function(){
+      const sp = document.getElementById('splash');
+      const sl = document.getElementById('splashLogo');
+      if (SHOP_LOGO && sl) sl.innerHTML = `<img src="${SHOP_LOGO}" style="width:100%;height:100%;object-fit:contain;">`;
+      setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 1200);
+      let ageOkd = false;
+      try { ageOkd = localStorage.getItem('abc_age_ok') === '1'; } catch(e) {}
+      if (!ageOkd) document.getElementById('agegate').style.display = 'flex';
+    })();
   </script>
 </div>
 </body>
