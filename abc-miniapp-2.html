@@ -1452,7 +1452,7 @@
         sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
         sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
-        pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', open_pin:'เปิดหมุดจัดส่ง', map_title:'ปักหมุดที่อยู่จัดส่ง', map_gps:'ใช้ตำแหน่งปัจจุบัน', map_confirm:'ยืนยันตำแหน่งนี้', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
+        pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', open_pin:'เปิดหมุดจัดส่ง', map_title:'ปักหมุดที่อยู่จัดส่ง', addr_detail_ph:'บ้านเลขที่ / ตึก / ชั้น / จุดสังเกต', map_gps:'ใช้ตำแหน่งปัจจุบัน', map_confirm:'ยืนยันตำแหน่งนี้', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
@@ -1493,7 +1493,7 @@
         sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
         sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
-        pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', open_pin:'Open delivery pin', map_title:'Pin delivery location', map_gps:'Use current location', map_confirm:'Confirm this location', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
+        pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', open_pin:'Open delivery pin', map_title:'Pin delivery location', addr_detail_ph:'House no. / building / floor / landmark', map_gps:'Use current location', map_confirm:'Confirm this location', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
@@ -1714,6 +1714,7 @@
     const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };   // 📍 พิกัดร้าน: BTS สุรศักดิ์
     const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3, RIDER_SURCHARGE = 10; // +10 ทุกออเดอร์ส่งด่วน
     let riderKm = null, riderFee = null, pinning = false, pinnedLoc = null, pinnedAddr = '', addrTimer = null;
+    let addrDetail = '';
     function distKm(a1, o1, a2, o2) {
       const R = 6371, dA = (a2 - a1) * Math.PI / 180, dO = (o2 - o1) * Math.PI / 180;
       const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
@@ -2128,7 +2129,7 @@
               <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
-              ${o.pin && o.pin.addr ? `<div style="font-size:11px;color:var(--sub);margin-top:8px;line-height:1.5;">📍 ${o.pin.addr}</div>` : ''}
+              ${o.pin && o.pin.addr ? `<div style="font-size:11px;color:var(--sub);margin-top:8px;line-height:1.5;">📍 ${o.pin.addr}${o.pin.detail ? ' · ' + o.pin.detail : ''}</div>` : ''}
               ${o.pin ? `<a class="report-btn" style="display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;color:var(--lime);border-color:rgba(189,251,0,.4);" href="https://www.google.com/maps?q=${o.pin.lat},${o.pin.lng}" target="_blank">📍 ${t('open_pin')}</a>` : ''}
               <button class="report-btn" onclick="openContact()">${t('report')}</button>
             </div>`;}).join('');
@@ -2227,7 +2228,7 @@
         ${shipMethod === 'rider' && total ? `<button class="pin-btn" onclick="openMapPicker()">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
           ${riderFee ? t('pin_again') + ' · ' + riderKm + ' ' + t('km') : t('pin_btn')}
-        </button>${riderFee && pinnedAddr ? `<div style="font-size:11px;color:var(--sub);margin:-2px 2px 10px;text-align:center;line-height:1.5;">${pinnedAddr}</div>` : ''}` : ''}
+        </button>${riderFee && pinnedAddr ? `<div style="font-size:11px;color:var(--sub);margin:-2px 2px 8px;text-align:center;line-height:1.5;">${pinnedAddr}</div>` : ''}${riderFee ? `<input value="${addrDetail.replace(/"/g,'&quot;')}" oninput="addrDetail=this.value" placeholder="${t('addr_detail_ph')}" style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 13px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;margin-bottom:10px;">` : ''}` : ''}
         <div class="sum-row"><span>${t('sum_sub')}</span><b>฿${total.toLocaleString()}</b></div>
         ${disc ? `<div class="sum-row"><span>${t('coupon_disc')}</span><b style="color:var(--lime);">-฿${disc.toLocaleString()}</b></div>` : ''}
         <div class="sum-row"><span>${t('sum_ship')}</span><b>${total ? (shipMethod === 'rider' ? (riderFee ? '฿' + riderFee + ' (' + riderKm + ' ' + t('km') + ')' : t('ship_grab')) : (ship ? '฿' + ship : t('ship_free'))) : '฿0'}</b></div>
@@ -2294,10 +2295,10 @@
       // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
       try {
         if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, address: pinnedAddr, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, address: pinnedAddr, detail: addrDetail, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
         }
       } catch (e) {}
-      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, addr: pinnedAddr } : null });
+      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, addr: pinnedAddr, detail: addrDetail } : null });
       totalOrders++; totalSpend += total;
       document.getElementById('memOrders').textContent = totalOrders;
       document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
