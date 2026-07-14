@@ -416,8 +416,10 @@
     .q-btn.plus { background: var(--lime); border-color: var(--lime); color: #111; }
     .q-num { font-size: 15px; font-weight: 800; min-width: 20px; text-align: center; }
     .d-foot {
-      padding: 12px 16px 0; flex-shrink: 0;
+      padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 12px));
+      flex-shrink: 0;
       border-top: 1px solid var(--border);
+      background: inherit;
     }
     .tot-row {
       display: flex; justify-content: space-between; align-items: center;
@@ -1809,18 +1811,20 @@
       const total = cartTotal();
       const time = new Date().toLocaleString('th-TH', { timeZone:'Asia/Bangkok' });
 
-      if (tg?.sendData) {
-        tg.sendData(JSON.stringify({ shop:SHOP, items, total, time }));
-      } else {
-        orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
-        totalOrders++; totalSpend += total;
-        document.getElementById('memOrders').textContent = totalOrders;
-        document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
-        document.getElementById('memPoints').textContent = Math.floor(totalSpend/100);
-        cart = {};
-        updateUI(); closeCart();
-        document.getElementById('success').classList.add('show');
-      }
+      // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
+      try {
+        if (tg && tg.initData && tg.sendData) {
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, time }));
+        }
+      } catch (e) {}
+      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
+      totalOrders++; totalSpend += total;
+      document.getElementById('memOrders').textContent = totalOrders;
+      document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
+      document.getElementById('memPoints').textContent = Math.floor(totalSpend/100);
+      cart = {};
+      updateUI(); closeCart();
+      document.getElementById('success').classList.add('show');
     }
 
     function closeSuccess() {
