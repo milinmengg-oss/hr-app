@@ -1020,7 +1020,11 @@
       </div>
     </div>
     <div class="map-foot">
-      <div id="mapAddr" style="font-size:12px;color:var(--sub);text-align:center;margin-bottom:8px;min-height:17px;line-height:1.4;">–</div>
+      <div id="mapAddr" style="font-size:12px;color:var(--sub);text-align:center;margin-bottom:4px;min-height:17px;line-height:1.4;">–</div>
+      <div style="font-size:10px;color:var(--sub);text-align:center;margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:4px;opacity:.85;">
+        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+        <span data-i18n="privacy_note">ตำแหน่งของคุณใช้คำนวณค่าส่งเท่านั้น ไม่มีการเก็บข้อมูล</span>
+      </div>
       <button class="pin-btn" style="margin-bottom:8px;" onclick="mapUseGPS()">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
         <span data-i18n="map_gps">ใช้ตำแหน่งปัจจุบัน</span>
@@ -1377,6 +1381,10 @@
         <div class="faq-t" data-i18n="f3_t">การชำระเงิน</div>
         <div class="faq-b" data-i18n="f3_b"></div>
       </div>
+      <div class="faq-card">
+        <div class="faq-t" data-i18n="f4_t">ความเป็นส่วนตัว (PDPA)</div>
+        <div class="faq-b" data-i18n="f4_b"></div>
+      </div>
     </div>
   </div>
 
@@ -1453,10 +1461,12 @@
         sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
         pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', open_pin:'เปิดหมุดจัดส่ง', map_title:'ปักหมุดที่อยู่จัดส่ง', addr_detail_ph:'บ้านเลขที่ / ตึก / ชั้น / จุดสังเกต', map_gps:'ใช้ตำแหน่งปัจจุบัน', map_confirm:'ยืนยันตำแหน่งนี้', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
-        faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
+        faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · คืนสินค้า · ชำระเงิน · ความเป็นส่วนตัว',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
-        f3_t:'การชำระเงิน', f3_b:'• โอนผ่านธนาคาร หรือพร้อมเพย์<br>• ไม่มีบริการเก็บเงินปลายทาง'
+        f3_t:'การชำระเงิน', f3_b:'• โอนผ่านธนาคาร หรือพร้อมเพย์<br>• ไม่มีบริการเก็บเงินปลายทาง',
+        f4_t:'ความเป็นส่วนตัว (PDPA)', f4_b:'• ตำแหน่งที่ปักหมุดใช้คำนวณค่าจัดส่งเท่านั้น ไม่มีการจัดเก็บ<br>• ข้อมูลออเดอร์ใช้เพื่อการจัดส่งและติดต่อลูกค้าเท่านั้น<br>• ไม่เปิดเผยหรือส่งต่อข้อมูลให้บุคคลที่สาม<br>• ขอตรวจสอบหรือลบข้อมูลได้ทาง Line ของร้าน',
+        privacy_note:'ตำแหน่งของคุณใช้คำนวณค่าส่งเท่านั้น ไม่มีการเก็บข้อมูล'
       },
       en: {
         ticker: `🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Buy 4+ items, free delivery <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span> 🛺 Welcome to ABC Shop <span class="ticker-sep">•</span> Buy 3 get 1 free Pod Pro <span class="ticker-sep">•</span> Buy 4+ items, free delivery <span class="ticker-sep">•</span> New members 10% off <span class="ticker-sep">•</span>`,
@@ -1494,10 +1504,12 @@
         sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
         pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', open_pin:'Open delivery pin', map_title:'Pin delivery location', addr_detail_ph:'House no. / building / floor / landmark', map_gps:'Use current location', map_confirm:'Confirm this location', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
-        faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
+        faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment · Privacy',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
-        f3_t:'Payment', f3_b:'• Bank transfer or PromptPay<br>• Cash on delivery is not available'
+        f3_t:'Payment', f3_b:'• Bank transfer or PromptPay<br>• Cash on delivery is not available',
+        f4_t:'Privacy (PDPA)', f4_b:'• Your pinned location is used to calculate delivery fees only — never stored<br>• Order data is used for delivery and customer contact only<br>• We never share your data with third parties<br>• Request data review or deletion via the shop Line',
+        privacy_note:'Your location is used to calculate delivery fees only — never stored'
       }
     };
     let lang = 'th';
