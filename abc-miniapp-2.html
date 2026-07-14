@@ -834,6 +834,69 @@
       cursor: not-allowed; box-shadow: none;
     }
     .add-btn.off:active { transform: none; background: var(--card3); }
+    /* ═══ ⚡ FLASH SALE ═══ */
+    .flash-sec {
+      margin: 12px 12px 4px; border-radius: 20px; padding: 12px 0 10px;
+      background: linear-gradient(160deg, rgba(189,251,0,.13), rgba(189,251,0,.03));
+      border: 1px solid rgba(189,251,0,.28);
+    }
+    .flash-head { display: flex; align-items: center; justify-content: space-between; padding: 0 14px 10px; }
+    .flash-title {
+      font-size: 16px; font-weight: 900; color: var(--lime);
+      display: flex; align-items: center; gap: 6px; letter-spacing: .5px;
+    }
+    .flash-timer { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--sub); }
+    .flash-timer b {
+      background: var(--lime); color: #111; border-radius: 6px;
+      padding: 2px 5px; font-size: 12px; font-weight: 900;
+      min-width: 24px; text-align: center; font-variant-numeric: tabular-nums;
+    }
+    .flash-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px; scrollbar-width: none; }
+    .flash-scroll::-webkit-scrollbar { display: none; }
+    .fs-card {
+      flex: 0 0 128px; background: rgba(255,255,255,.05);
+      border: 1px solid rgba(255,255,255,.09); border-radius: 14px;
+      overflow: hidden; cursor: pointer;
+    }
+    .fs-card:active { transform: scale(.96); }
+    .fs-thumb { height: 86px; position: relative; overflow: hidden; }
+    .fs-off {
+      position: absolute; top: 6px; left: 6px; z-index: 2;
+      background: #ff4d4d; color: #fff; font-size: 10px; font-weight: 900;
+      padding: 2px 7px; border-radius: 10px;
+    }
+    .fs-name { font-size: 11.5px; font-weight: 700; padding: 7px 8px 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .fs-price { padding: 2px 8px 0; font-size: 14px; font-weight: 900; color: var(--lime); }
+    .fs-price small { color: var(--sub); text-decoration: line-through; font-weight: 500; font-size: 10px; margin-left: 4px; }
+    .fs-bar { margin: 6px 8px 3px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; position: relative; }
+    .fs-bar i { position: absolute; top: 0; left: 0; bottom: 0; background: linear-gradient(90deg, var(--lime), #7fae00); border-radius: 3px; }
+    .fs-sold { font-size: 9.5px; color: var(--sub); padding: 0 8px 9px; }
+    .p-price s { color: var(--sub); font-size: 10.5px; font-weight: 500; }
+    /* ═══ 🎟 COUPONS ═══ */
+    .collect-btn {
+      background: var(--lime); color: #111; border: none;
+      border-radius: 14px; padding: 6px 14px;
+      font-size: 11.5px; font-weight: 800; font-family: inherit;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .collect-btn.got {
+      background: transparent; border: 1px solid var(--border);
+      color: var(--lime); cursor: default;
+    }
+    .coupon-row {
+      display: flex; justify-content: space-between; align-items: center;
+      border: 1px dashed rgba(189,251,0,.45); border-radius: 12px;
+      padding: 10px 12px; margin-bottom: 10px; cursor: pointer;
+      color: var(--lime); font-size: 12.5px; font-weight: 700;
+    }
+    .cp-item {
+      display: flex; justify-content: space-between; align-items: center;
+      background: var(--card2); border: 1px solid var(--border);
+      border-radius: 12px; padding: 13px 14px; margin: 0 20px 8px;
+      cursor: pointer; font-size: 13px; font-weight: 700;
+    }
+    .cp-item.dis { opacity: .45; cursor: not-allowed; }
+    .cp-item.sel { border-color: var(--lime); color: var(--lime); }
   </style>
 </head>
 <body>
@@ -891,6 +954,14 @@
     <div class="pd-foot">
       <button class="pd-add-btn" data-i18n="pick_first" id="pdAddBtn" disabled onclick="addCartFromDetail()">กรุณาเลือกกลิ่นก่อน</button>
     </div>
+  </div>
+
+  <!-- Coupon picker -->
+  <div class="pd-overlay" id="cpOverlay" onclick="closeCoupons()"></div>
+  <div class="pd-sheet" id="cpSheet">
+    <div class="pd-handle"></div>
+    <div class="pd-flavor-head" style="border-top:none;" data-i18n="cp_title">คูปองของฉัน</div>
+    <div id="cpList" style="overflow-y:auto;padding-bottom:20px;"></div>
   </div>
 
   <!-- Overlay & Drawer -->
@@ -952,6 +1023,15 @@
         <div class="hero-dot" id="hdot1"></div>
         <div class="hero-dot" id="hdot2"></div>
       </div>
+    </div>
+
+    <!-- ⚡ Flash Sale -->
+    <div class="flash-sec">
+      <div class="flash-head">
+        <div class="flash-title"><svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>FLASH SALE</div>
+        <div class="flash-timer"><span data-i18n="flash_end">จบใน</span> <b id="fsH">00</b>:<b id="fsM">00</b>:<b id="fsS">00</b></div>
+      </div>
+      <div class="flash-scroll" id="flashScroll"></div>
     </div>
 
     <!-- Categories -->
@@ -1046,6 +1126,7 @@
           <div class="coupon-desc" data-i18n="c2_desc"></div>
           <div class="coupon-tag" data-i18n="c2_tag">ใช้ได้ครั้งเดียว</div>
         </div>
+        <div style="display:flex;align-items:center;padding-right:12px;"><button class="collect-btn" id="cbtn_new10" onclick="collectCoupon('new10')">เก็บ</button></div>
       </div>
       <div class="coupon-card">
         <div class="coupon-left"><div class="coupon-icon">🚚</div><div class="coupon-pct">FREE</div></div>
@@ -1054,6 +1135,7 @@
           <div class="coupon-desc" data-i18n="c3_desc"></div>
           <div class="coupon-tag" data-i18n="c3_tag">ไม่จำกัดครั้ง</div>
         </div>
+        <div style="display:flex;align-items:center;padding-right:12px;"><button class="collect-btn" id="cbtn_freeship" onclick="collectCoupon('freeship')">เก็บ</button></div>
       </div>
       <div class="coupon-card">
         <div class="coupon-left"><div class="coupon-icon">⭐</div><div class="coupon-pct">PT</div></div>
@@ -1232,7 +1314,7 @@
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
-        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
@@ -1269,7 +1351,7 @@
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
-        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
@@ -1293,7 +1375,7 @@
       if (lb) lb.textContent = '🌐 ' + (lang === 'th' ? 'TH' : 'EN');
       const sb = document.getElementById('searchBox');
       if (sb) sb.placeholder = t('search_ph');
-      renderHome(); renderMenu(); renderOrder(); renderDrawer();
+      renderHome(); renderMenu(); renderOrder(); renderDrawer(); renderCollectBtns();
     }
     function ageOk() {
       const g = document.getElementById('agegate');
@@ -1444,6 +1526,80 @@
     };
     const brandFallback = b => `<span style="font-size:22px;font-weight:900;color:#1c2a05;letter-spacing:-1px;">${brandInit(b)}</span>`;
 
+    // ── ⚡ Flash Sale (mock — เดฟต่อเวลา/ราคาจริงภายหลัง) ──
+    const FLASH_ITEMS = [
+      { id: 2,  off: 30, soldPct: 82 },
+      { id: 5,  off: 25, soldPct: 64 },
+      { id: 11, off: 30, soldPct: 91 },
+      { id: 9,  off: 20, soldPct: 45 },
+      { id: 14, off: 35, soldPct: 73 }
+    ];
+    FLASH_ITEMS.forEach(fi => {
+      const p = PRODUCTS.find(x => x.id === fi.id);
+      if (p) {
+        p.orig = p.price;
+        p.price = Math.round(p.price * (100 - fi.off) / 100);
+        p.off = fi.off; p.soldPct = fi.soldPct;
+      }
+    });
+
+    // ── 🎟 ระบบคูปอง (mock — เดฟต่อเงื่อนไขจริงภายหลัง) ──
+    const COUPONS = [
+      { id: 'new10',    kind: 'pct',  val: 10, min: 300 },
+      { id: 'freeship', kind: 'ship', val: 0,  min: 0 }
+    ];
+    let collected = new Set();
+    try { collected = new Set(JSON.parse(localStorage.getItem('abc_coupons') || '[]')); } catch(e) {}
+    let usedCoupon = null;
+    function saveCoupons() { try { localStorage.setItem('abc_coupons', JSON.stringify([...collected])); } catch(e) {} }
+    function couponName(id) { return id === 'new10' ? t('c2_title') : t('c3_title'); }
+    function couponDiscount(total) {
+      if (!usedCoupon || !total) return 0;
+      const c = COUPONS.find(x => x.id === usedCoupon);
+      if (!c || total < c.min) return 0;
+      if (c.kind === 'pct') return Math.round(total * c.val / 100);
+      return 0;
+    }
+    function collectCoupon(id) {
+      collected.add(id); saveCoupons();
+      renderCollectBtns();
+      toast(t('coupon_saved'));
+    }
+    function renderCollectBtns() {
+      COUPONS.forEach(c => {
+        const b = document.getElementById('cbtn_' + c.id);
+        if (!b) return;
+        const has = collected.has(c.id);
+        b.textContent = has ? t('collected') : t('collect');
+        b.className = 'collect-btn' + (has ? ' got' : '');
+        b.disabled = has;
+      });
+    }
+    function openCoupons() {
+      const list = document.getElementById('cpList');
+      const total = cartTotal();
+      const have = COUPONS.filter(c => collected.has(c.id));
+      if (!have.length) {
+        list.innerHTML = `<div style="text-align:center;color:var(--sub);font-size:12.5px;padding:18px 20px 6px;">${t('cp_empty')}<br><button class="checkout-btn" style="max-width:200px;margin-top:14px;" onclick="closeCoupons();closeCart();nav('promo',3);">${t('cp_go')}</button></div>`;
+      } else {
+        list.innerHTML = have.map(c => {
+          const okc = total >= c.min;
+          const sel = usedCoupon === c.id;
+          return `<div class="cp-item${okc ? '' : ' dis'}${sel ? ' sel' : ''}" onclick="${okc ? `selectCoupon('${c.id}')` : ''}">
+            <span>${couponName(c.id)}</span>
+            <span style="font-size:11px;color:var(--sub);font-weight:500;">${c.min ? t('cp_min') + ' ฿' + c.min : ''}${sel ? ' ✓' : ''}</span>
+          </div>`;
+        }).join('') + `<div class="cp-item${usedCoupon === null ? ' sel' : ''}" onclick="selectCoupon(null)"><span>${t('no_coupon')}</span></div>`;
+      }
+      document.getElementById('cpOverlay').classList.add('open');
+      document.getElementById('cpSheet').classList.add('open');
+    }
+    function closeCoupons() {
+      document.getElementById('cpOverlay').classList.remove('open');
+      document.getElementById('cpSheet').classList.remove('open');
+    }
+    function selectCoupon(id) { usedCoupon = id; closeCoupons(); renderDrawer(); }
+
     // ── เรตติ้ง/ยอดขาย (mock — เดฟต่อข้อมูลจริงภายหลัง) ──
     const rateOf = p => (4.5 + ((p.id * 37) % 50) / 100).toFixed(1);
     const soldOf = p => {
@@ -1520,7 +1676,7 @@
           <div class="rate-row">★ ${rateOf(p)} <span>· ${t('sold')} ${soldOf(p)}</span></div>
         </div>
         <div class="p-footer">
-          <div class="p-price"><small>฿</small>${p.price.toLocaleString()}</div>
+          <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
           <button class="add-btn${out ? ' off' : ''}" onclick="event.stopPropagation();openProduct(${p.id})">${out ? t('out') : btnLabel}</button>
         </div>
       </div>`;
@@ -1545,9 +1701,29 @@
           <div class="rate-row" style="font-size:10px;">★ ${rateOf(p)}<span> · ${soldOf(p)}</span></div>
         </div>
         <div class="p-footer">
-          <div class="p-price"><small>฿</small>${p.price.toLocaleString()}</div>
+          <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
         </div>
       </div>`;
+    }
+
+    // ── ⚡ Flash render ──
+    function renderFlash() {
+      const el = document.getElementById('flashScroll');
+      if (!el) return;
+      el.innerHTML = FLASH_ITEMS.map(fi => {
+        const p = PRODUCTS.find(x => x.id === fi.id);
+        if (!p) return '';
+        const thumb = p.img
+          ? `<img src="${p.img}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">`
+          : `<div style="position:absolute;inset:0;background:${gradOf(p)};"></div>`;
+        return `<div class="fs-card" onclick="openProduct(${p.id})">
+          <div class="fs-thumb">${thumb}<div class="fs-off">-${fi.off}%</div></div>
+          <div class="fs-name">${p.name}</div>
+          <div class="fs-price">฿${p.price.toLocaleString()}<small>฿${p.orig.toLocaleString()}</small></div>
+          <div class="fs-bar"><i style="width:${fi.soldPct}%"></i></div>
+          <div class="fs-sold">${t('sold')} ${fi.soldPct}%</div>
+        </div>`;
+      }).join('');
     }
 
     // ── Home render ──
@@ -1575,6 +1751,7 @@
             <div class="cat-label">${catName(b)}</div>
           </div>`).join('');
       renderHomeGrid();
+      renderFlash();
     }
 
     function renderHomeGrid() {
@@ -1773,13 +1950,20 @@
     }
 
     function cartFootHTML(total) {
+      const disc = couponDiscount(total);
+      const net = total - disc;
       return `
+        <div class="coupon-row" onclick="openCoupons()">
+          <span style="display:flex;align-items:center;gap:6px;"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v2a2 2 0 0 0 0 6v2a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-2a2 2 0 0 0 0-6z"/></svg>${usedCoupon ? couponName(usedCoupon) : t('pick_coupon')}</span>
+          <span style="color:var(--sub);font-size:11px;font-weight:500;">${usedCoupon ? t('change') : ''} ›</span>
+        </div>
         <div class="sum-row"><span>${t('sum_sub')}</span><b>฿${total.toLocaleString()}</b></div>
+        ${disc ? `<div class="sum-row"><span>${t('coupon_disc')}</span><b style="color:var(--lime);">-฿${disc.toLocaleString()}</b></div>` : ''}
         <div class="sum-row"><span>${t('sum_ship')}</span><b>฿0</b></div>
         <div class="pay-bar">
           <div style="min-width:78px;">
             <div class="tot-label" style="font-size:12px;">${t('net')}</div>
-            <div class="tot-price" style="font-size:20px;">฿${total.toLocaleString()}</div>
+            <div class="tot-price" style="font-size:20px;">฿${net.toLocaleString()}</div>
           </div>
           <button class="trash-btn" onclick="clearCart()">🗑</button>
           <button class="checkout-btn" style="flex:1;" onclick="checkout()">${t('pay')}</button>
@@ -1829,13 +2013,15 @@
         const p = PRODUCTS.find(p=>p.id==idStr);
         return { id:idStr, name:p.name+(flavor?` (${flavor})`:''), emoji:p.emoji, qty, price:p.price };
       });
-      const total = cartTotal();
+      const grossTotal = cartTotal();
+      const discount = couponDiscount(grossTotal);
+      const total = grossTotal - discount;
       const time = new Date().toLocaleString('th-TH', { timeZone:'Asia/Bangkok' });
 
       // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
       try {
         if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, time }));
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, coupon: usedCoupon, time }));
         }
       } catch (e) {}
       orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
@@ -1843,7 +2029,7 @@
       document.getElementById('memOrders').textContent = totalOrders;
       document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
       document.getElementById('memPoints').textContent = Math.floor(totalSpend/100);
-      cart = {};
+      cart = {}; usedCoupon = null;
       updateUI(); closeCart();
       document.getElementById('success').classList.add('show');
     }
@@ -1873,7 +2059,7 @@
       document.getElementById('pdThumb').innerHTML = thumb;
       document.getElementById('pdName').textContent = p.name;
       document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:#e8b53a;font-weight:600;\">★ ${rateOf(p)}</span> <span style=\"color:var(--sub);\">${t('sold')} ${soldOf(p)}</span>`;
-      document.getElementById('pdPrice').textContent = `฿${p.price.toLocaleString()}`;
+      document.getElementById('pdPrice').innerHTML = `฿${p.price.toLocaleString()}${p.orig ? ` <s style=\"color:var(--sub);font-size:13px;font-weight:500;\">฿${p.orig.toLocaleString()}</s>` : ''}`;
       document.getElementById('pdFlavHead').innerHTML = `${t('choose_flavor')} <span>(${p.flavors.length} ${t('flavors_unit')})</span>`;
       document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f =>
         `<div class="flavor-chip" onclick="selectFlavor('${f.replace(/'/g,"\\'")}',this)">${flavName(f)}</div>`
@@ -1951,6 +2137,16 @@
       if (SHOP_LOGO && sl) sl.innerHTML = `<img src="${SHOP_LOGO}" style="width:100%;height:100%;object-fit:contain;">`;
       setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 1200);
       document.getElementById('agegate').style.display = 'flex';
+      function fsTick() {
+        const now = new Date();
+        const end = new Date(now); end.setHours(24, 0, 0, 0);
+        const s = Math.max(0, Math.floor((end - now) / 1000));
+        document.getElementById('fsH').textContent = String(Math.floor(s / 3600)).padStart(2, '0');
+        document.getElementById('fsM').textContent = String(Math.floor(s % 3600 / 60)).padStart(2, '0');
+        document.getElementById('fsS').textContent = String(s % 60).padStart(2, '0');
+      }
+      fsTick(); setInterval(fsTick, 1000);
+      renderCollectBtns();
     })();
   </script>
 </div>
