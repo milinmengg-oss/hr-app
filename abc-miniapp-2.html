@@ -1296,7 +1296,6 @@
       renderHome(); renderMenu(); renderOrder(); renderDrawer();
     }
     function ageOk() {
-      try { localStorage.setItem('abc_age_ok', '1'); } catch(e) {}
       const g = document.getElementById('agegate');
       g.style.transition = 'opacity .3s'; g.style.opacity = 0;
       setTimeout(() => g.remove(), 320);
@@ -1951,9 +1950,7 @@
       const sl = document.getElementById('splashLogo');
       if (SHOP_LOGO && sl) sl.innerHTML = `<img src="${SHOP_LOGO}" style="width:100%;height:100%;object-fit:contain;">`;
       setTimeout(() => { sp.classList.add('hide'); setTimeout(() => sp.remove(), 500); }, 1200);
-      let ageOkd = false;
-      try { ageOkd = localStorage.getItem('abc_age_ok') === '1'; } catch(e) {}
-      if (!ageOkd) document.getElementById('agegate').style.display = 'flex';
+      document.getElementById('agegate').style.display = 'flex';
     })();
   </script>
 </div>
