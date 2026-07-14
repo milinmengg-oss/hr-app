@@ -94,13 +94,16 @@
       padding: 7px 0; letter-spacing: 0.3px;
     }
     .ticker-inner {
-      display: inline-block;
-      animation: tick 25s linear infinite;
-      padding-left: 100%;
+      display: inline-flex;
+      white-space: nowrap;
+      animation: tick 18s linear infinite;
+      will-change: transform;
+      backface-visibility: hidden;
+      transform: translateZ(0);
     }
     @keyframes tick {
-      0%   { transform: translateX(0); }
-      100% { transform: translateX(-100%); }
+      0%   { transform: translate3d(0, 0, 0); }
+      100% { transform: translate3d(-50%, 0, 0); }
     }
     .ticker-sep { margin: 0 24px; opacity: 0.5; }
 
@@ -1529,6 +1532,8 @@
       if (lb) lb.textContent = '🌐 ' + (lang === 'th' ? 'TH' : 'EN');
       const sb = document.getElementById('searchBox');
       if (sb) sb.placeholder = t('search_ph');
+      const tk = document.querySelector('.ticker-inner');
+      if (tk) { tk.style.animation = 'none'; void tk.offsetWidth; tk.style.animation = ''; }
       renderHome(); renderMenu(); renderOrder(); renderDrawer(); renderCollectBtns();
     }
     function ageOk() {
