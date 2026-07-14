@@ -1407,7 +1407,7 @@
         sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
         sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
-        pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
+        pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', open_pin:'เปิดหมุดจัดส่ง', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
@@ -1448,7 +1448,7 @@
         sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
         sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
-        pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
+        pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', open_pin:'Open delivery pin', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
@@ -1668,7 +1668,7 @@
     // 📍 ค่าส่งด่วนตามระยะทาง (สไตล์ Grab)
     const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };   // 📍 พิกัดร้าน: BTS สุรศักดิ์
     const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3, RIDER_SURCHARGE = 10; // +10 ทุกออเดอร์ส่งด่วน
-    let riderKm = null, riderFee = null, pinning = false;
+    let riderKm = null, riderFee = null, pinning = false, pinnedLoc = null;
     function distKm(a1, o1, a2, o2) {
       const R = 6371, dA = (a2 - a1) * Math.PI / 180, dO = (o2 - o1) * Math.PI / 180;
       const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
@@ -1678,17 +1678,25 @@
       if (pinning) return;
       if (!navigator.geolocation) { toast(t('pin_fail')); return; }
       pinning = true; toast(t('pin_wait'));
-      navigator.geolocation.getCurrentPosition(pos => {
-        pinning = false;
-        const km = distKm(SHOP_LOC.lat, SHOP_LOC.lng, pos.coords.latitude, pos.coords.longitude) * ROAD_FACTOR;
+      // เก็บสัญญาณหลายค่า แล้วใช้ค่าที่แม่นที่สุด (กัน GPS เพี้ยนตอนค่าแรก)
+      let best = null, done = false, wid = null;
+      const finish = () => {
+        if (done) return;
+        done = true; pinning = false;
+        if (wid !== null) navigator.geolocation.clearWatch(wid);
+        if (!best) { toast(t('pin_fail')); return; }
+        pinnedLoc = { lat: Math.round(best.latitude * 1e6) / 1e6, lng: Math.round(best.longitude * 1e6) / 1e6 };
+        const km = distKm(SHOP_LOC.lat, SHOP_LOC.lng, best.latitude, best.longitude) * ROAD_FACTOR;
         riderKm = Math.round(km * 10) / 10;
         riderFee = Math.max(RIDER_BASE, Math.round((RIDER_BASE + km * RIDER_PER_KM) / 5) * 5) + RIDER_SURCHARGE;
         renderDrawer();
         toast(t('pin_ok').replace('{km}', riderKm));
-      }, () => {
-        pinning = false;
-        toast(t('pin_fail'));
-      }, { enableHighAccuracy: true, timeout: 12000 });
+      };
+      wid = navigator.geolocation.watchPosition(pos => {
+        if (!best || pos.coords.accuracy < best.accuracy) best = pos.coords;
+        if (pos.coords.accuracy <= 50) finish();
+      }, () => finish(), { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 });
+      setTimeout(finish, 9000);
     }
     function shipCost() {
       const n = cartCount();
@@ -2020,6 +2028,7 @@
               <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
+              ${o.pin ? `<a class="report-btn" style="display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;color:var(--lime);border-color:rgba(189,251,0,.4);" href="https://www.google.com/maps?q=${o.pin.lat},${o.pin.lng}" target="_blank">📍 ${t('open_pin')}</a>` : ''}
               <button class="report-btn" onclick="openContact()">${t('report')}</button>
             </div>`;}).join('');
     }
@@ -2184,10 +2193,10 @@
       // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
       try {
         if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, coupon: usedCoupon, time }));
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
         }
       } catch (e) {}
-      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
+      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc } : null });
       totalOrders++; totalSpend += total;
       document.getElementById('memOrders').textContent = totalOrders;
       document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
