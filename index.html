@@ -4,10 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>ABC HR System</title>
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700;800&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
@@ -201,6 +200,47 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
 
 /* Animated gradient login bg */
 #sLogin{background-size:300% 300%;animation:gradientShift 6s ease infinite}
+
+/* ═══════ PINK-DARK THEME v2 (override) ═══════ */
+:root{--pk:#ff4d8d;--pk2:#ec4899;--pk3:#f43f5e;--bg:#0d0d0f;--c1:#17171a;--c2:#1f1f23;--bd:#2a2a2f;--tx:#f1f1f3;--sb:#9a9aa1}
+html,body{background:#0d0d0f!important}
+body{background:radial-gradient(700px 420px at 85% -10%,rgba(236,72,153,.14),transparent 60%),radial-gradient(600px 400px at -10% 30%,rgba(244,63,94,.08),transparent 60%),#0d0d0f!important;color:var(--tx)!important}
+.screen{background:radial-gradient(700px 420px at 50% -10%,rgba(236,72,153,.16),transparent 60%),#0d0d0f!important}
+.card{background:rgba(23,23,26,.92)!important;border:1px solid var(--bd)!important;box-shadow:0 20px 60px rgba(0,0,0,.6),0 0 0 1px rgba(236,72,153,.12)!important;backdrop-filter:blur(16px)}
+.card p{color:var(--sb)!important}
+.fg label{color:var(--pk)!important}
+.fg input,.fg select,.fg textarea{background:var(--c2)!important;border:2px solid var(--bd)!important;color:var(--tx)!important}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--pk2)!important;background:#242429!important;box-shadow:0 0 0 3px rgba(236,72,153,.18)!important}
+.topbar{background:rgba(13,13,15,.85)!important;border-bottom:1px solid var(--bd)!important;backdrop-filter:blur(14px);color:var(--tx)!important}
+.sidebar{background:#131316!important;border-right:1px solid var(--bd)!important;color:var(--tx)!important}
+.sidebar a,.ni{color:#c9c9cf!important}
+.ni:hover{background:rgba(236,72,153,.1)!important;color:#fff!important}
+.ni.act,.act{background:linear-gradient(135deg,#ec4899,#f43f5e)!important;color:#fff!important;box-shadow:0 4px 14px rgba(236,72,153,.35)!important}
+.nsec{color:#6d6d75!important}
+.main{background:transparent!important}
+.pg{color:var(--tx)!important}
+table{color:var(--tx)!important}
+th{background:var(--c2)!important;color:var(--pk)!important;border-color:var(--bd)!important}
+td{border-color:#232328!important;color:#d9d9de!important}
+tr:hover td{background:rgba(236,72,153,.05)!important}
+.tabs{background:var(--c2)!important;border:1px solid var(--bd)!important}
+.tab{color:var(--sb)!important}
+.tab.act{background:linear-gradient(135deg,#ec4899,#f43f5e)!important;color:#fff!important}
+.modal{background:#17171a!important;border:1px solid var(--bd)!important;color:var(--tx)!important;box-shadow:0 30px 80px rgba(0,0,0,.7)!important}
+.modal-bg{background:rgba(0,0,0,.75)!important;backdrop-filter:blur(6px)}
+.kpi-card,.sc,.sg>div{background:var(--c1)!important;border:1px solid var(--bd)!important;color:var(--tx)!important}
+.clk-box{background:linear-gradient(145deg,#1c1c20,#131316)!important;border:1px solid rgba(236,72,153,.3)!important;box-shadow:0 10px 34px rgba(236,72,153,.15)!important}
+.clk-time{color:var(--pk)!important;text-shadow:0 0 24px rgba(236,72,153,.5)}
+.clk-date{color:var(--sb)!important}
+.empty{color:var(--sb)!important}
+.badge{filter:saturate(1.1)}
+.cam-box,.cam-wrap{background:#0f0f11!important;border-color:var(--bd)!important}
+.toast{background:#1f1f23!important;color:var(--tx)!important;border:1px solid var(--bd)!important}
+.menu-btn{background:var(--c2)!important;color:var(--tx)!important;border:1px solid var(--bd)!important}
+.skeleton{background:linear-gradient(90deg,#1c1c20 25%,#26262b 50%,#1c1c20 75%)!important}
+.bb,.br,.bg,.by,.lb{filter:brightness(1.05)}
+::placeholder{color:#6d6d75!important}
+select option{background:#1f1f23;color:#f1f1f3}
 </style>
 </head>
 <body>
@@ -212,7 +252,7 @@ body.dark .skeleton{background:linear-gradient(90deg,#2d1b4e 25%,#3b1f6b 50%,#2d
   <h1 style="text-align:center;margin-bottom:8px">กำลังโหลดระบบ</h1>
   <p style="text-align:center" id="loadMsg">กำลังเชื่อมต่อ Firebase...</p>
   <div class="progress-bar"><div class="progress-fill" id="loadBar" style="width:0%"></div></div>
-  <p style="font-size:11px;color:#94a3b8;margin-top:8px">ครั้งแรกอาจใช้เวลา 1-2 นาที (โหลดโมเดล AI)</p>
+  <p style="font-size:11px;color:#94a3b8;margin-top:8px">กำลังเชื่อมต่อระบบ...</p>
 </div>
 </div>
 
@@ -979,6 +1019,34 @@ async function initAdmin() {
   } catch(e) { console.warn('initAdmin:', e.message); }
 }
 
+// ── LAZY FACE-API (โหลดเฉพาะตอนใช้กล้อง) ──
+let _facePromise = null;
+function ensureFace(statusEl) {
+  if (faceReady) return Promise.resolve();
+  if (_facePromise) return _facePromise;
+  const say = t => { if (statusEl) statusEl.textContent = t; };
+  _facePromise = (async () => {
+    say('⏳ กำลังโหลดระบบสแกนหน้า (เฉพาะครั้งแรก)...');
+    if (typeof faceapi === 'undefined') {
+      await new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js';
+        s.onload = res; s.onerror = () => rej(new Error('โหลด face-api ไม่สำเร็จ'));
+        document.head.appendChild(s);
+      });
+    }
+    say('⏳ โหลดโมเดล 1/3...');
+    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
+    say('⏳ โหลดโมเดล 2/3...');
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    say('⏳ โหลดโมเดล 3/3...');
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    faceReady = true;
+    say('✅ พร้อมสแกน');
+  })();
+  return _facePromise;
+}
+
 // ── INIT ──
 async function initApp() {
   showScreen('sLoading');
@@ -988,15 +1056,9 @@ async function initApp() {
     // โหลด branding จาก Firebase
     const bRes = await api('getBranding',{});
     if (bRes.success && bRes.branding) applyBranding(bRes.branding.logo, bRes.branding.companyName);
-    setLoad('กำลังโหลด Face Detection (1/3)...', 20);
-    await faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL);
-    setLoad('กำลังโหลด Face Landmarks (2/3)...', 55);
-    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
-    setLoad('กำลังโหลด Face Recognition (3/3)...', 85);
-    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
     setLoad('พร้อมใช้งาน! ⚡', 100);
-    faceReady = true;
-    setTimeout(() => showScreen('sLogin'), 500);
+    // โมเดลสแกนหน้าจะโหลดอัตโนมัติเมื่อเปิดกล้องครั้งแรก (เปิดแอพเร็วขึ้นมาก)
+    setTimeout(() => showScreen('sLogin'), 300);
   } catch(e) {
     setLoad('❌ เกิดข้อผิดพลาด: ' + e.message, 0);
   }
@@ -1142,6 +1204,7 @@ function openCamera(mode, empId='') {
 }
 async function startCameraStream() {
   try {
+    await ensureFace(document.getElementById('camStatus'));
     videoStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:360,height:270}});
     const v = document.getElementById('faceVideo');
     v.srcObject = videoStream;
