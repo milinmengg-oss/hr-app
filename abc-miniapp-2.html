@@ -1666,8 +1666,8 @@
     }
     const SHIP_FEE = 40;
     // 📍 ค่าส่งด่วนตามระยะทาง (สไตล์ Grab)
-    const SHOP_LOC = { lat: 13.7563, lng: 100.5018 };   // ✏️ พิกัดร้าน — ตอนนี้เป็นกลางกรุงเทพ ให้แก้เป็นพิกัดจริงของร้าน
-    const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3;
+    const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };   // 📍 พิกัดร้าน: BTS สุรศักดิ์
+    const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3, RIDER_SURCHARGE = 10; // +10 ทุกออเดอร์ส่งด่วน
     let riderKm = null, riderFee = null, pinning = false;
     function distKm(a1, o1, a2, o2) {
       const R = 6371, dA = (a2 - a1) * Math.PI / 180, dO = (o2 - o1) * Math.PI / 180;
@@ -1682,7 +1682,7 @@
         pinning = false;
         const km = distKm(SHOP_LOC.lat, SHOP_LOC.lng, pos.coords.latitude, pos.coords.longitude) * ROAD_FACTOR;
         riderKm = Math.round(km * 10) / 10;
-        riderFee = Math.max(RIDER_BASE, Math.round((RIDER_BASE + km * RIDER_PER_KM) / 5) * 5);
+        riderFee = Math.max(RIDER_BASE, Math.round((RIDER_BASE + km * RIDER_PER_KM) / 5) * 5) + RIDER_SURCHARGE;
         renderDrawer();
         toast(t('pin_ok').replace('{km}', riderKm));
       }, () => {
