@@ -932,9 +932,14 @@
     /* ═══ BRAND TILES (ตามเรฟ: สี่เหลี่ยมมนพื้นดำ โลโก้ขาว) ═══ */
     .cat-circle.brand-tile {
       border-radius: 22px;
-      background: #161616;
-      border: 1px solid #2e2e2e;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 4px 12px rgba(0,0,0,.45);
+      background: linear-gradient(145deg, #1e1e1e 0%, #121212 100%);
+      border: 1px solid #383838;
+      box-shadow:
+        inset 0 2px 3px rgba(255,255,255,.12),
+        inset 2px 0 3px rgba(255,255,255,.05),
+        inset 0 -4px 6px rgba(0,0,0,.65),
+        inset -2px 0 4px rgba(0,0,0,.35),
+        0 6px 14px rgba(0,0,0,.5);
     }
     .cat-circle.brand-tile img {
       object-fit: contain;
@@ -945,6 +950,36 @@
       border-color: var(--lime);
       box-shadow: 0 0 0 3px rgba(189,251,0,.25), inset 0 1px 0 rgba(255,255,255,.07);
     }
+    /* ═══ 3D BUTTONS ═══ */
+    .add-btn, .checkout-btn, .pd-add-btn, .collect-btn, .nic-btn.active, .toggle-btn.active, .q-btn.plus, .flash-timer b, .coupon-left, .hcp-left {
+      background: linear-gradient(180deg, #ddfd60 0%, #bdfb00 45%, #98cf00 100%);
+      box-shadow:
+        inset 0 2px 2px rgba(255,255,255,.55),
+        inset 0 -3px 4px rgba(0,0,0,.22),
+        0 4px 10px rgba(189,251,0,.22),
+        0 2px 4px rgba(0,0,0,.35);
+    }
+    .add-btn:active, .checkout-btn:active, .pd-add-btn:active, .collect-btn:active {
+      box-shadow: inset 0 3px 6px rgba(0,0,0,.3);
+      transform: translateY(1px);
+    }
+    .float-cart {
+      box-shadow:
+        inset 0 2px 3px rgba(255,255,255,.5),
+        inset 0 -4px 6px rgba(0,0,0,.25),
+        0 6px 20px rgba(189,251,0,.45);
+    }
+    .h-btn, .trash-btn, .q-btn:not(.plus) {
+      box-shadow:
+        inset 0 1px 1px rgba(255,255,255,.09),
+        inset 0 -2px 3px rgba(0,0,0,.45),
+        0 3px 6px rgba(0,0,0,.3);
+    }
+    .collect-btn.got, .add-btn.off {
+      background: var(--card3);
+      box-shadow: none; transform: none;
+    }
+    .collect-btn.got { background: transparent; }
   </style>
 </head>
 <body>
