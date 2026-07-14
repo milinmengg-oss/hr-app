@@ -1020,6 +1020,7 @@
       </div>
     </div>
     <div class="map-foot">
+      <div id="mapAddr" style="font-size:12px;color:var(--sub);text-align:center;margin-bottom:8px;min-height:17px;line-height:1.4;">–</div>
       <button class="pin-btn" style="margin-bottom:8px;" onclick="mapUseGPS()">
         <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
         <span data-i18n="map_gps">ใช้ตำแหน่งปัจจุบัน</span>
@@ -1712,7 +1713,7 @@
     // 📍 ค่าส่งด่วนตามระยะทาง (สไตล์ Grab)
     const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };   // 📍 พิกัดร้าน: BTS สุรศักดิ์
     const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3, RIDER_SURCHARGE = 10; // +10 ทุกออเดอร์ส่งด่วน
-    let riderKm = null, riderFee = null, pinning = false, pinnedLoc = null;
+    let riderKm = null, riderFee = null, pinning = false, pinnedLoc = null, pinnedAddr = '', addrTimer = null;
     function distKm(a1, o1, a2, o2) {
       const R = 6371, dA = (a2 - a1) * Math.PI / 180, dO = (o2 - o1) * Math.PI / 180;
       const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
@@ -1725,6 +1726,18 @@
       riderFee = Math.max(RIDER_BASE, Math.round((RIDER_BASE + km * RIDER_PER_KM) / 5) * 5) + RIDER_SURCHARGE;
       renderDrawer();
       toast(t('pin_ok').replace('{km}', riderKm));
+      pinnedAddr = '';
+      revGeo(lat, lng, a => { pinnedAddr = a; renderDrawer(); });
+    }
+    function revGeo(lat, lng, cb) {
+      fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=th&zoom=18&lat=' + lat + '&lon=' + lng)
+        .then(r => r.json())
+        .then(d => {
+          const a = d.address || {};
+          const parts = [a.house_number, a.road, a.suburb || a.neighbourhood || a.quarter, a.city_district || a.district || a.subdistrict, a.city || a.town || a.province || a.state];
+          cb(parts.filter(Boolean).join(' ') || (d.display_name || '').split(',').slice(0, 3).join(', '));
+        })
+        .catch(() => cb(''));
     }
     let lMap = null;
     function openMapPicker() {
@@ -1735,6 +1748,16 @@
           lMap = L.map('leafletMap', { zoomControl: false }).setView(
             pinnedLoc ? [pinnedLoc.lat, pinnedLoc.lng] : [SHOP_LOC.lat, SHOP_LOC.lng], 14);
           L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(lMap);
+          lMap.on('moveend', () => {
+            const c = lMap.getCenter();
+            const el = document.getElementById('mapAddr');
+            if (el) el.textContent = '…';
+            clearTimeout(addrTimer);
+            addrTimer = setTimeout(() => revGeo(c.lat, c.lng, a => {
+              const e2 = document.getElementById('mapAddr');
+              if (e2) e2.textContent = a || '–';
+            }), 450);
+          });
           mapUseGPS(true);
         } else {
           lMap.invalidateSize();
@@ -2105,6 +2128,7 @@
               <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
+              ${o.pin && o.pin.addr ? `<div style="font-size:11px;color:var(--sub);margin-top:8px;line-height:1.5;">📍 ${o.pin.addr}</div>` : ''}
               ${o.pin ? `<a class="report-btn" style="display:flex;align-items:center;justify-content:center;gap:6px;text-decoration:none;color:var(--lime);border-color:rgba(189,251,0,.4);" href="https://www.google.com/maps?q=${o.pin.lat},${o.pin.lng}" target="_blank">📍 ${t('open_pin')}</a>` : ''}
               <button class="report-btn" onclick="openContact()">${t('report')}</button>
             </div>`;}).join('');
@@ -2203,7 +2227,7 @@
         ${shipMethod === 'rider' && total ? `<button class="pin-btn" onclick="openMapPicker()">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
           ${riderFee ? t('pin_again') + ' · ' + riderKm + ' ' + t('km') : t('pin_btn')}
-        </button>` : ''}
+        </button>${riderFee && pinnedAddr ? `<div style="font-size:11px;color:var(--sub);margin:-2px 2px 10px;text-align:center;line-height:1.5;">${pinnedAddr}</div>` : ''}` : ''}
         <div class="sum-row"><span>${t('sum_sub')}</span><b>฿${total.toLocaleString()}</b></div>
         ${disc ? `<div class="sum-row"><span>${t('coupon_disc')}</span><b style="color:var(--lime);">-฿${disc.toLocaleString()}</b></div>` : ''}
         <div class="sum-row"><span>${t('sum_ship')}</span><b>${total ? (shipMethod === 'rider' ? (riderFee ? '฿' + riderFee + ' (' + riderKm + ' ' + t('km') + ')' : t('ship_grab')) : (ship ? '฿' + ship : t('ship_free'))) : '฿0'}</b></div>
@@ -2270,10 +2294,10 @@
       // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
       try {
         if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, address: pinnedAddr, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
         }
       } catch (e) {}
-      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc } : null });
+      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, addr: pinnedAddr } : null });
       totalOrders++; totalSpend += total;
       document.getElementById('memOrders').textContent = totalOrders;
       document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
