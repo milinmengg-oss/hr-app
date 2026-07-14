@@ -1056,7 +1056,7 @@
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M5.5 17.5 9 10h4l2.5 7.5M13 10l-1.5-3H9"/><path d="M15.5 13h3"/></svg>
         <div>
           <div class="so-t" data-i18n="sm_rider">ส่งด่วน กทม.–ปริมณฑล</div>
-          <div class="so-d" data-i18n="sm_rider_d">ไรเดอร์ · ค่าส่งตามแอพ Grab</div>
+          <div class="so-d" data-i18n="sm_rider_d">ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10</div>
         </div>
       </div>
     </div>
@@ -1405,7 +1405,7 @@
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
         copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
         sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
-        sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ค่าส่งตามแอพ Grab',
+        sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
         pin_btn:'ปักหมุดที่อยู่ เพื่อคำนวณค่าส่ง', pin_again:'ปักหมุดใหม่', pin_wait:'กำลังหาตำแหน่ง...', pin_ok:'ปักหมุดแล้ว ห่างร้าน {km} กม.', pin_fail:'ระบุตำแหน่งไม่ได้ กรุณากดอนุญาตการเข้าถึงตำแหน่ง', km:'กม.', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
@@ -1446,7 +1446,7 @@
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
         copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
         sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
-        sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · fee per Grab app',
+        sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
         pin_btn:'Pin my location to calculate fee', pin_again:'Re-pin location', pin_wait:'Locating...', pin_ok:'Pinned — {km} km from the shop', pin_fail:'Could not get your location — please allow location access', km:'km', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
@@ -1666,7 +1666,7 @@
     }
     const SHIP_FEE = 40;
     // 📍 ค่าส่งด่วนตามระยะทาง (สไตล์ Grab)
-    const SHOP_LOC = { lat: 13.9889, lng: 100.6167 };   // 📍 พิกัดร้าน: รังสิต ปทุมธานี
+    const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };   // 📍 พิกัดร้าน: BTS สุรศักดิ์
     const RIDER_BASE = 20, RIDER_PER_KM = 7, ROAD_FACTOR = 1.3, RIDER_SURCHARGE = 10; // +10 ทุกออเดอร์ส่งด่วน
     let riderKm = null, riderFee = null, pinning = false;
     function distKm(a1, o1, a2, o2) {
