@@ -917,6 +917,18 @@
     .hcp-body { padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; justify-content: center; min-width: 0; }
     .hcp-title { font-size: 11.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .hcp-min { font-size: 9.5px; color: var(--sub); }
+    /* ═══ SHIP METHOD ═══ */
+    .ship-opts { display: flex; gap: 8px; padding: 4px 16px 0; flex-shrink: 0; }
+    .ship-opt {
+      flex: 1; display: flex; gap: 9px; align-items: center;
+      background: var(--card); border: 1.5px solid var(--border);
+      border-radius: 14px; padding: 10px 11px; cursor: pointer;
+    }
+    .ship-opt.sel { border-color: var(--lime); background: rgba(189,251,0,.07); }
+    .ship-opt svg { stroke: var(--sub); flex-shrink: 0; }
+    .ship-opt.sel svg { stroke: var(--lime); }
+    .so-t { font-size: 12px; font-weight: 800; }
+    .so-d { font-size: 9.5px; color: var(--sub); margin-top: 1px; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -997,6 +1009,23 @@
         <div class="addr-sub" data-i18n="ship_sub">คลิกเพื่อเลือกหรือเพิ่มที่อยู่จัดส่ง</div>
       </div>
       <div style="color:var(--sub);font-size:18px;">›</div>
+    </div>
+    <div class="cart-label" data-i18n="sm_title">วิธีจัดส่ง</div>
+    <div class="ship-opts">
+      <div class="ship-opt sel" id="shipPost" onclick="setShip('post')">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5"/></svg>
+        <div>
+          <div class="so-t" data-i18n="sm_post">ส่งพัสดุ</div>
+          <div class="so-d" data-i18n="sm_post_d">฿40 · ฟรีเมื่อครบ 4 แท่ง</div>
+        </div>
+      </div>
+      <div class="ship-opt" id="shipRider" onclick="setShip('rider')">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M5.5 17.5 9 10h4l2.5 7.5M13 10l-1.5-3H9"/><path d="M15.5 13h3"/></svg>
+        <div>
+          <div class="so-t" data-i18n="sm_rider">ส่งด่วน กทม.–ปริมณฑล</div>
+          <div class="so-d" data-i18n="sm_rider_d">ไรเดอร์ · ค่าส่งตามแอพ Grab</div>
+        </div>
+      </div>
     </div>
     <div class="cart-label" data-i18n="cart_items">รายการในตะกร้า</div>
     <div class="d-items" id="dItems"></div>
@@ -1318,7 +1347,7 @@
         nav_home:'หน้าหลัก', nav_menu:'เมนูสินค้า', nav_order:'ออเดอร์', nav_promo:'โปร', nav_member:'สมาชิก',
         cart_title:'ตะกร้าสินค้า', ship_to:'จัดส่งที่', ship_sub:'คลิกเพื่อเลือกหรือเพิ่มที่อยู่จัดส่ง',
         cart_items:'รายการในตะกร้า', cart_empty:'ตะกร้าของคุณว่างเปล่า',
-        sum_sub:'ยอดรวมสินค้า', sum_ship:'ค่าจัดส่ง (ครบ 4 แท่งส่งฟรี)', net:'ยอดสุทธิ', pay:'ชำระเงิน',
+        sum_sub:'ยอดรวมสินค้า', sum_ship:'ค่าจัดส่ง', net:'ยอดสุทธิ', pay:'ชำระเงิน',
         added:'เพิ่มลงตะกร้าแล้ว 🛒', added_flavor:'เพิ่ม "{f}" ลงตะกร้าแล้ว 🛒', cleared:'ล้างตะกร้าแล้ว',
         addr_toast:'เชื่อมระบบที่อยู่จัดส่งในเวอร์ชันจริง 🏠',
         choose_flavor:'เลือกกลิ่น', add:'เพิ่ม', flavors_unit:'กลิ่น', items_unit:'รายการ',
@@ -1341,7 +1370,10 @@
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
-        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
+        sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
+        sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ค่าส่งตามแอพ Grab',
+        rider_note:'* ค่าส่งด่วนคิดตามระยะทางจริง ร้านจะแจ้งหลังยืนยันออเดอร์', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
@@ -1355,7 +1387,7 @@
         nav_home:'Home', nav_menu:'Menu', nav_order:'Orders', nav_promo:'Deals', nav_member:'Member',
         cart_title:'My cart', ship_to:'Deliver to', ship_sub:'Tap to select or add a delivery address',
         cart_items:'Items in cart', cart_empty:'Your cart is empty',
-        sum_sub:'Subtotal', sum_ship:'Shipping (free on 4+ items)', net:'Total', pay:'Checkout',
+        sum_sub:'Subtotal', sum_ship:'Shipping', net:'Total', pay:'Checkout',
         added:'Added to cart 🛒', added_flavor:'Added "{f}" to cart 🛒', cleared:'Cart cleared',
         addr_toast:'Delivery address will be available in the live version 🏠',
         choose_flavor:'Choose flavor', add:'Add', flavors_unit:'flavors', items_unit:'items',
@@ -1378,7 +1410,10 @@
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
-        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
+        sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
+        sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · fee per Grab app',
+        rider_note:'* Express fee depends on distance — confirmed after ordering', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
@@ -1578,6 +1613,13 @@
     let collected = new Set();
     try { collected = new Set(JSON.parse(localStorage.getItem('abc_coupons') || '[]')); } catch(e) {}
     let usedCoupon = null;
+    let shipMethod = 'post';   // 'post' = พัสดุ ฿40, 'rider' = ส่งด่วนคิดตาม Grab
+    function setShip(m) {
+      shipMethod = m;
+      document.getElementById('shipPost').classList.toggle('sel', m === 'post');
+      document.getElementById('shipRider').classList.toggle('sel', m === 'rider');
+      renderDrawer();
+    }
     function saveCoupons() { try { localStorage.setItem('abc_coupons', JSON.stringify([...collected])); } catch(e) {} }
     function couponName(id) { return id === 'new10' ? t('c2_title') : t('c3_title'); }
     function couponDiscount(total) {
@@ -1591,6 +1633,7 @@
     function shipCost() {
       const n = cartCount();
       if (!n) return 0;
+      if (shipMethod === 'rider') return 0; // ส่งด่วน: คิดตามแอพ Grab ภายหลัง
       if (n >= 4) return 0;                 // โปรครบ 4 แท่งส่งฟรี
       if (usedCoupon === 'freeship') return 0;
       return SHIP_FEE;
@@ -2013,7 +2056,8 @@
         </div>
         <div class="sum-row"><span>${t('sum_sub')}</span><b>฿${total.toLocaleString()}</b></div>
         ${disc ? `<div class="sum-row"><span>${t('coupon_disc')}</span><b style="color:var(--lime);">-฿${disc.toLocaleString()}</b></div>` : ''}
-        <div class="sum-row"><span>${t('sum_ship')}</span><b>${total ? (ship ? '฿' + ship : t('ship_free')) : '฿0'}</b></div>
+        <div class="sum-row"><span>${t('sum_ship')}</span><b>${total ? (shipMethod === 'rider' ? t('ship_grab') : (ship ? '฿' + ship : t('ship_free'))) : '฿0'}</b></div>
+        ${shipMethod === 'rider' && total ? `<div style="font-size:10.5px;color:var(--sub);padding:1px 0 0;">${t('rider_note')}</div>` : ''}
         <div class="pay-bar">
           <div style="min-width:78px;">
             <div class="tot-label" style="font-size:12px;">${t('net')}</div>
@@ -2076,7 +2120,7 @@
       // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
       try {
         if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, coupon: usedCoupon, time }));
+          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, coupon: usedCoupon, time }));
         }
       } catch (e) {}
       orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode() });
