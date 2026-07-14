@@ -897,6 +897,26 @@
     }
     .cp-item.dis { opacity: .45; cursor: not-allowed; }
     .cp-item.sel { border-color: var(--lime); color: var(--lime); }
+    /* ═══ 🎟 HOME COUPON STRIP ═══ */
+    .home-cp-scroll { display: flex; gap: 8px; overflow-x: auto; padding: 0 12px 14px; scrollbar-width: none; }
+    .home-cp-scroll::-webkit-scrollbar { display: none; }
+    .hcp {
+      flex: 0 0 auto; display: flex; align-items: stretch;
+      background: var(--card); border: 1px solid rgba(189,251,0,.3);
+      border-radius: 12px; overflow: hidden; min-width: 230px;
+    }
+    .hcp-left {
+      background: var(--lime); color: #111; font-weight: 900;
+      display: flex; align-items: center; justify-content: center;
+      width: 54px; font-size: 13px; position: relative; flex-shrink: 0;
+    }
+    .hcp-left::after {
+      content: ''; position: absolute; right: -1px; top: 4px; bottom: 4px;
+      border-right: 2px dashed var(--bg);
+    }
+    .hcp-body { padding: 9px 10px; display: flex; flex-direction: column; gap: 2px; justify-content: center; min-width: 0; }
+    .hcp-title { font-size: 11.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hcp-min { font-size: 9.5px; color: var(--sub); }
   </style>
 </head>
 <body>
@@ -1033,6 +1053,13 @@
       </div>
       <div class="flash-scroll" id="flashScroll"></div>
     </div>
+
+    <!-- 🎟 คูปองหน้าแรก (สไตล์ Shopee) -->
+    <div class="sec-head" style="padding-top:12px;">
+      <div class="sec-title" data-i18n="home_cp">คูปองส่วนลด</div>
+      <div class="sec-more" data-i18n="see_all" onclick="nav('promo',3)">ดูทั้งหมด ›</div>
+    </div>
+    <div class="home-cp-scroll" id="homeCoupons"></div>
 
     <!-- Categories -->
     <div class="sec-head">
@@ -1314,7 +1341,7 @@
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
-        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', change:'เปลี่ยน', coupon_disc:'ส่วนลดคูปอง', no_coupon:'ไม่ใช้คูปอง', cp_title:'คูปองของฉัน', cp_empty:'ยังไม่มีคูปอง ไปเก็บได้ที่หน้าโปรโมชั่น', cp_min:'ขั้นต่ำ', cp_go:'ไปเก็บคูปอง',
         faq_title:'เงื่อนไขการบริการ', b5_title:'เงื่อนไขการบริการ', b5_desc:'จัดส่ง · เปลี่ยน-คืน · ชำระเงิน',
         f1_t:'การจัดส่ง', f1_b:'• กรุงเทพฯ–ปริมณฑล ส่งด่วน 1-3 ชั่วโมง<br>• ต่างจังหวัด ส่งผ่านขนส่งเอกชน 1-3 วัน<br>• สั่งครบ 4 แท่งส่งฟรีทันที',
         f2_t:'การเปลี่ยน / คืนสินค้า', f2_b:'• แจ้งปัญหาภายใน 7 วันพร้อมวิดีโอแกะกล่อง<br>• สินค้ามีตำหนิจากโรงงาน เปลี่ยนตัวใหม่ฟรี<br>• ไม่รับคืนสินค้าที่เปิดใช้งานแล้ว',
@@ -1351,7 +1378,7 @@
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
-        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', change:'Change', coupon_disc:'Coupon discount', no_coupon:'No coupon', cp_title:'My coupons', cp_empty:'No coupons yet — collect them on the Deals page', cp_min:'Min. spend', cp_go:'Get coupons',
         faq_title:'Shop policies', b5_title:'Shop policies', b5_desc:'Delivery · Returns · Payment',
         f1_t:'Delivery', f1_b:'• Bangkok metro: express 1-3 hours<br>• Other provinces: courier, 1-3 days<br>• Free delivery when you order 4+ items',
         f2_t:'Exchanges / returns', f2_b:'• Report issues within 7 days with an unboxing video<br>• Factory defects replaced free of charge<br>• No returns on opened items',
@@ -1570,9 +1597,26 @@
     }
     function collectCoupon(id) {
       collected.add(id); saveCoupons();
-      renderCollectBtns();
+      renderCollectBtns(); renderHomeCoupons();
       toast(t('coupon_saved'));
     }
+    function renderHomeCoupons() {
+      const el = document.getElementById('homeCoupons');
+      if (!el) return;
+      el.innerHTML = COUPONS.map(c => {
+        const has = collected.has(c.id);
+        const val = c.kind === 'pct' ? c.val + '%' : 'FREE';
+        return `<div class="hcp">
+          <div class="hcp-left">${val}</div>
+          <div class="hcp-body">
+            <div class="hcp-title">${couponName(c.id)}</div>
+            <div class="hcp-min">${c.min ? t('cp_min') + ' ฿' + c.min : t('c3_tag')}</div>
+          </div>
+          <button class="collect-btn${has ? ' got' : ''}" style="margin:0 10px;align-self:center;" ${has ? 'disabled' : ''} onclick="collectCoupon('${c.id}')">${has ? t('collected') : t('collect')}</button>
+        </div>`;
+      }).join('');
+    }
+
     function renderCollectBtns() {
       COUPONS.forEach(c => {
         const b = document.getElementById('cbtn_' + c.id);
@@ -1760,6 +1804,7 @@
           </div>`).join('');
       renderHomeGrid();
       renderFlash();
+      renderHomeCoupons();
     }
 
     function renderHomeGrid() {
