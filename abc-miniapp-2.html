@@ -1142,6 +1142,7 @@
         <div class="logo-text">ABC Shop<span class="logo-plus"> ✦</span><span class="vbadge" title="ร้านยืนยันแล้ว"><svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="#111" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span></div>
       </div>
       <div class="h-actions">
+        <button class="h-btn" onclick="nav('favs',0)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 13.6 12 21l-7.5-7.4A5 5 0 1 1 12 7a5 5 0 1 1 7.5 6.6z"/></svg></button>
         <button class="h-btn" onclick="nav('order',2)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/></svg></button>
         <button class="h-btn" id="cartBtn1" onclick="openCart()">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h7a2 2 0 0 0 2-1.5L21 7H6"/></svg><div class="cart-dot" id="dot1">0</div>
@@ -1215,6 +1216,7 @@
         <div class="logo-text" style="font-size:17px;" data-i18n="menu_title">เมนูสินค้า</div>
       </div>
       <div class="h-actions">
+        <button class="h-btn" onclick="nav('favs',0)"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.5 13.6 12 21l-7.5-7.4A5 5 0 1 1 12 7a5 5 0 1 1 7.5 6.6z"/></svg></button>
         <button class="h-btn" id="cartBtn2" onclick="openCart()">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="20" r="1.4"/><circle cx="17" cy="20" r="1.4"/><path d="M3 3h2l2.5 12.5a2 2 0 0 0 2 1.5h7a2 2 0 0 0 2-1.5L21 7H6"/></svg><div class="cart-dot" id="dot2">0</div>
         </button>
@@ -1371,6 +1373,21 @@
     </div>
   </div>
 
+  <!-- ══════ PAGE: FAVORITES ══════ -->
+  <div class="page" id="pageFavs">
+    <div class="header">
+      <div class="h-actions"><button class="h-btn" onclick="nav('home',0)">‹</button></div>
+      <div class="logo-text" style="font-size:17px;" data-i18n="favs_title">รายการโปรด</div>
+      <div style="width:38px;"></div>
+    </div>
+    <div class="p-grid" id="favsGrid" style="padding-top:10px;"></div>
+    <div id="favsEmpty" class="ord-empty" style="display:none;">
+      <div class="oe">🤍</div>
+      <h3 data-i18n="favs_title">รายการโปรด</h3>
+      <p data-i18n="favs_empty"></p>
+    </div>
+  </div>
+
   <!-- ══════ PAGE: FAQ ══════ -->
   <div class="page" id="pageFaq">
     <div class="header">
@@ -1466,7 +1483,7 @@
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
-        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', favs_title:'รายการโปรด', favs_empty:'กดหัวใจบนสินค้า เพื่อเก็บไว้สั่งซ้ำง่ายๆ ที่นี่', fav_added:'เพิ่มในรายการโปรดแล้ว ❤️', fav_removed:'เอาออกจากรายการโปรดแล้ว', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
         sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
         sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
@@ -1509,7 +1526,7 @@
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
-        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', favs_title:'My favorites', favs_empty:'Tap the heart on any product to save it here for quick reorders', fav_added:'Added to favorites ❤️', fav_removed:'Removed from favorites', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
         sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
         sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
@@ -1541,7 +1558,7 @@
       if (sb) sb.placeholder = t('search_ph');
       const tk = document.querySelector('.ticker-inner');
       if (tk) { tk.style.animation = 'none'; void tk.offsetWidth; tk.style.animation = ''; }
-      renderHome(); renderMenu(); renderOrder(); renderDrawer(); renderCollectBtns();
+      renderHome(); renderMenu(); renderOrder(); renderDrawer(); renderCollectBtns(); renderFavs();
     }
     function ageOk() {
       const g = document.getElementById('agegate');
@@ -1731,6 +1748,11 @@
       { id: 'new10',    kind: 'pct',  val: 10, min: 300 },
       { id: 'freeship', kind: 'ship', val: 0,  min: 0 }
     ];
+    // ── ❤️ รายการโปรด ──
+    let favs = new Set();
+    try { favs = new Set(JSON.parse(localStorage.getItem('abc_favs') || '[]')); } catch(e) {}
+    function saveFavs() { try { localStorage.setItem('abc_favs', JSON.stringify([...favs])); } catch(e) {} }
+
     let collected = new Set();
     try { collected = new Set(JSON.parse(localStorage.getItem('abc_coupons') || '[]')); } catch(e) {}
     let usedCoupon = null;
@@ -1972,7 +1994,7 @@
           ${thumb}
           <div class="p-thumb-emoji" style="${emojiStyle};background:${gradOf(p)}"></div>
           ${out ? `<div class="oos-badge"><span>${t('out')}</span></div>` : ''}
-          <button class="fav-btn" id="fav${p.id}" onclick="fav(event,${p.id})">🤍</button>
+          <button class="fav-btn" id="fav${p.id}" onclick="fav(event,${p.id})">${favs.has(p.id) ? '❤️' : '🤍'}</button>
         </div>
         <div class="p-tags-row">${tags}</div>
         <div class="p-body">
@@ -2421,9 +2443,22 @@
     // ── Fav ──
     function fav(e, id) {
       e.stopPropagation();
-      document.querySelectorAll('#fav'+id).forEach(b => {
-        b.textContent = b.textContent === '🤍' ? '❤️' : '🤍';
+      if (favs.has(id)) { favs.delete(id); toast(t('fav_removed')); }
+      else { favs.add(id); toast(t('fav_added')); }
+      saveFavs();
+      document.querySelectorAll('#fav' + id).forEach(b => {
+        b.textContent = favs.has(id) ? '❤️' : '🤍';
       });
+      const pf = document.getElementById('pageFavs');
+      if (pf && pf.classList.contains('active')) renderFavs();
+    }
+    function renderFavs() {
+      const list = PRODUCTS.filter(p => favs.has(p.id));
+      const g = document.getElementById('favsGrid');
+      const e = document.getElementById('favsEmpty');
+      if (!g) return;
+      g.innerHTML = list.map(pCard).join('');
+      e.style.display = list.length ? 'none' : 'block';
     }
 
     // ── Toast ──
@@ -2443,6 +2478,7 @@
       if (pg==='home')   renderHome();
       if (pg==='menu')   renderMenu();
       if (pg==='order')  renderOrder();
+      if (pg==='favs')   renderFavs();
     }
 
     // ── Init ──
