@@ -1094,6 +1094,23 @@
     <div id="cpList" style="overflow-y:auto;padding-bottom:20px;"></div>
   </div>
 
+  <!-- 🔽 Filter sheet -->
+  <div class="pd-overlay" id="ftOverlay" onclick="closeFilter()"></div>
+  <div class="pd-sheet" id="ftSheet">
+    <div class="pd-handle"></div>
+    <div class="pd-flavor-head" style="border-top:none;" data-i18n="filter">ตัวกรอง</div>
+    <div style="padding:0 20px 6px;overflow-y:auto;">
+      <div style="font-size:14px;font-weight:800;padding:4px 0 8px;" data-i18n="sort_by">เรียงตาม</div>
+      <div class="frow" id="sortPills" style="flex-wrap:wrap;"></div>
+      <div style="font-size:14px;font-weight:800;padding:14px 0 8px;" data-i18n="price_range">ช่วงราคา</div>
+      <div class="frow" id="pricePills" style="flex-wrap:wrap;"></div>
+    </div>
+    <div class="pd-foot" style="display:flex;gap:10px;">
+      <button class="report-btn" style="margin-top:0;flex:1;" onclick="clearFilter()" data-i18n="clearf">ล้างตัวกรอง</button>
+      <button class="checkout-btn" style="flex:1.4;" id="ftApply" onclick="closeFilter()">ดูสินค้า</button>
+    </div>
+  </div>
+
   <!-- Overlay & Drawer -->
   <div class="overlay" id="overlay" onclick="closeCart()"></div>
   <div class="drawer" id="drawer">
@@ -1232,7 +1249,12 @@
       <button class="toggle-btn" id="toggleBrand" onclick="setBrowseMode('brand',this)" data-i18n="toggle_brand">🏪 แบรนด์</button>
     </div>
     <div class="filter-bar">
-      <input id="searchBox" oninput="setSearch(this.value)" placeholder="ค้นหาสินค้า..." style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 14px;color:var(--text);font-family:inherit;font-size:13px;outline:none;margin-bottom:8px;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <input id="searchBox" oninput="setSearch(this.value)" placeholder="ค้นหาสินค้า..." style="flex:1;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 14px;color:var(--text);font-family:inherit;font-size:13px;outline:none;">
+        <button onclick="openFilter()" style="width:42px;flex-shrink:0;background:var(--card);border:1.5px solid var(--border);border-radius:12px;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;" aria-label="filter">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h18l-7 8v5l-4 2v-7z"/></svg>
+        </button>
+      </div>
       <div class="frow" id="catPills"></div>
       <div class="frow">
         <button class="nic-btn active" data-i18n="all" id="nicAll" onclick="setMenuNic('all',this)">ทั้งหมด</button>
@@ -1488,7 +1510,7 @@
         age_title:'สำหรับผู้มีอายุ 20 ปีขึ้นไป', age_sub:'สินค้าในร้านจำหน่ายให้เฉพาะผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น กรุณายืนยันอายุของคุณก่อนเข้าใช้งาน', age_yes:'ฉันอายุ 20 ปีขึ้นไป', age_no:'ยังไม่ถึง 20 ปี', age_sorry:'ขออภัย ร้านจำหน่ายให้ผู้มีอายุ 20+ เท่านั้น',
         st0:'รอยืนยัน', st1:'กำลังแพ็ค', st2:'กำลังจัดส่ง', st3:'ส่งแล้ว',
         si_title:'ข้อมูลร้าน', si_hours_l:'เวลาทำการ', si_hours_v:'08:00 – 02:00 ทุกวัน', si_ship_l:'พื้นที่จัดส่ง', si_ship_v:'กรุงเทพฯ–ปริมณฑล · 1-3 ชม.', si_pay_l:'ชำระเงิน', si_pay_v:'โอนธนาคาร · พร้อมเพย์',
-        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', favs_title:'รายการโปรด', favs_empty:'กดหัวใจบนสินค้า เพื่อเก็บไว้สั่งซ้ำง่ายๆ ที่นี่', fav_added:'เพิ่มในรายการโปรดแล้ว ❤️', fav_removed:'เอาออกจากรายการโปรดแล้ว', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
+        copied:'คัดลอกเลขออเดอร์แล้ว ✓', report:'แจ้งปัญหาออเดอร์นี้', pay_via:'ชำระผ่าน', pay_bank:'โอนธนาคาร', out:'หมด', out_toast:'สินค้าหมดชั่วคราว รอเติมสต็อกเร็วๆ นี้', flash_end:'จบใน', collect:'เก็บ', home_cp:'คูปองส่วนลด', favs_title:'รายการโปรด', filter:'ตัวกรอง', sort_by:'เรียงตาม', s_rec:'แนะนำ', s_plow:'ราคาต่ำ → สูง', s_phigh:'ราคาสูง → ต่ำ', s_best:'ขายดี', price_range:'ช่วงราคา', clearf:'ล้างตัวกรอง', apply:'ดูสินค้า', favs_empty:'กดหัวใจบนสินค้า เพื่อเก็บไว้สั่งซ้ำง่ายๆ ที่นี่', fav_added:'เพิ่มในรายการโปรดแล้ว ❤️', fav_removed:'เอาออกจากรายการโปรดแล้ว', collected:'เก็บแล้ว ✓', coupon_saved:'เก็บคูปองแล้ว', pick_coupon:'เลือกคูปอง', ship_free:'ฟรี ✓', ship_grab:'ตามระยะทาง', sm_title:'วิธีจัดส่ง',
         sm_post:'ส่งพัสดุ', sm_post_d:'฿40 · ฟรีเมื่อครบ 4 แท่ง',
         sm_rider:'ส่งด่วน กทม.–ปริมณฑล', sm_rider_d:'ไรเดอร์ · ตามระยะทาง + ค่าบริการเพิ่มเติม ฿10',
         rider_note:'* ปักหมุดที่อยู่เพื่อคำนวณค่าส่ง หรือให้ร้านแจ้งหลังยืนยันออเดอร์',
@@ -1531,7 +1553,7 @@
         age_title:'For ages 20 and over', age_sub:'Products in this shop are sold to customers aged 20+ only. Please confirm your age before entering.', age_yes:'I am 20 or older', age_no:'Under 20', age_sorry:'Sorry, this shop serves customers aged 20+ only',
         st0:'Pending', st1:'Packing', st2:'Shipping', st3:'Delivered',
         si_title:'Shop info', si_hours_l:'Open hours', si_hours_v:'08:00 – 02:00 daily', si_ship_l:'Delivery area', si_ship_v:'Bangkok metro · 1-3 hr', si_pay_l:'Payment', si_pay_v:'Bank transfer · PromptPay',
-        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', favs_title:'My favorites', favs_empty:'Tap the heart on any product to save it here for quick reorders', fav_added:'Added to favorites ❤️', fav_removed:'Removed from favorites', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
+        copied:'Order code copied ✓', report:'Report an issue with this order', pay_via:'Pay via', pay_bank:'Bank transfer', out:'Sold out', out_toast:'Temporarily out of stock — restocking soon', flash_end:'Ends in', collect:'Collect', home_cp:'Discount coupons', favs_title:'My favorites', filter:'Filters', sort_by:'Sort by', s_rec:'Recommended', s_plow:'Price: low → high', s_phigh:'Price: high → low', s_best:'Best sellers', price_range:'Price range', clearf:'Clear all', apply:'Show items', favs_empty:'Tap the heart on any product to save it here for quick reorders', fav_added:'Added to favorites ❤️', fav_removed:'Removed from favorites', collected:'Collected ✓', coupon_saved:'Coupon collected', pick_coupon:'Select coupon', ship_free:'Free ✓', ship_grab:'By distance', sm_title:'Delivery method',
         sm_post:'Parcel delivery', sm_post_d:'฿40 · free on 4+ items',
         sm_rider:'Express (Bangkok metro)', sm_rider_d:'Rider · distance fee + ฿10 service fee',
         rider_note:'* Pin your location to calculate the fee, or the shop will confirm it after ordering',
@@ -2120,14 +2142,53 @@
         if (menuNic !== 'all' && !(p.sub.includes(menuNic) || (p.flavors && p.flavors.some(fl => fl.includes(menuNic))))) return false;
         if (activeTags.size > 0 && ![...activeTags].some(t => p.tags.includes(t))) return false;
         if (searchQ && !(p.name.toLowerCase().includes(searchQ) || p.sub.toLowerCase().includes(searchQ))) return false;
+        if (!bandOk(p)) return false;
         return true;
       });
 
+      if (sortBy === 'plow') list.sort((a, b) => a.price - b.price);
+      else if (sortBy === 'phigh') list.sort((a, b) => b.price - a.price);
+      else if (sortBy === 'best') list.sort((a, b) => ((b.id * 173) % 2000) - ((a.id * 173) % 2000));
+
       document.getElementById('iCount').textContent = `[${list.length} ${t('items_unit')}]`;
+      const fb = document.getElementById('ftApply');
+      if (fb) fb.textContent = `${t('apply')} (${list.length})`;
       document.getElementById('menuGrid').innerHTML = list.map(pCardMini).join('');
     }
 
     function setSearch(v) { searchQ = v.trim().toLowerCase(); renderMenu(); }
+
+    // ── 🔽 ตัวกรอง / เรียงลำดับ ──
+    let sortBy = 'rec';
+    let priceBand = 'all';
+    function bandOk(p) {
+      if (priceBand === 'u300') return p.price < 300;
+      if (priceBand === 'b300') return p.price >= 300 && p.price <= 500;
+      if (priceBand === 'b500') return p.price > 500 && p.price <= 1000;
+      if (priceBand === 'o1000') return p.price > 1000;
+      return true;
+    }
+    function renderFilterUI() {
+      const SORTS = [['rec', t('s_rec')], ['plow', t('s_plow')], ['phigh', t('s_phigh')], ['best', t('s_best')]];
+      const BANDS = [['all', t('all')], ['u300', '< ฿300'], ['b300', '฿300-500'], ['b500', '฿500-1,000'], ['o1000', '> ฿1,000']];
+      document.getElementById('sortPills').innerHTML = SORTS.map(([v, lb]) =>
+        `<button class="pill${sortBy === v ? ' active' : ''}" onclick="sortBy='${v}';renderFilterUI();renderMenu();">${lb}</button>`).join('');
+      document.getElementById('pricePills').innerHTML = BANDS.map(([v, lb]) =>
+        `<button class="pill${priceBand === v ? ' active' : ''}" onclick="priceBand='${v}';renderFilterUI();renderMenu();">${lb}</button>`).join('');
+    }
+    function openFilter() {
+      renderFilterUI(); renderMenu();
+      document.getElementById('ftOverlay').classList.add('open');
+      document.getElementById('ftSheet').classList.add('open');
+    }
+    function closeFilter() {
+      document.getElementById('ftOverlay').classList.remove('open');
+      document.getElementById('ftSheet').classList.remove('open');
+    }
+    function clearFilter() {
+      sortBy = 'rec'; priceBand = 'all';
+      renderFilterUI(); renderMenu();
+    }
 
     function setBrowseMode(mode, btn) {
       browseMode = mode;
