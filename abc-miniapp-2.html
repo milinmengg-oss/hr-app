@@ -221,7 +221,7 @@
     }
     .p-card:active { transform: scale(0.96); }
     .p-thumb {
-      aspect-ratio: 1.7 / 1;
+      aspect-ratio: 1 / 1;
       margin: 10px 10px 0;
       border-radius: 16px;
       background: radial-gradient(circle at 50% 40%, #313131 0%, #1a1a1a 80%);
@@ -864,7 +864,7 @@
       overflow: hidden; cursor: pointer;
     }
     .fs-card:active { transform: scale(.96); }
-    .fs-thumb { height: 86px; position: relative; overflow: hidden; }
+    .fs-thumb { aspect-ratio: 1 / 1; position: relative; overflow: hidden; }
     .fs-off {
       position: absolute; top: 6px; left: 6px; z-index: 2;
       background: #ff4d4d; color: #fff; font-size: 10px; font-weight: 900;
@@ -2008,7 +2008,7 @@
         `<span class="tag ${p.tags.includes(t) ? cls : 'off'}">${ic} ${t}</span>`
       ).join('');
       const thumb = p.img
-        ? `<img loading="lazy" decoding="async" src="${p.img}" alt="${p.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+        ? `<img loading="lazy" decoding="async" src="${p.img}" alt="${p.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
         : '';
       const emojiStyle = p.img ? 'display:none' : 'display:flex';
       const hasFlav = p.flavors && p.flavors.length > 0;
@@ -2066,7 +2066,7 @@
         const p = PRODUCTS.find(x => x.id === fi.id);
         if (!p) return '';
         const thumb = p.img
-          ? `<img loading="lazy" decoding="async" src="${p.img}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;">`
+          ? `<img loading="lazy" decoding="async" src="${p.img}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">`
           : `<div style="position:absolute;inset:0;background:${gradOf(p)};"></div>`;
         return `<div class="fs-card" onclick="openProduct(${p.id})">
           <div class="fs-thumb">${thumb}<div class="fs-off">-${fi.off}%</div></div>
