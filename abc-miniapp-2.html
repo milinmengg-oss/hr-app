@@ -2008,7 +2008,7 @@
         `<span class="tag ${p.tags.includes(t) ? cls : 'off'}">${ic} ${t}</span>`
       ).join('');
       const thumb = p.img
-        ? `<img loading="lazy" decoding="async" src="${p.img}" alt="${p.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
+        ? `<img loading="lazy" decoding="async" src="${p.img}" alt="${p.name}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff" onerror="this.style.display='none';this.nextSibling.style.display='flex'">`
         : '';
       const emojiStyle = p.img ? 'display:none' : 'display:flex';
       const hasFlav = p.flavors && p.flavors.length > 0;
@@ -2066,7 +2066,7 @@
         const p = PRODUCTS.find(x => x.id === fi.id);
         if (!p) return '';
         const thumb = p.img
-          ? `<img loading="lazy" decoding="async" src="${p.img}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;">`
+          ? `<img loading="lazy" decoding="async" src="${p.img}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;">`
           : `<div style="position:absolute;inset:0;background:${gradOf(p)};"></div>`;
         return `<div class="fs-card" onclick="openProduct(${p.id})">
           <div class="fs-thumb">${thumb}<div class="fs-off">-${fi.off}%</div></div>
