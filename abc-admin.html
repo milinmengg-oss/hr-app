@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC Shop — หลังร้าน</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0d0d;--card:#171717;--card2:#212121;--border:#2b2b2b;--text:#f2f2f2;--sub:#9a9a9a;--lime:#bdfb00;--red:#ff5d5d;--amber:#e8b53a;--blue:#5db2ff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Kanit',sans-serif;font-size:14px;min-height:100vh;}
+.wrap{max-width:1040px;margin:0 auto;padding:16px 14px 80px;}
+h1{font-size:19px;display:flex;align-items:center;gap:8px;}
+h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--lime);box-shadow:0 0 10px var(--lime);}
+.tabs{display:flex;gap:8px;margin:14px 0;flex-wrap:wrap;}
+.tab{padding:8px 18px;border-radius:12px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-family:inherit;color:var(--text);font-size:13.5px;font-weight:600;}
+.tab.on{background:var(--lime);color:#111;}
+.chips{display:flex;gap:6px;margin:0 0 12px;flex-wrap:wrap;}
+.chip{padding:5px 13px;border-radius:99px;background:var(--card);border:1px solid var(--border);cursor:pointer;font-size:12px;color:var(--sub);}
+.chip.on{background:#fff;color:#111;font-weight:600;}
+.stat{display:flex;gap:10px;margin:10px 0 14px;flex-wrap:wrap;}
+.stat .s{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:10px 16px;min-width:130px;}
+.stat .s b{font-size:18px;color:var(--lime);display:block;}
+.stat .s span{font-size:11px;color:var(--sub);}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:12px;}
+.ocode{font-weight:800;letter-spacing:.4px;}
+.badge{font-size:11px;padding:3px 10px;border-radius:99px;font-weight:700;}
+.b-pending{background:#3d3517;color:var(--amber);}
+.b-paid{background:#16324a;color:var(--blue);}
+.b-shipped{background:#1d3d17;color:#8be05d;}
+.b-done{background:#233;color:#9fe;}
+.b-cancelled{background:#3d1717;color:var(--red);}
+.row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;}
+.items{font-size:12.5px;color:#ccc;margin:8px 0;line-height:1.7;background:var(--card2);border-radius:10px;padding:8px 12px;}
+.meta{font-size:12px;color:var(--sub);line-height:1.8;}
+.meta b{color:var(--text);font-weight:600;}
+.btns{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
+button.act{font-family:inherit;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:10px;border:none;cursor:pointer;}
+.a-ok{background:var(--lime);color:#111;}
+.a-ship{background:var(--blue);color:#111;}
+.a-done{background:#2f2f2f;color:var(--text);border:1px solid var(--border) !important;}
+.a-no{background:transparent;color:var(--red);border:1.5px solid var(--red) !important;}
+.a-copy{background:#2f2f2f;color:var(--text);}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{color:var(--sub);font-weight:500;font-size:11.5px;text-align:left;padding:8px 6px;border-bottom:1px solid var(--border);}
+td{padding:7px 6px;border-bottom:1px solid #1f1f1f;vertical-align:middle;}
+td input[type=number]{width:80px;background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:inherit;border-radius:8px;padding:6px 8px;font-size:13px;}
+td input[type=checkbox]{transform:scale(1.2);}
+.save{background:var(--lime);border:none;border-radius:8px;padding:6px 12px;font-family:inherit;font-weight:700;font-size:12px;cursor:pointer;}
+.search{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13.5px;outline:none;margin:0 0 12px;}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;}
+.lbox{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:30px;width:320px;text-align:center;}
+.lbox input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px;color:var(--text);font-family:inherit;font-size:16px;text-align:center;outline:none;margin:14px 0;letter-spacing:4px;}
+.lbox button{width:100%;background:var(--lime);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;}
+.note{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:10px;}
+.exp{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+.exp button{flex:1;min-width:220px;background:var(--card2);border:1.5px solid var(--border);color:var(--text);border-radius:14px;padding:16px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;}
+.exp button:hover{border-color:var(--lime);}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 22px;border-radius:99px;font-weight:600;font-size:13px;opacity:0;transition:.25s;pointer-events:none;z-index:99;}
+.toast.show{opacity:1;}
+.hidden{display:none;}
+a{color:var(--blue);}
+</style>
+</head>
+<body>
+<div id="login"><div class="lbox">
+  <div style="font-size:34px;">🔐</div>
+  <h2 style="font-size:17px;margin-top:6px;">ABC Shop — หลังร้าน</h2>
+  <div id="loginSub" class="note">ใส่รหัส PIN เพื่อเข้าใช้งาน</div>
+  <input id="pin" type="password" inputmode="numeric" placeholder="••••••" onkeydown="if(event.key==='Enter')enter()">
+  <button onclick="enter()">เข้าสู่ระบบ</button>
+</div></div>
+
+<div class="wrap hidden" id="main">
+  <h1><span class="dot"></span>ABC Shop — หลังร้าน <span id="conn" style="font-size:11px;color:var(--sub);font-weight:400;">กำลังเชื่อมต่อ…</span></h1>
+  <div class="stat">
+    <div class="s"><b id="stToday">-</b><span>ออเดอร์วันนี้</span></div>
+    <div class="s"><b id="stRev">-</b><span>ยอดขายวันนี้ (ที่อนุมัติ)</span></div>
+    <div class="s"><b id="stPending">-</b><span>รอตรวจสอบ</span></div>
+  </div>
+  <div class="tabs">
+    <button class="tab on" id="tabO" onclick="tab('O')">📋 ออเดอร์</button>
+    <button class="tab" id="tabS" onclick="tab('S')">📦 สต็อกสินค้า</button>
+    <button class="tab" id="tabX" onclick="tab('X')">⬇️ ส่งออกไฟล์</button>
+  </div>
+
+  <div id="paneO">
+    <div class="chips" id="fchips"></div>
+    <div id="olist"></div>
+  </div>
+
+  <div id="paneS" class="hidden">
+    <input class="search" placeholder="ค้นหาสินค้า…" oninput="sq=this.value;renderStock()">
+    <div class="note" style="margin:0 0 10px;">แก้ตัวเลขแล้วกด "บันทึก" ของแถวนั้น · ติ๊ก "ปิดขาย" = ซ่อนจากการสั่งซื้อชั่วคราว · สต็อก 0 = ขึ้น "หมด" ในแอพทันที</div>
+    <table><thead><tr><th style="width:38%">สินค้า</th><th>ราคา ฿</th><th>สต็อก</th><th>ขายแล้ว</th><th>ปิดขาย</th><th></th></tr></thead><tbody id="stockBody"></tbody></table>
+  </div>
+
+  <div id="paneX" class="hidden">
+    <div class="card">
+      <b>เลือกวัน</b> <input type="date" id="expDate" style="background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:inherit;border-radius:8px;padding:8px;margin-left:8px;">
+      <div class="exp">
+        <button onclick="expOrders()">📦 ไฟล์ออเดอร์ (CSV)<br><span style="font-size:11px;color:var(--sub);font-weight:400;">ชื่อ-ที่อยู่-เบอร์-รายการ สำหรับขนส่ง/บันทึก</span></button>
+        <button onclick="expSummary()">📊 สรุปยอดต่อรุ่น (CSV)<br><span style="font-size:11px;color:var(--sub);font-weight:400;">เอาไปหักสต็อกใน XSelly รวมทีเดียว</span></button>
+      </div>
+      <div class="note">ไฟล์เปิดใน Excel ได้เลย (รองรับภาษาไทย) · นับเฉพาะออเดอร์ที่ไม่ถูกยกเลิก</div>
+    </div>
+    <div class="card">
+      <b>⚙️ ตั้งค่า</b>
+      <div class="exp">
+        <button onclick="changePin()">เปลี่ยนรหัส PIN</button>
+        <button onclick="seedProducts(true)">รีเซ็ตรายการสินค้าจากแอพ (65 รุ่น)</button>
+      </div>
+      <div class="note">รีเซ็ต = เพิ่มรุ่นที่ยังไม่มีในฐานข้อมูล (ไม่ทับสต็อก/ยอดขายเดิม)</div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+const PLIST = [{"id": 1, "name": "ABC LEGO 20K (หัวน้ำยา)", "price": 299}, {"id": 2, "name": "ABC TANK 22K (หัวน้ำยา)", "price": 320}, {"id": 3, "name": "ELFBAR SWAP 25K (หัวน้ำยา)", "price": 379}, {"id": 4, "name": "ESKO BAR SWITCH 20K (หัวน้ำยา)", "price": 350}, {"id": 5, "name": "KS QUIK PRO 15K (หัวน้ำยา)", "price": 350}, {"id": 6, "name": "M SWITCH (หัวน้ำยา)", "price": 350}, {"id": 7, "name": "RELX BOOST POD (หัวน้ำยา)", "price": 350}, {"id": 8, "name": "RELX POD CLEAR 18K (หัวน้ำยา)", "price": 390}, {"id": 9, "name": "VAZER RELOAD 15K (หัวน้ำยา)", "price": 330}, {"id": 10, "name": "หัวพอต INFY PLUS", "price": 140}, {"id": 11, "name": "หัวพอต MARBO ZERO", "price": 140}, {"id": 12, "name": "หัวพอต RELX INFINITY", "price": 140}, {"id": 13, "name": "หัวพอต RELX LARGE", "price": 140}, {"id": 14, "name": "หัวพอต RELX ULTRA", "price": 120}, {"id": 15, "name": "ABC 8K", "price": 250}, {"id": 16, "name": "CARNIVAL 20K", "price": 399}, {"id": 17, "name": "DUAL SMASH 20K", "price": 320}, {"id": 18, "name": "ELFBAR 15K", "price": 350}, {"id": 19, "name": "ESKO BAR 20K", "price": 399}, {"id": 20, "name": "INFY 12K", "price": 350}, {"id": 21, "name": "INFY 20K", "price": 399}, {"id": 22, "name": "INFY BAR 15K", "price": 299}, {"id": 23, "name": "INFY BAR PRO 20K", "price": 399}, {"id": 24, "name": "JOIWAY 12K", "price": 320}, {"id": 25, "name": "JOIWAY TWINS 20K", "price": 399}, {"id": 26, "name": "KS Quik 6K", "price": 280}, {"id": 27, "name": "LANA IRIS 24K", "price": 410}, {"id": 28, "name": "MARBO 10K", "price": 399}, {"id": 29, "name": "MARBO 9K", "price": 350}, {"id": 30, "name": "MARBO 9K (โคลน)", "price": 290}, {"id": 31, "name": "RELX DIVA 30K", "price": 490}, {"id": 32, "name": "RELX SMASH GO 12K", "price": 320}, {"id": 33, "name": "RELX SPARTA 20K", "price": 399}, {"id": 34, "name": "SONIC 8K", "price": 250}, {"id": 35, "name": "STAR 2,500", "price": 150}, {"id": 36, "name": "V PLUS 16K", "price": 370}, {"id": 37, "name": "VOSOON 23K", "price": 399}, {"id": 38, "name": "ESKO BAR SWITCH 20K (KIT)", "price": 499}, {"id": 39, "name": "KS QUIK PRO 15K (KIT)", "price": 499}, {"id": 40, "name": "M SWITCH 15K (KIT)", "price": 499}, {"id": 41, "name": "VAZER RELOAD 15K (KIT)", "price": 450}, {"id": 42, "name": "เครื่อง DUAL SMASH", "price": 200}, {"id": 43, "name": "เครื่อง ELFBAR JOINONE", "price": 349}, {"id": 44, "name": "เครื่อง M SWITCH 15K", "price": 250}, {"id": 45, "name": "เครื่อง M SWITCH 15K (โคลน)", "price": 200}, {"id": 46, "name": "เครื่อง M ZERO NANO", "price": 690}, {"id": 47, "name": "เครื่อง M ZERO PRO", "price": 890}, {"id": 48, "name": "เครื่อง RELX CREATOR 20K", "price": 250}, {"id": 49, "name": "เครื่อง RELX ESSENTIAL 2", "price": 490}, {"id": 50, "name": "เครื่อง RELX INFINITY 2+", "price": 990}, {"id": 51, "name": "เครื่อง VAZER RELOAD", "price": 220}, {"id": 52, "name": "ไส้บุหรี่ IQOS INDO", "price": 1500}, {"id": 53, "name": "ไส้บุหรี่ IQOS JP", "price": 2150}, {"id": 54, "name": "ไส้บุหรี่ IQOS MALAY", "price": 1700}, {"id": 55, "name": "เครื่อง IQOS ILUMA I ONE", "price": 3200}, {"id": 56, "name": "เครื่อง IQOS ILUMA I PRIME", "price": 5200}, {"id": 57, "name": "เครื่อง IQOS ILUMA I STANDARD", "price": 4200}, {"id": 58, "name": "SALTNIC ESKOLIQ 30ML", "price": 250}, {"id": 59, "name": "SALTNIC MARBO 30ML", "price": 270}, {"id": 60, "name": "FREEBASE ESKOLIQ 30ML", "price": 150}, {"id": 61, "name": "FREEBASE MARBO 30ML", "price": 170}, {"id": 62, "name": "FREEBASE PHATJUICE 30ML", "price": 170}, {"id": 63, "name": "NICOTINE POUCH - KARDINAL POUCH", "price": 199}, {"id": 64, "name": "NICOTINE POUCH - ZAR POUCH", "price": 199}, {"id": 65, "name": "NICOTINE POUCH - ZYN POUCH", "price": 179}];
+const NAME = {}; PLIST.forEach(p => NAME[p.id] = p.name);
+firebase.initializeApp({ apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" });
+const db = firebase.firestore();
+let ORDERS = [], STOCK = {}, filter = 'all', sq = '';
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+// ── เข้าสู่ระบบด้วย PIN (เก็บใน shop_config/admin) ──
+async function enter(){
+  const v = document.getElementById('pin').value.trim();
+  if(!v){ return; }
+  try{
+    const doc = await db.collection('shop_config').doc('admin').get();
+    if(!doc.exists){
+      if(v.length < 4){ toast('PIN อย่างน้อย 4 หลัก'); return; }
+      await db.collection('shop_config').doc('admin').set({ pin: v, created: Date.now() });
+      await seedProducts(false);
+      toast('ตั้ง PIN และติดตั้งระบบเรียบร้อย');
+      start();
+    } else if(doc.data().pin === v){
+      start();
+    } else { toast('PIN ไม่ถูกต้อง'); }
+  }catch(e){ console.error(e); toast('เชื่อมต่อฐานข้อมูลไม่ได้: '+e.message); }
+}
+(async()=>{ try{ const d = await db.collection('shop_config').doc('admin').get();
+  if(!d.exists) document.getElementById('loginSub').innerHTML = 'ครั้งแรก: <b style="color:var(--lime)">ตั้งรหัส PIN ใหม่</b> แล้วระบบจะติดตั้งฐานข้อมูลอัตโนมัติ';
+}catch(e){} })();
+
+async function seedProducts(manual){
+  const ref = db.collection('shop_live').doc('stock');
+  const doc = await ref.get();
+  const p = (doc.exists && doc.data().p) ? doc.data().p : {};
+  let added = 0;
+  PLIST.forEach(x => { if(!p[x.id]){ p[x.id] = { s: 100, so: 0, pr: x.price, off: 0 }; added++; } });
+  await ref.set({ p }, { merge: true });
+  if(manual) toast('เพิ่มสินค้าใหม่ '+added+' รุ่น (สต็อกตั้งต้น 100)');
+}
+
+function start(){
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('main').classList.remove('hidden');
+  document.getElementById('expDate').value = new Date().toISOString().slice(0,10);
+  db.collection('shop_orders').orderBy('ts','desc').limit(400).onSnapshot(s=>{
+    ORDERS = s.docs.map(d=>d.data());
+    document.getElementById('conn').textContent = '● ออนไลน์';
+    document.getElementById('conn').style.color = 'var(--lime)';
+    renderStats(); renderOrders();
+  }, e=>{ document.getElementById('conn').textContent='การเชื่อมต่อขัดข้อง'; });
+  db.collection('shop_live').doc('stock').onSnapshot(s=>{ STOCK = (s.data()||{}).p || {}; renderStock(); });
+}
+
+function tab(k){
+  ['O','S','X'].forEach(x=>{
+    document.getElementById('tab'+x).classList.toggle('on', x===k);
+    document.getElementById('pane'+x).classList.toggle('hidden', x!==k);
+  });
+}
+
+const FL = [['all','ทั้งหมด'],['pending','⏳ รอตรวจสอบ'],['paid','📦 กำลังแพ็ค'],['shipped','🚚 จัดส่งแล้ว'],['done','✅ สำเร็จ'],['cancelled','❌ ยกเลิก']];
+function renderStats(){
+  const today = new Date(); today.setHours(0,0,0,0); const t0 = today.getTime();
+  const td = ORDERS.filter(o=>o.ts>=t0 && o.status!=='cancelled');
+  document.getElementById('stToday').textContent = td.length;
+  document.getElementById('stRev').textContent = '฿'+td.filter(o=>o.status!=='pending').reduce((a,o)=>a+o.total,0).toLocaleString();
+  document.getElementById('stPending').textContent = ORDERS.filter(o=>o.status==='pending').length;
+}
+function renderOrders(){
+  document.getElementById('fchips').innerHTML = FL.map(([k,l])=>{
+    const n = k==='all' ? ORDERS.length : ORDERS.filter(o=>o.status===k).length;
+    return `<div class="chip ${filter===k?'on':''}" onclick="filter='${k}';renderOrders()">${l} (${n})</div>`;
+  }).join('');
+  const list = ORDERS.filter(o=>filter==='all'||o.status===filter);
+  document.getElementById('olist').innerHTML = list.length===0 ? '<div class="note" style="text-align:center;padding:30px;">ไม่มีออเดอร์</div>' :
+    list.map(o=>{
+      const B = {pending:'⏳ รอตรวจสอบ',paid:'📦 กำลังแพ็ค',shipped:'🚚 จัดส่งแล้ว',done:'✅ สำเร็จ',cancelled:'❌ ยกเลิก'};
+      const btns = [];
+      if(o.status==='pending') btns.push(`<button class="act a-ok" onclick="setSt('${o.code}','paid')">✅ อนุมัติ (รับยอดโอนแล้ว)</button>`,`<button class="act a-no" onclick="cancelOrder('${o.code}')">❌ ยกเลิก+คืนสต็อก</button>`);
+      if(o.status==='paid') btns.push(`<button class="act a-ship" onclick="shipOrder('${o.code}')">🚚 จัดส่งแล้ว (ใส่เลขพัสดุ)</button>`,`<button class="act a-no" onclick="cancelOrder('${o.code}')">❌ ยกเลิก+คืนสต็อก</button>`);
+      if(o.status==='shipped') btns.push(`<button class="act a-done" onclick="setSt('${o.code}','done')">✔ ปิดงาน สำเร็จ</button>`);
+      btns.push(`<button class="act a-copy" onclick="copyAddr('${o.code}')">📋 ก็อปที่อยู่ (วางใน XSelly)</button>`);
+      return `<div class="card">
+        <div class="row"><span class="ocode">${o.code}</span><span class="badge b-${o.status}">${B[o.status]||o.status}</span></div>
+        <div class="meta">${o.time} ${o.user?('· ลูกค้า Telegram: <b>'+esc(o.user)+'</b>'):''}</div>
+        <div class="items">${(o.items||[]).map(x=>esc(x.name)+' ×'+x.qty).join('<br>')}</div>
+        <div class="meta">
+          📞 <b>${esc(o.phone||'-')}</b><br>
+          📍 ${esc(o.address||'-')} ${o.maps?`· <a href="${o.maps}" target="_blank">เปิดแผนที่</a>`:''}<br>
+          🛵 ${o.shipMethod==='rider'?('ส่งด่วนไรเดอร์ '+(o.distanceKm||'?')+' กม.'):'ส่งพัสดุ'} · ค่าส่ง ฿${o.shipping||0} ${o.coupon?('· คูปอง: '+esc(o.coupon)+' (-฿'+(o.discount||0)+')'):''} ${o.track?('· เลขพัสดุ: <b>'+esc(o.track)+'</b>'):''}
+        </div>
+        <div class="row" style="margin-top:6px;"><b style="font-size:16px;color:var(--lime);">รวม ฿${(o.total||0).toLocaleString()}</b></div>
+        <div class="btns">${btns.join('')}</div>
+      </div>`;
+    }).join('');
+}
+function esc(s){ return String(s).replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+async function setSt(code, st){
+  const upd = { status: st }; if(st==='done') upd.doneTs = Date.now();
+  await db.collection('shop_orders').doc(code).update(upd); toast('อัพเดต '+code+' → '+st);
+}
+async function shipOrder(code){
+  const tr = prompt('เลขพัสดุ / ชื่อไรเดอร์ (เว้นว่างได้)') || '';
+  await db.collection('shop_orders').doc(code).update({ status:'shipped', track: tr, shipTs: Date.now() });
+  toast('บันทึกจัดส่ง '+code);
+}
+async function cancelOrder(code){
+  if(!confirm('ยกเลิกออเดอร์ '+code+' และคืนสต็อก?')) return;
+  const stockRef = db.collection('shop_live').doc('stock');
+  const ordRef = db.collection('shop_orders').doc(code);
+  await db.runTransaction(async tx=>{
+    const [os, ss] = [await tx.get(ordRef), await tx.get(stockRef)];
+    if(!os.exists) throw new Error('no order');
+    const o = os.data(); if(o.status==='cancelled') return;
+    const d = ss.data()||{}; const P = d.p||{};
+    (o.items||[]).forEach(it=>{ const v=P[it.id]; if(v){ v.s=(v.s|0)+it.qty; v.so=Math.max(0,(v.so|0)-it.qty); P[it.id]=v; } });
+    tx.set(stockRef,{p:P},{merge:true});
+    tx.update(ordRef,{status:'cancelled',cancelTs:Date.now()});
+  });
+  toast('ยกเลิกและคืนสต็อกแล้ว');
+}
+function copyAddr(code){
+  const o = ORDERS.find(x=>x.code===code); if(!o) return;
+  const txt = (o.address||'') + '\n' + (o.phone||'') + '\n' + (o.items||[]).map(x=>x.name+' x'+x.qty).join('\n') + '\nรวม '+o.total+' บาท ('+o.code+')';
+  navigator.clipboard.writeText(txt).then(()=>toast('ก็อปแล้ว — วางใน XSelly ได้เลย'));
+}
+
+// ── สต็อก ──
+function renderStock(){
+  const q = sq.trim().toLowerCase();
+  document.getElementById('stockBody').innerHTML = PLIST
+    .filter(p=>!q || p.name.toLowerCase().includes(q))
+    .map(p=>{
+      const v = STOCK[p.id] || { s:'-', so:'-', pr:p.price, off:0 };
+      return `<tr>
+        <td>${esc(p.name)}</td>
+        <td><input type="number" id="pr${p.id}" value="${v.pr||p.price}"></td>
+        <td><input type="number" id="s${p.id}" value="${v.s}"></td>
+        <td style="color:var(--sub);">${v.so}</td>
+        <td><input type="checkbox" id="off${p.id}" ${v.off?'checked':''}></td>
+        <td><button class="save" onclick="saveRow(${p.id})">บันทึก</button></td>
+      </tr>`;
+    }).join('');
+}
+async function saveRow(id){
+  const v = STOCK[id] || { so:0 };
+  const upd = { s: parseInt(document.getElementById('s'+id).value)||0,
+                so: v.so|0,
+                pr: parseInt(document.getElementById('pr'+id).value)||0,
+                off: document.getElementById('off'+id).checked?1:0 };
+  await db.collection('shop_live').doc('stock').set({ p: { [id]: upd } }, { merge: true });
+  toast('บันทึก '+(NAME[id]||id));
+}
+
+// ── ส่งออก ──
+function dayOrders(){
+  const d = document.getElementById('expDate').value;
+  const t0 = new Date(d+'T00:00:00').getTime(), t1 = t0+86400000;
+  return ORDERS.filter(o=>o.ts>=t0 && o.ts<t1 && o.status!=='cancelled');
+}
+function dl(name, rows){
+  const csv = '﻿'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download = name; a.click();
+}
+function expOrders(){
+  const os = dayOrders(); if(!os.length){ toast('วันนั้นไม่มีออเดอร์'); return; }
+  const rows = [['เลขออเดอร์','เวลา','สถานะ','ชื่อ-ที่อยู่ผู้รับ','เบอร์','รายการ','ยอดรวม','วิธีส่ง','ค่าส่ง','เลขพัสดุ','ลิงก์แผนที่']];
+  os.forEach(o=>rows.push([o.code,o.time,o.status,o.address,o.phone,(o.items||[]).map(x=>x.name+' x'+x.qty).join(' | '),o.total,o.shipMethod==='rider'?'ไรเดอร์':'พัสดุ',o.shipping,o.track||'',o.maps||'']));
+  dl('ABC-orders-'+document.getElementById('expDate').value+'.csv', rows);
+}
+function expSummary(){
+  const os = dayOrders(); if(!os.length){ toast('วันนั้นไม่มีออเดอร์'); return; }
+  const sum = {};
+  os.forEach(o=>(o.items||[]).forEach(x=>{ const k=x.name; sum[k]=(sum[k]||0)+x.qty; }));
+  const rows = [['สินค้า (รุ่น+กลิ่น)','จำนวนที่ขาย']];
+  Object.keys(sum).sort().forEach(k=>rows.push([k,sum[k]]));
+  dl('ABC-summary-'+document.getElementById('expDate').value+'.csv', rows);
+}
+async function changePin(){
+  const np = prompt('รหัส PIN ใหม่ (อย่างน้อย 4 หลัก)'); if(!np||np.length<4){ toast('ยกเลิก'); return; }
+  await db.collection('shop_config').doc('admin').update({ pin: np });
+  toast('เปลี่ยน PIN แล้ว');
+}
+</script>
+</body>
+</html>

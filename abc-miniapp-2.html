@@ -1955,14 +1955,17 @@
     // ── เรตติ้ง/ยอดขาย (mock — เดฟต่อข้อมูลจริงภายหลัง) ──
     const rateOf = p => (4.5 + ((p.id * 37) % 50) / 100).toFixed(1);
     const soldOf = p => {
-      const s = (p.id * 173) % 2000 + 120;
+      const real = (p.sold != null);
+      const s = real ? p.sold : ((p.id * 173) % 2000 + 120);
+      if (real && s <= 0) return '';
       const k = lang === 'en' ? 'k' : 'พัน';
       return s >= 1000 ? (s / 1000).toFixed(1) + k : s;
     };
+    const soldTxt = p => { const v = soldOf(p); return v === '' ? '' : `· ${t('sold')} ${v}`; };
 
     // ── State ──
     let cart = {};
-    let orders = [];
+    let orders = (()=>{try{return JSON.parse(localStorage.getItem('abc_orders')||'[]')}catch(e){return []}})();
     let activeCat = 'all';
     let activeTags = new Set();
     let activeNic = 'all';
@@ -2025,7 +2028,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}${hasFlav?` · ${p.flavors.length} ${t('flavors_unit')}`:''}</div>
-          <div class="rate-row">★ ${rateOf(p)} <span>· ${t('sold')} ${soldOf(p)}</span></div>
+          <div class="rate-row">★ ${rateOf(p)} <span>${soldTxt(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
@@ -2050,7 +2053,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}</div>
-          <div class="rate-row" style="font-size:10px;">★ ${rateOf(p)}<span> · ${soldOf(p)}</span></div>
+          <div class="rate-row" style="font-size:10px;">★ ${rateOf(p)}<span>${soldTxt(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
@@ -2241,11 +2244,15 @@
 
     // ── Order render ──
     function renderOrder() {
+      refreshOrderStatuses();
       document.getElementById('ordContent').innerHTML = orders.length === 0
         ? `<div class="ord-empty"><div class="oe">📋</div><h3>${t('ord_empty_title')}</h3><p>${t('ord_empty_sub')}</p></div>`
         : orders.map((o,i)=>{
-            const idx = o.ts ? Math.min(3, Math.floor((Date.now() - o.ts) / 120000)) : 3;
-            const STL = [t('st0'), t('st1'), t('st2'), t('st3')];
+            const ST = o.st || null;
+            const MAP = { pending: 0, paid: 1, packed: 1, shipped: 2, done: 3 };
+            const idx = ST ? (ST === 'cancelled' ? -1 : (MAP[ST] != null ? MAP[ST] : 0)) : (o.ts ? Math.min(3, Math.floor((Date.now() - o.ts) / 120000)) : 3);
+            const STL = lang === 'en' ? ['Reviewing', 'Packing', 'Shipped', 'Done'] : ['รอตรวจสอบ', 'กำลังแพ็ค', 'จัดส่งแล้ว', 'สำเร็จ'];
+            const stText = ST === 'cancelled' ? (lang === 'en' ? '❌ Cancelled' : '❌ ยกเลิกแล้ว') : `${idx >= 3 ? '✅ ' : '⏳ '}${STL[Math.max(0, idx)]}${o.track ? ' · ' + o.track : ''}`;
             return `
             <div class="ord-card">
               <div class="ord-id" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -2253,8 +2260,8 @@
                 <button class="copy-btn" onclick="copyOrd('${o.code||''}')" aria-label="copy"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke-width="2"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button>
                 <span>· ${o.time}</span>
               </div>
-              <div class="ord-status">${idx === 3 ? '✅ ' : '⏳ '}${STL[idx]}</div>
-              <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
+              <div class="ord-status">${stText}</div>
+              <div class="ord-steps">${STL.map((s,j)=>`<div class="ostep ${idx>=0&&j<=idx?'on':''}"><div class="odot"></div><div class="olabel">${s}</div></div>`).join('')}</div>
               <div class="ord-items">${o.items.map(x=>`${x.name} ×${x.qty}`).join('<br>')}</div>
               <div class="ord-total">${t('ord_total')} ฿${o.total.toLocaleString()}</div>
               ${o.pin && o.pin.addr ? `<div style="font-size:11px;color:var(--sub);margin-top:8px;line-height:1.5;">📍 ${o.pin.addr}${o.pin.detail ? ' · ' + o.pin.detail : ''}</div>` : ''}
@@ -2356,7 +2363,7 @@
         ${shipMethod === 'rider' && total ? `<button class="pin-btn" onclick="openMapPicker()">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
           ${riderFee ? t('pin_again') + ' · ' + riderKm + ' ' + t('km') : t('pin_btn')}
-        </button>${riderFee && pinnedAddr ? `<div style="font-size:11px;color:var(--sub);margin:-2px 2px 8px;text-align:center;line-height:1.5;">${pinnedAddr}</div>` : ''}${riderFee ? `<input value="${addrDetail.replace(/"/g,'&quot;')}" oninput="addrDetail=this.value" placeholder="${t('addr_detail_ph')}" style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 13px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;margin-bottom:10px;">` : ''}` : ''}
+        </button>${riderFee && pinnedAddr ? `<div style="font-size:11px;color:var(--sub);margin:-2px 2px 8px;text-align:center;line-height:1.5;">${pinnedAddr}</div>` : ''}${riderFee ? `<input value="${addrDetail.replace(/"/g,'&quot;')}" oninput="addrDetail=this.value" placeholder="${t('addr_detail_ph')}" style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 13px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;margin-bottom:10px;">` : ''}` : ''}${total ? `<input value="${custPhone.replace(/"/g,'&quot;')}" oninput="custPhone=this.value" inputmode="tel" placeholder="${lang==='en'?'📞 Recipient phone *':'📞 เบอร์โทรผู้รับ *'}" style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 13px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;margin-bottom:10px;">` : ''}${total && shipMethod !== 'rider' ? `<textarea oninput="parcelAddr=this.value" placeholder="${lang==='en'?'👤 Recipient name + full address *':'👤 ชื่อผู้รับ + ที่อยู่จัดส่ง (บ้านเลขที่ ถนน แขวง เขต จังหวัด รหัสไปรษณีย์) *'}" style="width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:9px 13px;color:var(--text);font-family:inherit;font-size:12.5px;outline:none;margin-bottom:10px;height:76px;resize:none;">${parcelAddr.replace(/</g,'&lt;')}</textarea>` : ''}
         <div class="sum-row"><span>${t('sum_sub')}</span><b>฿${total.toLocaleString()}</b></div>
         ${disc ? `<div class="sum-row"><span>${t('coupon_disc')}</span><b style="color:var(--lime);">-฿${disc.toLocaleString()}</b></div>` : ''}
         <div class="sum-row"><span>${t('sum_ship')}</span><b>${total ? (shipMethod === 'rider' ? (riderFee ? '฿' + riderFee + ' (' + riderKm + ' ' + t('km') + ')' : t('ship_grab')) : (ship ? '฿' + ship : t('ship_free'))) : '฿0'}</b></div>
@@ -2406,34 +2413,144 @@
     }
 
     // ── Checkout ──
+    // ══ BACKEND: Firebase Firestore (โปรเจกต์เดียวกับ HR: abc-hr-online) ══
+    const FB_CONFIG = { apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" };
+    let fbDB = null, fbLoading = false, fbQueue = [];
+    let LIVE = null; // {pid:{s:สต็อก, so:ขายแล้ว, pr:ราคา, off:ปิดขาย}}
+    function fbReady(cb, onFail) {
+      if (fbDB) { cb(); return; }
+      fbQueue.push({ cb, onFail });
+      if (fbLoading) return;
+      fbLoading = true;
+      const fail = () => { const q = fbQueue; fbQueue = []; fbLoading = false; q.forEach(x => x.onFail && x.onFail()); };
+      const s1 = document.createElement('script');
+      s1.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+      s1.onerror = fail;
+      s1.onload = () => {
+        const s2 = document.createElement('script');
+        s2.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+        s2.onerror = fail;
+        s2.onload = () => {
+          try {
+            firebase.initializeApp(FB_CONFIG);
+            fbDB = firebase.firestore();
+            const q = fbQueue; fbQueue = []; fbLoading = false;
+            q.forEach(x => x.cb());
+          } catch (e) { fail(); }
+        };
+        document.head.appendChild(s2);
+      };
+      document.head.appendChild(s1);
+    }
+    function applyLive() {
+      if (!LIVE) return;
+      PRODUCTS.forEach(p => {
+        const v = LIVE[p.id];
+        if (!v) return;
+        p.sold = v.so | 0;
+        p.out = (v.s | 0) <= 0 || !!v.off;
+        if (v.pr) p.price = v.pr;
+      });
+      try { renderHomeGrid(); renderFlash(); renderMenu(); renderFavs(); } catch (e) {}
+    }
+    function hydrateStock() {
+      fbReady(() => {
+        fbDB.collection('shop_live').doc('stock').onSnapshot(snap => {
+          const d = snap.data();
+          if (d && d.p) { LIVE = d.p; applyLive(); }
+        });
+      }, () => {});
+    }
+    hydrateStock();
+    let custPhone = localStorage.getItem('abc_phone') || '';
+    let parcelAddr = localStorage.getItem('abc_addr') || '';
+    function saveOrders() { try { localStorage.setItem('abc_orders', JSON.stringify(orders.slice(0, 30))) } catch (e) {} }
+    let _refO = 0;
+    function refreshOrderStatuses() {
+      if (!orders.length || Date.now() - _refO < 15000) return;
+      _refO = Date.now();
+      fbReady(() => {
+        Promise.all(orders.slice(0, 10).map(o => o.code ? fbDB.collection('shop_orders').doc(o.code).get().catch(() => null) : Promise.resolve(null)))
+          .then(snaps => {
+            let ch = false;
+            snaps.forEach((s, i) => {
+              if (s && s.exists) {
+                const d = s.data();
+                if (orders[i].st !== d.status || orders[i].track !== (d.track || '')) { orders[i].st = d.status; orders[i].track = d.track || ''; ch = true; }
+              }
+            });
+            if (ch) { saveOrders(); renderOrder(); }
+          });
+      }, () => {});
+    }
+
     function checkout() {
       if (!cartCount()) return;
-      const items = Object.entries(cart).map(([key,qty]) => {
+      const items = Object.entries(cart).map(([key, qty]) => {
         const [idStr, ...flavParts] = key.split('|');
         const flavor = flavParts.join('|');
-        const p = PRODUCTS.find(p=>p.id==idStr);
-        return { id:idStr, name:p.name+(flavor?` (${flavor})`:''), emoji:p.emoji, qty, price:p.price };
+        const p = PRODUCTS.find(p => p.id == idStr);
+        return { id: p.id, name: p.name + (flavor ? ` (${flavor})` : ''), flavor: flavor || '', qty, price: p.price };
       });
+      if (!custPhone.trim() || custPhone.replace(/\D/g, '').length < 9) { toast(lang === 'en' ? 'Please enter recipient phone' : 'กรุณากรอกเบอร์โทรผู้รับ'); return; }
+      if (shipMethod === 'rider' && !pinnedLoc) { toast(lang === 'en' ? 'Please pin delivery location' : 'กรุณาปักหมุดที่อยู่จัดส่ง'); return; }
+      if (shipMethod !== 'rider' && !parcelAddr.trim()) { toast(lang === 'en' ? 'Please enter name + address' : 'กรุณากรอกชื่อ-ที่อยู่ผู้รับ'); return; }
+      try { localStorage.setItem('abc_phone', custPhone); localStorage.setItem('abc_addr', parcelAddr); } catch (e) {}
       const grossTotal = cartTotal();
       const discount = couponDiscount(grossTotal);
       const shipping = shipCost();
       const total = grossTotal - discount + shipping;
-      const time = new Date().toLocaleString('th-TH', { timeZone:'Asia/Bangkok' });
-
-      // ส่งเข้าบอทเทเลแกรมถ้าเปิดผ่านบอท (ถ้าไม่ใช่ ให้ทำงานแบบเดโม่ต่อ)
-      try {
-        if (tg && tg.initData && tg.sendData) {
-          tg.sendData(JSON.stringify({ shop:SHOP, items, total, discount, shipping, shippingMethod: shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null, pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, address: pinnedAddr, detail: addrDetail, maps: 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng } : null, coupon: usedCoupon, time }));
-        }
-      } catch (e) {}
-      orders.unshift({ items, total, time, ts: Date.now(), code: genOrderCode(), pin: (shipMethod === 'rider' && pinnedLoc) ? { ...pinnedLoc, addr: pinnedAddr, detail: addrDetail } : null });
-      totalOrders++; totalSpend += total;
-      document.getElementById('memOrders').textContent = totalOrders;
-      document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
-      document.getElementById('memPoints').textContent = Math.floor(totalSpend/100);
-      cart = {}; usedCoupon = null;
-      updateUI(); closeCart();
-      document.getElementById('success').classList.add('show');
+      const time = new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' });
+      const code = genOrderCode();
+      const order = {
+        code, status: 'pending', shop: SHOP, items,
+        gross: grossTotal, discount, shipping, total,
+        shipMethod, distanceKm: shipMethod === 'rider' ? riderKm : null,
+        phone: custPhone.trim(),
+        address: shipMethod === 'rider' ? ((pinnedAddr || '') + (addrDetail ? ' | ' + addrDetail : '')) : parcelAddr.trim(),
+        maps: (shipMethod === 'rider' && pinnedLoc) ? 'https://www.google.com/maps?q=' + pinnedLoc.lat + ',' + pinnedLoc.lng : '',
+        coupon: usedCoupon || '', time, ts: Date.now(),
+        user: (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? ((tg.initDataUnsafe.user.first_name || '') + ' @' + (tg.initDataUnsafe.user.username || tg.initDataUnsafe.user.id)) : ''
+      };
+      const finishLocal = () => {
+        orders.unshift({ code, items, total, time, ts: Date.now(), st: 'pending' });
+        saveOrders();
+        totalOrders++; totalSpend += total;
+        document.getElementById('memOrders').textContent = totalOrders;
+        document.getElementById('memSpend').textContent = '฿' + totalSpend.toLocaleString();
+        document.getElementById('memPoints').textContent = Math.floor(totalSpend / 100);
+        cart = {}; usedCoupon = null;
+        updateUI(); closeCart();
+        document.getElementById('success').classList.add('show');
+      };
+      fbReady(() => {
+        const stockRef = fbDB.collection('shop_live').doc('stock');
+        const ordRef = fbDB.collection('shop_orders').doc(code);
+        fbDB.runTransaction(tx =>
+          tx.get(stockRef).then(snap => {
+            const d = snap.data() || {}; const P = d.p || {};
+            items.forEach(it => {
+              const v = P[it.id];
+              if (v) {
+                if (v.off || (v.s | 0) < it.qty) { const err = new Error('OUT'); err.pname = it.name; throw err; }
+                v.s = (v.s | 0) - it.qty; v.so = (v.so | 0) + it.qty; P[it.id] = v;
+              }
+            });
+            tx.set(stockRef, { p: P }, { merge: true });
+            tx.set(ordRef, order);
+          })
+        ).then(() => {
+          try { if (tg && tg.initData && tg.sendData) tg.sendData(JSON.stringify(order)); } catch (e) {}
+          finishLocal();
+        }).catch(err => {
+          if (err && err.pname) { toast((lang === 'en' ? 'Not enough stock: ' : 'สินค้าไม่พอ: ') + err.pname); }
+          else { toast(lang === 'en' ? 'Connection failed, please retry' : 'เชื่อมต่อไม่ได้ กรุณาลองใหม่อีกครั้ง'); }
+        });
+      }, () => {
+        // เปิดแบบออฟไลน์/พรีวิว — ทำงานโหมดเดโม่เหมือนเดิม
+        try { if (tg && tg.initData && tg.sendData) tg.sendData(JSON.stringify(order)); } catch (e) {}
+        finishLocal();
+      });
     }
 
     function closeSuccess() {
@@ -2460,7 +2577,7 @@
         : `<div style="width:100%;height:100%;background:${gradOf(p)}"></div>`;
       document.getElementById('pdThumb').innerHTML = thumb;
       document.getElementById('pdName').textContent = p.name;
-      document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:#e8b53a;font-weight:600;\">★ ${rateOf(p)}</span> <span style=\"color:var(--sub);\">${t('sold')} ${soldOf(p)}</span>`;
+      document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:#e8b53a;font-weight:600;\">★ ${rateOf(p)}</span> <span style=\"color:var(--sub);\">${soldTxt(p)}</span>`;
       document.getElementById('pdPrice').innerHTML = `฿${p.price.toLocaleString()}${p.orig ? ` <s style=\"color:var(--sub);font-size:13px;font-weight:500;\">฿${p.orig.toLocaleString()}</s>` : ''}`;
       document.getElementById('pdFlavHead').innerHTML = `${t('choose_flavor')} <span>(${p.flavors.length} ${t('flavors_unit')})</span>`;
       document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f =>
