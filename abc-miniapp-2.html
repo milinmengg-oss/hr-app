@@ -1055,6 +1055,16 @@
     <div class="s-ring">✅</div>
     <div class="s-title" data-i18n="success_title">สั่งซื้อสำเร็จ!</div>
     <div class="s-sub" data-i18n="success_sub"></div>
+    <div style="background:var(--card);border:1.5px solid var(--border);border-radius:16px;padding:14px 16px;margin:12px 0 4px;max-width:320px;width:100%;text-align:left;">
+      <div style="font-size:12px;color:var(--sub);">เลขออเดอร์ <b id="payCode" style="color:var(--lime);"></b> · ยอดชำระ <b id="payTotal" style="color:var(--text);"></b></div>
+      <div style="display:flex;align-items:center;gap:8px;margin:9px 0 3px;font-size:14px;">
+        <span style="font-size:18px;">🏦</span>
+        <div><b>กสิกรไทย 124-1-50848-6</b><div style="font-size:11.5px;color:var(--sub);">ชื่อบัญชี สหรัฐ</div></div>
+        <button onclick="copyAcct()" style="margin-left:auto;background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:5px 10px;font-family:inherit;font-size:11px;cursor:pointer;">คัดลอก</button>
+      </div>
+      <div style="font-size:11.5px;color:var(--sub);line-height:1.6;margin-top:6px;">โอนเงินแล้วส่ง <b style="color:var(--text);">สลิป + เลขออเดอร์</b> เข้าไลน์ร้านเพื่อยืนยัน</div>
+      <button onclick="openContact()" style="width:100%;margin-top:10px;background:#06c755;border:none;border-radius:12px;padding:11px;font-family:inherit;font-weight:800;font-size:13.5px;color:#fff;cursor:pointer;">💬 ส่งสลิปเข้าไลน์ร้าน @abc.v18</button>
+    </div>
     <button class="checkout-btn" data-i18n="success_btn" onclick="closeSuccess()" style="max-width:220px;">ดูออเดอร์ของฉัน</button>
   </div>
 
@@ -1752,21 +1762,30 @@
     const brandFallback = b => `<span style="font-size:20px;font-weight:900;color:#f2f2f2;letter-spacing:-0.5px;">${brandInit(b)}</span>`;
 
     // ── ⚡ Flash Sale (mock — เดฟต่อเวลา/ราคาจริงภายหลัง) ──
-    const FLASH_ITEMS = [
+    let FLASH_ITEMS = [
       { id: 12, off: 30, soldPct: 82 },
       { id: 18, off: 20, soldPct: 45 },
       { id: 20, off: 30, soldPct: 91 },
       { id: 26, off: 35, soldPct: 73 },
       { id: 29, off: 25, soldPct: 64 }
     ];
-    FLASH_ITEMS.forEach(fi => {
-      const p = PRODUCTS.find(x => x.id === fi.id);
-      if (p) {
-        p.orig = p.price;
-        p.price = Math.round(p.price * (100 - fi.off) / 100);
-        p.off = fi.off; p.soldPct = fi.soldPct;
-      }
-    });
+    let FLASH_END = null; // ตั้งจากหลังบ้านได้
+    PRODUCTS.forEach(p => { p.base = p.price; });
+    function applyFlash(items, endTs) {
+      FLASH_ITEMS = items || []; FLASH_END = endTs || null;
+      PRODUCTS.forEach(p => { p.price = p.base; delete p.orig; delete p.off; delete p.soldPct; });
+      FLASH_ITEMS.forEach(fi => {
+        const p = PRODUCTS.find(x => x.id === fi.id);
+        if (p && fi.off > 0) {
+          p.orig = p.base;
+          p.price = Math.round(p.base * (100 - fi.off) / 100);
+          p.off = fi.off; p.soldPct = fi.soldPct != null ? fi.soldPct : 50;
+        }
+      });
+      const sec = document.querySelector('.flash-sec');
+      if (sec) sec.style.display = FLASH_ITEMS.length ? '' : 'none';
+    }
+    applyFlash(FLASH_ITEMS, null);
 
     // ── 🎟 ระบบคูปอง (mock — เดฟต่อเงื่อนไขจริงภายหลัง) ──
     const COUPONS = [
@@ -2449,8 +2468,9 @@
         if (!v) return;
         p.sold = v.so | 0;
         p.out = (v.s | 0) <= 0 || !!v.off;
-        if (v.pr) p.price = v.pr;
+        if (v.pr) p.base = v.pr;
       });
+      applyFlash(FLASH_ITEMS, FLASH_END);
       try { renderHomeGrid(); renderFlash(); renderMenu(); renderFavs(); } catch (e) {}
     }
     function hydrateStock() {
@@ -2458,6 +2478,12 @@
         fbDB.collection('shop_live').doc('stock').onSnapshot(snap => {
           const d = snap.data();
           if (d && d.p) { LIVE = d.p; applyLive(); }
+        });
+        fbDB.collection('shop_config').doc('flash').onSnapshot(snap => {
+          if (!snap.exists) return;
+          const d = snap.data() || {};
+          applyFlash(d.items || [], d.end || null);
+          try { renderHomeGrid(); renderFlash(); renderMenu(); } catch (e) {}
         });
       }, () => {});
     }
@@ -2521,6 +2547,8 @@
         document.getElementById('memPoints').textContent = Math.floor(totalSpend / 100);
         cart = {}; usedCoupon = null;
         updateUI(); closeCart();
+        document.getElementById('payCode').textContent = code;
+        document.getElementById('payTotal').textContent = '฿' + total.toLocaleString();
         document.getElementById('success').classList.add('show');
       };
       fbReady(() => {
@@ -2616,6 +2644,9 @@
 
     // ── ติดต่อร้าน ──
     const CONTACT_LINE = 'https://lin.ee/nw1x5lg'; // ลิงก์ Line ร้าน ABC
+    function copyAcct() {
+      (navigator.clipboard ? navigator.clipboard.writeText('1241508486') : Promise.reject()).then(()=>toast(lang==='en'?'Copied':'คัดลอกเลขบัญชีแล้ว')).catch(()=>{});
+    }
     function openContact() {
       if (tg?.openLink) tg.openLink(CONTACT_LINE);
       else window.open(CONTACT_LINE, '_blank');
@@ -2672,7 +2703,9 @@
       document.getElementById('agegate').style.display = 'flex';
       function fsTick() {
         const now = new Date();
-        const end = new Date(now); end.setHours(24, 0, 0, 0);
+        let end;
+        if (FLASH_END) { end = new Date(FLASH_END); }
+        else { end = new Date(now); end.setHours(24, 0, 0, 0); }
         const s = Math.max(0, Math.floor((end - now) / 1000));
         document.getElementById('fsH').textContent = String(Math.floor(s / 3600)).padStart(2, '0');
         document.getElementById('fsM').textContent = String(Math.floor(s % 3600 / 60)).padStart(2, '0');

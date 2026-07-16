@@ -83,6 +83,7 @@ a{color:var(--blue);}
   <div class="tabs">
     <button class="tab on" id="tabO" onclick="tab('O')">📋 ออเดอร์</button>
     <button class="tab" id="tabS" onclick="tab('S')">📦 สต็อกสินค้า</button>
+    <button class="tab" id="tabF" onclick="tab('F')">⚡ Flash Sale</button>
     <button class="tab" id="tabX" onclick="tab('X')">⬇️ ส่งออกไฟล์</button>
   </div>
 
@@ -95,6 +96,17 @@ a{color:var(--blue);}
     <input class="search" placeholder="ค้นหาสินค้า…" oninput="sq=this.value;renderStock()">
     <div class="note" style="margin:0 0 10px;">แก้ตัวเลขแล้วกด "บันทึก" ของแถวนั้น · ติ๊ก "ปิดขาย" = ซ่อนจากการสั่งซื้อชั่วคราว · สต็อก 0 = ขึ้น "หมด" ในแอพทันที</div>
     <table><thead><tr><th style="width:38%">สินค้า</th><th>ราคา ฿</th><th>สต็อก</th><th>ขายแล้ว</th><th>ปิดขาย</th><th></th></tr></thead><tbody id="stockBody"></tbody></table>
+  </div>
+
+  <div id="paneF" class="hidden">
+    <div class="card">
+      <b>⚡ ตั้ง Flash Sale เอง</b>
+      <div class="note" style="margin:6px 0 10px;">ติ๊กรุ่นที่จะลด + ใส่ % ส่วนลด + ตั้งเวลาหมดเขต แล้วกดบันทึก — มีผลในแอพทันที · ไม่ติ๊กเลย = ปิดโซน Flash Sale</div>
+      <div style="margin-bottom:10px;">หมดเขต: <input type="datetime-local" id="flashEnd" style="background:var(--card2);border:1px solid var(--border);color:var(--text);font-family:inherit;border-radius:8px;padding:8px;"></div>
+      <input class="search" placeholder="ค้นหาสินค้า…" oninput="fq=this.value;renderFlashAdmin()">
+      <table><thead><tr><th style="width:8%">ร่วม</th><th style="width:44%">สินค้า</th><th>ราคาปกติ</th><th>ลด %</th><th>ราคาหลังลด</th></tr></thead><tbody id="flashBody"></tbody></table>
+      <div style="margin-top:12px;"><button class="act a-ok" style="padding:12px 26px;font-size:14px;" onclick="saveFlash()">💾 บันทึก Flash Sale</button></div>
+    </div>
   </div>
 
   <div id="paneX" class="hidden">
@@ -174,7 +186,7 @@ function start(){
 }
 
 function tab(k){
-  ['O','S','X'].forEach(x=>{
+  ['O','S','F','X'].forEach(x=>{
     document.getElementById('tab'+x).classList.toggle('on', x===k);
     document.getElementById('pane'+x).classList.toggle('hidden', x!==k);
   });
@@ -273,6 +285,47 @@ async function saveRow(id){
                 off: document.getElementById('off'+id).checked?1:0 };
   await db.collection('shop_live').doc('stock').set({ p: { [id]: upd } }, { merge: true });
   toast('บันทึก '+(NAME[id]||id));
+}
+
+// ── Flash Sale ──
+let FLASH_CFG = { items: [], end: null }, fq = '';
+db.collection('shop_config').doc('flash').onSnapshot(s=>{
+  if(s.exists){ FLASH_CFG = s.data(); }
+  const el = document.getElementById('flashEnd');
+  if(el && FLASH_CFG.end){ const d=new Date(FLASH_CFG.end); el.value = new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
+  renderFlashAdmin();
+});
+function renderFlashAdmin(){
+  const q = fq.trim().toLowerCase();
+  const cur = {}; (FLASH_CFG.items||[]).forEach(it=>cur[it.id]=it);
+  document.getElementById('flashBody').innerHTML = PLIST
+    .filter(p=>!q || p.name.toLowerCase().includes(q))
+    .map(p=>{
+      const it = cur[p.id];
+      const base = (STOCK[p.id]&&STOCK[p.id].pr)||p.price;
+      const off = it?it.off:20;
+      return `<tr>
+        <td><input type="checkbox" id="fon${p.id}" ${it?'checked':''} onchange="renderFlashAdmin.calc&&0"></td>
+        <td>${esc(p.name)}</td>
+        <td style="color:var(--sub);">฿${base.toLocaleString()}</td>
+        <td><input type="number" id="foff${p.id}" value="${off}" min="1" max="90" style="width:60px;" oninput="document.getElementById('fnew${p.id}').textContent='฿'+Math.round(${base}*(100-(parseInt(this.value)||0))/100).toLocaleString()"></td>
+        <td id="fnew${p.id}" style="color:var(--lime);font-weight:700;">฿${Math.round(base*(100-off)/100).toLocaleString()}</td>
+      </tr>`;
+    }).join('');
+}
+async function saveFlash(){
+  const items = [];
+  PLIST.forEach(p=>{
+    const on = document.getElementById('fon'+p.id);
+    if(on && on.checked){
+      const off = parseInt(document.getElementById('foff'+p.id).value)||0;
+      if(off>0) items.push({ id: p.id, off, soldPct: 50 });
+    }
+  });
+  const ev = document.getElementById('flashEnd').value;
+  const end = ev ? new Date(ev).getTime() : null;
+  await db.collection('shop_config').doc('flash').set({ items, end, updated: Date.now() });
+  toast(items.length ? ('บันทึก Flash Sale '+items.length+' รุ่น — มีผลในแอพทันที') : 'ปิดโซน Flash Sale แล้ว');
 }
 
 // ── ส่งออก ──
