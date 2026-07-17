@@ -548,6 +548,11 @@ const MKT = {
 };
 firebase.initializeApp({ apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" });
 const db = firebase.firestore();
+function blackbox(kind, info){
+  try{ db.collection('shop_config').doc('debug').set({ [kind]: { info: String(info).slice(0,500), ua: navigator.userAgent.slice(0,160), w: window.innerWidth, ts: new Date().toLocaleString('th-TH') } }, { merge: true }); }catch(e){}
+}
+window.addEventListener('error', e => blackbox('jsError', (e.message||'?')+' @'+(e.filename||'')+':'+(e.lineno||'')));
+window.addEventListener('unhandledrejection', e => blackbox('promiseError', e.reason));
 const fmt = n => '฿' + Math.round(n).toLocaleString();
 const fmtN = n => Math.round(n).toLocaleString();
 const TH = { '2025-12':'ธ.ค.68','2026-01':'ม.ค.','2026-02':'ก.พ.','2026-03':'มี.ค.','2026-04':'เม.ย.','2026-05':'พ.ค.','2026-06':'มิ.ย.','2026-07':'ก.ค.' };
@@ -574,7 +579,7 @@ async function enter(){
 let pq='';
 Chart.defaults.color='#9a9a9a'; Chart.defaults.font.family='Kanit'; Chart.defaults.borderColor='#242424';
 const IS_TOUCH = !window.matchMedia('(hover: hover)').matches;
-if (IS_TOUCH) { Chart.defaults.animation = false; Chart.defaults.datasets.line = Chart.defaults.datasets.line||{}; Chart.defaults.events = ['click']; }
+if (IS_TOUCH) { Chart.defaults.animation = false; Chart.defaults.devicePixelRatio = 1.5; Chart.defaults.datasets.line = Chart.defaults.datasets.line||{}; Chart.defaults.events = ['click']; }
 const LIME='#bdfb00', BLUE='#5db2ff', PINK='#ff6b9d', AMBER='#e8b53a';
 
 function start(){
@@ -799,8 +804,8 @@ async function initMap(){
       .attr('stroke','#0d0d0d').attr('stroke-width',.7).style('cursor','pointer')
       .on('mouseover', function(){ if(window.matchMedia('(hover: hover)').matches) d3.select(this).attr('stroke','#fff').attr('stroke-width',1.2); })
       .on('mouseout', function(){ if(this!==selPath) d3.select(this).attr('stroke','#0d0d0d').attr('stroke-width',.7); })
-      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); renderProv(EN2TH[f.properties.name]); if(window.innerWidth<820) document.getElementById('pvPanel').scrollIntoView(); });
-    renderProv('กรุงเทพมหานคร');
+      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); blackbox('mapTap', f.properties.name); renderProv(EN2TH[f.properties.name]); if(window.innerWidth<820) document.getElementById('pvPanel').scrollIntoView(); });
+    blackbox('mapReady','paths='+gj.features.length); renderProv('กรุงเทพมหานคร');
   }catch(e){ document.getElementById('thMapWrap').innerHTML='<div class="note">โหลดแผนที่ไม่สำเร็จ: '+e.message+'</div>'; }
 }
 function mkBars(pairs, labelFn, color){
