@@ -790,7 +790,27 @@ function setRange(mode){
 const EN2TH={"Bangkok Metropolis":"กรุงเทพมหานคร","Samut Prakan":"สมุทรปราการ","Nonthaburi":"นนทบุรี","Pathum Thani":"ปทุมธานี","Phra Nakhon Si Ayutthaya":"พระนครศรีอยุธยา","Ang Thong":"อ่างทอง","Lop Buri":"ลพบุรี","Sing Buri":"สิงห์บุรี","Chai Nat":"ชัยนาท","Saraburi":"สระบุรี","Chon Buri":"ชลบุรี","Rayong":"ระยอง","Chanthaburi":"จันทบุรี","Trat":"ตราด","Chachoengsao":"ฉะเชิงเทรา","Prachin Buri":"ปราจีนบุรี","Nakhon Nayok":"นครนายก","Sa Kaeo":"สระแก้ว","Nakhon Ratchasima":"นครราชสีมา","Buri Ram":"บุรีรัมย์","Surin":"สุรินทร์","Si Sa Ket":"ศรีสะเกษ","Ubon Ratchathani":"อุบลราชธานี","Yasothon":"ยโสธร","Chaiyaphum":"ชัยภูมิ","Amnat Charoen":"อำนาจเจริญ","Bueng Kan":"บึงกาฬ","Nong Bua Lam Phu":"หนองบัวลำภู","Khon Kaen":"ขอนแก่น","Udon Thani":"อุดรธานี","Loei":"เลย","Nong Khai":"หนองคาย","Maha Sarakham":"มหาสารคาม","Roi Et":"ร้อยเอ็ด","Kalasin":"กาฬสินธุ์","Sakon Nakhon":"สกลนคร","Nakhon Phanom":"นครพนม","Mukdahan":"มุกดาหาร","Chiang Mai":"เชียงใหม่","Lamphun":"ลำพูน","Lampang":"ลำปาง","Uttaradit":"อุตรดิตถ์","Phrae":"แพร่","Nan":"น่าน","Phayao":"พะเยา","Chiang Rai":"เชียงราย","Mae Hong Son":"แม่ฮ่องสอน","Nakhon Sawan":"นครสวรรค์","Uthai Thani":"อุทัยธานี","Kamphaeng Phet":"กำแพงเพชร","Tak":"ตาก","Sukhothai":"สุโขทัย","Phitsanulok":"พิษณุโลก","Phichit":"พิจิตร","Phetchabun":"เพชรบูรณ์","Ratchaburi":"ราชบุรี","Kanchanaburi":"กาญจนบุรี","Suphan Buri":"สุพรรณบุรี","Nakhon Pathom":"นครปฐม","Samut Sakhon":"สมุทรสาคร","Samut Songkhram":"สมุทรสงคราม","Phetchaburi":"เพชรบุรี","Prachuap Khiri Khan":"ประจวบคีรีขันธ์","Nakhon Si Thammarat":"นครศรีธรรมราช","Krabi":"กระบี่","Phangnga":"พังงา","Phuket":"ภูเก็ต","Surat Thani":"สุราษฎร์ธานี","Ranong":"ระนอง","Chumphon":"ชุมพร","Songkhla":"สงขลา","Satun":"สตูล","Trang":"ตรัง","Phatthalung":"พัทลุง","Pattani":"ปัตตานี","Yala":"ยะลา","Narathiwat":"นราธิวาส"};
 const CATTH={'ry_head':'หัวน้ำยา (Big Pod)','pod_head':'หัวพอต','head':'หัวน้ำยา/หัวพอต','disposable':'พอตใช้แล้วทิ้ง','bigpod_kit':'ชุด KIT (เครื่อง+หัว)','pod_device':'เครื่องพอต','iqos':'ไส้ IQOS','iqos_dev':'เครื่อง IQOS','saltnic':'SALTNIC (น้ำยา)','freebase':'FREEBASE (น้ำยา)','nicpouch':'NIC POUCH'};
 let selPath=null;
+function provListMobile(){
+  const wrap=document.getElementById('thMapWrap');
+  window.__provArr=Object.entries(GEO).filter(([k])=>k!=='ไม่ระบุ').sort((a,b)=>b[1].r-a[1].r);
+  const mx=window.__provArr[0][1].r;
+  window.__provRow=function(k,v,i){
+    return '<div onclick="renderProv(\''+k+'\');document.getElementById(\'pvPanel\').scrollIntoView();" style="display:flex;align-items:center;gap:8px;padding:9px 6px;border-bottom:1px solid #1e1e1e;cursor:pointer;">'
+      +'<span style="width:22px;color:var(--sub);font-size:11px;">'+(i+1)+'</span>'
+      +'<span style="width:112px;font-size:13px;font-weight:600;">'+k+'</span>'
+      +'<div style="flex:1;background:#0d0d0d;border-radius:5px;height:8px;overflow:hidden;"><div style="width:'+Math.max(2,v.r/mx*100)+'%;height:100%;background:'+(i===0?'var(--lime)':'rgba(189,251,0,.45)')+';border-radius:5px;"></div></div>'
+      +'<span style="width:62px;text-align:right;font-size:11.5px;color:var(--sub);">'+(v.r/1e6).toFixed(1)+' ลบ.</span></div>';
+  };
+  window.mProvFilter=function(q){
+    q=(q||'').trim();
+    document.getElementById('mProvList').innerHTML=window.__provArr.filter(([k])=>!q||k.includes(q)).map(([k,v],i)=>window.__provRow(k,v,i)).join('');
+  };
+  wrap.innerHTML='<div style="width:100%;"><input class="search" placeholder="ค้นหาจังหวัด… (แตะเพื่อดูรายละเอียด)" oninput="mProvFilter(this.value)"><div id="mProvList"></div></div>';
+  window.mProvFilter('');
+  blackbox('mapMode','mobile-list');
+}
 async function initMap(){
+  if(IS_TOUCH && window.innerWidth<820){ provListMobile(); renderProv('กรุงเทพมหานคร'); return; }
   try{
     const gj = await (await fetch('thailand.json?v=2')).json();
     const W=470,H=700;
