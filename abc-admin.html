@@ -93,9 +93,10 @@ a{color:var(--blue);}
   </div>
 
   <div id="paneS" class="hidden">
+    <div class="card" id="stkAlert" style="margin:0 0 10px;padding:10px 14px;"></div>
     <input class="search" placeholder="ค้นหาสินค้า…" oninput="sq=this.value;renderStock()">
-    <div class="note" style="margin:0 0 10px;">แก้ตัวเลขแล้วกด "บันทึก" ของแถวนั้น · ติ๊ก "ปิดขาย" = ซ่อนจากการสั่งซื้อชั่วคราว · สต็อก 0 = ขึ้น "หมด" ในแอพทันที</div>
-    <table><thead><tr><th style="width:38%">สินค้า</th><th>ราคา ฿</th><th>สต็อก</th><th>ขายแล้ว</th><th>ปิดขาย</th><th></th></tr></thead><tbody id="stockBody"></tbody></table>
+    <div class="note" style="margin:0 0 10px;">แก้ตัวเลขแล้วกด "บันทึก" ของแถวนั้น · ติ๊ก "ปิดขาย" = ซ่อนจากการสั่งซื้อชั่วคราว · สต็อก 0 = ขึ้น "หมด" ในแอพทันที · <b>Min</b> = ต่ำกว่านี้แจ้งเตือนให้สั่งเพิ่ม · <b>Max</b> = เพดานสต็อก (เว้นว่าง = ไม่ใช้)</div>
+    <table><thead><tr><th style="width:30%">สินค้า</th><th>ราคา ฿</th><th>สต็อก</th><th>Min</th><th>Max</th><th>ขายแล้ว</th><th>ปิดขาย</th><th></th></tr></thead><tbody id="stockBody"></tbody></table>
   </div>
 
   <div id="paneF" class="hidden">
@@ -261,16 +262,31 @@ function copyAddr(code){
 }
 
 // ── สต็อก ──
+let lowOnly = false;
 function renderStock(){
   const q = sq.trim().toLowerCase();
+  let low=0, over=0;
+  PLIST.forEach(p=>{ const v=STOCK[p.id]; if(!v||v.off) return; const s=+v.s||0;
+    if(v.mn>0 && s<=v.mn) low++; else if(v.mx>0 && s>v.mx) over++; });
+  const bar = document.getElementById('stkAlert');
+  if(bar) bar.innerHTML = (low||over)
+    ? `${low?`<span style="color:#ff5f56;font-weight:700;">🔴 ${low} รุ่นต่ำกว่า Min — ต้องสั่งเพิ่ม</span>`:''}${over?`<span style="color:#f2c14e;font-weight:700;margin-left:10px;">⚠️ ${over} รุ่นเกิน Max</span>`:''}<button class="save" style="margin-left:12px;" onclick="lowOnly=!lowOnly;renderStock()">${lowOnly?'แสดงทั้งหมด':'ดูเฉพาะที่แจ้งเตือน'}</button>`
+    : `<span style="color:var(--sub);">✅ สต็อกทุกรุ่นอยู่ในเกณฑ์ Min/Max</span>`;
   document.getElementById('stockBody').innerHTML = PLIST
     .filter(p=>!q || p.name.toLowerCase().includes(q))
     .map(p=>{
       const v = STOCK[p.id] || { s:'-', so:'-', pr:p.price, off:0 };
-      return `<tr>
-        <td>${esc(p.name)}</td>
+      const s=+v.s||0;
+      const isLow = v.mn>0 && s<=v.mn, isOver = !isLow && v.mx>0 && s>v.mx;
+      if(lowOnly && !(isLow||isOver)) return '';
+      const badge = isLow?' <span style="color:#ff5f56;font-size:11px;font-weight:700;">🔴 ต่ำกว่า Min</span>'
+                  :(isOver?' <span style="color:#f2c14e;font-size:11px;font-weight:700;">⚠️ เกิน Max</span>':'');
+      return `<tr${isLow?' style="background:rgba(255,95,86,.08);"':''}>
+        <td>${esc(p.name)}${badge}</td>
         <td><input type="number" id="pr${p.id}" value="${v.pr||p.price}"></td>
         <td><input type="number" id="s${p.id}" value="${v.s}"></td>
+        <td><input type="number" id="mn${p.id}" value="${v.mn>0?v.mn:''}" placeholder="–" style="width:58px;"></td>
+        <td><input type="number" id="mx${p.id}" value="${v.mx>0?v.mx:''}" placeholder="–" style="width:58px;"></td>
         <td style="color:var(--sub);">${v.so}</td>
         <td><input type="checkbox" id="off${p.id}" ${v.off?'checked':''}></td>
         <td><button class="save" onclick="saveRow(${p.id})">บันทึก</button></td>
@@ -282,6 +298,8 @@ async function saveRow(id){
   const upd = { s: parseInt(document.getElementById('s'+id).value)||0,
                 so: v.so|0,
                 pr: parseInt(document.getElementById('pr'+id).value)||0,
+                mn: parseInt(document.getElementById('mn'+id).value)||0,
+                mx: parseInt(document.getElementById('mx'+id).value)||0,
                 off: document.getElementById('off'+id).checked?1:0 };
   await db.collection('shop_live').doc('stock').set({ p: { [id]: upd } }, { merge: true });
   toast('บันทึก '+(NAME[id]||id));
