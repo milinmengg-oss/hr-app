@@ -795,9 +795,9 @@ async function initMap(){
       .attr('d', path)
       .attr('fill', f=>{ const g=GEO[EN2TH[f.properties.name]]; const t=g?Math.sqrt(g.r/maxR):0; return d3.interpolateRgb('#20290a','#bdfb00')(Math.max(.06,t)); })
       .attr('stroke','#0d0d0d').attr('stroke-width',.7).style('cursor','pointer')
-      .on('mouseover', function(){ d3.select(this).attr('stroke','#fff').attr('stroke-width',1.2); })
+      .on('mouseover', function(){ if(window.matchMedia('(hover: hover)').matches) d3.select(this).attr('stroke','#fff').attr('stroke-width',1.2); })
       .on('mouseout', function(){ if(this!==selPath) d3.select(this).attr('stroke','#0d0d0d').attr('stroke-width',.7); })
-      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); renderProv(EN2TH[f.properties.name]); });
+      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); renderProv(EN2TH[f.properties.name]); if(window.innerWidth<820) setTimeout(()=>document.getElementById('pvPanel').scrollIntoView({behavior:'smooth',block:'start'}),120); });
     renderProv('กรุงเทพมหานคร');
   }catch(e){ document.getElementById('thMapWrap').innerHTML='<div class="note">โหลดแผนที่ไม่สำเร็จ: '+e.message+'</div>'; }
 }
