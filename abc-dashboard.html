@@ -68,7 +68,7 @@ td.r,th.r{text-align:right;}
 
   <div class="tabbar" id="tabbar"></div>
   <div class="tabsec on" data-t="ov">
-  <div class="panel" style="margin-top:10px;"><b style="font-size:14px;">💡 Executive Insights — สิ่งที่ข้อมูลกำลังบอกเรา</b><div id="insights" style="margin-top:6px;"></div></div>
+  <div class="panel" style="margin-top:10px;"><b style="font-size:14px;">💡 Executive Insights — <span id="insLabel">สิ่งที่ข้อมูลกำลังบอกเรา</span></b><div id="insights" style="margin-top:6px;"></div></div>
   <div class="cards" id="kpis"></div>
 
   <h2>🔍 ดูตามช่วงเวลา <span class="pill">ข้อมูล 1 ม.ค. – 30 มิ.ย. 2569</span></h2>
@@ -703,13 +703,51 @@ function start(){
   const bkk = SALES.provinces['กรุงเทพมหานคร'];
   const upTop = trAll.filter(x=>x.pct>0).sort((x,y)=>y.pct-x.pct)[0];
   const pr0 = INS.pairs.filter(p=>p[0]!=='PROMOTION'&&p[1]!=='PROMOTION')[0];
-  document.getElementById('insights').innerHTML = `
-    <div class="ins">ลูกค้า <b>${R.repeat_pct}%</b> กลับมาซื้อซ้ำ รอบซื้อค่ากลาง <b>${R.median_gap} วัน</b> → ช่วงทองยิงแอด/ส่งโปรตามคือ <b>วันที่ 15-30 หลังซื้อ</b></div>
-    <div class="ins">ช่วงเวลาที่มีออเดอร์สูงสุดคือ <b>${pkDay} เวลา ${pkHr}:00</b> — เหมาะจัด Live/ปล่อยโปร</div>
-    <div class="ins">พื้นที่ยอดขายสูงสุดคือ <b>กรุงเทพมหานคร</b> (${(bkk.r/totR*100).toFixed(0)}% ของยอดทั้งหมด) สินค้ายอดนิยม ${bkk.top[0][0]}</div>
-    <div class="ins">สินค้า Momentum แรงสุดเดือนล่าสุด: <b>${upTop?upTop.line:'-'}</b> (${upTop?'+'+upTop.pct.toFixed(0)+'%':''} จากเดือนก่อน)</div>
-    <div class="ins">คู่สินค้าที่ถูกซื้อร่วมกันบ่อยสุด: <b>${pr0[0]} + ${pr0[1]}</b> (${fmtN(pr0[2])} ออเดอร์) → จัดเซ็ต Bundle เพิ่มยอดได้</div>
-    <div class="ins" style="border-color:#ff6b6b;">⚠️ มีสินค้า <b style="color:#ff6b6b;">${STK.low.length} รุ่นหมด/ใกล้หมดสต็อก</b> รวมถึงตัวที่ยังขายดี — เช็คแท็บ "สต็อก"</div>`;
+  const avgDayAll = DAILY.reduce((a,x)=>a+x.r,0)/DAILY.length;
+  const aovAll = totR/totO;
+  const WD=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสฯ','ศุกร์','เสาร์'];
+  const thd = d => d.slice(8)+'/'+d.slice(5,7);
+  window.renderInsights = function(rows,label,mode){
+    const el=document.getElementById('insights'); if(!el||!rows||!rows.length) return;
+    document.getElementById('insLabel').textContent = 'วิเคราะห์สด · '+label;
+    const ins=[];
+    const o=rows.reduce((a,x)=>a+x.o,0), r=rows.reduce((a,x)=>a+x.r,0);
+    if(rows.length>=2){
+      const firstIdx=DAILY.findIndex(x=>x.d===rows[0].d);
+      const prev=DAILY.slice(Math.max(0,firstIdx-rows.length), firstIdx);
+      if(prev.length===rows.length){
+        const pr=prev.reduce((a,x)=>a+x.r,0), g=(r-pr)/pr*100;
+        ins.push(`ยอดขาย${label} <b>${fmt(r)}</b> ${g>=0?'เพิ่มขึ้น':'ลดลง'} <b>${Math.abs(g).toFixed(1)}%</b> จากช่วงก่อนหน้า (${fmt(pr)}) ${g>=3?'📈 แนวโน้มดีมาก':g<=-3?'⚠️ ต่ำกว่าช่วงก่อน ควรดูสาเหตุ':'➡️ ใกล้เคียงช่วงก่อน'}`);
+      }
+      const best=rows.reduce((a,b)=>a.r>=b.r?a:b), worst=rows.reduce((a,b)=>a.r<=b.r?a:b);
+      ins.push(`วันขายดีสุดของช่วงนี้คือ <b>${thd(best.d)}</b> (${fmt(best.r)}) ส่วนวันเบาสุดคือ ${thd(worst.d)} (${fmt(worst.r)}) ต่างกัน ${(best.r/worst.r).toFixed(1)} เท่า`);
+      if(rows.length>=6){
+        const h=Math.floor(rows.length/2);
+        const r1=rows.slice(0,h).reduce((a,x)=>a+x.r,0)/h, r2=rows.slice(rows.length-h).reduce((a,x)=>a+x.r,0)/h;
+        const m=(r2-r1)/r1*100;
+        ins.push(`โมเมนตัมภายในช่วง: ครึ่งหลังเฉลี่ยวันละ <b>${fmt(r2)}</b> ${m>=0?'สูงกว่า':'ต่ำกว่า'}ครึ่งแรก <b>${Math.abs(m).toFixed(1)}%</b> ${m>=5?'🚀 กำลังเร่งตัว':m<=-5?'🔻 กำลังแผ่ว จับตาใกล้ชิด':'➡️ ทรงตัว'}`);
+        const agg={}; rows.forEach(x=>{const w=new Date(x.d).getDay(); agg[w]=agg[w]||{r:0,n:0}; agg[w].r+=x.r; agg[w].n++;});
+        const ent=Object.entries(agg).filter(([,v])=>v.n>0).sort((a,b)=>b[1].r/b[1].n-a[1].r/a[1].n);
+        if(ent.length>=3) ins.push(`ในช่วงนี้ วัน<b>${WD[ent[0][0]]}</b>ทำยอดเฉลี่ย/วันสูงสุด (${fmt(ent[0][1].r/ent[0][1].n)}) ส่วนวัน${WD[ent[ent.length-1][0]]}เบาสุด — ใช้วางแผนปล่อยโปร/Live ได้`);
+      }
+      const avgDay=r/rows.length, dg=(avgDay-avgDayAll)/avgDayAll*100;
+      ins.push(`เฉลี่ยวันละ <b>${fmt(avgDay)}</b> ${dg>=0?'สูงกว่า':'ต่ำกว่า'}ค่าเฉลี่ยปกติ 6 เดือน <b>${Math.abs(dg).toFixed(1)}%</b>`);
+    } else {
+      const x=rows[0], w=new Date(x.d).getDay();
+      const same=DAILY.filter(y=>new Date(y.d).getDay()===w);
+      const avg=same.reduce((a,y)=>a+y.r,0)/same.length, g=(x.r-avg)/avg*100;
+      ins.push(`ยอดวันที่ ${thd(x.d)} = <b>${fmt(x.r)}</b> (${fmtN(x.o)} ออเดอร์) ${g>=0?'สูงกว่า':'ต่ำกว่า'}ค่าเฉลี่ยของวัน${WD[w]}ทั่วไป <b>${Math.abs(g).toFixed(1)}%</b> ${g>=10?'🎉 วันที่ทำได้ดีมาก':g<=-10?'⚠️ ต่ำกว่ามาตรฐานของวันนี้':'➡️ อยู่ในเกณฑ์ปกติ'}`);
+      const idx=DAILY.findIndex(y=>y.d===x.d);
+      if(idx>0){ const pv=DAILY[idx-1], pg=(x.r-pv.r)/pv.r*100;
+        ins.push(`เทียบวันก่อนหน้า (${thd(pv.d)}: ${fmt(pv.r)}) ${pg>=0?'เพิ่มขึ้น':'ลดลง'} <b>${Math.abs(pg).toFixed(1)}%</b>`); }
+      const rk=[...DAILY].sort((a,b)=>b.r-a.r).findIndex(y=>y.d===x.d)+1;
+      ins.push(`วันนี้อยู่<b>อันดับ ${rk} จาก ${DAILY.length} วัน</b>ของข้อมูลทั้งหมด`);
+    }
+    const aov=o?r/o:0, ag=(aov-aovAll)/aovAll*100;
+    ins.push(`ยอดเฉลี่ย/ออเดอร์ช่วงนี้ <b>฿${fmtN(aov)}</b> ${ag>=0?'สูงกว่า':'ต่ำกว่า'}ค่าปกติ (฿${fmtN(aovAll)}) ${Math.abs(ag).toFixed(1)}% ${ag>=3?'— ลูกค้าซื้อหนักขึ้นต่อครั้ง':ag<=-3?'— ตะกร้าเล็กลง ลองจัดโปรพ่วง/Bundle':''}`);
+    ins.push(`<span style="opacity:.75;">📌 ภาพรวม 6 เดือน: ลูกค้าซื้อซ้ำ <b>${R.repeat_pct}%</b> รอบซื้อ ~${R.median_gap} วัน · คู่ Bundle เด่น ${pr0[0]} + ${pr0[1]} · <span style="color:#ff6b6b;">สต็อกหมด/ใกล้หมด ${STK.low.length} รุ่น</span></span>`);
+    el.innerHTML = ins.map(t=>`<div class="ins">${t}</div>`).join('');
+  };
 
   setRange('7');
   loadLive();
@@ -738,6 +776,7 @@ function setRange(mode){
     {type:'bar',label:'ยอดขาย (บาท)',data:rows.map(x=>x.r),backgroundColor:'rgba(189,251,0,.75)',borderRadius:6,yAxisID:'y'},
     {type:'line',label:'ออเดอร์',data:rows.map(x=>x.o),borderColor:BLUE,backgroundColor:BLUE,tension:.3,pointRadius:2,yAxisID:'y2'}]},
     options:{maintainAspectRatio:false,scales:{y:{ticks:{callback:v=>(v/1e6).toFixed(1)+'M'}},y2:{position:'right',grid:{display:false}}}}});
+  if(window.renderInsights) renderInsights(rows,label,mode);
 }
 
 const EN2TH={"Bangkok Metropolis":"กรุงเทพมหานคร","Samut Prakan":"สมุทรปราการ","Nonthaburi":"นนทบุรี","Pathum Thani":"ปทุมธานี","Phra Nakhon Si Ayutthaya":"พระนครศรีอยุธยา","Ang Thong":"อ่างทอง","Lop Buri":"ลพบุรี","Sing Buri":"สิงห์บุรี","Chai Nat":"ชัยนาท","Saraburi":"สระบุรี","Chon Buri":"ชลบุรี","Rayong":"ระยอง","Chanthaburi":"จันทบุรี","Trat":"ตราด","Chachoengsao":"ฉะเชิงเทรา","Prachin Buri":"ปราจีนบุรี","Nakhon Nayok":"นครนายก","Sa Kaeo":"สระแก้ว","Nakhon Ratchasima":"นครราชสีมา","Buri Ram":"บุรีรัมย์","Surin":"สุรินทร์","Si Sa Ket":"ศรีสะเกษ","Ubon Ratchathani":"อุบลราชธานี","Yasothon":"ยโสธร","Chaiyaphum":"ชัยภูมิ","Amnat Charoen":"อำนาจเจริญ","Bueng Kan":"บึงกาฬ","Nong Bua Lam Phu":"หนองบัวลำภู","Khon Kaen":"ขอนแก่น","Udon Thani":"อุดรธานี","Loei":"เลย","Nong Khai":"หนองคาย","Maha Sarakham":"มหาสารคาม","Roi Et":"ร้อยเอ็ด","Kalasin":"กาฬสินธุ์","Sakon Nakhon":"สกลนคร","Nakhon Phanom":"นครพนม","Mukdahan":"มุกดาหาร","Chiang Mai":"เชียงใหม่","Lamphun":"ลำพูน","Lampang":"ลำปาง","Uttaradit":"อุตรดิตถ์","Phrae":"แพร่","Nan":"น่าน","Phayao":"พะเยา","Chiang Rai":"เชียงราย","Mae Hong Son":"แม่ฮ่องสอน","Nakhon Sawan":"นครสวรรค์","Uthai Thani":"อุทัยธานี","Kamphaeng Phet":"กำแพงเพชร","Tak":"ตาก","Sukhothai":"สุโขทัย","Phitsanulok":"พิษณุโลก","Phichit":"พิจิตร","Phetchabun":"เพชรบูรณ์","Ratchaburi":"ราชบุรี","Kanchanaburi":"กาญจนบุรี","Suphan Buri":"สุพรรณบุรี","Nakhon Pathom":"นครปฐม","Samut Sakhon":"สมุทรสาคร","Samut Songkhram":"สมุทรสงคราม","Phetchaburi":"เพชรบุรี","Prachuap Khiri Khan":"ประจวบคีรีขันธ์","Nakhon Si Thammarat":"นครศรีธรรมราช","Krabi":"กระบี่","Phangnga":"พังงา","Phuket":"ภูเก็ต","Surat Thani":"สุราษฎร์ธานี","Ranong":"ระนอง","Chumphon":"ชุมพร","Songkhla":"สงขลา","Satun":"สตูล","Trang":"ตรัง","Phatthalung":"พัทลุง","Pattani":"ปัตตานี","Yala":"ยะลา","Narathiwat":"นราธิวาส"};
