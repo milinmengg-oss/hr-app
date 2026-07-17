@@ -170,7 +170,18 @@ td.r,th.r{text-align:right;}
   <div class="cards" id="stkKpis" style="margin-top:0;"></div>
   <div class="grid2" style="margin-top:12px;">
     <div class="panel"><b style="font-size:13px;color:var(--lime);">💰 มูลค่าสต็อกสูงสุด 10 อันดับ</b><table style="margin-top:8px;"><thead><tr><th>รุ่น</th><th class="r">พร้อมขาย (ชิ้น)</th><th class="r">มูลค่า ฿</th></tr></thead><tbody id="stkTop"></tbody></table></div>
-    <div class="panel"><b style="font-size:13px;color:#ff6b6b;">⚠️ หมด/ใกล้หมด (พร้อมขายน้อยกว่า 60 ชิ้น)</b><table style="margin-top:8px;"><thead><tr><th>รุ่น</th><th class="r">พร้อมขาย (ชิ้น)</th></tr></thead><tbody id="stkLow"></tbody></table></div>
+    <div class="panel"><b style="font-size:13px;color:#ff6b6b;">⚠️ ต้องสั่งเพิ่ม (หมด / ต่ำกว่า Min ที่ตั้งไว้)</b><table style="margin-top:8px;"><thead><tr><th>รุ่น</th><th class="r">พร้อมขาย (ชิ้น)</th></tr></thead><tbody id="stkLow"></tbody></table></div>
+  </div>
+  <style>
+    .mmIn{width:64px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:6px;padding:5px 6px;font-family:inherit;font-size:12px;text-align:right;}
+    @media(max-width:820px){ #mmWrap{max-height:none !important;overflow:visible !important;} }
+  </style>
+  <div class="panel" style="margin-top:12px;">
+    <b style="font-size:13px;color:var(--lime);">🎯 ตั้งเกณฑ์ Min/Max รายรุ่น</b>
+    <div style="font-size:11.5px;color:var(--sub);margin:4px 0 8px;">Min = ต่ำกว่านี้ขึ้นแจ้งเตือนให้สั่งเพิ่ม · Max = เพดานสต็อก เกินแล้วเตือนว่าสั่งมากไป · เว้นว่าง = ไม่ใช้ · แก้เสร็จกด "บันทึกทั้งหมด" มีผลทุกเครื่องทันที</div>
+    <input id="stkSearch" placeholder="ค้นหารุ่น…" oninput="renderStkTable()" style="width:100%;max-width:320px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:8px 12px;font-family:inherit;font-size:13px;margin-bottom:4px;">
+    <div id="mmWrap" style="max-height:420px;overflow:auto;"><table style="margin-top:8px;"><thead><tr><th>รุ่น</th><th class="r">พร้อมขาย</th><th class="r">Min</th><th class="r">Max</th><th>สถานะ</th></tr></thead><tbody id="stkMM"></tbody></table></div>
+    <div style="margin-top:10px;"><button onclick="saveMinmax()" style="background:var(--lime);color:#111;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer;">💾 บันทึกทั้งหมด</button> <span id="mmMsg" style="font-size:12px;color:var(--sub);margin-left:8px;"></span></div>
   </div>
 
   </div><div class="tabsec" data-t="top">
@@ -651,13 +662,55 @@ function start(){
   new Chart(chHour,{type:'line',data:{labels:HH.map(h=>h+':00'),datasets:[{label:'ออเดอร์รายชั่วโมง',data:HH.map(h=>INS.hour[h].o),borderColor:AMBER,backgroundColor:'rgba(232,181,58,.12)',fill:true,tension:.3,pointRadius:2}]},
     options:{maintainAspectRatio:false}});
 
-  document.getElementById('stkKpis').innerHTML = `
+  const STKL = [{"line":"MARBO 9K","a":1392,"v":453224,"n":24},{"line":"M SWITCH 15K (KIT)","a":941,"v":328000,"n":17},{"line":"V PLUS 16K","a":1526,"v":315134,"n":16},{"line":"ESKO BAR SWITCH 20K (KIT)","a":787,"v":250021,"n":15},{"line":"หัวพอต M SWITCH","a":126,"v":231853,"n":17},{"line":"ELFBAR SWAP 25K (หัวน้ำยา)","a":806,"v":179142,"n":20},{"line":"KS Quik 6K","a":919,"v":178104,"n":18},{"line":"หัวพอต RELX INFINITY","a":1701,"v":170245,"n":46},{"line":"ไส้บุหรี่ IQOS MALAY","a":83,"v":128270,"n":10},{"line":"SONIC 8K","a":1088,"v":74701,"n":10},{"line":"JOIWAY TWINS 20K","a":309,"v":71307,"n":16},{"line":"DUAL SMASH 20K","a":796,"v":55543,"n":12},{"line":"INFY 20K","a":143,"v":53882,"n":21},{"line":"ไส้บุหรี่ IQOS INDO","a":33,"v":42481,"n":19},{"line":"VAZER RELOAD 15K (KIT)","a":98,"v":29290,"n":5},{"line":"JOIWAY 12K","a":104,"v":28886,"n":16},{"line":"ไส้บุหรี่ IQOS JP","a":7,"v":22008,"n":27},{"line":"ESKO BAR 20K","a":56,"v":16500,"n":22},{"line":"NICOTINE POUCH - ZAR POUCH","a":130,"v":11700,"n":10},{"line":"เครื่อง DUAL SMASH","a":119,"v":11610,"n":1},{"line":"STAR 2,500","a":118,"v":9600,"n":12},{"line":"NICOTINE POUCH - KARDINAL POUCH","a":116,"v":9280,"n":10},{"line":"เครื่อง IQOS ILUMA I PRIME","a":3,"v":8700,"n":5},{"line":"RELX DIVA 30K","a":13,"v":5814,"n":17},{"line":"NICOTINE POUCH - ZYN POUCH","a":81,"v":5508,"n":8},{"line":"เครื่อง IQOS ILUMA I STANDARD","a":2,"v":5000,"n":6},{"line":"เครื่อง VAZER RELOAD","a":27,"v":4185,"n":1},{"line":"หัวพอต INFY PLUS","a":27,"v":2719,"n":28},{"line":"LANA IRIS 24K","a":0,"v":2475,"n":15},{"line":"หัวพอต RELX BOOST POD","a":4,"v":2463,"n":31},{"line":"หัวพอต RELX ULTRA","a":18,"v":1866,"n":15},{"line":"VOSOON 23K","a":2,"v":1380,"n":10},{"line":"ESKO BAR SWITCH 20K (หัวน้ำยา)","a":5,"v":1260,"n":20},{"line":"RELX POD CLEAR 18K (หัวน้ำยา)","a":5,"v":1249,"n":19},{"line":"INFY BAR PRO 20K","a":5,"v":1225,"n":25},{"line":"หัวพอต RELX LARGE","a":13,"v":853,"n":9},{"line":"MARBO 10K","a":2,"v":764,"n":12},{"line":"VAZER RELOAD 15K (หัวน้ำยา)","a":2,"v":570,"n":15},{"line":"เครื่อง RELX INFINITY 2+","a":0,"v":543,"n":7},{"line":"RELX SMASH GO 12K","a":-1,"v":312,"n":27},{"line":"RELX SPARTA 20K","a":0,"v":239,"n":21},{"line":"ABC LEGO 20K (หัวน้ำยา)","a":0,"v":110,"n":12},{"line":"MARBO 9K (โคลน)","a":1,"v":105,"n":24},{"line":"FREEBASE ESKOLIQ 30ML","a":0,"v":0,"n":3},{"line":"ABC TANK 22K (หัวน้ำยา)","a":0,"v":0,"n":12},{"line":"CARNIVAL 20K","a":0,"v":0,"n":20},{"line":"ELFBAR 15K","a":0,"v":0,"n":16},{"line":"SALTNIC ESKOLIQ 30ML","a":0,"v":0,"n":2},{"line":"เครื่อง RELX ESSENTIAL 2","a":0,"v":0,"n":4},{"line":"เครื่อง RELX CREATOR 20K","a":1450,"v":0,"n":2},{"line":"เครื่อง M ZERO PRO","a":0,"v":0,"n":8},{"line":"เครื่อง M ZERO NANO","a":0,"v":0,"n":4},{"line":"เครื่อง M SWITCH 15K","a":0,"v":0,"n":2},{"line":"ELFBAR ICE KING 30K","a":0,"v":0,"n":13},{"line":"เครื่อง ELFBAR JOINONE","a":0,"v":0,"n":6},{"line":"เครื่อง IQOS ILUMA I ONE","a":0,"v":0,"n":5},{"line":"PROMOTION","a":267,"v":0,"n":9},{"line":"FREEBASE MARBO 30ML","a":0,"v":0,"n":4},{"line":"FREEBASE PHATJUICE 30ML","a":0,"v":0,"n":1},{"line":"INFY 12K","a":0,"v":0,"n":31},{"line":"INFY BAR 15K","a":0,"v":0,"n":20},{"line":"หัวพอต MARBO ZERO","a":0,"v":0,"n":31},{"line":"SALTNIC MARBO 30ML","a":0,"v":0,"n":9},{"line":"KS QUIK PRO 15K (KIT)","a":0,"v":0,"n":16},{"line":"KS QUIK PRO 15K (หัวน้ำยา)","a":0,"v":0,"n":16},{"line":"ABC 8K","a":0,"v":0,"n":12}];
+  let MMX = {};
+  function stkState(x){ const c=MMX[x.line]||{};
+    if(x.a<=0) return ['out','หมด','#ff6b6b'];
+    if(c.mn>0&&x.a<=c.mn) return ['low','ต่ำกว่า Min','#ff6b6b'];
+    if(c.mx>0&&x.a>c.mx) return ['over','เกิน Max','var(--amber)'];
+    return ['ok','ปกติ','var(--sub)'];
+  }
+  function renderStkHead(){
+    const al = STKL.filter(x=>{const s=stkState(x)[0];return s==='out'||s==='low';});
+    const over = STKL.filter(x=>stkState(x)[0]==='over').length;
+    document.getElementById('stkKpis').innerHTML = `
     <div class="kpi"><b>${fmt(STK.total.value)}</b><span>มูลค่าสต็อกรวม (ต้นทุน)</span></div>
     <div class="kpi"><b>${fmtN(STK.total.qty)}</b><span>สินค้าพร้อมขาย (ชิ้น)</span></div>
     <div class="kpi"><b>${fmtN(STK.total.skus)}</b><span>จำนวน SKU ในคลัง</span></div>
-    <div class="kpi"><b style="color:#ff6b6b;">${STK.low.length}</b><span>รุ่นที่หมด/ใกล้หมด</span></div>`;
-  document.getElementById('stkTop').innerHTML = STK.top_value.map(x=>`<tr><td>${x.line}</td><td class="r">${fmtN(x.a)}</td><td class="r">${fmtN(x.v)}</td></tr>`).join('');
-  document.getElementById('stkLow').innerHTML = STK.low.map(x=>`<tr><td>${x.line}</td><td class="r" style="color:${x.a<=0?'#ff6b6b':'var(--amber)'};font-weight:700;">${x.a}</td></tr>`).join('');
+    <div class="kpi"><b style="color:#ff6b6b;">${al.length}</b><span>ต้องสั่งเพิ่ม (หมด/ต่ำกว่า Min)${over?` · <span style=\"color:var(--amber);\">เกิน Max ${over}</span>`:''}</span></div>`;
+    document.getElementById('stkTop').innerHTML = STK.top_value.map(x=>`<tr><td>${x.line}</td><td class="r">${fmtN(x.a)}</td><td class="r">${fmtN(x.v)}</td></tr>`).join('');
+    document.getElementById('stkLow').innerHTML = al.slice(0,20).map(x=>{const c=MMX[x.line]||{};
+      return `<tr><td>${x.line}</td><td class="r" style="color:${x.a<=0?'#ff6b6b':'var(--amber)'};font-weight:700;">${x.a}${c.mn>0?` <span style=\"color:var(--sub);font-weight:400;\">/ Min ${c.mn}</span>`:''}</td></tr>`;}).join('');
+  }
+  window.renderStkTable = function(){
+    const el=document.getElementById('stkSearch');
+    const q=((el&&el.value)||'').trim().toLowerCase();
+    document.getElementById('stkMM').innerHTML = STKL
+      .map((x,i)=>({x,i}))
+      .filter(o=>!q||o.x.line.toLowerCase().includes(q))
+      .map(o=>{ const x=o.x, c=MMX[x.line]||{}, st=stkState(x);
+        return `<tr${(st[0]==='low'||st[0]==='out')?' style="background:rgba(255,107,107,.07);"':''}>
+          <td>${x.line}</td><td class="r">${fmtN(x.a)}</td>
+          <td class="r"><input type="number" class="mmIn" data-i="${o.i}" data-k="mn" value="${c.mn>0?c.mn:''}" placeholder="–"></td>
+          <td class="r"><input type="number" class="mmIn" data-i="${o.i}" data-k="mx" value="${c.mx>0?c.mx:''}" placeholder="–"></td>
+          <td style="color:${st[2]};font-weight:700;font-size:11.5px;white-space:nowrap;">${st[0]==='out'?'🔴 หมด':st[0]==='low'?'🔴 ต่ำกว่า Min':st[0]==='over'?'⚠️ เกิน Max':'✓'}</td></tr>`;
+      }).join('');
+  };
+  window.saveMinmax = async function(){
+    document.querySelectorAll('.mmIn').forEach(el=>{
+      const x=STKL[+el.dataset.i]; if(!x) return;
+      MMX[x.line]=MMX[x.line]||{};
+      MMX[x.line][el.dataset.k]=parseInt(el.value)||0;
+    });
+    const clean={}; Object.keys(MMX).forEach(k=>{ if((MMX[k].mn|0)>0||(MMX[k].mx|0)>0) clean[k]={mn:MMX[k].mn|0,mx:MMX[k].mx|0}; });
+    const msg=document.getElementById('mmMsg');
+    try{ await db.collection('shop_config').doc('minmax').set({m:clean});
+      msg.textContent='บันทึกแล้ว ✓ '+new Date().toLocaleTimeString('th-TH');
+    }catch(e){ msg.textContent='บันทึกไม่สำเร็จ: '+e.message; blackbox('mmErr',e.message); }
+    renderStkHead(); renderStkTable();
+  };
+  try{ db.collection('shop_config').doc('minmax').onSnapshot(s=>{ MMX=(s.data()||{}).m||{}; renderStkHead(); renderStkTable(); }); }catch(e){ blackbox('mmSub',e.message); }
+  renderStkHead(); renderStkTable();
 
   const MM = MKT.months, mkeys = Object.keys(MM).sort();
   const lastM = mkeys.filter(k=>MM[k].spend>0).pop();
