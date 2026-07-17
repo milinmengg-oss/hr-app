@@ -786,7 +786,7 @@ const CATTH={'ry_head':'หัวน้ำยา (Big Pod)','pod_head':'หั�
 let selPath=null;
 async function initMap(){
   try{
-    const gj = await (await fetch('thailand.json')).json();
+    const gj = await (await fetch('thailand.json?v=2')).json();
     const W=470,H=700;
     const proj = d3.geoMercator().fitSize([W,H], gj);
     const path = d3.geoPath(proj);
@@ -799,7 +799,7 @@ async function initMap(){
       .attr('stroke','#0d0d0d').attr('stroke-width',.7).style('cursor','pointer')
       .on('mouseover', function(){ if(window.matchMedia('(hover: hover)').matches) d3.select(this).attr('stroke','#fff').attr('stroke-width',1.2); })
       .on('mouseout', function(){ if(this!==selPath) d3.select(this).attr('stroke','#0d0d0d').attr('stroke-width',.7); })
-      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); renderProv(EN2TH[f.properties.name]); if(window.innerWidth<820) setTimeout(()=>document.getElementById('pvPanel').scrollIntoView({behavior:'smooth',block:'start'}),120); });
+      .on('click', function(e,f){ if(selPath) d3.select(selPath).attr('stroke','#0d0d0d').attr('stroke-width',.7); selPath=this; d3.select(this).attr('stroke','#fff').attr('stroke-width',1.6); renderProv(EN2TH[f.properties.name]); if(window.innerWidth<820) document.getElementById('pvPanel').scrollIntoView(); });
     renderProv('กรุงเทพมหานคร');
   }catch(e){ document.getElementById('thMapWrap').innerHTML='<div class="note">โหลดแผนที่ไม่สำเร็จ: '+e.message+'</div>'; }
 }
