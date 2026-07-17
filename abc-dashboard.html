@@ -135,7 +135,7 @@ td.r,th.r{text-align:right;}
   </div>
   <div class="panel" style="margin-top:12px;max-height:420px;overflow-y:auto;">
     <input class="search" placeholder="ค้นหารุ่น…" oninput="pfq=this.value;renderPfTable()">
-    <table><thead><tr><th>รุ่น</th><th class="r">ขาย (ชิ้น)</th><th class="r">ต้นทุน/ชิ้น</th><th class="r">ราคาส่ง</th><th class="r">ราคาปลีก (มินิแอพ)</th><th class="r">กำไร/ชิ้น (ส่ง)</th><th class="r">กำไร/ชิ้น (ปลีก)</th><th class="r">Margin %</th><th class="r">กำไรรวม ฿</th></tr></thead><tbody id="pfBody"></tbody></table>
+    <table><thead><tr><th>รุ่น</th><th class="r">ขาย (ชิ้น)</th><th class="r">ต้นทุน/ชิ้น</th><th class="r">ราคาส่ง</th><th class="r">ราคาปลีก (มินิแอพ)</th><th class="r">กำไร/ชิ้น (ส่ง)</th><th class="r">กำไร/ชิ้น (ปลีก)</th><th class="r">Margin % (ส่ง)</th><th class="r">Margin % (ปลีก)</th><th class="r">กำไรรวม ฿</th></tr></thead><tbody id="pfBody"></tbody></table>
     <div class="note" style="margin-top:8px;">* ประมาณการจากราคาส่ง (Dropship) และต้นทุนกลางของแต่ละรุ่นในไฟล์สต็อก — ยอดจริงอาจต่างเล็กน้อยตามส่วนลด/โปรโมชั่น/สัดส่วนปลีก-ส่ง</div>
   </div>
   </div><div class="tabsec" data-t="re">
@@ -683,7 +683,7 @@ function start(){
   window.renderPfTable = function(){
     const q=(pfq||'').trim().toLowerCase();
     document.getElementById('pfBody').innerHTML = PROF.filter(x=>!q||x.line.toLowerCase().includes(q))
-      .map((x,i)=>`<tr><td>${i+1}. ${x.line}</td><td class="r">${fmtN(x.q)}</td><td class="r">฿${x.cost}</td><td class="r">฿${x.pW||x.pR}</td><td class="r" style="color:var(--blue,#5db2ff);">฿${x.pApp||'-'}</td><td class="r">฿${x.unit}</td><td class="r" style="color:var(--blue,#5db2ff);">฿${x.unitR||'-'}</td><td class="r" style="color:${x.margin>=40?'var(--lime)':x.margin>=25?'var(--amber)':'#ff6b6b'};font-weight:700;">${x.margin}%</td><td class="r" style="font-weight:700;">${fmtN(x.total)}</td></tr>`).join('');
+      .map((x,i)=>`<tr><td>${i+1}. ${x.line}</td><td class="r">${fmtN(x.q)}</td><td class="r">฿${x.cost}</td><td class="r">฿${x.pW||x.pR}</td><td class="r" style="color:var(--blue,#5db2ff);">฿${x.pApp||'-'}</td><td class="r">฿${x.unit}</td><td class="r" style="color:var(--blue,#5db2ff);">฿${x.unitR||'-'}</td><td class="r" style="color:${x.margin>=40?'var(--lime)':x.margin>=25?'var(--amber)':'#ff6b6b'};font-weight:700;">${x.margin}%</td><td class="r" style="color:${x.pApp&&x.unitR/x.pApp>=.4?'var(--lime)':x.pApp&&x.unitR/x.pApp>=.25?'var(--amber)':'#5db2ff'};font-weight:700;">${x.pApp?(x.unitR/x.pApp*100).toFixed(1)+'%':'-'}</td><td class="r" style="font-weight:700;">${fmtN(x.total)}</td></tr>`).join('');
   };
   renderPfTable();
 
