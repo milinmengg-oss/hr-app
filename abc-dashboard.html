@@ -805,9 +805,24 @@ function provListMobile(){
     q=(q||'').trim();
     document.getElementById('mProvList').innerHTML=window.__provArr.filter(([k])=>!q||k.includes(q)).map(([k,v],i)=>window.__provRow(k,v,i)).join('');
   };
-  wrap.innerHTML='<div style="width:100%;"><input class="search" placeholder="ค้นหาจังหวัด… (แตะเพื่อดูรายละเอียด)" oninput="mProvFilter(this.value)"><div id="mProvList"></div></div>';
+  wrap.innerHTML='<div style="width:100%;"><div id="mMap" style="display:flex;justify-content:center;margin-bottom:10px;"></div><input class="search" placeholder="ค้นหาจังหวัด… (แตะเพื่อดูรายละเอียด)" oninput="mProvFilter(this.value)"><div id="mProvList" style="max-height:380px;overflow-y:auto;"></div></div>';
   window.mProvFilter('');
-  blackbox('mapMode','mobile-list');
+  drawStaticMap();
+  blackbox('mapMode','mobile-map+list');
+}
+async function drawStaticMap(){
+  try{
+    const gj = await (await fetch('thailand.json?v=2')).json();
+    const W=300,H=450;
+    const proj = d3.geoMercator().fitSize([W,H], gj);
+    const path = d3.geoPath(proj);
+    const maxR = Math.max(...Object.values(GEO).map(g=>g.r));
+    const svg = d3.select('#mMap').append('svg').attr('viewBox','0 0 '+W+' '+H).style('width','62%').style('pointer-events','none');
+    svg.selectAll('path').data(gj.features).join('path')
+      .attr('d', path)
+      .attr('fill', f=>{ const g=GEO[EN2TH[f.properties.name]]; const t=g?Math.sqrt(g.r/maxR):0; return d3.interpolateRgb('#20290a','#bdfb00')(Math.max(.06,t)); })
+      .attr('stroke','#0d0d0d').attr('stroke-width',.6);
+  }catch(e){ blackbox('mapStaticErr', e.message); }
 }
 async function initMap(){
   if(IS_TOUCH && window.innerWidth<820){ provListMobile(); renderProv('กรุงเทพมหานคร'); return; }
