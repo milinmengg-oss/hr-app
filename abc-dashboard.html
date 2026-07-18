@@ -72,6 +72,7 @@ td.r,th.r{text-align:right;}
   <div class="tabsec on" data-t="ov">
   <div class="panel" style="margin-top:10px;"><b style="font-size:14px;">💡 Executive Insights — <span id="insLabel">สิ่งที่ข้อมูลกำลังบอกเรา</span></b><div id="insights" style="margin-top:6px;"></div></div>
   <div class="cards" id="kpis"></div>
+  <div class="panel" id="tgtPanel" style="display:none;margin-top:12px;"></div>
 
   <h2>🔍 ดูตามช่วงเวลา <span class="pill">ข้อมูล 1 ม.ค. – 30 มิ.ย. 2569</span></h2>
   <div class="panel">
@@ -189,6 +190,15 @@ td.r,th.r{text-align:right;}
   <h2>👑 Top Spender <span class="pill">6 เดือน · ปกปิดตัวตนตามนโยบายข้อมูล</span></h2>
   <div class="panel"><table><thead><tr><th>#</th><th>ลูกค้า</th><th>เบอร์ (ปกปิด)</th><th class="r">ออเดอร์</th><th class="r">ยอดซื้อสะสม ฿</th><th class="r">เฉลี่ย/ออเดอร์</th></tr></thead><tbody id="topBody"></tbody></table>
   <div class="note" style="margin-top:8px;">ดูตัวตนเต็มได้จากไฟล์ XSelly โดยตรงเท่านั้น — แดชบอร์ดไม่เก็บข้อมูลส่วนตัว</div></div>
+  </div><div class="tabsec" data-t="upd">
+  <h2>⬆️ อัพเดตข้อมูลยอดขาย <span class="pill">เฉพาะผู้บริหาร</span></h2>
+  <div class="panel">
+    <div class="note">ลากไฟล์ <b>Sale Rec รายเดือน</b> จาก XSelly (.xlsx) มาวาง ระบบจะคำนวณและรวมยอดเดือนใหม่เข้าทุกแท็บอัตโนมัติ<br>หมายเหตุ: ข้อมูลลูกค้าซื้อซ้ำ / Top Spender / สต็อก เป็นการอัพเดตรอบใหญ่แยกต่างหาก</div>
+    <div id="updDrop" style="border:2px dashed var(--border);border-radius:14px;padding:40px 20px;text-align:center;color:var(--sub);cursor:pointer;margin-top:12px;font-size:14px;">📂 คลิกเลือกไฟล์ หรือลากไฟล์มาวางตรงนี้<input type="file" id="updFile" accept=".xlsx" style="display:none;"></div>
+    <div id="updLog" style="font-size:12.5px;margin-top:12px;line-height:1.9;color:var(--sub);"></div>
+    <div id="updSummary" style="margin-top:6px;"></div>
+    <button id="updGo" style="display:none;margin-top:12px;background:var(--lime);color:#111;border:none;border-radius:8px;padding:12px 26px;font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;" onclick="updCommit()">✅ ยืนยันอัพเดตข้อมูล</button>
+  </div>
   </div><div class="tabsec" data-t="live">
   <h2>🛍 มินิแอพ ABC Shop <span class="pill">เรียลไทม์</span></h2>
   <div class="cards" id="liveKpis" style="margin-top:0;"><div class="kpi"><b>…</b><span>กำลังเชื่อมต่อ</span></div></div>
@@ -400,7 +410,7 @@ function start(){
   }
 
   const TABS=[['ov','ภาพรวมเชิงวิเคราะห์'],['geo','พื้นที่'],['prod','สินค้า'],['pf','กำไร 💰'],['re','ซื้อซ้ำ & คู่กัน'],['time','เวลา'],['mkt','การตลาด'],['stk','สต็อก'],['top','Top Spender'],['live','มินิแอพสด']];
-  const TABS2 = ROLE==='exec' ? TABS : TABS.filter(([k])=>!['pf','top'].includes(k));
+  const TABS2 = ROLE==='exec' ? [...TABS,['upd','⬆️ อัพเดตข้อมูล']] : TABS.filter(([k])=>!['pf','top'].includes(k));
   document.getElementById('tabbar').innerHTML = TABS2.map(([k,l],i)=>`<button class="tb ${i===0?'on':''}" id="tb_${k}" onclick="showTab('${k}')">${l}</button>`).join('') + '<button class="tb" style="color:#ff6b6b;" onclick="doLogout()">ออกจากระบบ</button>';
   window.showTab = k => {
     document.querySelectorAll('.tabsec').forEach(s=>s.classList.toggle('on', s.dataset.t===k));
@@ -464,6 +474,7 @@ function start(){
 
   setRange('7');
   loadLive();
+  if(ROLE==='exec'){ try{ initTarget(); }catch(e){ blackbox('tgtErr', e.message); } }
 }
 
 let chRangeObj=null;
@@ -609,6 +620,229 @@ async function loadLive(){
     document.getElementById('liveKpis').innerHTML = '<div class="kpi"><b>-</b><span>เชื่อมต่อมินิแอพไม่ได้</span></div>';
   }
 }
+
+// ═══════════ เป้า vs จริง ═══════════
+let TGT={};
+async function initTarget(){
+  const el=document.getElementById('tgtPanel'); if(!el) return;
+  el.style.display='block';
+  try{ const d=await db.collection('dash_secure').doc('target').get(); TGT=(d.exists&&d.data().m)||{}; }catch(e){}
+  renderTarget();
+}
+function renderTarget(){
+  const el=document.getElementById('tgtPanel'); if(!el) return;
+  const keys=Object.keys(SALES.months).sort(); const M=keys[keys.length-1];
+  const t=+TGT[M]||0, rev=SALES.months[M].revenue||0, o=SALES.months[M].orders||0;
+  const now=new Date(), isCur=(M===now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0'));
+  const dim=new Date(+M.slice(0,4), +M.slice(5,7), 0).getDate();
+  const de=isCur?Math.max(1,now.getDate()-1):dim;
+  const proj=rev/de*dim, pct=t?Math.min(100,rev/t*100):0;
+  el.innerHTML=`<b style="font-size:13px;color:var(--lime);">🎯 เป้า vs จริง — เดือน ${TH[M]||M}</b>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--sub);">ตั้งเป้ายอดขาย (บาท):</span>
+      <input id="tgtIn" type="number" value="${t||''}" placeholder="เช่น 50000000" style="width:170px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:8px 12px;font-family:inherit;font-size:13px;">
+      <button onclick="saveTarget('${M}')" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 18px;font-family:inherit;font-size:12.5px;cursor:pointer;">บันทึกเป้า</button>
+    </div>
+    ${t?`<div style="margin-top:12px;background:#0d0d0d;border-radius:8px;height:16px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${pct>=100?'var(--lime)':pct>=70?'rgba(189,251,0,.7)':'var(--amber)'};border-radius:8px;transition:width .6s;"></div></div>
+    <div style="font-size:13px;margin-top:8px;">ทำได้ <b>${fmt(rev)}</b> จากเป้า ${fmt(t)} = <b style="color:${pct>=100?'var(--lime)':'var(--amber)'};">${(rev/t*100).toFixed(1)}%</b>${isCur?` · ผ่านไป ${de}/${dim} วัน`:''}
+    <br>คาดการณ์จบเดือนตามจังหวะนี้: <b>${fmt(proj)}</b> ${proj>=t?`<span style="color:var(--lime);">🎯 เกินเป้า +${fmt(proj-t)}</span>`:`<span style="color:#ff6b6b;">⚠️ ต่ำกว่าเป้า ${fmt(t-proj)}</span>`}</div>`:'<div class="note" style="margin-top:8px;">ยังไม่ได้ตั้งเป้าเดือนนี้ — ใส่ตัวเลขแล้วกดบันทึก</div>'}`;
+}
+async function saveTarget(M){
+  TGT[M]=parseInt(document.getElementById('tgtIn').value)||0;
+  try{ await db.collection('dash_secure').doc('target').set({m:TGT}); toast('บันทึกเป้าแล้ว ✓'); }catch(e){ toast('บันทึกไม่สำเร็จ: '+(e.code||e.message)); }
+  renderTarget();
+}
+
+// ═══════════ อัพเดตข้อมูล (อัพโหลด XSelly) ═══════════
+const ZIP2PROV={'10':'กรุงเทพมหานคร','11':'นนทบุรี','12':'ปทุมธานี','13':'พระนครศรีอยุธยา','14':'อ่างทอง','15':'ลพบุรี','16':'สิงห์บุรี','17':'ชัยนาท','18':'สระบุรี','20':'ชลบุรี','21':'ระยอง','22':'จันทบุรี','23':'ตราด','24':'ฉะเชิงเทรา','25':'ปราจีนบุรี','26':'นครนายก','27':'สระแก้ว','30':'นครราชสีมา','31':'บุรีรัมย์','32':'สุรินทร์','33':'ศรีสะเกษ','34':'อุบลราชธานี','35':'ยโสธร','36':'ชัยภูมิ','37':'อำนาจเจริญ','38':'บึงกาฬ','39':'หนองบัวลำภู','40':'ขอนแก่น','41':'อุดรธานี','42':'เลย','43':'หนองคาย','44':'มหาสารคาม','45':'ร้อยเอ็ด','46':'กาฬสินธุ์','47':'สกลนคร','48':'นครพนม','49':'มุกดาหาร','50':'เชียงใหม่','51':'ลำพูน','52':'ลำปาง','53':'อุตรดิตถ์','54':'แพร่','55':'น่าน','56':'พะเยา','57':'เชียงราย','58':'แม่ฮ่องสอน','60':'นครสวรรค์','61':'อุทัยธานี','62':'กำแพงเพชร','63':'ตาก','64':'สุโขทัย','65':'พิษณุโลก','66':'พิจิตร','67':'เพชรบูรณ์','70':'ราชบุรี','71':'กาญจนบุรี','72':'สุพรรณบุรี','73':'นครปฐม','74':'สมุทรสาคร','75':'สมุทรสงคราม','76':'เพชรบุรี','77':'ประจวบคีรีขันธ์','80':'นครศรีธรรมราช','81':'กระบี่','82':'พังงา','83':'ภูเก็ต','84':'สุราษฎร์ธานี','85':'ระนอง','86':'ชุมพร','90':'สงขลา','91':'สตูล','92':'ตรัง','93':'พัทลุง','94':'ปัตตานี','95':'ยะลา','96':'นราธิวาส'};
+const SAMUT_ZIP=new Set(['10130','10270','10280','10290','10540','10550','10560','10570','10580']);
+const DIST_RE=/(?:อำเภอ|เขต|อ\.)\s*([ก-๙]{2,25}?)(?=จังหวัด|จ\.|แขวง|ตำบล|ต\.|ถนน|ถ\.|ซอย|กรุงเทพ|รหัส|\d|\s|$)/;
+function catRule(line){
+  if(!line) return 'other';
+  if(line.startsWith('หัวพอต')) return 'pod_head';
+  if(line.includes('หัวน้ำยา')) return 'ry_head';
+  if(line.includes('KIT')) return 'bigpod_kit';
+  if(line.startsWith('เครื่อง IQOS')) return 'iqos_dev';
+  if(line.startsWith('ไส้บุหรี่')) return 'iqos';
+  if(line.startsWith('เครื่อง')) return 'pod_device';
+  if(line.includes('SALTNIC')||line.includes('FREEBASE')) return 'saltnic';
+  if(line.includes('POUCH')) return 'nicpouch';
+  return 'disposable';
+}
+function zip2prov(z){
+  if(z==null) return 'ไม่ระบุ';
+  const s=String(Math.round(+z)||z).trim().padStart(5,'0');
+  if(SAMUT_ZIP.has(s)) return 'สมุทรปราการ';
+  return ZIP2PROV[s.slice(0,2)]||'ไม่ระบุ';
+}
+let UPD=null;
+async function loadSheetJS(){
+  if(window.XLSX) return;
+  await new Promise((res,rej)=>{ const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+}
+function updLog(m){ const el=document.getElementById('updLog'); el.innerHTML+=m+'<br>'; }
+async function updParse(file){
+  document.getElementById('updLog').innerHTML=''; document.getElementById('updSummary').innerHTML=''; document.getElementById('updGo').style.display='none'; UPD=null;
+  try{
+    updLog('⏳ กำลังอ่านไฟล์ <b>'+file.name+'</b> ('+(file.size/1e6).toFixed(1)+' MB) — ไฟล์ใหญ่อาจใช้เวลา 10-30 วินาที…');
+    await loadSheetJS();
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{cellDates:true});
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:null});
+    updLog('อ่านได้ '+rows.length.toLocaleString()+' แถว · กำลังโหลดแผนที่ SKU…');
+    const [sa,sb]=await Promise.all([db.collection('dash_secure').doc('skumap_a').get(),db.collection('dash_secure').doc('skumap_b').get()]);
+    const SKMAP={};
+    [sa,sb].forEach(dd=>{ if(dd.exists){ const inv=JSON.parse(dd.data().j); for(const line in inv) inv[line].forEach(s=>SKMAP[s]=line); } });
+    updLog('กำลังประมวลผลออเดอร์…');
+    const C_TOT='ยอดออเดอร์(รวมขายสินค้าทั้งออเดอร์ + ค่าจัดส่ง + ค่าอื่นๆ - ส่วนลด)';
+    const orders=[]; let cur=null, unmatched=0, items=0;
+    for(const r of rows){
+      if(r[C_TOT]!=null && r[C_TOT]!==''){
+        if(cur) orders.push(cur);
+        let dt=r['วันเวลาที่สร้างออเดอร์'];
+        if(!(dt instanceof Date)) dt=new Date(String(dt||'').replace(' ','T'));
+        cur={ total:+r[C_TOT]||0, dt, st:String(r['สถานะออเดอร์']||''), ship:String(r['ขนส่ง']||''), zip:r['ผู้รับ:ไปรษณีย์'], addr:String(r['ผู้รับ:ที่อยู่']||''), items:[] };
+      }
+      if(cur && r['ชื่อสินค้า']!=null){
+        const sku=String(r['ชื่อสินค้า']).trim(), q=+r['จำนวน']||0;
+        const line=SKMAP[sku]; if(!line) unmatched++;
+        cur.items.push({line:line||'อื่นๆ', q}); items++;
+      }
+    }
+    if(cur) orders.push(cur);
+    const ok=orders.filter(o=>!o.st.includes('ยกเลิก') && o.dt && !isNaN(o.dt));
+    // เดือนหลักของไฟล์
+    const mc={}; ok.forEach(o=>{ const k=o.dt.getFullYear()+'-'+String(o.dt.getMonth()+1).padStart(2,'0'); mc[k]=(mc[k]||0)+1; });
+    const M=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0][0];
+    // aggregate
+    const A={M, orders:ok.length, revenue:0, daily:{}, dailyRows:{}, prov:{}, geo:{}, prodq:{}, dow:[...Array(7)].map(()=>({o:0,r:0})), hour:[...Array(24)].map(()=>({o:0,r:0})), pairs:{}};
+    for(const o of ok){
+      A.revenue+=o.total;
+      const day=o.dt.getDate(); A.daily[day]=(A.daily[day]||0)+o.total;
+      const ymd=o.dt.getFullYear()+'-'+String(o.dt.getMonth()+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+      if(ymd.slice(0,7)===M){
+        const dr=A.dailyRows[ymd]=A.dailyRows[ymd]||{d:ymd,o:0,r:0,f:0,k:0,g:0,x:0};
+        dr.o++; dr.r+=o.total;
+        const sh=o.ship.toLowerCase();
+        if(sh.includes('flash')||sh.includes('แฟลช')) dr.f++;
+        else if(sh.includes('kerry')||sh.includes('เคอ')) dr.k++;
+        else if(sh.includes('grab')||sh.includes('แกร็บ')||sh.includes('แกรบ')) dr.g++;
+        else dr.x++;
+      }
+      A.dow[o.dt.getDay()===0?6:o.dt.getDay()-1].o++; A.dow[o.dt.getDay()===0?6:o.dt.getDay()-1].r+=o.total;
+      A.hour[o.dt.getHours()].o++; A.hour[o.dt.getHours()].r+=o.total;
+      const p=zip2prov(o.zip);
+      const pv=A.prov[p]=A.prov[p]||{o:0,r:0,top:{}};
+      pv.o++; pv.r+=o.total;
+      const gg=A.geo[p]=A.geo[p]||{o:0,r:0,sku:{},ship:{},cat:{},dist:{}};
+      gg.o++; gg.r+=o.total;
+      const shName=o.ship.trim()||'อื่นๆ'; gg.ship[shName]=(gg.ship[shName]||0)+1;
+      const dm=o.addr.match(DIST_RE);
+      if(dm){ let dn=dm[1]; if(dn==='เมือง') dn='เมือง'+p; gg.dist[dn]=(gg.dist[dn]||0)+1; }
+      const lines=new Set();
+      for(const it of o.items){
+        pv.top[it.line]=(pv.top[it.line]||0)+it.q;
+        gg.sku[it.line]=(gg.sku[it.line]||0)+it.q;
+        gg.cat[catRule(it.line)]=(gg.cat[catRule(it.line)]||0)+it.q;
+        const pq=A.prodq[it.line]=A.prodq[it.line]||0; A.prodq[it.line]=pq+it.q;
+        lines.add(it.line);
+      }
+      const la=[...lines].sort();
+      for(let i=0;i<la.length;i++) for(let j=i+1;j<la.length;j++){ const key=la[i]+'|||'+la[j]; A.pairs[key]=(A.pairs[key]||0)+1; }
+    }
+    A.dailyRows=Object.values(A.dailyRows).sort((a,b)=>a.d<b.d?-1:1);
+    UPD=A;
+    // เช็คว่าเดือนนี้อยู่ในฐานเดิมหรือยัง
+    let baseMonths=Object.keys(SALES.months);
+    try{ const b=await db.collection('dash_secure').doc('base').get(); if(b.exists) baseMonths=Object.keys(JSON.parse(b.data().j).SALES.months); }catch(e){}
+    const inBase=baseMonths.includes(M);
+    const matchPct=items?((items-unmatched)/items*100).toFixed(1):100;
+    document.getElementById('updSummary').innerHTML=`<div class="ins">📄 เดือนที่พบ: <b>${TH[M]||M}</b> · ออเดอร์ <b>${ok.length.toLocaleString()}</b> · ยอดขาย <b>${fmt(A.revenue)}</b><br>จับคู่สินค้าได้ ${matchPct}% · ครอบคลุม ${A.dailyRows.length} วัน · จังหวัด ${Object.keys(A.prov).length} จังหวัด${inBase?'<br><span style="color:#ff6b6b;font-weight:700;">⛔ เดือนนี้มีอยู่ในข้อมูลหลักแล้ว — อัพซ้ำไม่ได้ (กันข้อมูลเบิ้ล) ถ้าต้องการแก้ไขเดือนเก่า ติดต่อจีติง</span>':'<br><span style="color:var(--lime);">พร้อมอัพเดต — ถ้าเคยอัพเดือนนี้ไปแล้ว ระบบจะแทนที่ของเดิมให้ (ไม่เบิ้ล)</span>'}</div>`;
+    document.getElementById('updGo').style.display=inBase?'none':'inline-block';
+    updLog('✅ ประมวลผลเสร็จ ตรวจสอบตัวเลขด้านล่างก่อนกดยืนยัน');
+  }catch(e){ updLog('<span style="color:#ff6b6b;">❌ อ่านไฟล์ไม่สำเร็จ: '+(e.message||e)+'</span>'); blackbox('updParseErr', e.message||String(e)); }
+}
+function mergeMonth(D, A){
+  const M=A.M;
+  D.SALES.months[M]={orders:A.orders, revenue:A.revenue, daily:A.daily};
+  for(const p in A.prov){
+    const s=A.prov[p];
+    const t=D.SALES.provinces[p]=D.SALES.provinces[p]||{o:0,r:0,top:[]};
+    t.o+=s.o; t.r+=s.r;
+    const td={}; (t.top||[]).forEach(([k,v])=>td[k]=v);
+    for(const k in s.top) td[k]=(td[k]||0)+s.top[k];
+    t.top=Object.entries(td).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  }
+  for(const line in A.prodq){
+    let row=D.SALES.products.find(x=>x.line===line);
+    if(!row){ row={line,q:0,m:{}}; D.SALES.products.push(row); }
+    row.q+=A.prodq[line]; row.m=row.m||{}; row.m[M]=(row.m[M]||0)+A.prodq[line];
+  }
+  D.SALES.products.sort((a,b)=>b.q-a.q);
+  D.DAILY=D.DAILY.filter(x=>!x.d.startsWith(M)).concat(A.dailyRows).sort((a,b)=>a.d<b.d?-1:1);
+  for(const p in A.geo){
+    const s=A.geo[p];
+    const g=D.GEO[p]=D.GEO[p]||{o:0,r:0,cust:0,rep:0,cat:[],br:[],sku:[],ship:[],dist:[]};
+    g.o+=s.o; g.r+=s.r;
+    const mg=(oldArr,addObj,keep)=>{ const d={}; (oldArr||[]).forEach(([k,v])=>d[k]=v); for(const k in addObj) d[k]=(d[k]||0)+addObj[k]; return Object.entries(d).sort((a,b)=>b[1]-a[1]).slice(0,keep); };
+    g.sku=mg(g.sku,s.sku,5); g.ship=mg(g.ship,s.ship,6); g.cat=mg(g.cat,s.cat,11); g.dist=mg(g.dist,s.dist,8);
+  }
+  for(let i=0;i<7;i++){ if(D.INS.dow[i]){ D.INS.dow[i].o=(D.INS.dow[i].o||0)+A.dow[i].o; if(D.INS.dow[i].r!=null) D.INS.dow[i].r+=A.dow[i].r; } }
+  for(let h=0;h<24;h++){ if(D.INS.hour[h]){ D.INS.hour[h].o=(D.INS.hour[h].o||0)+A.hour[h].o; if(D.INS.hour[h].r!=null) D.INS.hour[h].r+=A.hour[h].r; } }
+  const pd={}; (D.INS.pairs||[]).forEach(x=>pd[x[0]+'|||'+x[1]]=x[2]);
+  for(const k in A.pairs) pd[k]=(pd[k]||0)+A.pairs[k];
+  D.INS.pairs=Object.entries(pd).map(([k,v])=>{const [a,b]=k.split('|||');return [a,b,v];}).sort((a,b)=>b[2]-a[2]).slice(0,25);
+  for(const line in A.prodq){
+    const pr=(D.PROF||[]).find(x=>x.line===line);
+    if(pr&&pr.unit!=null){ pr.q+=A.prodq[line]; pr.total=pr.unit*pr.q; }
+  }
+  D.SALES.updated=new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
+  return D;
+}
+function scrubOpen(x){
+  const S=['r','v','value','rev','revenue','aov'];
+  const sc=y=>{ if(Array.isArray(y)) return y.map(sc); if(y&&typeof y==='object'){ const o={}; for(const k in y){ if(S.includes(k)) continue; o[k]=sc(y[k]); } return o; } return y; };
+  const O={SALES:sc(x.SALES),MKT:x.MKT,GEO:sc(x.GEO),INS:sc(x.INS),DAILY:sc(x.DAILY),STK:sc(x.STK),STKL:sc(x.STKL)};
+  if(O.SALES.months){ for(const m in O.SALES.months) delete O.SALES.months[m].daily; }
+  return O;
+}
+async function updCommit(){
+  if(!UPD){ toast('ยังไม่มีข้อมูลที่ประมวลผล'); return; }
+  const btn=document.getElementById('updGo'); btn.disabled=true; btn.textContent='⏳ กำลังบันทึก…';
+  try{
+    let b=await db.collection('dash_secure').doc('base').get();
+    if(!b.exists){
+      const cur=await db.collection('dash_secure').doc('all').get();
+      await db.collection('dash_secure').doc('base').set({j:cur.data().j, at:new Date().toISOString()});
+      b=await db.collection('dash_secure').doc('base').get();
+      updLog('สร้างฐานข้อมูลหลัก (ครั้งแรก) แล้ว');
+    }
+    await db.collection('dash_secure').doc('m_'+UPD.M).set({j:JSON.stringify(UPD), at:new Date().toISOString()});
+    updLog('บันทึกเดือน '+(TH[UPD.M]||UPD.M)+' แล้ว · กำลังรวมข้อมูลทั้งหมด…');
+    const D=JSON.parse(b.data().j);
+    const snaps=await db.collection('dash_secure').get();
+    const mdocs=[]; snaps.forEach(dd=>{ if(dd.id.startsWith('m_')) mdocs.push(JSON.parse(dd.data().j)); });
+    mdocs.sort((a,b)=>a.M<b.M?-1:1).forEach(A=>mergeMonth(D,A));
+    await db.collection('dash_secure').doc('all').set({j:JSON.stringify(D), at:new Date().toISOString()});
+    await db.collection('dash_open').doc('all').set({j:JSON.stringify(scrubOpen(D)), at:new Date().toISOString()});
+    updLog('<b style="color:var(--lime);">🎉 อัพเดตสำเร็จ! กำลังรีโหลดหน้า…</b>');
+    setTimeout(()=>location.reload(), 1800);
+  }catch(e){
+    updLog('<span style="color:#ff6b6b;">❌ บันทึกไม่สำเร็จ: '+(e.code||e.message)+'</span>');
+    blackbox('updCommitErr', e.code||e.message);
+    btn.disabled=false; btn.textContent='✅ ยืนยันอัพเดตข้อมูล';
+  }
+}
+(function(){
+  const dz=document.getElementById('updDrop'); if(!dz) return;
+  const fi=document.getElementById('updFile');
+  dz.onclick=()=>fi.click();
+  dz.ondragover=e=>{ e.preventDefault(); dz.style.borderColor='var(--lime)'; };
+  dz.ondragleave=()=>{ dz.style.borderColor='var(--border)'; };
+  dz.ondrop=e=>{ e.preventDefault(); dz.style.borderColor='var(--border)'; if(e.dataTransfer.files[0]) updParse(e.dataTransfer.files[0]); };
+  fi.onchange=()=>{ if(fi.files[0]) updParse(fi.files[0]); };
+})();
+
 </script>
 </body>
 </html>
