@@ -66,7 +66,7 @@ td.r,th.r{text-align:right;}
 </div></div>
 
 <div class="wrap hidden" id="main">
-  <h1><span class="dot"></span>ABC — ภาพรวมบริษัท <small>ข้อมูลขาย ม.ค.–มิ.ย. 2569 · การตลาด ธ.ค. 2568–ก.ค. 2569 · อัพเดต 17 ก.ค. 2569</small></h1>
+  <h1><span class="dot"></span>ABC — ภาพรวมบริษัท <small id="subT">ข้อมูลขาย ม.ค.–มิ.ย. 2569 · การตลาด ธ.ค. 2568–ก.ค. 2569 · อัพเดต 17 ก.ค. 2569</small></h1>
 
   <div class="tabbar" id="tabbar"></div>
   <div class="tabsec on" data-t="ov">
@@ -74,7 +74,7 @@ td.r,th.r{text-align:right;}
   <div class="cards" id="kpis"></div>
   <div class="panel" id="tgtPanel" style="display:none;margin-top:12px;"></div>
 
-  <h2>🔍 ดูตามช่วงเวลา <span class="pill">ข้อมูล 1 ม.ค. – 30 มิ.ย. 2569</span></h2>
+  <h2>🔍 ดูตามช่วงเวลา <span class="pill" id="rangePill">ข้อมูล 1 ม.ค. – 30 มิ.ย. 2569</span></h2>
   <div class="panel">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
       <button class="rbtn on" id="rb7" onclick="setRange('7')">7 วันล่าสุด</button>
@@ -83,16 +83,10 @@ td.r,th.r{text-align:right;}
       <button class="rbtn" id="rbA" onclick="setRange('A')">ทั้งหมด 6 เดือน</button>
       <select id="rbMo" onchange="if(this.value)setRange('MO')" style="background:var(--card2);border:1.5px solid var(--border);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;border-radius:99px;padding:8px 14px;cursor:pointer;outline:none;">
         <option value="">📆 เลือกเดือน…</option>
-        <option value="2026-01">มกราคม 2569</option>
-        <option value="2026-02">กุมภาพันธ์ 2569</option>
-        <option value="2026-03">มีนาคม 2569</option>
-        <option value="2026-04">เมษายน 2569</option>
-        <option value="2026-05">พฤษภาคม 2569</option>
-        <option value="2026-06">มิถุนายน 2569</option>
       </select>
       <label for="rbD" style="display:inline-flex;align-items:center;gap:8px;background:var(--lime);border:none;border-radius:99px;padding:8px 16px;cursor:pointer;font-size:13px;font-weight:800;color:#111;box-shadow:0 0 12px rgba(189,251,0,.35);">
         📅 เลือกดูรายวัน
-        <input type="date" id="rbD" min="2026-01-01" max="2026-06-30" onchange="setRange('D')" style="background:#fff;border:none;border-radius:8px;color:#111;font-family:inherit;font-size:13px;font-weight:700;outline:none;cursor:pointer;padding:3px 8px;color-scheme:light;">
+        <input type="date" id="rbD" min="2026-01-01" onchange="setRange('D')" style="background:#fff;border:none;border-radius:8px;color:#111;font-family:inherit;font-size:13px;font-weight:700;outline:none;cursor:pointer;padding:3px 8px;color-scheme:light;">
       </label>
     </div>
     <div class="cards" id="rKpis" style="margin-top:0;"></div>
@@ -220,7 +214,8 @@ window.addEventListener('error', e => blackbox('jsError', (e.message||'?')+' @'+
 window.addEventListener('unhandledrejection', e => blackbox('promiseError', e.reason));
 const fmt = n => (n==null||isNaN(n)) ? '—' : '฿' + Math.round(n).toLocaleString();
 const fmtN = n => (n==null||isNaN(n)) ? '—' : Math.round(n).toLocaleString();
-const TH = { '2025-12':'ธ.ค.68','2026-01':'ม.ค.','2026-02':'ก.พ.','2026-03':'มี.ค.','2026-04':'เม.ย.','2026-05':'พ.ค.','2026-06':'มิ.ย.','2026-07':'ก.ค.' };
+const TH = { '2025-12':'ธ.ค.68','2026-01':'ม.ค.','2026-02':'ก.พ.','2026-03':'มี.ค.','2026-04':'เม.ย.','2026-05':'พ.ค.','2026-06':'มิ.ย.','2026-07':'ก.ค.','2026-08':'ส.ค.','2026-09':'ก.ย.','2026-10':'ต.ค.','2026-11':'พ.ย.','2026-12':'ธ.ค.','2027-01':'ม.ค.70','2027-02':'ก.พ.70','2027-03':'มี.ค.70' };
+const MNAME={'01':'มกราคม','02':'กุมภาพันธ์','03':'มีนาคม','04':'เมษายน','05':'พฤษภาคม','06':'มิถุนายน','07':'กรกฎาคม','08':'สิงหาคม','09':'กันยายน','10':'ตุลาคม','11':'พฤศจิกายน','12':'ธันวาคม'};
 function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
 const auth = firebase.auth();
@@ -257,6 +252,16 @@ const LIME='#bdfb00', BLUE='#5db2ff', PINK='#ff6b9d', AMBER='#e8b53a';
 function start(){
   document.getElementById('login').classList.add('hidden');
   document.getElementById('main').classList.remove('hidden');
+  try{
+    const mks=Object.keys(SALES.months).sort(), lm=mks[mks.length-1];
+    document.getElementById('rbM').textContent='เดือนล่าสุด ('+(TH[lm]||lm)+')';
+    document.getElementById('rbA').textContent='ทั้งหมด '+mks.length+' เดือน';
+    document.getElementById('rbMo').innerHTML='<option value="">📆 เลือกเดือน…</option>'+mks.map(k=>'<option value="'+k+'">'+(MNAME[k.slice(5)]||k)+' '+(+k.slice(0,4)+543)+'</option>').join('');
+    const fD=DAILY[0].d, lD=DAILY[DAILY.length-1].d;
+    const dEl=document.getElementById('rbD'); dEl.min=fD; dEl.max=lD;
+    document.getElementById('rangePill').textContent='ข้อมูล '+(+fD.slice(8))+' '+(TH[fD.slice(0,7)]||'')+' – '+(+lD.slice(8))+' '+(TH[lD.slice(0,7)]||'')+' '+(+lD.slice(0,4)+543);
+    document.getElementById('subT').textContent='ข้อมูลขาย ม.ค.–'+(TH[lm]||lm)+' '+(+lm.slice(0,4)+543)+' · การตลาด ธ.ค. 2568–ก.ค. 2569 · อัพเดต '+(SALES.updated||'');
+  }catch(e){ blackbox('dynUiErr', e.message); }
   const M = SALES.months, keys = Object.keys(M).sort();
   const last = keys[keys.length-1], prev = keys[keys.length-2];
   const totR = keys.reduce((a,k)=>a+M[k].revenue,0), totO = keys.reduce((a,k)=>a+M[k].orders,0);
@@ -484,9 +489,9 @@ function setRange(mode){
   let rows=[], label='';
   if(mode==='7'){ rows=DAILY.slice(-7); label='7 วันล่าสุดของข้อมูล'; document.getElementById('rb7').classList.add('on'); }
   else if(mode==='30'){ rows=DAILY.slice(-30); label='30 วันล่าสุดของข้อมูล'; document.getElementById('rb30').classList.add('on'); }
-  else if(mode==='M'){ rows=DAILY.filter(x=>x.d.startsWith('2026-06')); label='มิถุนายน 2569'; document.getElementById('rbM').classList.add('on'); }
-  else if(mode==='A'){ rows=DAILY; label='1 ม.ค. – 30 มิ.ย. 2569'; document.getElementById('rbA').classList.add('on'); }
-  else if(mode==='MO'){ const mo=document.getElementById('rbMo').value; const MN={'01':'มกราคม','02':'กุมภาพันธ์','03':'มีนาคม','04':'เมษายน','05':'พฤษภาคม','06':'มิถุนายน'}; rows=DAILY.filter(x=>x.d.startsWith(mo)); label=(MN[mo.slice(5)]||mo)+' 2569'; }
+  else if(mode==='M'){ const LM=Object.keys(SALES.months).sort().pop(); rows=DAILY.filter(x=>x.d.startsWith(LM)); label=(MNAME[LM.slice(5)]||LM)+' '+(+LM.slice(0,4)+543); document.getElementById('rbM').classList.add('on'); }
+  else if(mode==='A'){ rows=DAILY; const f=DAILY[0].d, l=DAILY[DAILY.length-1].d; label=(+f.slice(8))+' '+(TH[f.slice(0,7)]||'')+' – '+(+l.slice(8))+' '+(TH[l.slice(0,7)]||'')+' '+(+l.slice(0,4)+543); document.getElementById('rbA').classList.add('on'); }
+  else if(mode==='MO'){ const mo=document.getElementById('rbMo').value; rows=DAILY.filter(x=>x.d.startsWith(mo)); label=(MNAME[mo.slice(5)]||mo)+' '+(+mo.slice(0,4)+543); }
   else if(mode==='D'){ const d=document.getElementById('rbD').value; rows=DAILY.filter(x=>x.d===d); label='วันที่ '+d; }
   if(!rows.length){ document.getElementById('rKpis').innerHTML='<div class="kpi"><b>-</b><span>ไม่มีข้อมูลวันนี้ในไฟล์</span></div>'; if(chRangeObj){chRangeObj.destroy();chRangeObj=null;} return; }
   const o=rows.reduce((a,x)=>a+x.o,0), r=rows.reduce((a,x)=>a+x.r,0);
