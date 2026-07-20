@@ -265,12 +265,14 @@ function start(){
   const M = SALES.months, keys = Object.keys(M).sort();
   const last = keys[keys.length-1], prev = keys[keys.length-2];
   const totR = keys.reduce((a,k)=>a+M[k].revenue,0), totO = keys.reduce((a,k)=>a+M[k].orders,0);
-  const g = (prev && M[prev].revenue!=null) ? (M[last].revenue-M[prev].revenue)/M[prev].revenue*100 : null;
+  const dC0=DAILY.filter(x=>x.d.startsWith(last)).length, dM0=new Date(+last.slice(0,4),+last.slice(5,7),0).getDate();
+  const partial0=dC0>0&&dC0<dM0;
+  const g = (prev && M[prev].revenue!=null) ? ((partial0?M[last].revenue/dC0*dM0:M[last].revenue)-M[prev].revenue)/M[prev].revenue*100 : null;
   document.getElementById('kpis').innerHTML = `
     <div class="kpi"><b>${fmt(totR)}</b><span>ยอดขายรวม ${keys.length} เดือน</span></div>
     <div class="kpi"><b>${fmtN(totO)}</b><span>ออเดอร์รวม</span></div>
     <div class="kpi"><b>${fmt(totR/totO)}</b><span>ยอดเฉลี่ย/ออเดอร์</span></div>
-    <div class="kpi"><b>${fmt(M[last].revenue)}</b><span>ยอดเดือนล่าสุด (${TH[last]})</span>${g==null?'':`<div class="${g>=0?'up':'down'}">${g>=0?'▲':'▼'} ${Math.abs(g).toFixed(1)}% จากเดือนก่อน</div>`}</div>
+    <div class="kpi"><b>${fmt(M[last].revenue)}</b><span>ยอดเดือนล่าสุด (${TH[last]})</span>${g==null?'':`<div class="${g>=0?'up':'down'}">${g>=0?'▲':'▼'} ${Math.abs(g).toFixed(1)}% จากเดือนก่อน${partial0?' (คาดทั้งเดือน · มีข้อมูล '+dC0+'/'+dM0+' วัน)':''}</div>`}</div>
     <div class="kpi"><b>${fmtN(M[last].orders/(Object.keys(M[last].daily||{}).length||30))}</b><span>ออเดอร์เฉลี่ย/วัน (${TH[last]})</span></div>`;
 
   new Chart(chRev,{data:{labels:keys.map(k=>TH[k]),datasets:[
