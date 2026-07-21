@@ -197,7 +197,7 @@ td.r,th.r{text-align:right;}
   <h2>🛍 มินิแอพ ABC Shop <span class="pill">เรียลไทม์</span></h2>
   <div class="cards" id="liveKpis" style="margin-top:0;"><div class="kpi"><b>…</b><span>กำลังเชื่อมต่อ</span></div></div>
   <div class="panel" style="margin-top:12px;"><b style="font-size:13px;color:var(--lime);">📊 กรวยลูกค้า (Conversion)</b><span class="pill">7 วันล่าสุด · เริ่มนับตั้งแต่ติดตั้งระบบ</span><div id="funnelBox" style="margin-top:10px;"><div class="note">กำลังโหลด…</div></div></div>
-  <div class="panel" style="margin-top:12px;"><b style="font-size:13px;color:#5db2ff;">🎯 ผลตามรหัสแอด</b><span class="pill">ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์มินิแอพในแอดแต่ละตัว</span><table style="margin-top:8px;"><thead><tr><th>รหัสแอด</th><th class="r">เปิดแอพ</th><th class="r">ตะกร้า</th><th class="r">ซื้อ</th><th class="r">Conv%</th><th class="r">ยอดขาย</th></tr></thead><tbody id="adBody"></tbody></table></div>
+  <div class="panel" style="margin-top:12px;"><b style="font-size:13px;color:#5db2ff;">🎯 ผลตามรหัสแอด</b><span class="pill">ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์มินิแอพในแอดแต่ละตัว</span><table style="margin-top:8px;"><thead><tr><th>รหัสแอด</th><th class="r">เปิดแอพ</th><th class="r">💬 กดไลน์</th><th class="r">ตะกร้า</th><th class="r">ซื้อ</th><th class="r">Conv%</th><th class="r">ยอดขาย</th></tr></thead><tbody id="adBody"></tbody></table></div>
   <div class="panel" style="margin-top:12px;">
     <b style="font-size:13px;color:var(--amber);">🔗 สร้างลิงก์ยิงแอด / โพสต์</b>
     <div style="font-size:11.5px;color:var(--sub);margin:4px 0 10px;">เลือกช่องทาง → ตั้งชื่อแคมเปญ (ไม่บังคับ) → กดสร้าง แล้วเอาลิงก์ไปวางในแอดหรือโพสต์ได้เลย ระบบจะแยกผลให้อัตโนมัติ</div>
@@ -889,15 +889,15 @@ async function loadFunnel(){
   try{
     const ids=[]; for(let i=0;i<7;i++){ const d=new Date(); d.setDate(d.getDate()-i); ids.push('d'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')); }
     const snaps=await Promise.all(ids.map(id=>db.collection('shop_stats').doc(id).get()));
-    const T={o:0,v:0,c:0,b:0,rev:0}, ADS={};
+    const T={o:0,v:0,c:0,b:0,l:0,rev:0}, ADS={};
     snaps.forEach(s=>{ if(!s.exists) return; const d=s.data();
-      ['o','v','c','b','rev'].forEach(k=>T[k]+=d[k]||0);
-      const a=d.ads||{}; for(const code in a){ const t2=ADS[code]=ADS[code]||{o:0,v:0,c:0,b:0,rev:0}; ['o','v','c','b','rev'].forEach(k=>t2[k]+=(a[code][k]||0)); }
+      ['o','v','c','b','l','rev'].forEach(k=>T[k]+=d[k]||0);
+      const a=d.ads||{}; for(const code in a){ const t2=ADS[code]=ADS[code]||{o:0,v:0,c:0,b:0,l:0,rev:0}; ['o','v','c','b','l','rev'].forEach(k=>t2[k]+=(a[code][k]||0)); }
     });
     const box=document.getElementById('funnelBox'); if(!box) return;
     if(!T.o){
       box.innerHTML='<div class="note">ยังไม่มีข้อมูล — ระบบเริ่มนับตั้งแต่ติดตั้ง ลองเปิดมินิแอพหนึ่งครั้งแล้วรีเฟรชหน้านี้</div>';
-      document.getElementById('adBody').innerHTML='<tr><td colspan="6" style="color:var(--sub);">ยังไม่มีข้อมูล</td></tr>';
+      document.getElementById('adBody').innerHTML='<tr><td colspan="7" style="color:var(--sub);">ยังไม่มีข้อมูล</td></tr>';
       return;
     }
     const steps=[['เปิดแอพ',T.o,'var(--lime)'],['ดูสินค้า',T.v,'#5db2ff'],['ใส่ตะกร้า',T.c,'var(--amber)'],['สั่งซื้อสำเร็จ',T.b,'#ff6b9d']];
@@ -905,9 +905,11 @@ async function loadFunnel(){
       const pct=T.o?Math.round(st[1]/T.o*100):0;
       const drop=(i>0&&steps[i-1][1])?' <span style="color:var(--sub);font-size:11px;">('+Math.round(st[1]/steps[i-1][1]*100)+'% จากขั้นก่อน)</span>':'';
       return '<div style="display:flex;align-items:center;gap:10px;margin:7px 0;font-size:12.5px;"><span style="width:104px;flex-shrink:0;">'+st[0]+'</span><div style="flex:1;background:#0d0d0d;border-radius:5px;height:14px;overflow:hidden;"><div style="width:'+Math.max(2,pct)+'%;height:100%;background:'+st[2]+';border-radius:5px;"></div></div><span style="min-width:150px;text-align:right;">'+fmtN(st[1])+' <span style="color:var(--sub);">('+pct+'%)</span>'+drop+'</span></div>';
-    }).join('')+(ROLE==='exec'?'<div class="note" style="margin-top:6px;">💰 ยอดขายผ่านมินิแอพ 7 วันนี้: '+fmt(T.rev)+'</div>':'');
+    }).join('')
+      +'<div style="display:flex;align-items:center;gap:10px;margin:10px 0 0;font-size:12.5px;border-top:1px solid var(--border);padding-top:10px;"><span style="width:104px;flex-shrink:0;color:#06c755;font-weight:700;">💬 กดแอดไลน์</span><div style="flex:1;background:#0d0d0d;border-radius:5px;height:14px;overflow:hidden;"><div style="width:'+Math.max(2,(T.o?Math.round((T.l||0)/T.o*100):0))+'%;height:100%;background:#06c755;border-radius:5px;"></div></div><span style="min-width:150px;text-align:right;">'+fmtN(T.l||0)+' <span style="color:var(--sub);">('+(T.o?Math.round((T.l||0)/T.o*100):0)+'% ของคนเปิดแอพ)</span></span></div>'
+      +(ROLE==='exec'?'<div class="note" style="margin-top:6px;">💰 ยอดขายผ่านมินิแอพ 7 วันนี้: '+fmt(T.rev)+'</div>':'');
     const rows=Object.entries(ADS).sort((a,b)=>(b[1].b-a[1].b)||(b[1].o-a[1].o)).slice(0,15);
-    document.getElementById('adBody').innerHTML = rows.map(([code,v])=>'<tr><td>'+code+'</td><td class="r">'+fmtN(v.o)+'</td><td class="r">'+fmtN(v.c)+'</td><td class="r" style="font-weight:700;">'+fmtN(v.b)+'</td><td class="r" style="color:'+((v.o&&v.b/v.o>=.03)?'var(--lime)':'var(--amber)')+';font-weight:700;">'+(v.o?(v.b/v.o*100).toFixed(1):'0.0')+'%</td><td class="r">'+(ROLE==='exec'?fmt(v.rev):'🔒')+'</td></tr>').join('') || '<tr><td colspan="6" style="color:var(--sub);">ยังไม่มีรหัสแอด — ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์ในแอดเพื่อเริ่มวัดผล</td></tr>';
+    document.getElementById('adBody').innerHTML = rows.map(([code,v])=>'<tr><td>'+code+'</td><td class="r">'+fmtN(v.o)+'</td><td class="r" style="color:#06c755;">'+fmtN(v.l||0)+'</td><td class="r">'+fmtN(v.c)+'</td><td class="r" style="font-weight:700;">'+fmtN(v.b)+'</td><td class="r" style="color:'+((v.o&&v.b/v.o>=.03)?'var(--lime)':'var(--amber)')+';font-weight:700;">'+(v.o?(v.b/v.o*100).toFixed(1):'0.0')+'%</td><td class="r">'+(ROLE==='exec'?fmt(v.rev):'🔒')+'</td></tr>').join('') || '<tr><td colspan="7" style="color:var(--sub);">ยังไม่มีรหัสแอด — ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์ในแอดเพื่อเริ่มวัดผล</td></tr>';
   }catch(e){ blackbox('funnelErr', e.code||e.message); }
 }
 

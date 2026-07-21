@@ -2733,6 +2733,7 @@
     // ── ติดต่อร้าน ──
     const CONTACT_LINE = 'https://lin.ee/nw1x5lg'; // ลิงก์ Line ร้าน ABC
     function openContact() {
+      try{ track('l'); }catch(e){}
       if (tg?.openLink) tg.openLink(CONTACT_LINE);
       else window.open(CONTACT_LINE, '_blank');
     }
