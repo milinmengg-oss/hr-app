@@ -715,6 +715,14 @@
     /* ═══ TRUST ═══ */
     .rate-row { font-size: 11px; color: #e8b53a; font-weight: 600; margin-top: 3px; }
     .rate-row span { color: var(--sub); font-weight: 500; }
+    .comp-box { margin:12px 20px 0; background:rgba(189,251,0,.06); border:1px solid rgba(189,251,0,.22); border-radius:14px; padding:12px; }
+    .comp-head { font-size:12px; font-weight:800; color:var(--lime); margin-bottom:8px; }
+    .comp-item { display:flex; align-items:center; gap:10px; padding:7px 0; cursor:pointer; }
+    .comp-item + .comp-item { border-top:1px solid rgba(255,255,255,.07); }
+    .comp-thumb { width:42px; height:42px; border-radius:9px; overflow:hidden; background:#222; flex-shrink:0; }
+    .comp-name { font-size:12px; font-weight:600; }
+    .comp-price { font-size:11.5px; color:var(--sub); }
+    .comp-add { font-size:11.5px; font-weight:800; color:var(--lime); border:1px solid var(--lime); border-radius:8px; padding:5px 10px; white-space:nowrap; }
     .agegate {
       position: fixed; inset: 0; background: rgba(0,0,0,.84);
       backdrop-filter: blur(8px); z-index: 9998;
@@ -1079,6 +1087,7 @@
     </div>
     <div class="pd-flavor-head" id="pdFlavHead">เลือกกลิ่น</div>
     <div class="flavor-grid" id="pdFlavorGrid"></div>
+    <div id="pdComp"></div>
     <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px 0;flex-shrink:0;border-top:1px solid var(--border);">
       <div style="font-size:14px;font-weight:800;" data-i18n="qty">จำนวน</div>
       <div class="qty-ctrl">
@@ -2380,7 +2389,7 @@
             <button class="q-btn plus" onclick="incCart('${key.replace(/'/g,"\\'")}')">+</button>
           </div>
         </div>`;
-      }).join('');
+      }).join('') + cartCompHTML(keys);
       fEl.innerHTML = cartFootHTML(cartTotal());
     }
 
@@ -2450,6 +2459,45 @@
     const FB_CONFIG = { apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" };
     let fbDB = null, fbLoading = false, fbQueue = [];
     let LIVE = null; // {pid:{s:สต็อก, so:ขายแล้ว, pr:ราคา, off:ปิดขาย}}
+    // ── 🛒 มักซื้อคู่กัน (จากออเดอร์จริง พ.ค.–มิ.ย.) ──
+    const COMPANIONS = {"MARBO 9K":["หัวพอต M SWITCH","MARBO 10K"],"MARBO 9K (โคลน)":["MARBO 9K","หัวพอต M SWITCH"],"ABC LEGO 20K (หัวน้ำยา)":["หัวพอต RELX BOOST POD","เครื่อง RELX CREATOR 20K"],"หัวพอต RELX BOOST POD":["เครื่อง RELX CREATOR 20K","RELX POD CLEAR 18K (หัวน้ำยา)"],"ESKO BAR SWITCH 20K (หัวน้ำยา)":["ESKO BAR SWITCH 20K (KIT)","หัวพอต M SWITCH"],"MARBO 10K":["MARBO 9K","หัวพอต M SWITCH"],"RELX SMASH GO 12K":["MARBO 9K","MARBO 10K"],"หัวพอต M SWITCH":["MARBO 9K","M SWITCH 15K (KIT)"],"SONIC 8K":["MARBO 9K","RELX SMASH GO 12K"],"JOIWAY TWINS 20K":["RELX SPARTA 20K","MARBO 9K"],"INFY 20K":["RELX SPARTA 20K","MARBO 9K"],"เครื่อง RELX CREATOR 20K":["หัวพอต RELX BOOST POD","RELX POD CLEAR 18K (หัวน้ำยา)"],"เครื่อง M SWITCH 15K":["หัวพอต M SWITCH","MARBO 9K"],"RELX SPARTA 20K":["INFY 20K","MARBO 9K"],"หัวพอต RELX LARGE":["หัวพอต RELX INFINITY","หัวพอต RELX ULTRA"],"หัวพอต RELX ULTRA":["หัวพอต RELX INFINITY","หัวพอต RELX LARGE"],"เครื่อง RELX ESSENTIAL 2":["หัวพอต RELX INFINITY","หัวพอต INFY PLUS"],"หัวพอต MARBO ZERO":["หัวพอต RELX INFINITY","หัวพอต INFY PLUS"],"ESKO BAR SWITCH 20K (KIT)":["ESKO BAR SWITCH 20K (หัวน้ำยา)","หัวพอต M SWITCH"],"หัวพอต INFY PLUS":["หัวพอต RELX INFINITY","หัวพอต MARBO ZERO"],"หัวพอต RELX INFINITY":["เครื่อง RELX INFINITY 2+","หัวพอต RELX BOOST POD"],"เครื่อง RELX INFINITY 2+":["หัวพอต RELX INFINITY","หัวพอต INFY PLUS"],"ESKO BAR 20K":["MARBO 9K","MARBO 10K"],"RELX POD CLEAR 18K (หัวน้ำยา)":["หัวพอต RELX BOOST POD","เครื่อง RELX CREATOR 20K"],"หัวพอต RELX INFINITY ":["หัวพอต RELX INFINITY","เครื่อง RELX INFINITY 2+"],"ELFBAR 15K":["RELX SMASH GO 12K","หัวพอต RELX BOOST POD"],"JOIWAY 12K":["MARBO 9K","RELX SMASH GO 12K"],"DUAL SMASH 20K":["เครื่อง DUAL SMASH","หัวพอต RELX BOOST POD"],"เครื่อง DUAL SMASH":["DUAL SMASH 20K"],"RELX DIVA 30K":["RELX SPARTA 20K","RELX SMASH GO 12K"],"VAZER RELOAD 15K (หัวน้ำยา)":["หัวพอต M SWITCH","ESKO BAR SWITCH 20K (หัวน้ำยา)"],"LANA IRIS 24K":["RELX DIVA 30K","RELX SPARTA 20K"],"STAR 2,500":["MARBO 9K","RELX SMASH GO 12K"],"ELFBAR SWAP 25K (หัวน้ำยา)":["เครื่อง ELFBAR JOINONE","หัวพอต RELX BOOST POD"],"CARNIVAL 20K":["INFY 20K","ESKO BAR 20K"],"KS Quik 6K":["RELX SMASH GO 12K","หัวพอต RELX INFINITY"],"M SWITCH 15K (KIT)":["หัวพอต M SWITCH","MARBO 9K"],"INFY BAR PRO 20K":["ESKO BAR 20K","INFY 20K"],"เครื่อง M ZERO PRO":["หัวพอต MARBO ZERO"],"เครื่อง ELFBAR JOINONE":["ELFBAR SWAP 25K (หัวน้ำยา)"]};
+    const COMP_ALIAS = {'หัวพอต RELX BOOST POD':'RELX BOOST POD (หัวน้ำยา)','หัวพอต M SWITCH':'M SWITCH (หัวน้ำยา)'};
+    function _salesKey(appName){ for(const k in COMP_ALIAS){ if(COMP_ALIAS[k]===appName) return k; } return appName; }
+    function _appProduct(salesName){
+      const nm=COMP_ALIAS[salesName]||salesName;
+      const norm=s=>s.replace(/\s+/g,'').toLowerCase();
+      return PRODUCTS.find(p=>norm(p.name)===norm(nm));
+    }
+    function companionsFor(p){
+      const list=COMPANIONS[_salesKey(p.name)]||[];
+      return list.map(_appProduct).filter(x=>x&&!x.out&&x.id!==p.id).slice(0,2);
+    }
+    function compItemHTML(c){
+      const th=c.img?`<img loading="lazy" src="${c.img}" style="width:100%;height:100%;object-fit:cover;">`:'';
+      const act=(c.flavors&&c.flavors.length)?(lang==='en'?'Pick flavor':'เลือกกลิ่น'):(lang==='en'?'+ Add':'+ ใส่ตะกร้า');
+      return `<div class="comp-item" onclick="openProduct(${c.id})">
+        <div class="comp-thumb">${th}</div>
+        <div style="flex:1;"><div class="comp-name">${c.name}</div><div class="comp-price">฿${c.price.toLocaleString()}</div></div>
+        <div class="comp-add">${act}</div></div>`;
+    }
+    function renderPdComp(p){
+      const el=document.getElementById('pdComp'); if(!el) return;
+      const cs=companionsFor(p);
+      el.innerHTML = cs.length
+        ? `<div class="comp-box"><div class="comp-head">🛒 ${lang==='en'?'Frequently bought together':'ลูกค้ามักซื้อคู่กับ'}</div>${cs.map(compItemHTML).join('')}</div>`
+        : '';
+    }
+    function cartCompHTML(keys){
+      try{
+        const inCart=new Set(); keys.forEach(k=>{ const p=PRODUCTS.find(x=>x.id==k.split('|')[0]); if(p) inCart.add(p.id); });
+        const sugg=[]; const seen=new Set();
+        keys.forEach(k=>{ const p=PRODUCTS.find(x=>x.id==k.split('|')[0]); if(!p) return;
+          companionsFor(p).forEach(c=>{ if(!inCart.has(c.id)&&!seen.has(c.id)){ seen.add(c.id); sugg.push(c); } });
+        });
+        if(!sugg.length) return '';
+        return `<div class="comp-box" style="margin:12px 0 0;"><div class="comp-head" style="color:#e8b53a;">✨ ${lang==='en'?'People also add':'คนส่วนใหญ่หยิบคู่กัน'}</div>${sugg.slice(0,2).map(compItemHTML).join('')}</div>`;
+      }catch(e){ return ''; }
+    }
     // ── 📊 Conversion tracking ──
     let AD='direct';
     try{
@@ -2652,6 +2700,7 @@
       ).join('');
       const btn = document.getElementById('pdAddBtn');
       btn.disabled = true; btn.textContent = t('pick_first');
+      try{ renderPdComp(p); }catch(e){}
       document.getElementById('pdOverlay').classList.add('open');
       document.getElementById('pdSheet').classList.add('open');
     }
