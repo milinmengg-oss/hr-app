@@ -184,6 +184,14 @@ td.r,th.r{text-align:right;}
   <h2>👑 Top Spender <span class="pill">ฐานข้อมูล ม.ค.–มิ.ย. 69 · ปกปิดตัวตนตามนโยบายข้อมูล</span></h2>
   <div class="panel"><table><thead><tr><th>#</th><th>ลูกค้า</th><th>เบอร์ (ปกปิด)</th><th class="r">ออเดอร์</th><th class="r">ยอดซื้อสะสม ฿</th><th class="r">เฉลี่ย/ออเดอร์</th></tr></thead><tbody id="topBody"></tbody></table>
   <div class="note" style="margin-top:8px;">ดูตัวตนเต็มได้จากไฟล์ XSelly โดยตรงเท่านั้น — แดชบอร์ดไม่เก็บข้อมูลส่วนตัว</div></div>
+  </div><div class="tabsec" data-t="shops">
+  <h2>🏪 ยอดขายรายร้าน (V) <span class="pill">จากหมายเหตุการชำระใน XSelly · เริ่มมีข้อมูล พ.ค. 69</span></h2>
+  <div style="margin-bottom:10px;"><select id="shopMo" onchange="renderShops()" style="background:var(--card2);border:1.5px solid var(--border);color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;border-radius:99px;padding:8px 14px;cursor:pointer;outline:none;"></select></div>
+  <div class="cards" id="shopKpis" style="margin-top:0;"></div>
+  <div class="panel" style="margin-top:12px;">
+    <table><thead><tr><th>ร้าน</th><th class="r">ออเดอร์</th><th class="r">ยอดขาย</th><th class="r">เฉลี่ย/ออเดอร์</th><th style="width:28%">สัดส่วน</th></tr></thead><tbody id="shopBody"></tbody></table>
+    <div class="note" style="margin-top:8px;">ออเดอร์ที่ไม่มีหมายเหตุร้าน = "ไม่ระบุ" · เดือน ม.ค.–เม.ย. ไฟล์ XSelly ยังไม่ได้เริ่มระบุร้าน</div>
+  </div>
   </div><div class="tabsec" data-t="upd">
   <h2>⬆️ อัพเดตข้อมูลยอดขาย <span class="pill">เฉพาะผู้บริหาร</span></h2>
   <div class="panel">
@@ -257,7 +265,7 @@ async function loadDash(user){
     const doc = await db.collection(col).doc('all').get();
     if(!doc.exists) throw new Error('ไม่พบข้อมูล');
     const D = JSON.parse(doc.data().j);
-    SALES=D.SALES; MKT=D.MKT; GEO=D.GEO; PROF=D.PROF||[]; INS=D.INS; TOPS=D.TOPS||[]; DAILY=D.DAILY; STK=D.STK; STKL=D.STKL||[];
+    SALES=D.SALES; MKT=D.MKT; GEO=D.GEO; PROF=D.PROF||[]; INS=D.INS; TOPS=D.TOPS||[]; DAILY=D.DAILY; STK=D.STK; STKL=D.STKL||[]; window.SHOPS=D.SHOPS||{};
     start();
   }catch(e){ __booted=false; blackbox('loadDashErr', e.code||e.message); toast('โหลดข้อมูลไม่ได้: '+(e.code||e.message)); }
 }
@@ -449,7 +457,7 @@ function start(){
   renderPfTable();
   }
 
-  const TABS=[['ov','ภาพรวมเชิงวิเคราะห์'],['geo','พื้นที่'],['prod','สินค้า'],['pf','กำไร 💰'],['re','ซื้อซ้ำ & คู่กัน'],['time','เวลา'],['mkt','การตลาด'],['stk','สต็อก'],['top','Top Spender'],['live','มินิแอพสด']];
+  const TABS=[['ov','ภาพรวมเชิงวิเคราะห์'],['geo','พื้นที่'],['prod','สินค้า'],['pf','กำไร 💰'],['re','ซื้อซ้ำ & คู่กัน'],['time','เวลา'],['mkt','การตลาด'],['shops','🏪 ร้าน V'],['stk','สต็อก'],['top','Top Spender'],['live','มินิแอพสด']];
   const TABS2 = ROLE==='exec' ? [...TABS,['upd','⬆️ อัพเดตข้อมูล']] : TABS.filter(([k])=>!['pf','top'].includes(k));
   document.getElementById('tabbar').innerHTML = TABS2.map(([k,l],i)=>`<button class="tb ${i===0?'on':''}" id="tb_${k}" onclick="showTab('${k}')">${l}</button>`).join('') + '<button class="tb" style="color:#ff6b6b;" onclick="doLogout()">ออกจากระบบ</button>';
   window.showTab = k => {
@@ -516,6 +524,7 @@ function start(){
   loadLive();
   try{ loadFunnel(); }catch(e){ blackbox('funnelCall', e.message); }
   if(ROLE==='exec'){ try{ initTarget(); }catch(e){ blackbox('tgtErr', e.message); } }
+  try{ renderShops(); }catch(e){ blackbox('shopsErr', e.message); }
 }
 
 let chRangeObj=null;
@@ -742,7 +751,7 @@ async function updParse(file){
         if(cur) orders.push(cur);
         let dt=r['วันเวลาที่สร้างออเดอร์'];
         if(!(dt instanceof Date)) dt=new Date(String(dt||'').replace(' ','T'));
-        cur={ total:+r[C_TOT]||0, dt, st:String(r['สถานะออเดอร์']||''), ship:String(r['ขนส่ง']||''), zip:r['ผู้รับ:ไปรษณีย์'], addr:String(r['ผู้รับ:ที่อยู่']||''), items:[] };
+        cur={ total:+r[C_TOT]||0, dt, st:String(r['สถานะออเดอร์']||''), ship:String(r['ขนส่ง']||''), zip:r['ผู้รับ:ไปรษณีย์'], addr:String(r['ผู้รับ:ที่อยู่']||''), pn:r['หมายเหตุการชำระ'], items:[] };
       }
       if(cur && r['ชื่อสินค้า']!=null){
         const sku=String(r['ชื่อสินค้า']).trim(), q=+r['จำนวน']||0;
@@ -756,7 +765,7 @@ async function updParse(file){
     const mc={}; ok.forEach(o=>{ const k=o.dt.getFullYear()+'-'+String(o.dt.getMonth()+1).padStart(2,'0'); mc[k]=(mc[k]||0)+1; });
     const M=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0][0];
     // aggregate
-    const A={M, orders:ok.length, revenue:0, daily:{}, dailyRows:{}, prov:{}, geo:{}, prodq:{}, dow:[...Array(7)].map(()=>({o:0,r:0})), hour:[...Array(24)].map(()=>({o:0,r:0})), pairs:{}};
+    const A={M, orders:ok.length, revenue:0, daily:{}, dailyRows:{}, prov:{}, geo:{}, prodq:{}, shops:{}, dow:[...Array(7)].map(()=>({o:0,r:0})), hour:[...Array(24)].map(()=>({o:0,r:0})), pairs:{}};
     for(const o of ok){
       A.revenue+=o.total;
       const day=o.dt.getDate(); A.daily[day]=(A.daily[day]||0)+o.total;
@@ -772,6 +781,8 @@ async function updParse(file){
       }
       A.dow[o.dt.getDay()===0?6:o.dt.getDay()-1].o++; A.dow[o.dt.getDay()===0?6:o.dt.getDay()-1].r+=o.total;
       A.hour[o.dt.getHours()].o++; A.hour[o.dt.getHours()].r+=o.total;
+      const snm=(typeof o.pn==='string' && o.pn.match(/[Vv]\.?\s?(\d{1,2})(?![0-9])/)) ? ('V'+o.pn.match(/[Vv]\.?\s?(\d{1,2})(?![0-9])/)[1]) : (typeof o.pn==='string'&&o.pn.trim()?'อื่นๆ':'ไม่ระบุ');
+      const sv2=A.shops[snm]=A.shops[snm]||{o:0,r:0}; sv2.o++; sv2.r+=o.total;
       const p=zip2prov(o.zip);
       const pv=A.prov[p]=A.prov[p]||{o:0,r:0,top:{}};
       pv.o++; pv.r+=o.total;
@@ -837,13 +848,14 @@ function mergeMonth(D, A){
     const pr=(D.PROF||[]).find(x=>x.line===line);
     if(pr&&pr.unit!=null){ pr.q+=A.prodq[line]; pr.total=pr.unit*pr.q; }
   }
+  if(A.shops&&Object.keys(A.shops).length){ D.SHOPS=D.SHOPS||{}; D.SHOPS[M]=A.shops; }
   D.SALES.updated=new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'numeric'});
   return D;
 }
 function scrubOpen(x){
   const S=['r','v','value','rev','revenue','aov'];
   const sc=y=>{ if(Array.isArray(y)) return y.map(sc); if(y&&typeof y==='object'){ const o={}; for(const k in y){ if(S.includes(k)) continue; o[k]=sc(y[k]); } return o; } return y; };
-  const O={SALES:sc(x.SALES),MKT:x.MKT,GEO:sc(x.GEO),INS:sc(x.INS),DAILY:sc(x.DAILY),STK:sc(x.STK),STKL:sc(x.STKL)};
+  const O={SALES:sc(x.SALES),MKT:x.MKT,GEO:sc(x.GEO),INS:sc(x.INS),DAILY:sc(x.DAILY),STK:sc(x.STK),STKL:sc(x.STKL),SHOPS:sc(x.SHOPS||{})};
   if(O.SALES.months){ for(const m in O.SALES.months) delete O.SALES.months[m].daily; }
   return O;
 }
@@ -925,6 +937,35 @@ window.copyGenLink=function(){
   const el=document.getElementById('glUrl');
   navigator.clipboard.writeText(el.value).then(()=>toast('คัดลอกลิงก์แล้ว ✓')).catch(()=>{ el.select(); document.execCommand('copy'); toast('คัดลอกลิงก์แล้ว ✓'); });
 };
+
+function renderShops(){
+  const S=window.SHOPS||{}; const sel=document.getElementById('shopMo'); if(!sel) return;
+  const mks=Object.keys(S).sort();
+  const body=document.getElementById('shopBody');
+  if(!mks.length){ body.innerHTML='<tr><td colspan="5" style="color:var(--sub);">ยังไม่มีข้อมูลร้าน — จะเริ่มเห็นเมื่ออัพไฟล์เดือนที่มีหมายเหตุร้าน (พ.ค. เป็นต้นไป)</td></tr>'; return; }
+  if(sel.dataset.built!=='1'){
+    sel.innerHTML=mks.map(k=>'<option value="'+k+'">'+(MNAME[k.slice(5)]||k)+' '+(+k.slice(0,4)+543)+'</option>').join('');
+    sel.value=mks[mks.length-1]; sel.dataset.built='1';
+  }
+  const M=sel.value||mks[mks.length-1];
+  const rows=Object.entries(S[M]||{}).sort((a,b)=>((b[1].r!=null?b[1].r:b[1].o))-((a[1].r!=null?a[1].r:a[1].o)));
+  const totR=rows.reduce((a,x)=>a+(x[1].r||0),0), totO=rows.reduce((a,x)=>a+x[1].o,0);
+  const vCnt=rows.filter(x=>x[0].startsWith('V')).length;
+  document.getElementById('shopKpis').innerHTML=
+    '<div class="kpi"><b>'+vCnt+'</b><span>ร้านที่มียอดเดือนนี้</span></div>'
+   +'<div class="kpi"><b>'+fmtN(totO)+'</b><span>ออเดอร์รวม</span></div>'
+   +'<div class="kpi"><b>'+(totR?fmt(totR):'—')+'</b><span>ยอดขายรวม</span></div>'
+   +'<div class="kpi"><b style="font-size:15px;">'+(rows[0]?rows[0][0]:'-')+'</b><span>ร้านอันดับ 1'+(rows[0]&&rows[0][1].r!=null?' ('+fmt(rows[0][1].r)+')':'')+'</span></div>';
+  const mx=rows.length?((rows[0][1].r!=null?rows[0][1].r:rows[0][1].o)||1):1;
+  body.innerHTML=rows.map((x,i)=>{
+    const k=x[0], v=x[1];
+    return '<tr><td style="font-weight:700;'+(k.startsWith('V')?'':'color:var(--sub);')+'">'+k+'</td>'
+      +'<td class="r">'+fmtN(v.o)+'</td>'
+      +'<td class="r">'+(v.r!=null?fmt(v.r):'—')+'</td>'
+      +'<td class="r">'+(v.r!=null&&v.o?fmt(v.r/v.o):'—')+'</td>'
+      +'<td><div style="background:#0d0d0d;border-radius:5px;height:10px;overflow:hidden;"><div style="width:'+Math.max(2,Math.round(((v.r!=null?v.r:v.o))/mx*100))+'%;height:100%;background:'+(i===0?'var(--lime)':'rgba(189,251,0,.4)')+';border-radius:5px;"></div></div></td></tr>';
+  }).join('');
+}
 </script>
 </body>
 </html>
