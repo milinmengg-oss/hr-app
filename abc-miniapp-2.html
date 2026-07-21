@@ -1303,6 +1303,15 @@
         </div>
       </div>
       <div class="coupon-card">
+        <div class="coupon-left"><div class="coupon-icon">🎉</div><div class="coupon-pct">15%</div></div>
+        <div class="coupon-body">
+          <div class="coupon-title" data-i18n="c0_title">คูปองเปิดตัว ลด 15%</div>
+          <div class="coupon-desc" data-i18n="c0_desc">ฉลองเปิดมินิแอพใหม่ ลด 15% ทั้งร้าน เมื่อซื้อครบ 500.-</div>
+          <div class="coupon-tag" data-i18n="c0_tag">ลูกค้าทุกคน · จำกัดเวลา</div>
+        </div>
+        <div style="display:flex;align-items:center;padding-right:12px;"><button class="collect-btn" id="cbtn_launch15" onclick="collectCoupon('launch15')">เก็บ</button></div>
+      </div>
+      <div class="coupon-card">
         <div class="coupon-left"><div class="coupon-icon">💸</div><div class="coupon-pct">10%</div></div>
         <div class="coupon-body">
           <div class="coupon-title" data-i18n="c2_title">สมาชิกใหม่ลด 10%</div>
@@ -1500,7 +1509,7 @@
         pick_first:'กรุณาเลือกกลิ่นก่อน', add_flavor_btn:'🛒 เพิ่ม "{f}" ลงตะกร้า', flavor_label:'กลิ่น',
         success_title:'สั่งซื้อสำเร็จ!', success_sub:'ขอบคุณที่ใช้บริการ <span class="s-lime">ABC Shop</span><br>เราจะติดต่อกลับเร็วๆ นี้ 🙏', success_btn:'ดูออเดอร์ของฉัน',
         promo_hero_title:'ดีลพิเศษสำหรับคุณ', promo_hero_sub:'อัพเดทโปรโมชั่นทุกสัปดาห์<br>อย่าพลาดข้อเสนอสุดคุ้ม!',
-        c1_title:'ซื้อ 3 แถม 1', c1_desc:'ซื้อ Pod Pro ครบ 3 ชิ้น รับฟรีอีก 1 ชิ้น ราคาเท่ากัน', c1_tag:'Pod Pro เท่านั้น',
+        c0_title:'คูปองเปิดตัว ลด 15%', c0_desc:'ฉลองเปิดมินิแอพใหม่ ลด 15% ทั้งร้าน เมื่อซื้อครบ 500.-', c0_tag:'ลูกค้าทุกคน · จำกัดเวลา', c1_title:'ซื้อ 3 แถม 1', c1_desc:'ซื้อ Pod Pro ครบ 3 ชิ้น รับฟรีอีก 1 ชิ้น ราคาเท่ากัน', c1_tag:'Pod Pro เท่านั้น',
         c2_title:'สมาชิกใหม่ลด 10%', c2_desc:'สำหรับลูกค้าใหม่ที่สั่งซื้อครั้งแรก ลดทันที 10%', c2_tag:'ใช้ได้ครั้งเดียว',
         c3_title:'ซื้อครบ 4 แท่งส่งฟรี', c3_desc:'สั่งสินค้าครบ 4 แท่งขึ้นไป จัดส่งฟรีทันที', c3_tag:'ไม่จำกัดครั้ง',
         c4_title:'สะสมแต้มทุกการซื้อ', c4_desc:'ซื้อครบ ฿100 = 1 แต้ม · ครบ 50 แต้ม = ส่วนลด ฿50', c4_tag:'สะสมได้ตลอด',
@@ -1543,7 +1552,7 @@
         pick_first:'Please choose a flavor first', add_flavor_btn:'🛒 Add "{f}" to cart', flavor_label:'Flavor',
         success_title:'Order placed!', success_sub:'Thank you for shopping with <span class="s-lime">ABC Shop</span><br>We will contact you soon 🙏', success_btn:'View my orders',
         promo_hero_title:'Special deals for you', promo_hero_sub:'New promotions every week<br>Do not miss out!',
-        c1_title:'Buy 3 get 1 free', c1_desc:'Buy 3 Pod Pro and get 1 more free (same price)', c1_tag:'Pod Pro only',
+        c0_title:'Grand opening 15% off', c0_desc:'Celebrating our new mini app — 15% off orders over 500.-', c0_tag:'Everyone · limited time', c1_title:'Buy 3 get 1 free', c1_desc:'Buy 3 Pod Pro and get 1 more free (same price)', c1_tag:'Pod Pro only',
         c2_title:'New member 10% off', c2_desc:'10% off instantly on your first order', c2_tag:'One time only',
         c3_title:'Buy 4 get free delivery', c3_desc:'Order 4 or more items and delivery is free', c3_tag:'Unlimited',
         c4_title:'Earn points every order', c4_desc:'Every ฿100 = 1 point · 50 points = ฿50 off', c4_tag:'Always on',
@@ -1793,6 +1802,7 @@
 
     // ── 🎟 ระบบคูปอง (mock — เดฟต่อเงื่อนไขจริงภายหลัง) ──
     const COUPONS = [
+      { id: 'launch15', kind: 'pct',  val: 15, min: 500 },
       { id: 'new10',    kind: 'pct',  val: 10, min: 300 },
       { id: 'freeship', kind: 'ship', val: 0,  min: 0 }
     ];
@@ -1812,7 +1822,7 @@
       renderDrawer();
     }
     function saveCoupons() { try { localStorage.setItem('abc_coupons', JSON.stringify([...collected])); } catch(e) {} }
-    function couponName(id) { return id === 'new10' ? t('c2_title') : t('c3_title'); }
+    function couponName(id) { return id === 'launch15' ? t('c0_title') : id === 'new10' ? t('c2_title') : t('c3_title'); }
     function couponDiscount(total) {
       if (!usedCoupon || !total) return 0;
       const c = COUPONS.find(x => x.id === usedCoupon);
@@ -1976,7 +1986,6 @@
     function selectCoupon(id) { usedCoupon = id; closeCoupons(); renderDrawer(); }
 
     // ── เรตติ้ง/ยอดขาย (mock — เดฟต่อข้อมูลจริงภายหลัง) ──
-    const rateOf = p => (4.5 + ((p.id * 37) % 50) / 100).toFixed(1);
     const soldOf = p => {
       const real = (p.sold != null);
       const s = real ? p.sold : ((p.id * 173) % 2000 + 120);
@@ -2051,7 +2060,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}${hasFlav?` · ${p.flavors.length} ${t('flavors_unit')}`:''}</div>
-          <div class="rate-row">★ ${rateOf(p)} <span>${soldTxt(p)}</span></div>
+          <div class="rate-row"><span>${soldTxt(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
@@ -2076,7 +2085,7 @@
         <div class="p-body">
           <div class="p-name">${p.name}</div>
           <div class="p-sub-txt">${subTxt(p)}</div>
-          <div class="rate-row" style="font-size:10px;">★ ${rateOf(p)}<span>${soldTxt(p)}</span></div>
+          <div class="rate-row" style="font-size:10px;"><span>${soldTxt(p)}</span></div>
         </div>
         <div class="p-footer">
           <div class="p-price"><small>฿</small>${p.price.toLocaleString()}${p.orig ? ` <s>฿${p.orig.toLocaleString()}</s>` : ''}</div>
@@ -2297,6 +2306,7 @@
     // cart key: "${id}" for no-flavor, "${id}|${flavor}" for flavored
 
     function addCart(id) {
+      try{ track('c'); }catch(e){}
       const key = String(id);
       cart[key] = (cart[key]||0) + 1;
       updateUI();
@@ -2440,6 +2450,29 @@
     const FB_CONFIG = { apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" };
     let fbDB = null, fbLoading = false, fbQueue = [];
     let LIVE = null; // {pid:{s:สต็อก, so:ขายแล้ว, pr:ราคา, off:ปิดขาย}}
+    // ── 📊 Conversion tracking ──
+    let AD='direct';
+    try{
+      const qad=(new URLSearchParams(location.search).get('ad')||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40);
+      if(qad){ sessionStorage.setItem('abc_ad', qad); }
+      AD=sessionStorage.getItem('abc_ad')||'direct';
+    }catch(e){}
+    function track(step, rev){
+      try{
+        if(step!=='b'){ const k='abc_t_'+step; if(sessionStorage.getItem(k)) return; sessionStorage.setItem(k,'1'); }
+        const dd=new Date();
+        const did='d'+dd.getFullYear()+String(dd.getMonth()+1).padStart(2,'0')+String(dd.getDate()).padStart(2,'0');
+        fbReady(()=>{
+          try{
+            const inc=firebase.firestore.FieldValue.increment;
+            const pay={ [step]:inc(1), ads:{ [AD]:{ [step]:inc(1) } } };
+            if(rev){ pay.rev=inc(rev); pay.ads[AD].rev=inc(rev); }
+            fbDB.collection('shop_stats').doc(did).set(pay,{merge:true}).catch(()=>{});
+          }catch(e){}
+        }, ()=>{});
+      }catch(e){}
+    }
+    try{ track('o'); }catch(e){}
     function fbReady(cb, onFail) {
       if (fbDB) { cb(); return; }
       fbQueue.push({ cb, onFail });
@@ -2572,6 +2605,7 @@
             tx.set(ordRef, order);
           })
         ).then(() => {
+          try { track('b', order.total||0); } catch (e) {}
           try { if (tg && tg.initData && tg.sendData) tg.sendData(JSON.stringify(order)); } catch (e) {}
           finishLocal();
         }).catch(err => {
@@ -2600,6 +2634,7 @@
     function openProduct(id) {
       const p = PRODUCTS.find(x => x.id === id);
       if (!p) return;
+      try{ track('v'); }catch(e){}
       if (p.out) { toast(t('out_toast')); return; }
       if (!p.flavors || p.flavors.length === 0) { addCart(id); return; }
       pdProduct = p; selFlavor = null;
@@ -2609,7 +2644,7 @@
         : `<div style="width:100%;height:100%;background:${gradOf(p)}"></div>`;
       document.getElementById('pdThumb').innerHTML = thumb;
       document.getElementById('pdName').textContent = p.name;
-      document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:#e8b53a;font-weight:600;\">★ ${rateOf(p)}</span> <span style=\"color:var(--sub);\">${soldTxt(p)}</span>`;
+      document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:var(--sub);\">${soldTxt(p)}</span>`;
       document.getElementById('pdPrice').innerHTML = `฿${p.price.toLocaleString()}${p.orig ? ` <s style=\"color:var(--sub);font-size:13px;font-weight:500;\">฿${p.orig.toLocaleString()}</s>` : ''}`;
       document.getElementById('pdFlavHead').innerHTML = `${t('choose_flavor')} <span>(${p.flavors.length} ${t('flavors_unit')})</span>`;
       document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f =>
