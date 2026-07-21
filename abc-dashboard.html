@@ -198,6 +198,32 @@ td.r,th.r{text-align:right;}
   <div class="cards" id="liveKpis" style="margin-top:0;"><div class="kpi"><b>…</b><span>กำลังเชื่อมต่อ</span></div></div>
   <div class="panel" style="margin-top:12px;"><b style="font-size:13px;color:var(--lime);">📊 กรวยลูกค้า (Conversion)</b><span class="pill">7 วันล่าสุด · เริ่มนับตั้งแต่ติดตั้งระบบ</span><div id="funnelBox" style="margin-top:10px;"><div class="note">กำลังโหลด…</div></div></div>
   <div class="panel" style="margin-top:12px;"><b style="font-size:13px;color:#5db2ff;">🎯 ผลตามรหัสแอด</b><span class="pill">ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์มินิแอพในแอดแต่ละตัว</span><table style="margin-top:8px;"><thead><tr><th>รหัสแอด</th><th class="r">เปิดแอพ</th><th class="r">ตะกร้า</th><th class="r">ซื้อ</th><th class="r">Conv%</th><th class="r">ยอดขาย</th></tr></thead><tbody id="adBody"></tbody></table></div>
+  <div class="panel" style="margin-top:12px;">
+    <b style="font-size:13px;color:var(--amber);">🔗 สร้างลิงก์ยิงแอด / โพสต์</b>
+    <div style="font-size:11.5px;color:var(--sub);margin:4px 0 10px;">เลือกช่องทาง → ตั้งชื่อแคมเปญ (ไม่บังคับ) → กดสร้าง แล้วเอาลิงก์ไปวางในแอดหรือโพสต์ได้เลย ระบบจะแยกผลให้อัตโนมัติ</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select id="glCh" style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:9px 12px;font-family:inherit;font-size:13px;">
+        <option value="fb">Facebook Ads</option>
+        <option value="fbpost">Facebook โพสต์เพจ</option>
+        <option value="ig">Instagram</option>
+        <option value="x">X (Twitter)</option>
+        <option value="yt">YouTube</option>
+        <option value="tt">TikTok</option>
+        <option value="line">LINE ร้าน</option>
+        <option value="mssg">แลนดิ้งเพจ (mssg)</option>
+        <option value="etc">อื่นๆ</option>
+      </select>
+      <input id="glName" placeholder="ชื่อแคมเปญ เช่น video1 (อังกฤษ/ตัวเลข)" style="width:230px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:9px 12px;font-family:inherit;font-size:13px;">
+      <button onclick="genLink()" style="background:var(--lime);color:#111;border:none;border-radius:8px;padding:10px 20px;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer;">สร้างลิงก์</button>
+    </div>
+    <div id="glOut" style="display:none;margin-top:10px;">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="glUrl" readonly style="flex:1;min-width:260px;background:#0d0d0d;border:1px solid var(--border);color:var(--lime);border-radius:8px;padding:9px 12px;font-family:inherit;font-size:12px;">
+        <button onclick="copyGenLink()" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 18px;font-family:inherit;font-size:12.5px;cursor:pointer;">📋 คัดลอก</button>
+      </div>
+      <div class="note" style="margin-top:6px;" id="glNote"></div>
+    </div>
+  </div>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -884,6 +910,19 @@ async function loadFunnel(){
     document.getElementById('adBody').innerHTML = rows.map(([code,v])=>'<tr><td>'+code+'</td><td class="r">'+fmtN(v.o)+'</td><td class="r">'+fmtN(v.c)+'</td><td class="r" style="font-weight:700;">'+fmtN(v.b)+'</td><td class="r" style="color:'+((v.o&&v.b/v.o>=.03)?'var(--lime)':'var(--amber)')+';font-weight:700;">'+(v.o?(v.b/v.o*100).toFixed(1):'0.0')+'%</td><td class="r">'+(ROLE==='exec'?fmt(v.rev):'🔒')+'</td></tr>').join('') || '<tr><td colspan="6" style="color:var(--sub);">ยังไม่มีรหัสแอด — ใส่ ?ad=ชื่อแคมเปญ ต่อท้ายลิงก์ในแอดเพื่อเริ่มวัดผล</td></tr>';
   }catch(e){ blackbox('funnelErr', e.code||e.message); }
 }
+
+window.genLink=function(){
+  const ch=document.getElementById('glCh').value;
+  const nm=(document.getElementById('glName').value||'').toLowerCase().replace(/[^a-z0-9-_]/g,'').slice(0,30);
+  const code=nm?(ch+'-'+nm):ch;
+  document.getElementById('glOut').style.display='block';
+  document.getElementById('glUrl').value='https://milinmengg-oss.github.io/hr-app/abc-miniapp-2.html?ad='+code;
+  document.getElementById('glNote').innerHTML='รหัสแอด: <b style="color:var(--lime);">'+code+'</b> — เมื่อมีคนกดลิงก์นี้ ผลจะขึ้นในตาราง "ผลตามรหัสแอด" เป็นแถวของรหัสนี้อัตโนมัติ';
+};
+window.copyGenLink=function(){
+  const el=document.getElementById('glUrl');
+  navigator.clipboard.writeText(el.value).then(()=>toast('คัดลอกลิงก์แล้ว ✓')).catch(()=>{ el.select(); document.execCommand('copy'); toast('คัดลอกลิงก์แล้ว ✓'); });
+};
 </script>
 </body>
 </html>
