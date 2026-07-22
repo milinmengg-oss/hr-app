@@ -169,7 +169,10 @@ td.r,th.r{text-align:right;}
       <div class="note" style="margin-bottom:6px;">วิธีเร็ว: ลากเลือกเลขเพื่อนใหม่ทั้งแถว "สรุป" เดือน <b id="mfEditMon"></b> ในชีต (แนวนอน V1→V18) แล้ววางในช่องนี้ กด "แยกใส่ให้"</div>
       <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;">
         <textarea id="mfPaste" placeholder="วางที่นี่ เช่น  1194  1197  1022  745 …  (คั่นด้วยเว้นวรรค/แท็บ/บรรทัดก็ได้)" style="flex:1;min-width:280px;height:44px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:12.5px;resize:vertical;"></textarea>
-        <button onclick="mfFill()" style="background:var(--blue,#5db2ff);color:#062033;border:none;border-radius:8px;padding:10px 18px;font-weight:700;font-family:inherit;font-size:12.5px;cursor:pointer;white-space:nowrap;">↦ แยกใส่ให้</button>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <button onclick="mfFill(true)" style="background:var(--blue,#5db2ff);color:#062033;border:none;border-radius:8px;padding:9px 16px;font-weight:700;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap;">↦ วางทั้งแถว (มีค่าโฆษณาด้วย)</button>
+          <button onclick="mfFill(false)" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:9px 16px;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap;">↦ วางเฉพาะคอลัมน์เพื่อน</button>
+        </div>
       </div>
       <div class="note" style="margin-bottom:8px;">หรือแก้ทีละช่องด้านล่างก็ได้ · เว้นว่าง = ร้านนั้นไม่มี</div>
       <div id="mfInputs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;"></div>
@@ -1041,13 +1044,16 @@ window.mfEditToggle=function(){
     e.style.display='block'; b.textContent='✖ ปิด';
   } else { e.style.display='none'; b.textContent='✏️ กรอก/แก้ไข'; }
 };
-window.mfFill=function(){
+window.mfFill=function(hasMoney){
   var raw=(document.getElementById('mfPaste').value||'');
-  var nums=(raw.match(/-?\d[\d,]*\.?\d*/g)||[]).map(function(x){return Math.round(parseFloat(x.replace(/,/g,'')))||0;});
+  var toks=raw.match(/-?\d[\d,]*(?:\.\d+)?/g)||[];
+  var all=toks.map(function(t){return Math.round(parseFloat(t.replace(/,/g,'')))||0;});
+  // ถ้าวางทั้งแถว = คู่ (ค่าโฆษณา,เพื่อน) → หยิบตัวที่ 2 ของทุกคู่
+  var vals = hasMoney ? all.filter(function(_,i){return i%2===1;}) : all;
   var inputs=Array.prototype.slice.call(document.querySelectorAll('#mfInputs input'));
-  if(!nums.length){ document.getElementById('mfMsg').textContent='ไม่พบตัวเลขในช่องที่วาง'; return; }
-  inputs.forEach(function(el,i){ el.value = (i<nums.length && nums[i]>0) ? nums[i] : ''; });
-  document.getElementById('mfMsg').textContent='แยกใส่ '+Math.min(nums.length,inputs.length)+' ร้านแล้ว — ตรวจดูก่อนกดบันทึก';
+  if(!vals.length){ document.getElementById('mfMsg').textContent='ไม่พบตัวเลขในช่องที่วาง'; return; }
+  inputs.forEach(function(el,i){ el.value = (i<vals.length && vals[i]>0) ? vals[i] : ''; });
+  document.getElementById('mfMsg').textContent='แยกใส่ '+Math.min(vals.length,inputs.length)+' ร้านแล้ว'+(hasMoney?' (หยิบเฉพาะคอลัมน์เพื่อน)':'')+' — ตรวจดูให้ตรงก่อนกดบันทึก';
 };
 window.mfSave=function(){
   var obj={}; document.querySelectorAll('#mfInputs input').forEach(function(el){ var v=parseInt(el.value)||0; if(v>0) obj[el.dataset.shop]=v; });
