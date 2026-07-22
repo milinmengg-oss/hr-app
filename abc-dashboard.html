@@ -161,6 +161,17 @@ td.r,th.r{text-align:right;}
     <div class="panel"><div class="ch"><canvas id="chMkt"></canvas></div></div>
     <div class="panel"><div class="ch"><canvas id="chCPA"></canvas></div></div>
   </div>
+  <div class="panel" style="margin-top:12px;">
+    <b style="font-size:13px;color:var(--blue,#5db2ff);">👥 เพื่อนใหม่แยกร้าน (V)</b><span class="pill" id="mfMonLbl">เลือกเดือนด้านบน</span>
+    <div id="mfBody" style="margin-top:8px;"><div class="note">ยังไม่มีข้อมูลเดือนนี้ — กด "กรอก/แก้ไข" เพื่อใส่ตัวเลขจากชีต</div></div>
+    <div style="margin-top:10px;"><button onclick="mfEditToggle()" id="mfEditBtn" style="background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 16px;font-family:inherit;font-size:12.5px;cursor:pointer;">✏️ กรอก/แก้ไข</button></div>
+    <div id="mfEdit" style="display:none;margin-top:10px;">
+      <div class="note" style="margin-bottom:8px;">วางตัวเลขเพื่อนใหม่ของแต่ละร้าน เดือน <b id="mfEditMon"></b> จากแถว "สรุป" ในชีต (เว้นว่าง = ไม่มี) แล้วกดบันทึก</div>
+      <div id="mfInputs" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;"></div>
+      <button onclick="mfSave()" style="margin-top:10px;background:var(--lime);color:#111;border:none;border-radius:8px;padding:10px 22px;font-weight:700;font-family:inherit;font-size:13px;cursor:pointer;">💾 บันทึก</button>
+      <span id="mfMsg" style="font-size:12px;color:var(--sub);margin-left:8px;"></span>
+    </div>
+  </div>
 
   </div><div class="tabsec" data-t="stk">
   <h2>📦 สต็อกคงคลัง <span class="pill">ณ 17 ก.ค. 2569 15:25</span></h2>
@@ -456,6 +467,9 @@ function start(){
     if(cpaChart) cpaChart.destroy();
     cpaChart=new Chart(chCPA,{type:'line',data:{labels:mkeys.map(k=>TH[k]||k),datasets:[{label:'ต้นทุนต่อเพื่อนใหม่ 1 คน (บาท)',data:mkeys.map(k=>MM[k].friends?+(MM[k].spend/MM[k].friends).toFixed(1):null),borderColor:PINK,backgroundColor:'rgba(255,107,157,.12)',fill:true,tension:.3,pointRadius:mkeys.map(k=>hi&&k===hi?6:3),pointBackgroundColor:mkeys.map(k=>hi&&k===hi?'#fff':PINK)}]},
       options:{maintainAspectRatio:false}});
+    renderMktFriends(sel==='ALL'?lastM:sel);
+    document.getElementById('mfEdit').style.display='none';
+    document.getElementById('mfEditBtn').textContent='✏️ กรอก/แก้ไข';
   };
   renderMkt();
 
@@ -991,6 +1005,45 @@ function renderShops(){
       +'<td><div style="background:#0d0d0d;border-radius:5px;height:10px;overflow:hidden;"><div style="width:'+Math.max(2,Math.round(((v.r!=null?v.r:v.o))/mx*100))+'%;height:100%;background:'+(i===0?'var(--lime)':'rgba(189,251,0,.4)')+';border-radius:5px;"></div></div></td></tr>';
   }).join('');
 }
+
+// ── 👥 เพื่อนใหม่แยกร้าน (V) ──
+var MKTFRIENDS = {};
+var MF_SHOPS = ['V1','V2','V3','V4','V5','V6','V7','V8','V9','V13','V14','V15','V18'];
+var mfCurMon = null;
+try{ db.collection('dash_secure').doc('mktfriends').onSnapshot(function(s){ MKTFRIENDS=(s.data()||{}).m||{}; if(mfCurMon) renderMktFriends(mfCurMon); }); }catch(e){ blackbox('mfSub', e.message); }
+function renderMktFriends(mk){
+  mfCurMon = mk;
+  var lbl=document.getElementById('mfMonLbl'); if(lbl) lbl.textContent=(MNAME[mk.slice(5)]||TH[mk]||mk)+' '+(+mk.slice(0,4)+543);
+  var data=(MKTFRIENDS[mk])||{};
+  var rows=Object.keys(data).filter(function(k){return (+data[k])>0;}).map(function(k){return [k,+data[k]];}).sort(function(a,b){return b[1]-a[1];});
+  var box=document.getElementById('mfBody'); if(!box) return;
+  if(!rows.length){ box.innerHTML='<div class="note">ยังไม่มีข้อมูลเดือนนี้ — กด "กรอก/แก้ไข" เพื่อใส่ตัวเลขเพื่อนใหม่รายร้านจากชีต</div>'; return; }
+  var tot=rows.reduce(function(a,x){return a+x[1];},0), mx=rows[0][1]||1;
+  box.innerHTML='<div class="note" style="margin-bottom:6px;">รวมเพื่อนใหม่ '+(MNAME[mk.slice(5)]||TH[mk])+': <b style="color:var(--lime);">'+fmtN(tot)+'</b> คน · '+rows.length+' ร้าน</div>'
+    +rows.map(function(x,i){ var pct=Math.round(x[1]/tot*100);
+      return '<div style="display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12.5px;"><span style="width:44px;font-weight:700;">'+x[0]+'</span><div style="flex:1;background:#0d0d0d;border-radius:5px;height:10px;overflow:hidden;"><div style="width:'+Math.max(2,Math.round(x[1]/mx*100))+'%;height:100%;background:'+(i===0?'#5db2ff':'rgba(93,178,255,.45)')+';border-radius:5px;"></div></div><span style="width:120px;text-align:right;">'+fmtN(x[1])+' คน <span style="color:var(--sub);">('+pct+'%)</span></span></div>';
+    }).join('');
+}
+window.mfEditToggle=function(){
+  var e=document.getElementById('mfEdit'), b=document.getElementById('mfEditBtn');
+  if(e.style.display==='none'){
+    document.getElementById('mfEditMon').textContent=(MNAME[mfCurMon.slice(5)]||TH[mfCurMon]||mfCurMon)+' '+(+mfCurMon.slice(0,4)+543);
+    var cur=MKTFRIENDS[mfCurMon]||{};
+    var shops=MF_SHOPS.slice(); Object.keys(cur).forEach(function(k){ if(shops.indexOf(k)<0) shops.push(k); });
+    document.getElementById('mfInputs').innerHTML=shops.map(function(s){
+      return '<div style="display:flex;align-items:center;gap:6px;"><span style="width:34px;font-size:12px;font-weight:600;">'+s+'</span><input type="number" data-shop="'+s+'" value="'+(cur[s]>0?cur[s]:'')+'" placeholder="–" style="width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:6px;padding:6px 8px;font-family:inherit;font-size:12px;text-align:right;"></div>';
+    }).join('');
+    e.style.display='block'; b.textContent='✖ ปิด';
+  } else { e.style.display='none'; b.textContent='✏️ กรอก/แก้ไข'; }
+};
+window.mfSave=function(){
+  var obj={}; document.querySelectorAll('#mfInputs input').forEach(function(el){ var v=parseInt(el.value)||0; if(v>0) obj[el.dataset.shop]=v; });
+  var msg=document.getElementById('mfMsg');
+  var all=Object.assign({}, MKTFRIENDS); all[mfCurMon]=obj;
+  db.collection('dash_secure').doc('mktfriends').set({m:all}).then(function(){
+    msg.textContent='บันทึกแล้ว ✓ '+new Date().toLocaleTimeString('th-TH'); MKTFRIENDS=all; renderMktFriends(mfCurMon);
+  }).catch(function(e){ msg.textContent='บันทึกไม่สำเร็จ: '+(e.code||e.message); blackbox('mfSaveErr', e.code||e.message); });
+};
 </script>
 </body>
 </html>
