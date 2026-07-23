@@ -220,16 +220,18 @@ export default {
 
     // ── seed ข้อมูลตั้งต้น (ใช้ครั้งแรกครั้งเดียว ผ่านเครื่องมือ seed-tool.html) ──
     if (url0.pathname.startsWith("/seed/")) {
-      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
-      if (request.method !== "POST") return new Response("method", { status: 405 });
+      const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "*" };
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden (key)", { status: 403, headers: CORS });
+      if (request.method !== "POST") return new Response("method", { status: 405, headers: CORS });
       const which = url0.pathname.split("/")[2];
-      if (!["skumap", "stockmap"].includes(which)) return new Response("unknown", { status: 404 });
+      if (!["skumap", "stockmap"].includes(which)) return new Response("unknown", { status: 404, headers: CORS });
       try {
         const txt = await request.text();
-        JSON.parse(txt); // ตรวจว่าเป็น JSON จริง
+        const obj = JSON.parse(txt); // ตรวจว่าเป็น JSON จริง
         await env.CONV.put(which, txt);
-        return new Response("seeded " + which, { status: 200, headers: { "Access-Control-Allow-Origin": "*" } });
-      } catch (e) { return new Response("bad json", { status: 400, headers: { "Access-Control-Allow-Origin": "*" } }); }
+        return new Response("seeded " + which + " (" + Object.keys(obj).length + " รายการ)", { status: 200, headers: CORS });
+      } catch (e) { return new Response("bad json", { status: 400, headers: CORS }); }
     }
 
     if (request.method === "GET") return new Response("ABC LINE AI OK", { status: 200 });

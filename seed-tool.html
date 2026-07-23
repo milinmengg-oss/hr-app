@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="th">
+<head><meta charset="UTF-8"><title>จีทู — Seed เครื่องมือ (ใช้ครั้งเดียว)</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#111;color:#eee;display:flex;justify-content:center;padding:40px;}
+.box{max-width:520px;width:100%;background:#1b1b1b;border:1px solid #333;border-radius:16px;padding:26px;}
+h2{margin:0 0 6px;} .note{color:#999;font-size:13px;line-height:1.7;}
+input,button{width:100%;box-sizing:border-box;margin-top:10px;padding:12px;border-radius:10px;border:1px solid #444;background:#222;color:#eee;font-size:14px;}
+button{background:#bdfb00;color:#111;font-weight:800;border:none;cursor:pointer;}
+#log{margin-top:14px;font-size:13px;line-height:1.8;}
+</style></head>
+<body><div class="box">
+<h2>🌱 Seed ข้อมูล SKU ให้จีทู</h2>
+<div class="note">ใช้ครั้งเดียว: ใส่คีย์ (XSELLY_KEY ที่ตั้งใน Cloudflare) → เลือกไฟล์ skumap.json → กดส่ง<br>คีย์ไม่ถูกส่งไปที่อื่นนอกจาก Worker ของเราเอง</div>
+<input type="password" id="key" placeholder="XSELLY_KEY (ที่แกตั้งใน Cloudflare)">
+<input type="file" id="file" accept=".json">
+<button onclick="go()">🚀 ส่งเข้า จีทู</button>
+<div id="log"></div>
+</div>
+<script>
+const WORKER='https://abc-line-ai.milin-mengg.workers.dev';
+async function go(){
+  const key=document.getElementById('key').value.trim();
+  const f=document.getElementById('file').files[0];
+  const log=document.getElementById('log');
+  if(!key||!f){ log.textContent='ใส่คีย์ + เลือกไฟล์ก่อนค่ะ'; return; }
+  log.textContent='กำลังส่ง…';
+  try{
+    const txt=await f.text();
+    JSON.parse(txt);
+    const r=await fetch(WORKER+'/seed/skumap?key='+encodeURIComponent(key),{method:'POST',body:txt});
+    const t=await r.text();
+    log.textContent = r.ok ? '✅ สำเร็จ: '+t+' — จีทูรู้จัก SKU ครบแล้ว' : '❌ '+r.status+' '+t+(r.status===403?' (คีย์ไม่ตรงกับ XSELLY_KEY ใน Cloudflare)':'');
+  }catch(e){ log.textContent='❌ '+e.message; }
+}
+</script>
+</body></html>
