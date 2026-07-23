@@ -302,9 +302,19 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     const replyToken = ev.replyToken;
     if (!replyToken) return;
 
-    // ── ทางลัดเมนู (เฉพาะข้อความ) ──
+    // ── โหมดแอดมินดูแล: ถ้าแชทนี้ถูกส่งต่อให้คนแล้ว จีทูเงียบ (12 ชม.) ──
+    const muteKey = `mute:${shopId}:${userId}`;
+    if (env.CONV && (await env.CONV.get(muteKey))) return;
+    const muteNow = async () => { try { if (env.CONV) await env.CONV.put(muteKey, "1", { expirationTtl: 43200 }); } catch (e) {} };
+
+    // ── ทางลัดเมนู + ขอคุยแอดมิน (เฉพาะข้อความ) ──
     if (mtype === "text") {
       const t = ev.message.text.trim();
+      if (/ติดต่อแอดมิน|คุยกับแอดมิน|ขอแอดมิน|ขอคุยกับคน|คุยกับคนจริง|แอดมินอยู่ไหม|แอดมินอยู่มั้ย|เรียกแอดมิน/.test(t)) {
+        await muteNow(); // ส่งต่อให้คน — จีทูเงียบแชทนี้ 12 ชม.
+        await lineReply(TOKEN, replyToken, "รับเรื่องแล้วค่ะ เดี๋ยวแอดมินเข้ามาดูแลนะคะ รอสักครู่ค่ะ 🙏🏻💕");
+        return;
+      }
       if (/เมนู|มีอะไรบ้าง|มีอะไรมั่ง|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t)) {
         await lineReply(TOKEN, replyToken, MENU_MSG);
         return;
@@ -337,11 +347,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const visionMsg = {
         role: "user",
         content: [
-          { type: "text", text: "ลูกค้าส่งรูปนี้มา (ส่วนมากเป็นรูปเมนู/สินค้าที่ลูกค้าวงกลมหรือทำเครื่องหมายสีแดงตรงตัวที่ต้องการ) ช่วยดูรูปแล้วบอกว่าลูกค้าเลือกสินค้ารุ่นอะไร จากนั้นยืนยันชื่อรุ่น + ราคา (ยึดราคาจาก 'รายการสินค้า' ในระบบเป็นหลัก) แล้วถามกลิ่น/สี และจำนวนต่อ ถ้ารูปไม่ชัดหรือไม่แน่ใจว่าวงตัวไหน ให้ขอโทษแล้วขอให้ลูกค้าพิมพ์ชื่อรุ่นมายืนยันค่ะ" },
+          { type: "text", text: "ลูกค้าส่งรูปนี้มา ขั้นแรก: จำแนกก่อนว่าเป็นรูปอะไร — ถ้าเป็น 'สลิปโอนเงิน/หลักฐานการชำระเงิน' (มีโลโก้ธนาคาร ยอดเงิน วันเวลา เลขอ้างอิง) ให้ตอบแค่คำเดียวว่า [SLIP] ห้ามพิมพ์อย่างอื่น\nถ้าเป็นรูปเมนู/สินค้า (มักวงกลมหรือทำเครื่องหมายสีแดงตรงตัวที่ต้องการ): บอกว่าลูกค้าเลือกสินค้ารุ่นอะไร ยืนยันชื่อรุ่น + ราคา (ยึดราคาจาก 'รายการสินค้า' ในระบบ) แล้วถามกลิ่น/สี และจำนวนต่อ ถ้ารูปไม่ชัดให้ขอให้ลูกค้าพิมพ์ชื่อรุ่นมายืนยันค่ะ" },
           { type: "image_url", image_url: { url: dataUri } }
         ]
       };
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt }, ...history.slice(-8), visionMsg], VISION_MODELS);
+      if (reply.indexOf("[SLIP]") !== -1) {
+        // เป็นสลิปโอนเงิน → ตอบรับ + ส่งต่อแอดมิน (จีทูเงียบแชทนี้ 12 ชม.)
+        await muteNow();
+        await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕");
+        return;
+      }
       userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้]" };
     } else {
       // ── ข้อความปกติ ──
@@ -374,6 +390,9 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt + stockNote }, ...history.slice(-10), { role: "user", content: text }]);
       userForHistory = { role: "user", content: text };
     }
+
+    // ถ้า AI ส่งต่อเคสให้แอดมินหลังการขาย → เงียบแชทนี้ให้แอดมินดูแล
+    if (reply.indexOf("แอดมินหลังการขาย") !== -1) await muteNow();
 
     // บันทึกประวัติ (เก็บ 20 ข้อความล่าสุด, อยู่ 1 ชม.)
     if (env.CONV) {
