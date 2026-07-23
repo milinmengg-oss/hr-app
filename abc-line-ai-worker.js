@@ -351,16 +351,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
           const names = Object.keys(sm);
           if (names.length) {
-            const toks = text.toLowerCase().split(/[^a-zA-Z0-9ก-๙%]+/).filter(w => w.length >= 3);
+            // จับคู่แบบกลับด้าน: เอาคำในชื่อสินค้าไปหาในข้อความลูกค้า (รองรับพิมพ์ติดกันเช่น "แล้วmarboหละ")
+            const textLow = text.toLowerCase();
             const hit = [];
             for (const nm of names) {
-              const low = nm.toLowerCase();
-              if (toks.some(t => low.includes(t))) { hit.push(nm); if (hit.length >= 30) break; }
+              const ntoks = nm.toLowerCase().split(/[^a-z0-9ก-๙%]+/).filter(w => w.length >= 3);
+              if (ntoks.some(t => textLow.includes(t))) { hit.push(nm); if (hit.length >= 40) break; }
             }
             if (hit.length) {
               stockNote = "\n\n# สต็อกจริงตอนนี้ (อัพเดตอัตโนมัติจากคลัง — เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
                 hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ " + sm[nm] + " ชิ้น" : "❌ หมด")).join("\n") +
-                "\nกติกา: ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
+                "\nกติกา: ตัวเลขสต็อกใช้จากรายการนี้เท่านั้น ห้ามกุเลขเอง ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
             }
           }
         }
