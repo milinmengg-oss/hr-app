@@ -202,20 +202,38 @@ export default {
     if (url0.pathname.startsWith("/xselly")) {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       if (request.method !== "POST") return new Response("ok", { status: 200 });
-      try {
-        const body = await request.json();
-        const items = (body && body.data && body.data.items) || [];
-        if (items.length && env.CONV) {
-          const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
-          const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
-          for (const it of items) {
-            const nm = skumap[it.sku] || it.sku;
-            stock[nm] = +it.new;
+      const rawBody = await request.text();
+      // ตรวจลายเซ็น HMAC-SHA256 ตาม doc (ใช้ api key จาก XSelly = secret XSELLY_API_KEY)
+      if (env.XSELLY_API_KEY) {
+        try {
+          const sig = (request.headers.get("X-XSelly-Signature") || "").toLowerCase();
+          const enc2 = new TextEncoder();
+          const k = await crypto.subtle.importKey("raw", enc2.encode(env.XSELLY_API_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+          const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc2.encode(rawBody)));
+          const hex = Array.from(mac).map(b => b.toString(16).padStart(2, "0")).join("");
+          if (hex !== sig) { console.log("XSELLY_SIG_FAIL got=" + sig.slice(0, 16)); return new Response("bad signature", { status: 401 }); }
+        } catch (e) { console.log("XSELLY_SIG_ERR " + String(e).slice(0, 120)); }
+      }
+      // ตอบ 200 ทันที (doc: ต้องตอบใน 1 วิ และไม่มี retry) แล้วค่อยประมวลผลเบื้องหลัง
+      ctx.waitUntil((async () => {
+        try {
+          const body = JSON.parse(rawBody);
+          const items = (body && body.data && body.data.items) || [];
+          if (items.length && env.CONV) {
+            const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
+            const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+            let n = 0;
+            for (const it of items) {
+              if (!it || !it.sku) continue; // sku อาจเป็นค่าว่างตาม doc
+              const nm = skumap[it.sku] || it.sku;
+              stock[nm] = +it.new; n++;
+            }
+            await env.CONV.put("stockmap", JSON.stringify(stock));
+            console.log("XSELLY_OK items=" + n);
           }
-          await env.CONV.put("stockmap", JSON.stringify(stock));
-        }
-        return new Response("OK", { status: 200 });
-      } catch (e) { return new Response("bad", { status: 400 }); }
+        } catch (e) { console.log("XSELLY_ERR " + String(e).slice(0, 200)); }
+      })());
+      return new Response("OK", { status: 200 });
     }
 
     // ── seed ข้อมูลตั้งต้น (ใช้ครั้งแรกครั้งเดียว ผ่านเครื่องมือ seed-tool.html) ──
