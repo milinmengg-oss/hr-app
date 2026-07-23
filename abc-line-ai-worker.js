@@ -202,6 +202,32 @@ export default {
 
     // ── XSelly webhook: สต็อกเปลี่ยน → จำไว้ใน KV ──
     // ตั้ง webhook URL ใน XSelly เป็น  https://<worker>/xselly?key=<XSELLY_KEY>
+    // ── แผงควบคุมจีทู (ใช้กับหน้า jeetoo-control.html) ──
+    if (url0.pathname.startsWith("/ctl/")) {
+      const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "*" };
+      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403, headers: CORS });
+      const act = url0.pathname.split("/")[2];
+      const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
+      const J = (o) => new Response(JSON.stringify(o), { headers: { ...CORS, "Content-Type": "application/json; charset=utf-8" } });
+      try {
+        if (act === "status") {
+          const off = await env.CONV.get("botoff:" + shop);
+          const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });
+          return J({ on: !off, muted: list.keys.length });
+        }
+        if (act === "on") { await env.CONV.delete("botoff:" + shop); return J({ ok: 1, on: true }); }
+        if (act === "off") { await env.CONV.put("botoff:" + shop, "1"); return J({ ok: 1, on: false }); }
+        if (act === "unmute") {
+          let n = 0;
+          const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });
+          for (const k of list.keys) { await env.CONV.delete(k.name); n++; }
+          return J({ ok: 1, cleared: n });
+        }
+      } catch (e) { return J({ err: String(e).slice(0, 100) }); }
+      return new Response("unknown", { status: 404, headers: CORS });
+    }
+
     // ── ช่องส่องข้อมูลสต็อกในหน่วยความจำ (debug) ──
     if (url0.pathname === "/stock") {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
@@ -302,10 +328,20 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     const replyToken = ev.replyToken;
     if (!replyToken) return;
 
+    // ── สวิตช์ใหญ่: ถ้าแอดมินกดปิดจีทูทั้งร้าน (หน้า control) → เงียบทุกแชท ──
+    if (env.CONV && (await env.CONV.get("botoff:" + shopId))) return;
+
     // ── โหมดแอดมินดูแล: ถ้าแชทนี้ถูกส่งต่อให้คนแล้ว จีทูเงียบ (12 ชม.) ──
     const muteKey = `mute:${shopId}:${userId}`;
-    if (env.CONV && (await env.CONV.get(muteKey))) return;
-    const muteNow = async () => { try { if (env.CONV) await env.CONV.put(muteKey, "1", { expirationTtl: 43200 }); } catch (e) {} };
+    if (env.CONV && (await env.CONV.get(muteKey))) {
+      // คำปลุก: พิมพ์ #เปิดบอท ในแชทนั้น → จีทูกลับมาทันที
+      if (mtype === "text" && /#?เปิดบอท|#bot/i.test(ev.message.text)) {
+        await env.CONV.delete(muteKey);
+        await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕");
+      }
+      return; // เงียบให้แอดมินดูแล
+    }
+    const muteNow = async () => { try { if (env.CONV) await env.CONV.put(muteKey, "1", { expirationTtl: 3600 }); } catch (e) {} }; // เงียบ 1 ชม. แล้วกลับมาเอง
 
     // ── ทางลัดเมนู + ขอคุยแอดมิน (เฉพาะข้อความ) ──
     if (mtype === "text") {

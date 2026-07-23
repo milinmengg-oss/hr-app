@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>จีทู — แผงควบคุม</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Kanit',sans-serif;background:#0d0d0d;color:#f2f2f2;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
+.box{width:100%;max-width:420px;background:#171717;border:1px solid #2b2b2b;border-radius:22px;padding:28px;text-align:center;}
+h1{font-size:20px;display:flex;align-items:center;justify-content:center;gap:9px;}
+.dot{width:12px;height:12px;border-radius:50%;background:#666;}
+.dot.on{background:#00e676;box-shadow:0 0 12px #00e676;}
+.dot.off{background:#ff5d5d;box-shadow:0 0 12px #ff5d5d;}
+.status{font-size:14px;color:#9a9a9a;margin:8px 0 22px;}
+.status b{color:#f2f2f2;}
+.bigbtn{width:100%;border:none;border-radius:18px;padding:22px;font-family:inherit;font-size:20px;font-weight:800;cursor:pointer;transition:transform .1s;}
+.bigbtn:active{transform:scale(.97);}
+.bigbtn.turnoff{background:#ff5d5d;color:#fff;}
+.bigbtn.turnon{background:#bdfb00;color:#111;}
+.sub{margin-top:12px;width:100%;background:#222;border:1.5px solid #333;color:#f2f2f2;border-radius:14px;padding:14px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+.sub:active{transform:scale(.98);}
+.muted{font-size:12.5px;color:#9a9a9a;margin-top:14px;line-height:1.7;}
+input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;text-align:center;}
+#msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;}
+.hidden{display:none;}
+</style>
+</head>
+<body>
+<div class="box">
+  <h1><span class="dot" id="dot"></span> จีทู — ร้าน V20</h1>
+  <div class="status" id="status">กำลังเช็คสถานะ…</div>
+
+  <div id="keybox">
+    <input type="password" id="key" placeholder="ใส่รหัส (XSELLY_KEY) ครั้งแรกครั้งเดียว">
+    <button class="sub" onclick="saveKey()">บันทึกรหัส</button>
+  </div>
+
+  <div id="panel" class="hidden">
+    <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
+    <button class="sub" onclick="unmute()">🔓 ปลดล็อกทุกแชทที่แอดมินดูแลค้างอยู่</button>
+    <div class="muted">💡 ปิด = จีทูเงียบทุกแชท (แอดมินคุมเองหมด) · เปิด = กลับมาตอบอัตโนมัติ<br>แชทที่มีสลิป/เคสปัญหา จีทูจะเงียบให้เอง 1 ชม. อยู่แล้ว</div>
+  </div>
+  <div id="msg"></div>
+</div>
+
+<script>
+const W='https://abc-line-ai.milin-mengg.workers.dev';
+let KEY=localStorage.getItem('g2key')||'';
+let ON=true;
+const $=id=>document.getElementById(id);
+
+function saveKey(){ KEY=$('key').value.trim(); if(!KEY){$('msg').textContent='ใส่รหัสก่อนค่ะ';return;} localStorage.setItem('g2key',KEY); init(); }
+
+async function api(act){
+  const r=await fetch(W+'/ctl/'+act+'?key='+encodeURIComponent(KEY)+'&shop=v20',{method:act==='status'?'GET':'POST'});
+  if(r.status===403){ localStorage.removeItem('g2key'); KEY=''; init(); throw new Error('รหัสไม่ถูกต้อง'); }
+  return r.json();
+}
+
+function render(on,muted){
+  ON=on;
+  $('dot').className='dot '+(on?'on':'off');
+  $('status').innerHTML=on?'สถานะ: <b style="color:#00e676;">🟢 จีทูกำลังตอบลูกค้า</b>'+(muted?'<br>มี <b>'+muted+'</b> แชทที่แอดมินดูแลอยู่ (จีทูเว้นให้)':'')
+                          :'สถานะ: <b style="color:#ff5d5d;">🔴 จีทูปิดอยู่ — แอดมินคุมแชทเองทั้งหมด</b>';
+  const t=$('toggle');
+  t.textContent=on?'⏸ ปิดจีทู (แอดมินคุมเอง)':'▶️ เปิดจีทูกลับมาตอบ';
+  t.className='bigbtn '+(on?'turnoff':'turnon');
+}
+
+async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); }catch(e){ $('msg').textContent=e.message; } }
+
+async function toggle(){
+  $('msg').textContent='กำลังสั่งงาน…';
+  try{ const s=await api(ON?'off':'on'); render(s.on, 0); $('msg').textContent=s.on?'✅ เปิดจีทูแล้ว':'✅ ปิดจีทูแล้ว'; setTimeout(refresh,800); }
+  catch(e){ $('msg').textContent=e.message; }
+}
+
+async function unmute(){
+  $('msg').textContent='กำลังปลดล็อก…';
+  try{ const s=await api('unmute'); $('msg').textContent='✅ ปลดล็อกแล้ว '+s.cleared+' แชท'; refresh(); }
+  catch(e){ $('msg').textContent=e.message; }
+}
+
+function init(){
+  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); }
+  else{ $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden'); $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)'; }
+}
+init();
+</script>
+</body>
+</html>
