@@ -195,11 +195,48 @@ https://cutt.ly/abc-menu"
 // ===== main =====
 export default {
   async fetch(request, env, ctx) {
+    const url0 = new URL(request.url);
+
+    // ── XSelly webhook: สต็อกเปลี่ยน → จำไว้ใน KV ──
+    // ตั้ง webhook URL ใน XSelly เป็น  https://<worker>/xselly?key=<XSELLY_KEY>
+    if (url0.pathname.startsWith("/xselly")) {
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      if (request.method !== "POST") return new Response("ok", { status: 200 });
+      try {
+        const body = await request.json();
+        const items = (body && body.data && body.data.items) || [];
+        if (items.length && env.CONV) {
+          const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
+          const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+          for (const it of items) {
+            const nm = skumap[it.sku] || it.sku;
+            stock[nm] = +it.new;
+          }
+          await env.CONV.put("stockmap", JSON.stringify(stock));
+        }
+        return new Response("OK", { status: 200 });
+      } catch (e) { return new Response("bad", { status: 400 }); }
+    }
+
+    // ── seed ข้อมูลตั้งต้น (ใช้ครั้งแรกครั้งเดียว ผ่านเครื่องมือ seed-tool.html) ──
+    if (url0.pathname.startsWith("/seed/")) {
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      if (request.method !== "POST") return new Response("method", { status: 405 });
+      const which = url0.pathname.split("/")[2];
+      if (!["skumap", "stockmap"].includes(which)) return new Response("unknown", { status: 404 });
+      try {
+        const txt = await request.text();
+        JSON.parse(txt); // ตรวจว่าเป็น JSON จริง
+        await env.CONV.put(which, txt);
+        return new Response("seeded " + which, { status: 200, headers: { "Access-Control-Allow-Origin": "*" } });
+      } catch (e) { return new Response("bad json", { status: 400, headers: { "Access-Control-Allow-Origin": "*" } }); }
+    }
+
     if (request.method === "GET") return new Response("ABC LINE AI OK", { status: 200 });
     if (request.method !== "POST") return new Response("method", { status: 405 });
 
     // ระบุร้านจาก path เช่น /w/v20
-    const url = new URL(request.url);
+    const url = url0;
     const m = url.pathname.match(/\/w\/([a-z0-9]+)/i);
     const shopId = (m ? m[1] : "v20").toLowerCase();
     const shop = SHOPS[shopId];
@@ -278,7 +315,28 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     } else {
       // ── ข้อความปกติ ──
       const text = ev.message.text.trim();
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt }, ...history.slice(-10), { role: "user", content: text }]);
+      // 🔍 เช็คสต็อกจริง (จาก XSelly webhook) เฉพาะรายการที่เกี่ยวกับข้อความลูกค้า
+      let stockNote = "";
+      try {
+        if (env.CONV) {
+          const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+          const names = Object.keys(sm);
+          if (names.length) {
+            const toks = text.toLowerCase().split(/[^a-zA-Z0-9ก-๙%]+/).filter(w => w.length >= 3);
+            const hit = [];
+            for (const nm of names) {
+              const low = nm.toLowerCase();
+              if (toks.some(t => low.includes(t))) { hit.push(nm); if (hit.length >= 30) break; }
+            }
+            if (hit.length) {
+              stockNote = "\n\n# สต็อกจริงตอนนี้ (อัพเดตอัตโนมัติจากคลัง — เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
+                hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ " + sm[nm] + " ชิ้น" : "❌ หมด")).join("\n") +
+                "\nกติกา: ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
+            }
+          }
+        }
+      } catch (e) {}
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt + stockNote }, ...history.slice(-10), { role: "user", content: text }]);
       userForHistory = { role: "user", content: text };
     }
 
