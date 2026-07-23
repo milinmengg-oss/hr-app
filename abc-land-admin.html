@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ABC — หลังบ้านแลนดิ้งเพจ</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0d0d0d;--card:#171717;--card2:#212121;--border:#2b2b2b;--text:#f2f2f2;--sub:#9a9a9a;--lime:#bdfb00;--green:#00c853;--red:#ff5d5d;--blue:#5db2ff;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:'Kanit',sans-serif;font-size:14px;min-height:100vh;}
+.wrap{max-width:1080px;margin:0 auto;padding:16px 14px 90px;}
+h1{font-size:19px;display:flex;align-items:center;gap:8px;}
+h1 .dot{width:10px;height:10px;border-radius:50%;background:var(--lime);box-shadow:0 0 10px var(--lime);}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;}
+.sub{color:var(--sub);font-size:12.5px;line-height:1.7;margin:8px 0 14px;}
+.logout{background:var(--card2);border:1px solid var(--border);color:var(--sub);border-radius:10px;padding:7px 14px;font-family:inherit;font-size:12px;cursor:pointer;}
+.search{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:12px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13.5px;outline:none;margin:0 0 14px;}
+.shopcard{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:14px 15px;margin-bottom:12px;}
+.shophead{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+.shopcode{font-size:16px;font-weight:800;letter-spacing:.5px;display:flex;align-items:center;gap:9px;}
+.pill{font-size:11px;padding:3px 11px;border-radius:99px;font-weight:700;}
+.p-on{background:#12331c;color:#7ee29a;}
+.p-off{background:#3a2020;color:var(--red);}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.fld{display:flex;flex-direction:column;gap:4px;}
+.fld.full{grid-column:1/-1;}
+.fld label{font-size:11.5px;color:var(--sub);font-weight:500;}
+.fld label b{color:var(--lime);}
+.fld input[type=text]{background:var(--card2);border:1.5px solid var(--border);color:var(--text);font-family:inherit;border-radius:10px;padding:9px 12px;font-size:13.5px;outline:none;}
+.fld input:focus{border-color:var(--lime);}
+.actions{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap;}
+.tog{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--sub);cursor:pointer;user-select:none;}
+.tog input{transform:scale(1.25);accent-color:var(--green);}
+.save{background:var(--lime);border:none;border-radius:10px;padding:9px 20px;font-family:inherit;font-weight:800;font-size:13px;cursor:pointer;color:#111;}
+.save:active{transform:scale(.97);}
+.copy{background:var(--card2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;cursor:pointer;display:inline-flex;gap:6px;align-items:center;}
+.open{background:transparent;border:1px solid var(--blue);color:var(--blue);border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;cursor:pointer;text-decoration:none;}
+.dirty{color:var(--lime);font-size:11.5px;margin-left:2px;opacity:0;transition:.2s;}
+.dirty.on{opacity:1;}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50;}
+.lbox{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:30px;width:330px;text-align:center;}
+.lbox input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px;color:var(--text);font-family:inherit;font-size:15px;outline:none;margin:8px 0;}
+.lbox button{width:100%;background:var(--lime);border:none;border-radius:12px;padding:12px;font-family:inherit;font-weight:800;font-size:15px;cursor:pointer;color:#111;margin-top:6px;}
+.note{font-size:11.5px;color:var(--sub);line-height:1.7;margin-top:10px;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#fff;color:#111;padding:10px 22px;border-radius:99px;font-weight:600;font-size:13px;opacity:0;transition:.25s;pointer-events:none;z-index:99;}
+.toast.show{opacity:1;}
+.hidden{display:none;}
+.warn{background:#2a2410;border:1px solid #4a3f15;color:#e8c96a;border-radius:12px;padding:11px 14px;font-size:12px;line-height:1.6;margin-bottom:14px;}
+</style>
+</head>
+<body>
+
+<div id="login"><div class="lbox">
+  <div style="font-size:34px;">🔐</div>
+  <h2 style="font-size:17px;margin-top:6px;">หลังบ้านแลนดิ้งเพจ</h2>
+  <div id="loginSub" class="note">เข้าสู่ระบบด้วยบัญชีผู้บริหาร</div>
+  <input id="em" type="email" placeholder="อีเมล">
+  <input id="pw" type="password" placeholder="รหัสผ่าน" onkeydown="if(event.key==='Enter')enter()">
+  <button onclick="enter()">เข้าสู่ระบบ</button>
+  <div class="note">เฉพาะผู้บริหารเท่านั้นที่แก้ไขได้</div>
+</div></div>
+
+<div class="wrap hidden" id="app">
+  <div class="top">
+    <h1><span class="dot"></span> หลังบ้านแลนดิ้งเพจ ABC</h1>
+    <button class="logout" onclick="doLogout()">ออกจากระบบ</button>
+  </div>
+  <div class="sub">แก้ชื่อร้าน · ลิงก์แอดไลน์ · Pixel ID ได้เอง 20 หน้า — กด <b style="color:var(--lime)">บันทึก</b> แล้วหน้าแลนดิ้งเปลี่ยนทันที ไม่ต้องแตะโค้ด</div>
+
+  <div class="warn">💡 <b>Pixel ID</b> = เลขจาก Meta Events Manager (15–16 หลัก) ใส่แล้วหน้านั้นจะยิง PageView / Lead (กดไลน์) / InitiateCheckout (กดสั่งซื้อ) เข้า Facebook อัตโนมัติ · เว้นว่าง = ไม่ยิงพิกเซล</div>
+
+  <input class="search" id="search" placeholder="🔍 ค้นหาร้าน (เช่น v18)" oninput="render()">
+  <div id="list"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+firebase.initializeApp({ apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" });
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+const LAND_URL = 'https://milinmengg-oss.github.io/hr-app/abc-landing.html';
+/* รายชื่อร้านที่รองรับ (20 หน้า) */
+const SHOP_IDS = Array.from({length:20}, (_,i)=>'v'+(i+1));
+let CFG = {};          // {v1:{name,line,pixel,active}, ...}
+let ROLE = 'manager';
+let __booted = false;
+
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+async function enter(){
+  const em=document.getElementById('em').value.trim(), pw=document.getElementById('pw').value;
+  if(!em||!pw){ toast('กรุณาใส่อีเมลและรหัสผ่าน'); return; }
+  document.getElementById('loginSub').textContent='กำลังเข้าสู่ระบบ…';
+  try{ await auth.signInWithEmailAndPassword(em,pw); }
+  catch(e){ document.getElementById('loginSub').textContent='เข้าสู่ระบบด้วยบัญชีผู้บริหาร'; toast('อีเมลหรือรหัสผ่านไม่ถูกต้อง'); }
+}
+window.doLogout=function(){ auth.signOut().then(()=>location.reload()); };
+
+auth.onAuthStateChanged(async u=>{
+  if(!u) return;
+  if(__booted) return; __booted=true;
+  try{
+    const ud = await db.collection('users').doc(u.uid).get();
+    ROLE = (ud.data()||{}).role || 'manager';
+    if(ROLE!=='exec'){ toast('บัญชีนี้ไม่มีสิทธิ์แก้ไข (เฉพาะผู้บริหาร)'); await auth.signOut(); setTimeout(()=>location.reload(),1800); return; }
+    await loadAll();
+    document.getElementById('login').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+  }catch(e){ __booted=false; toast('โหลดข้อมูลไม่ได้: '+(e.code||e.message)); }
+});
+
+async function loadAll(){
+  CFG = {};
+  const snap = await db.collection('land_config').get();
+  snap.forEach(d=>{ CFG[d.id] = d.data(); });
+  render();
+}
+
+function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function render(){
+  const q = (document.getElementById('search').value||'').toLowerCase().trim();
+  const list = document.getElementById('list');
+  list.innerHTML='';
+  SHOP_IDS.filter(id=>!q||id.includes(q)).forEach(id=>{
+    const c = CFG[id] || {};
+    const name = c.name || ('ร้าน '+id.toUpperCase());
+    const on = c.active !== false && (c.line||c.name);   // มีข้อมูล = ถือว่าเปิด
+    const card = document.createElement('div');
+    card.className='shopcard';
+    card.innerHTML =
+      '<div class="shophead">'+
+        '<div class="shopcode">🏪 '+id.toUpperCase()+' <span class="dirty" id="dty_'+id+'">● ยังไม่บันทึก</span></div>'+
+        '<span class="pill '+(on?'p-on':'p-off')+'" id="pill_'+id+'">'+(on?'● ใช้งาน':'○ ยังไม่ตั้ง')+'</span>'+
+      '</div>'+
+      '<div class="grid">'+
+        '<div class="fld"><label>ชื่อร้าน (แสดงบนหน้า)</label><input type="text" id="name_'+id+'" value="'+esc(name)+'" oninput="mark(\''+id+'\')"></div>'+
+        '<div class="fld"><label>ลิงก์แอดไลน์ (lin.ee/...)</label><input type="text" id="line_'+id+'" value="'+esc(c.line||'')+'" placeholder="https://lin.ee/xxxx" oninput="mark(\''+id+'\')"></div>'+
+        '<div class="fld full"><label><b>Pixel ID</b> (เว้นว่าง = ไม่ยิงพิกเซล)</label><input type="text" id="pixel_'+id+'" value="'+esc(c.pixel||'')+'" placeholder="เช่น 1234567890123456" oninput="mark(\''+id+'\')"></div>'+
+      '</div>'+
+      '<div class="actions">'+
+        '<label class="tog"><input type="checkbox" id="active_'+id+'" '+(c.active!==false?'checked':'')+' onchange="mark(\''+id+'\')"> เปิดใช้งานหน้านี้</label>'+
+        '<div style="flex:1"></div>'+
+        '<button class="copy" onclick="copyLink(\''+id+'\')">🔗 คัดลอกลิงก์</button>'+
+        '<a class="open" href="'+LAND_URL+'?shop='+id+'" target="_blank">ดูหน้า ↗</a>'+
+        '<button class="save" onclick="save(\''+id+'\')">บันทึก</button>'+
+      '</div>';
+    list.appendChild(card);
+  });
+}
+
+window.mark=function(id){ const d=document.getElementById('dty_'+id); if(d) d.classList.add('on'); };
+
+window.save=async function(id){
+  const name=document.getElementById('name_'+id).value.trim();
+  let line=document.getElementById('line_'+id).value.trim();
+  let pixel=document.getElementById('pixel_'+id).value.trim().replace(/[^0-9]/g,'');
+  const active=document.getElementById('active_'+id).checked;
+  if(line && !/^https?:\/\//i.test(line)) line='https://'+line;
+  const data={ name:name||('ร้าน '+id.toUpperCase()), line, pixel, active, at:new Date().toISOString() };
+  try{
+    await db.collection('land_config').doc(id).set(data,{merge:true});
+    CFG[id]=Object.assign(CFG[id]||{}, data);
+    const d=document.getElementById('dty_'+id); if(d) d.classList.remove('on');
+    const pill=document.getElementById('pill_'+id);
+    const on=active&&(line||name);
+    if(pill){ pill.className='pill '+(on?'p-on':'p-off'); pill.textContent=on?'● ใช้งาน':'○ ยังไม่ตั้ง'; }
+    toast('บันทึก '+id.toUpperCase()+' แล้ว ✓');
+  }catch(e){ toast('บันทึกไม่สำเร็จ: '+(e.code||e.message)); }
+};
+
+window.copyLink=function(id){
+  const url=LAND_URL+'?shop='+id;
+  navigator.clipboard.writeText(url).then(()=>toast('คัดลอกลิงก์ '+id.toUpperCase()+' แล้ว 📋')).catch(()=>{
+    prompt('คัดลอกลิงก์นี้:', url);
+  });
+};
+</script>
+</body>
+</html>

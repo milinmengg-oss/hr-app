@@ -1,4 +1,4 @@
-<!DOCTYPE html><!--img-->
+<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -262,13 +262,33 @@ function track(step){
    🚀  เริ่มทำงาน
    ============================================================ */
 var qs = new URLSearchParams(location.search);
-var SHOP = (qs.get('shop')||'').toLowerCase().replace(/[^a-z0-9]/g,'') || DEFAULT_SHOP;
-if(!SHOPS[SHOP]) SHOP = DEFAULT_SHOP;
+var SHOP = (qs.get('shop')||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+if(!/^v\d{1,2}$/.test(SHOP)) SHOP = DEFAULT_SHOP;   // รองรับ v1–v20
 var AD = (qs.get('ad')||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40) || 'direct';
-var CFG = SHOPS[SHOP];
+/* ค่าเริ่มต้น (ใช้ทันทีระหว่างรอโหลดจากหลังบ้าน) */
+var CFG = SHOPS[SHOP] || { name:'ร้าน '+SHOP.toUpperCase(), line:'' };
+CFG.name = CFG.name || ('ร้าน '+SHOP.toUpperCase());
 
 document.getElementById('shoptag').textContent = CFG.name;
 document.title = 'ABC — ' + CFG.name;
+
+/* ============================================================
+   ☁️  ดึงค่าจากหลังบ้าน (land_config) — แก้ในหน้าแอดมินแล้วเปลี่ยนทันที
+   ============================================================ */
+function loadConfig(){
+  lReady(function(){
+    try{
+      lDB.collection('land_config').doc(SHOP).get().then(function(d){
+        if(d && d.exists){
+          var c = d.data() || {};
+          if(c.name){ CFG.name = c.name; document.getElementById('shoptag').textContent = c.name; document.title = 'ABC — ' + c.name; }
+          if(c.line){ CFG.line = c.line; }
+          if(c.pixel){ PIXEL_ID = String(c.pixel).replace(/[^0-9]/g,''); }
+        }
+      }).catch(function(){}).then(function(){ fbq_track('PageView'); });
+    }catch(e){ fbq_track('PageView'); }
+  });
+}
 
 /* ============================================================
    🖼️  รูปสินค้า (ดึงจากรูปจริง 65 รุ่นที่มีในระบบแล้ว)
@@ -325,11 +345,12 @@ document.getElementById('heroBg').style.backgroundImage = 'url(' + IMGB + HOT[0]
   });
 })();
 
-/* วัดยอดเข้าหน้า + Pixel PageView (ถ้าตั้ง Pixel แล้ว) */
+/* วัดยอดเข้าหน้า (ระบบเราเอง) + โหลด config จากหลังบ้าน แล้วค่อยยิง Pixel PageView */
 track('v');
-fbq_track('PageView');
+loadConfig();
 
 function goLine(){
+  if(!CFG.line){ alert('ร้านนี้ยังไม่ได้ตั้งค่าลิงก์ไลน์ในหลังบ้าน'); return; }
   track('l');
   fbq_track('Lead', {content_name:'line_add', shop:SHOP});   // ← CAPI: Lead
   location.href = CFG.line;
