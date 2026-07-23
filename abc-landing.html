@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>ABC — สั่งซื้อ / แอดไลน์</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  :root{
+    --g1:#0f9d58; --g2:#00c853; --g3:#00e676;
+    --dark:#0a2e1a; --ink:#123522; --mut:#5a7a68;
+    --card:#ffffff; --line:#e3efe8; --bg:#f2f8f4;
+  }
+  html,body{background:var(--bg);color:var(--ink);font-family:'Kanit',system-ui,sans-serif;overflow-x:hidden}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center}
+  .wrap{width:100%;max-width:480px;padding:0 0 40px;position:relative}
+
+  /* ---- HERO ---- */
+  .hero{background:linear-gradient(160deg,var(--g1),var(--g2) 55%,var(--g3));color:#fff;
+        padding:38px 22px 60px;position:relative;overflow:hidden;text-align:center;
+        border-radius:0 0 30px 30px;box-shadow:0 12px 30px rgba(15,157,88,.28)}
+  .hero::before,.hero::after{content:'';position:absolute;border-radius:50%;background:rgba(255,255,255,.12)}
+  .hero::before{width:220px;height:220px;top:-90px;right:-70px}
+  .hero::after{width:150px;height:150px;bottom:-60px;left:-40px}
+  .badge-live{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.18);
+        padding:5px 13px;border-radius:20px;font-size:12.5px;font-weight:500;margin-bottom:16px;backdrop-filter:blur(4px)}
+  .dot{width:7px;height:7px;border-radius:50%;background:#b9ffcf;box-shadow:0 0 0 0 #b9ffcf;animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(185,255,207,.7)}70%{box-shadow:0 0 0 9px rgba(185,255,207,0)}100%{box-shadow:0 0 0 0 rgba(185,255,207,0)}}
+  .logo{font-size:40px;font-weight:700;letter-spacing:1px;position:relative;z-index:1;text-shadow:0 3px 10px rgba(0,0,0,.15)}
+  .logo small{font-size:14px;font-weight:400;opacity:.9;display:block;letter-spacing:3px;margin-top:2px}
+  .tagline{font-size:16px;font-weight:300;margin-top:12px;opacity:.97;position:relative;z-index:1;line-height:1.5}
+  .shoptag{position:relative;z-index:1;margin-top:14px;display:inline-block;background:#fff;color:var(--g1);
+        font-weight:600;font-size:14px;padding:6px 16px;border-radius:20px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+
+  /* ---- TRUST STRIP ---- */
+  .trust{display:flex;justify-content:space-around;margin:-34px 16px 0;position:relative;z-index:5;
+         background:var(--card);border-radius:18px;padding:16px 8px;box-shadow:0 8px 24px rgba(10,46,26,.1)}
+  .trust div{text-align:center;flex:1}
+  .trust b{display:block;font-size:19px;color:var(--g1);font-weight:600}
+  .trust span{font-size:11px;color:var(--mut)}
+  .trust .sep{flex:0 0 1px;background:var(--line);max-width:1px;padding:0}
+
+  /* ---- SECTION ---- */
+  .sec{margin:22px 16px 0}
+  .sec-h{font-size:15px;font-weight:600;color:var(--ink);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .sec-h::before{content:'';width:4px;height:16px;background:var(--g2);border-radius:3px}
+
+  .feats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .feat{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 12px;display:flex;gap:10px;align-items:center}
+  .feat .ic{width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:#eafaf0;display:flex;align-items:center;justify-content:center;font-size:19px}
+  .feat b{font-size:13px;font-weight:600;display:block;line-height:1.25}
+  .feat span{font-size:11px;color:var(--mut)}
+
+  /* ---- REVIEWS ---- */
+  .rev{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 15px;margin-bottom:10px}
+  .rev .top{display:flex;align-items:center;gap:10px;margin-bottom:7px}
+  .rev .av{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--g2),var(--g3));color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px}
+  .rev .nm{font-size:13px;font-weight:600}
+  .rev .st{font-size:11px;color:#f5a623}
+  .rev p{font-size:12.5px;color:#455;line-height:1.5}
+
+  /* ---- STICKY CTA ---- */
+  .spacer{height:96px}
+  .cta{position:fixed;left:0;right:0;bottom:0;z-index:50;display:flex;justify-content:center;
+       padding:12px 14px calc(12px + env(safe-area-inset-bottom));
+       background:linear-gradient(to top,var(--bg) 72%,rgba(242,248,244,0));pointer-events:none}
+  .cta-in{width:100%;max-width:480px;display:flex;gap:10px;pointer-events:auto}
+  .btn{flex:1;border:none;border-radius:16px;padding:15px 10px;font-family:inherit;font-weight:600;font-size:15px;
+       cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:transform .12s,box-shadow .12s;line-height:1.1}
+  .btn:active{transform:scale(.96)}
+  .btn small{font-size:10.5px;font-weight:400;opacity:.9}
+  .btn-line{background:#06c755;color:#fff;box-shadow:0 8px 20px rgba(6,199,85,.35)}
+  .btn-buy{background:linear-gradient(135deg,var(--g1),var(--g2));color:#fff;box-shadow:0 8px 20px rgba(15,157,88,.35)}
+  .btn .bi{font-size:20px;margin-bottom:1px}
+
+  .foot{text-align:center;font-size:11px;color:var(--mut);margin:26px 16px 0;line-height:1.6}
+  .foot .warn{display:inline-block;background:#fff6e5;color:#a76a00;border-radius:10px;padding:8px 12px;margin-top:8px;font-size:11px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="hero">
+    <div class="badge-live"><span class="dot"></span> พร้อมส่งวันนี้ · ตอบไวทุกวัน</div>
+    <div class="logo">ABC<small>PREMIUM STORE</small></div>
+    <div class="tagline" id="tagline">สินค้าครบ ราคาส่ง ของแท้ 100%<br>เลือกช่องทางที่สะดวกได้เลย 👇</div>
+    <div class="shoptag" id="shoptag">ร้าน V18</div>
+  </div>
+
+  <div class="trust">
+    <div><b>65+</b><span>รุ่นสินค้า</span></div>
+    <div class="sep"></div>
+    <div><b>4.9★</b><span>รีวิวลูกค้า</span></div>
+    <div class="sep"></div>
+    <div><b>ส่งไว</b><span>ทั่วไทย</span></div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">ทำไมต้องสั่งกับเรา</div>
+    <div class="feats">
+      <div class="feat"><div class="ic">✅</div><div><b>ของแท้ 100%</b><span>เช็คได้ทุกชิ้น</span></div></div>
+      <div class="feat"><div class="ic">🚚</div><div><b>ส่งไวทันใจ</b><span>เก็บปลายทางได้</span></div></div>
+      <div class="feat"><div class="ic">💬</div><div><b>ตอบเร็ว</b><span>ทักไลน์ได้ตลอด</span></div></div>
+      <div class="feat"><div class="ic">🏷️</div><div><b>ราคาส่ง</b><span>ถูกกว่าที่อื่น</span></div></div>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-h">ลูกค้าพูดถึงเรา</div>
+    <div class="rev">
+      <div class="top"><div class="av">K</div><div><div class="nm">คุณเค</div><div class="st">★★★★★</div></div></div>
+      <p>สั่งบ่ายได้ของเช้าเลย ของแท้ ตรงปก แอดมินตอบไวมากค่ะ</p>
+    </div>
+    <div class="rev">
+      <div class="top"><div class="av">P</div><div><div class="nm">คุณพี</div><div class="st">★★★★★</div></div></div>
+      <p>ราคาดีกว่าเจ้าอื่นจริง สั่งประจำเลย บริการดีมาก</p>
+    </div>
+  </div>
+
+  <div class="foot">
+    เลือก “แอดไลน์” ถ้าอยากสอบถาม/ให้แอดมินช่วยจัดให้ · เลือก “สั่งซื้อเอง” ถ้าอยากเลือกสินค้าเองในแอป
+    <div class="warn" id="ageWarn">⚠️ จำหน่ายสำหรับผู้ที่มีอายุ 20 ปีขึ้นไปเท่านั้น</div>
+  </div>
+
+  <div class="spacer"></div>
+</div>
+
+<div class="cta">
+  <div class="cta-in">
+    <button class="btn btn-line" id="btnLine" onclick="goLine()">
+      <span class="bi">💬</span> แอดไลน์ร้าน <small>สอบถาม / สั่งกับแอดมิน</small>
+    </button>
+    <button class="btn btn-buy" id="btnBuy" onclick="goBuy()">
+      <span class="bi">🛒</span> สั่งซื้อเอง <small>เลือกสินค้าในแอป</small>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ⚙️  ตั้งค่าร้าน — เพิ่ม/แก้ได้ทีเดียว ใช้ได้ทุกร้าน
+   ============================================================ */
+var SHOPS = {
+  v18: { name:'ร้าน V18', line:'https://lin.ee/8vwZIBNN' }
+  // เพิ่มร้านอื่นทีหลังแบบนี้:
+  // v1:  { name:'ร้าน V1',  line:'https://lin.ee/xxxxxx' },
+  // v2:  { name:'ร้าน V2',  line:'https://lin.ee/yyyyyy' },
+};
+var DEFAULT_SHOP = 'v18';
+
+/* ปลายทาง "สั่งซื้อเอง" = มินิแอพ ABC (ส่ง shop+ad ต่อเพื่อวัดผลต่อเนื่อง) */
+var MINIAPP_URL = 'https://milinmengg-oss.github.io/hr-app/abc-miniapp-2.html';
+
+/* ============================================================
+   🔵  Facebook Pixel + CAPI (โครงเว้นไว้ พร้อมเปิดใช้ทีหลัง)
+   ── ใส่ PIXEL_ID แล้ว Pixel ฝั่งเบราว์เซอร์จะทำงานทันที
+   ── event_id ถูกสร้างไว้ให้แล้ว เอาไปใช้ตอนต่อ CAPI ฝั่งเซิร์ฟเวอร์
+      เพื่อกันนับซ้ำ (deduplication) ระหว่าง Pixel กับ CAPI
+   ============================================================ */
+var PIXEL_ID = '';   // ← ใส่ Pixel ID ตรงนี้เมื่อพร้อม (ฝั่งจำนำรถ/ธุรกิจที่ยืนยันแล้ว)
+function newEventId(){ return 'e'+Date.now()+Math.random().toString(36).slice(2,8); }
+function fbq_track(evt, extra){
+  try{
+    if(!PIXEL_ID) return null;               // ยังไม่ตั้ง = ข้าม
+    if(!window.fbq){
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+      n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+      n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;
+      t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
+      (window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', PIXEL_ID);
+    }
+    var eid = newEventId();
+    fbq('track', evt, extra||{}, {eventID: eid});
+    /* 👉 อนาคต: ส่ง eid + shop เดียวกันนี้เข้า CAPI ฝั่งเซิร์ฟเวอร์เพื่อกันนับซ้ำ */
+    return eid;
+  }catch(e){ return null; }
+}
+
+/* ============================================================
+   📊  ระบบวัดผลของเราเอง (Firestore) — เฟสตายข้อมูลไม่หาย
+   ============================================================ */
+var FB_CONFIG = { apiKey:"AIzaSyC6gCnnTfRp47HtPpHWPSQQmvssLwSki-g", authDomain:"abc-hr-online.firebaseapp.com", projectId:"abc-hr-online" };
+var lDB=null, lLoading=false, lQueue=[];
+function lReady(cb){
+  if(lDB){cb();return;}
+  lQueue.push(cb);
+  if(lLoading) return; lLoading=true;
+  var s1=document.createElement('script');
+  s1.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js';
+  s1.onload=function(){
+    var s2=document.createElement('script');
+    s2.src='https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js';
+    s2.onload=function(){ try{ firebase.initializeApp(FB_CONFIG); lDB=firebase.firestore();
+      var q=lQueue; lQueue=[]; lLoading=false; q.forEach(function(c){c();}); }catch(e){} };
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
+/* step: 'v'=เข้าหน้า, 'l'=กดแอดไลน์, 'b'=กดสั่งซื้อ */
+function track(step){
+  try{
+    var k='abcl_'+step+'_'+SHOP;
+    if(sessionStorage.getItem(k)) return; sessionStorage.setItem(k,'1');
+    var d=new Date();
+    var did='d'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+    lReady(function(){
+      try{
+        var inc=firebase.firestore.FieldValue.increment;
+        var pay={ [step]:inc(1),
+                  shops:{ [SHOP]:{ [step]:inc(1) } },
+                  ads:{ [AD]:{ [step]:inc(1) } } };
+        lDB.collection('land_stats').doc(did).set(pay,{merge:true}).catch(function(){});
+      }catch(e){}
+    });
+  }catch(e){}
+}
+
+/* ============================================================
+   🚀  เริ่มทำงาน
+   ============================================================ */
+var qs = new URLSearchParams(location.search);
+var SHOP = (qs.get('shop')||'').toLowerCase().replace(/[^a-z0-9]/g,'') || DEFAULT_SHOP;
+if(!SHOPS[SHOP]) SHOP = DEFAULT_SHOP;
+var AD = (qs.get('ad')||'').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40) || 'direct';
+var CFG = SHOPS[SHOP];
+
+document.getElementById('shoptag').textContent = CFG.name;
+document.title = 'ABC — ' + CFG.name;
+
+/* วัดยอดเข้าหน้า + Pixel PageView (ถ้าตั้ง Pixel แล้ว) */
+track('v');
+fbq_track('PageView');
+
+function goLine(){
+  track('l');
+  fbq_track('Lead', {content_name:'line_add', shop:SHOP});   // ← CAPI: Lead
+  location.href = CFG.line;
+}
+function goBuy(){
+  track('b');
+  fbq_track('InitiateCheckout', {shop:SHOP});                 // ← CAPI: เริ่มสั่งซื้อ
+  var sep = MINIAPP_URL.indexOf('?')>=0 ? '&' : '?';
+  location.href = MINIAPP_URL + sep + 'ad=' + encodeURIComponent(AD) + '&from=' + SHOP;
+}
+</script>
+</body>
+</html>
