@@ -90,31 +90,46 @@ const LAND_URL = 'https://milinmengg-oss.github.io/hr-app/abc-landing.html';
 const SHOP_IDS = Array.from({length:20}, (_,i)=>'v'+(i+1));
 let CFG = {};          // {v1:{name,line,pixel,active}, ...}
 let ROLE = 'manager';
-let __booted = false;
+let __booting = false;
 
-function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+function sub(m){ const s=document.getElementById('loginSub'); if(s) s.innerHTML=m; }
 
 async function enter(){
   const em=document.getElementById('em').value.trim(), pw=document.getElementById('pw').value;
-  if(!em||!pw){ toast('กรุณาใส่อีเมลและรหัสผ่าน'); return; }
-  document.getElementById('loginSub').textContent='กำลังเข้าสู่ระบบ…';
-  try{ await auth.signInWithEmailAndPassword(em,pw); }
-  catch(e){ document.getElementById('loginSub').textContent='เข้าสู่ระบบด้วยบัญชีผู้บริหาร'; toast('อีเมลหรือรหัสผ่านไม่ถูกต้อง'); }
+  if(!em||!pw){ sub('กรุณาใส่อีเมลและรหัสผ่าน'); return; }
+  if(!/@/.test(em)){ sub('ต้องใส่ <b style="color:var(--lime)">อีเมล</b> ไม่ใช่ชื่อผู้ใช้<br>เช่น boss@abc.shop'); return; }
+  sub('กำลังเข้าสู่ระบบ…');
+  try{
+    const cred = await auth.signInWithEmailAndPassword(em,pw);
+    if(cred && cred.user){ boot(cred.user); }   // ยิง boot ตรงๆ ไม่รอ onAuthStateChanged อย่างเดียว
+  }
+  catch(e){ sub('เข้าสู่ระบบไม่ได้: '+(e.code||e.message)+'<br>เช็คอีเมล/รหัสผ่านอีกครั้ง'); }
 }
 window.doLogout=function(){ auth.signOut().then(()=>location.reload()); };
 
-auth.onAuthStateChanged(async u=>{
-  if(!u) return;
-  if(__booted) return; __booted=true;
+async function boot(u){
+  if(__booting) return; __booting=true;
   try{
+    sub('กำลังตรวจสอบสิทธิ์…');
     const ud = await db.collection('users').doc(u.uid).get();
     ROLE = (ud.data()||{}).role || 'manager';
-    if(ROLE!=='exec'){ toast('บัญชีนี้ไม่มีสิทธิ์แก้ไข (เฉพาะผู้บริหาร)'); await auth.signOut(); setTimeout(()=>location.reload(),1800); return; }
+    if(ROLE!=='exec'){
+      sub('บัญชีนี้ไม่ใช่ผู้บริหาร ('+(u.email||'')+')<br>แก้ไขไม่ได้ — ใช้บัญชีผู้บริหารเข้าสู่ระบบ');
+      try{ await auth.signOut(); }catch(_){}
+      __booting=false; return;
+    }
+    sub('กำลังโหลดข้อมูล…');
     await loadAll();
     document.getElementById('login').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-  }catch(e){ __booted=false; toast('โหลดข้อมูลไม่ได้: '+(e.code||e.message)); }
-});
+  }catch(e){
+    sub('เกิดข้อผิดพลาด: '+(e.code||e.message)+'<br>กดเข้าสู่ระบบอีกครั้ง');
+    try{ await auth.signOut(); }catch(_){}
+  }finally{ __booting=false; }
+}
+
+auth.onAuthStateChanged(u=>{ if(u) boot(u); });
 
 async function loadAll(){
   CFG = {};
