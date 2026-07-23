@@ -1,4 +1,4 @@
-<!DOCTYPE html><!-- v18 build -->
+<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -32,6 +32,32 @@
   .tagline{font-size:16px;font-weight:300;margin-top:12px;opacity:.97;position:relative;z-index:1;line-height:1.5}
   .shoptag{position:relative;z-index:1;margin-top:14px;display:inline-block;background:#fff;color:var(--g1);
         font-weight:600;font-size:14px;padding:6px 16px;border-radius:20px;box-shadow:0 4px 12px rgba(0,0,0,.12)}
+  /* hero product background (faded) */
+  .hero-bg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.16;z-index:0;
+        filter:saturate(1.1)}
+  .hero>*{position:relative;z-index:1}
+  /* logo image mark */
+  .logo-img{width:64px;height:64px;border-radius:18px;object-fit:cover;margin:0 auto 8px;display:block;
+        border:3px solid rgba(255,255,255,.6);box-shadow:0 6px 16px rgba(0,0,0,.2)}
+
+  /* ---- PRODUCT SLIDESHOW ---- */
+  .slidewrap{margin:22px 16px 0}
+  .slide{position:relative;border-radius:18px;overflow:hidden;box-shadow:0 8px 22px rgba(10,46,26,.14);
+        background:#0a2e1a;aspect-ratio:16/11}
+  .slide-track{display:flex;transition:transform .5s cubic-bezier(.4,0,.2,1);height:100%}
+  .slide-item{min-width:100%;position:relative;height:100%}
+  .slide-item img{width:100%;height:100%;object-fit:cover;display:block}
+  .slide-cap{position:absolute;left:0;right:0;bottom:0;padding:26px 16px 14px;color:#fff;
+        background:linear-gradient(to top,rgba(0,0,0,.72),transparent)}
+  .slide-cap b{font-size:17px;font-weight:600;display:block}
+  .slide-cap span{font-size:12px;opacity:.9}
+  .slide-hot{position:absolute;top:12px;left:12px;background:#ff5252;color:#fff;font-size:11px;font-weight:600;
+        padding:4px 11px;border-radius:20px;box-shadow:0 3px 8px rgba(255,82,82,.4)}
+  .slide-dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
+  .slide-dots i{width:7px;height:7px;border-radius:50%;background:var(--line);transition:.3s;cursor:pointer}
+  .slide-dots i.on{background:var(--g2);width:20px;border-radius:4px}
+  .slide-tap{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.92);color:var(--g1);
+        font-size:11px;font-weight:600;padding:5px 11px;border-radius:20px;z-index:2}
 
   /* ---- TRUST STRIP ---- */
   .trust{display:flex;justify-content:space-around;margin:-34px 16px 0;position:relative;z-index:5;
@@ -59,6 +85,8 @@
   .rev .nm{font-size:13px;font-weight:600}
   .rev .st{font-size:11px;color:#f5a623}
   .rev p{font-size:12.5px;color:#455;line-height:1.5}
+  .rev-imgs{display:flex;gap:6px;margin-top:9px}
+  .rev-imgs img{width:56px;height:56px;border-radius:9px;object-fit:cover;border:1px solid var(--line)}
 
   /* ---- STICKY CTA ---- */
   .spacer{height:96px}
@@ -82,7 +110,9 @@
 <div class="wrap">
 
   <div class="hero">
+    <div class="hero-bg" id="heroBg"></div>
     <div class="badge-live"><span class="dot"></span> พร้อมส่งวันนี้ · ตอบไวทุกวัน</div>
+    <img class="logo-img" id="logoImg" alt="">
     <div class="logo">ABC<small>PREMIUM STORE</small></div>
     <div class="tagline" id="tagline">สินค้าครบ ราคาส่ง ของแท้ 100%<br>เลือกช่องทางที่สะดวกได้เลย 👇</div>
     <div class="shoptag" id="shoptag">ร้าน V18</div>
@@ -94,6 +124,15 @@
     <div><b>4.9★</b><span>รีวิวลูกค้า</span></div>
     <div class="sep"></div>
     <div><b>ส่งไว</b><span>ทั่วไทย</span></div>
+  </div>
+
+  <!-- สไลด์สินค้าขายดี (แตะ = ไปสั่งซื้อในแอป) -->
+  <div class="slidewrap">
+    <div class="slide" onclick="goBuy()">
+      <div class="slide-tap">🛒 แตะเพื่อสั่ง</div>
+      <div class="slide-track" id="slideTrack"></div>
+    </div>
+    <div class="slide-dots" id="slideDots"></div>
   </div>
 
   <div class="sec">
@@ -111,10 +150,12 @@
     <div class="rev">
       <div class="top"><div class="av">K</div><div><div class="nm">คุณเค</div><div class="st">★★★★★</div></div></div>
       <p>สั่งบ่ายได้ของเช้าเลย ของแท้ ตรงปก แอดมินตอบไวมากค่ะ</p>
+      <div class="rev-imgs" id="revImgs1"></div>
     </div>
     <div class="rev">
       <div class="top"><div class="av">P</div><div><div class="nm">คุณพี</div><div class="st">★★★★★</div></div></div>
       <p>ราคาดีกว่าเจ้าอื่นจริง สั่งประจำเลย บริการดีมาก</p>
+      <div class="rev-imgs" id="revImgs2"></div>
     </div>
   </div>
 
@@ -228,6 +269,61 @@ var CFG = SHOPS[SHOP];
 
 document.getElementById('shoptag').textContent = CFG.name;
 document.title = 'ABC — ' + CFG.name;
+
+/* ============================================================
+   🖼️  รูปสินค้า (ดึงจากรูปจริง 65 รุ่นที่มีในระบบแล้ว)
+   ============================================================ */
+var IMGB = 'https://milinmengg-oss.github.io/hr-app/img/';
+var HOT = [
+  { img:'p29.jpg', n:'MARBO 9K',            t:'ขายดีอันดับ 1' },
+  { img:'p40.jpg', n:'M SWITCH 15K (KIT)',  t:'มาแรง' },
+  { img:'p36.jpg', n:'V PLUS 16K',          t:'ยอดนิยม' },
+  { img:'p38.jpg', n:'ESKO BAR SWITCH 20K', t:'ของใหม่' },
+  { img:'p3.jpg',  n:'ELFBAR SWAP 25K',     t:'ขายดี' },
+  { img:'p26.jpg', n:'KS QUIK 6K',          t:'ราคาส่ง' },
+  { img:'p34.jpg', n:'SONIC 8K',            t:'คุ้มสุด' },
+  { img:'p12.jpg', n:'หัวพอต RELX INFINITY',t:'ครบทุกกลิ่น' }
+];
+
+/* โลโก้ + พื้นหลัง hero = รูปสินค้าขายดีอันดับ 1 */
+document.getElementById('logoImg').src = IMGB + HOT[0].img;
+document.getElementById('heroBg').style.backgroundImage = 'url(' + IMGB + HOT[0].img + ')';
+
+/* สร้างสไลด์ */
+(function(){
+  var track = document.getElementById('slideTrack');
+  var dots  = document.getElementById('slideDots');
+  HOT.forEach(function(p, i){
+    var it = document.createElement('div');
+    it.className = 'slide-item';
+    it.innerHTML = '<img loading="lazy" src="'+IMGB+p.img+'" alt="'+p.n+'">'+
+                   '<div class="slide-hot">🔥 '+p.t+'</div>'+
+                   '<div class="slide-cap"><b>'+p.n+'</b><span>ของแท้ · พร้อมส่ง · ราคาส่ง</span></div>';
+    track.appendChild(it);
+    var d = document.createElement('i');
+    if(i===0) d.className='on';
+    d.onclick = function(e){ e.stopPropagation(); go(i); };
+    dots.appendChild(d);
+  });
+  var cur = 0, n = HOT.length, timer;
+  function go(i){
+    cur = (i+n)%n;
+    track.style.transform = 'translateX(-'+(cur*100)+'%)';
+    Array.prototype.forEach.call(dots.children, function(d,j){ d.className = j===cur?'on':''; });
+  }
+  function loop(){ timer = setInterval(function(){ go(cur+1); }, 2600); }
+  loop();
+  /* รูปจริงในรีวิว = สุ่มจากสินค้าขายดี */
+  ['revImgs1','revImgs2'].forEach(function(id, k){
+    var box = document.getElementById(id);
+    [k*3+1, k*3+2, k*3+3].forEach(function(idx){
+      var p = HOT[idx % HOT.length];
+      var im = document.createElement('img');
+      im.loading='lazy'; im.src = IMGB + p.img; im.alt = p.n;
+      box.appendChild(im);
+    });
+  });
+})();
 
 /* วัดยอดเข้าหน้า + Pixel PageView (ถ้าตั้ง Pixel แล้ว) */
 track('v');
