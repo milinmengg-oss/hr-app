@@ -231,9 +231,19 @@ export default {
     // ── ช่องส่องข้อมูลสต็อกในหน่วยความจำ (debug) ──
     if (url0.pathname === "/stock") {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
-      const sm = (await env.CONV.get("stockmap")) || "{}";
+      const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
       const sk = JSON.parse((await env.CONV.get("skumap")) || "{}");
-      return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, stockmap: JSON.parse(sm) }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+      // ทับด้วยค่าล่าสุดจาก webhook (stk:*)
+      let live = 0;
+      try {
+        let cursor;
+        do {
+          const l = await env.CONV.list({ prefix: "stk:", cursor });
+          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) { sm[k.name.slice(4)] = +v; live++; } }
+          cursor = l.list_complete ? null : l.cursor;
+        } while (cursor);
+      } catch (e) {}
+      return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, live_updates: live, stockmap: sm }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
     }
 
     if (url0.pathname.startsWith("/xselly")) {
@@ -258,14 +268,13 @@ export default {
           const items = (body && body.data && body.data.items) || [];
           if (items.length && env.CONV) {
             const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
-            const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+            // เขียนแยกรายตัว (stk:ชื่อ) — ห้ามเขียนทับแผนที่ใหญ่ ไม่งั้นข้อมูล seed หายเพราะ race condition
             let n = 0;
             for (const it of items) {
               if (!it || !it.sku) continue; // sku อาจเป็นค่าว่างตาม doc
               const nm = skumap[it.sku] || it.sku;
-              stock[nm] = +it.new; n++;
+              await env.CONV.put("stk:" + nm, String(+it.new)); n++;
             }
-            await env.CONV.put("stockmap", JSON.stringify(stock));
             console.log("XSELLY_OK items=" + n);
           }
         } catch (e) { console.log("XSELLY_ERR " + String(e).slice(0, 200)); }
@@ -418,6 +427,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               if (ntoks.some(t => textLow.includes(t))) { hit.push(nm); if (hit.length >= 40) break; }
             }
             if (hit.length) {
+              // ทับด้วยค่าล่าสุดจาก webhook (stk:ชื่อ) เฉพาะตัวที่โดนถาม
+              try {
+                const ov = await Promise.all(hit.map(nm => env.CONV.get("stk:" + nm)));
+                ov.forEach((v, i) => { if (v !== null) sm[hit[i]] = +v; });
+              } catch (e) {}
               stockNote = "\n\n# สต็อกจริงตอนนี้ (อัพเดตอัตโนมัติจากคลัง — เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
                 hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ " + sm[nm] + " ชิ้น" : "❌ หมด")).join("\n") +
                 "\nกติกา: ตัวเลขสต็อกใช้จากรายการนี้เท่านั้น ห้ามกุเลขเอง ⛔ รุ่น/กลิ่นที่ลูกค้าพูดถึงแต่ \"ไม่มีชื่ออยู่ในรายการข้างบนแบบตรงตัว\" = คุณไม่รู้สต็อกของมัน ห้ามระบุจำนวนชิ้นเด็ดขาด ให้ตอบว่า \"เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻\" (รับออเดอร์ต่อได้ แต่ห้ามยืนยันว่ามีของ) ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
