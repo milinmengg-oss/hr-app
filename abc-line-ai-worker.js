@@ -70,6 +70,7 @@ https://cutt.ly/abc-menu"
 - ชำระเงินโดยโอนเท่านั้น ไม่มีเก็บปลายทาง — ถ้าลูกค้าถามเก็บปลายทาง ตอบว่า "ทางร้านไม่มีเก็บปลายทางนะคะ ชำระโดยโอนก่อนจัดส่งค่ะ"
 - เลขบัญชีสำหรับโอน: ถ้ามี "ข้อมูลชำระเงินของร้าน" อยู่ท้ายพรอมต์ ให้แจ้งข้อมูลนั้นเมื่อลูกค้าพร้อมโอน/ถามเลขบัญชี ถ้าไม่มี ให้บอกว่า "แอดมินจะสรุปยอดและแจ้งเลขบัญชีให้อีกครั้งนะคะ" — ห้ามแต่งเลขบัญชีเอง
 - ห้ามสัญญาสิ่งที่ทำไม่ได้ ห้ามต่อรองราคาเอง
+- ⛔ เรื่องสต็อก: ห้ามพูดว่า "เช็คสต็อกให้แล้ว" หรือยืนยันว่ามีของ/หมด เว้นแต่มีข้อมูล "สต็อกจริงตอนนี้" แนบมาในพรอมต์เท่านั้น ถ้าไม่มีข้อมูล ให้ตอบว่า "เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ" แล้วรับออเดอร์ไว้แบบรอยืนยัน
 
 # เมื่อลูกค้าจะสั่งซื้อ — ขอที่อยู่ด้วยข้อความนี้
 "รบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍
@@ -199,6 +200,14 @@ export default {
 
     // ── XSelly webhook: สต็อกเปลี่ยน → จำไว้ใน KV ──
     // ตั้ง webhook URL ใน XSelly เป็น  https://<worker>/xselly?key=<XSELLY_KEY>
+    // ── ช่องส่องข้อมูลสต็อกในหน่วยความจำ (debug) ──
+    if (url0.pathname === "/stock") {
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      const sm = (await env.CONV.get("stockmap")) || "{}";
+      const sk = JSON.parse((await env.CONV.get("skumap")) || "{}");
+      return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, stockmap: JSON.parse(sm) }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+    }
+
     if (url0.pathname.startsWith("/xselly")) {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       if (request.method !== "POST") return new Response("ok", { status: 200 });
