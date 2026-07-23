@@ -26,6 +26,13 @@ const MODELS = [
   "google/gemini-2.0-flash-exp:free",
 ];
 
+// ===== โมเดลอ่านรูป (vision) — ใช้ตอนลูกค้าส่งรูปเมนูที่วงกลม =====
+const VISION_MODELS = [
+  "google/gemini-flash-1.5",
+  "qwen/qwen-2.5-vl-72b-instruct",
+  "google/gemini-2.0-flash-exp:free",
+];
+
 // ===== ข้อความเมนู (ส่งทันทีเมื่อลูกค้าขอเมนู/ถามมีอะไรบ้าง) =====
 const MENU_MSG = "เมนูสินค้า\nต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
 
@@ -218,16 +225,20 @@ export default {
 
 async function handleEvent(ev, env, TOKEN, shopId) {
   try {
-    if (ev.type !== "message" || !ev.message || ev.message.type !== "text") return;
+    if (ev.type !== "message" || !ev.message) return;
+    const mtype = ev.message.type;
+    if (mtype !== "text" && mtype !== "image") return; // ข้ามสติกเกอร์/เสียง ฯลฯ
     const userId = (ev.source && ev.source.userId) || "anon";
-    const text = ev.message.text.trim();
     const replyToken = ev.replyToken;
     if (!replyToken) return;
 
-    // ── ทางลัด: ถ้าลูกค้าขอเมนู/ถามมีอะไรบ้าง → ส่งลิงก์เมนูทันที (การันตี ไม่ต้องรอ AI) ──
-    if (/เมนู|มีอะไรบ้าง|มีอะไรมั่ง|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(text)) {
-      await lineReply(TOKEN, replyToken, MENU_MSG);
-      return;
+    // ── ทางลัดเมนู (เฉพาะข้อความ) ──
+    if (mtype === "text") {
+      const t = ev.message.text.trim();
+      if (/เมนู|มีอะไรบ้าง|มีอะไรมั่ง|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t)) {
+        await lineReply(TOKEN, replyToken, MENU_MSG);
+        return;
+      }
     }
 
     // โหลดประวัติแชท (ถ้ามี KV)
@@ -244,17 +255,34 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       ? "\n\n# ข้อมูลชำระเงินของร้าน (แจ้งลูกค้าเฉพาะเมื่อลูกค้าพร้อมโอน/ยืนยันออเดอร์/ถามเลขบัญชี — ห้ามแจ้งพร่ำเพรื่อ)\nเมื่อถึงตอนให้โอน ให้ส่งข้อมูลนี้เป๊ะ:\n" + payInfo
       : "");
 
-    const messages = [
-      { role: "system", content: sysPrompt },
-      ...history.slice(-10),
-      { role: "user", content: text },
-    ];
+    let reply, userForHistory;
 
-    const reply = await askAI(env.OPENROUTER_KEY, messages);
+    if (mtype === "image") {
+      // ── ลูกค้าส่งรูป (มักเป็นเมนูที่วงกลมสินค้า) → ให้ AI อ่านรูป ──
+      const dataUri = await getLineImage(ev.message.id, TOKEN);
+      if (!dataUri) {
+        await lineReply(TOKEN, replyToken, "ขออภัยค่ะ รูปโหลดไม่ได้ 🙏🏻 รบกวนพิมพ์ชื่อรุ่น/กลิ่นที่ต้องการมาได้เลยนะคะ");
+        return;
+      }
+      const visionMsg = {
+        role: "user",
+        content: [
+          { type: "text", text: "ลูกค้าส่งรูปนี้มา (ส่วนมากเป็นรูปเมนู/สินค้าที่ลูกค้าวงกลมหรือทำเครื่องหมายสีแดงตรงตัวที่ต้องการ) ช่วยดูรูปแล้วบอกว่าลูกค้าเลือกสินค้ารุ่นอะไร จากนั้นยืนยันชื่อรุ่น + ราคา (ยึดราคาจาก 'รายการสินค้า' ในระบบเป็นหลัก) แล้วถามกลิ่น/สี และจำนวนต่อ ถ้ารูปไม่ชัดหรือไม่แน่ใจว่าวงตัวไหน ให้ขอโทษแล้วขอให้ลูกค้าพิมพ์ชื่อรุ่นมายืนยันค่ะ" },
+          { type: "image_url", image_url: { url: dataUri } }
+        ]
+      };
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt }, ...history.slice(-8), visionMsg], VISION_MODELS);
+      userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้]" };
+    } else {
+      // ── ข้อความปกติ ──
+      const text = ev.message.text.trim();
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt }, ...history.slice(-10), { role: "user", content: text }]);
+      userForHistory = { role: "user", content: text };
+    }
 
     // บันทึกประวัติ (เก็บ 20 ข้อความล่าสุด, อยู่ 1 ชม.)
     if (env.CONV) {
-      const next = [...history, { role: "user", content: text }, { role: "assistant", content: reply }].slice(-20);
+      const next = [...history, userForHistory, { role: "assistant", content: reply }].slice(-20);
       await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
     }
 
@@ -264,8 +292,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
   }
 }
 
-async function askAI(apiKey, messages) {
-  for (const model of MODELS) {
+async function askAI(apiKey, messages, models) {
+  for (const model of (models || MODELS)) {
     try {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -298,6 +326,25 @@ async function lineReply(token, replyToken, text) {
     },
     body: JSON.stringify({ replyToken, messages: [{ type: "text", text: msg }] }),
   });
+}
+
+// โหลดรูปที่ลูกค้าส่งจาก LINE แล้วแปลงเป็น data URI (base64) สำหรับให้โมเดล vision อ่าน
+async function getLineImage(messageId, token) {
+  try {
+    const r = await fetch("https://api-data.line.me/v2/bot/message/" + messageId + "/content", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!r.ok) return null;
+    const ct = r.headers.get("content-type") || "image/jpeg";
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (bytes.length > 4500000) return null; // กันรูปใหญ่เกิน (~4.5MB)
+    let bin = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return "data:" + ct + ";base64," + btoa(bin);
+  } catch (e) { return null; }
 }
 
 async function verifySignature(secret, body, signature) {
