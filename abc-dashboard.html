@@ -74,6 +74,28 @@ td.r,th.r{text-align:right;}
   <div class="cards" id="kpis"></div>
   <div class="panel" id="tgtPanel" style="display:none;margin-top:12px;"></div>
 
+  <h2>📦 ของเข้าคลัง <span class="pill">รายวัน + รวมรายสัปดาห์ · ผู้บริหารกรอกเพิ่มได้</span></h2>
+  <div class="grid2">
+    <div class="panel">
+      <b style="font-size:13px;color:var(--lime);">ของเข้ารายวัน (ล่าสุด)</b>
+      <table style="margin-top:8px;"><thead><tr><th>วันที่</th><th>รายการ</th><th class="r">จำนวน (ชิ้น)</th><th></th></tr></thead><tbody id="inDaily"></tbody></table>
+      <div id="inForm" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="date" id="inD" style="background:var(--card2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;padding:8px 10px;">
+          <input type="text" id="inT" placeholder="รายการ เช่น MARBO 9K" style="flex:1;min-width:160px;background:var(--card2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;padding:8px 10px;">
+          <input type="number" id="inQ" placeholder="จำนวน" style="width:90px;background:var(--card2);border:1.5px solid var(--border);border-radius:10px;color:var(--text);font-family:inherit;padding:8px 10px;">
+          <button onclick="inAdd()" style="background:var(--lime);color:#111;border:none;border-radius:10px;padding:8px 18px;font-weight:800;font-family:inherit;cursor:pointer;">+ เพิ่ม</button>
+        </div>
+        <div class="note" id="inMsg" style="margin-top:6px;"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <b style="font-size:13px;color:var(--blue,#5db2ff);">ของเข้ารวมรายสัปดาห์</b>
+      <div class="ch" style="height:220px;"><canvas id="chInWeek"></canvas></div>
+      <div class="cards" id="inKpis" style="margin-top:8px;"></div>
+    </div>
+  </div>
+
   <h2>🔍 ดูตามช่วงเวลา <span class="pill" id="rangePill">ข้อมูล 1 ม.ค. – 30 มิ.ย. 2569</span></h2>
   <div class="panel">
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
@@ -115,6 +137,9 @@ td.r,th.r{text-align:right;}
     </div>
   </div>
 
+  <h2>🏆 สินค้าขายดีตามภูมิภาค <span class="pill">เหนือ · อีสาน · กลาง · ตะวันออก · ตะวันตก · ใต้ (จากข้อมูลขายจริง)</span></h2>
+  <div id="regionCards" class="cards" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr));"><div class="note">รอข้อมูลวิเคราะห์ — ผู้บริหารอัพไฟล์ในแท็บ ⬆️ อัพเดตข้อมูล</div></div>
+
   </div><div class="tabsec" data-t="prod">
   <h2>🏆 สินค้าขายดี <span class="pill">ตามจำนวนชิ้น · รวมทุกเดือน</span></h2>
   <div class="panel"><div class="ch" style="height:320px;"><canvas id="chProd"></canvas></div></div>
@@ -144,6 +169,12 @@ td.r,th.r{text-align:right;}
   <div class="grid2" style="margin-top:12px;">
     <div class="panel"><div class="ch"><canvas id="chRe"></canvas></div></div>
     <div class="panel" style="max-height:292px;overflow-y:auto;"><b style="font-size:13px;color:var(--lime);">🧺 สินค้าที่ถูกซื้อคู่กันบ่อยที่สุด</b><table style="margin-top:8px;"><thead><tr><th>#</th><th>สินค้า A</th><th>สินค้า B</th><th class="r">ครั้ง</th></tr></thead><tbody id="pairBody"></tbody></table></div>
+  </div>
+
+  <h2>⏰ วงจรซื้อซ้ำรายรุ่น + จังหวะจัดโปร <span class="pill">คำนวณจากระยะห่างการซื้อซ้ำของลูกค้าจริง (median)</span></h2>
+  <div class="panel" style="max-height:420px;overflow-y:auto;">
+    <div class="note" style="margin-bottom:8px;">💡 วิธีใช้: ลูกค้ามักกลับมาซื้อรุ่นนั้นซ้ำทุก ~N วัน → ยิงโปร/บรอดแคสต์ <b style="color:var(--lime);">ก่อนถึงรอบ 2-3 วัน</b> จะได้ดักตอนลูกค้ากำลังจะหมด</div>
+    <table><thead><tr><th>#</th><th>รุ่นสินค้า</th><th class="r">รอบซื้อซ้ำ (วัน)</th><th class="r">จำนวนตัวอย่าง</th><th>คำแนะนำจัดโปร</th></tr></thead><tbody id="repBody"><tr><td colspan="5" class="note">รอข้อมูลวิเคราะห์ — ผู้บริหารอัพไฟล์ในแท็บ ⬆️ อัพเดตข้อมูล</td></tr></tbody></table>
   </div>
 
   </div><div class="tabsec" data-t="time">
@@ -220,6 +251,12 @@ td.r,th.r{text-align:right;}
     <div id="updLog" style="font-size:12.5px;margin-top:12px;line-height:1.9;color:var(--sub);"></div>
     <div id="updSummary" style="margin-top:6px;"></div>
     <button id="updGo" style="display:none;margin-top:12px;background:var(--lime);color:#111;border:none;border-radius:8px;padding:12px 26px;font-weight:700;font-family:inherit;font-size:14px;cursor:pointer;" onclick="updCommit()">✅ ยืนยันอัพเดตข้อมูล</button>
+  </div>
+  <h2 style="margin-top:18px;">📊 อัพไฟล์วิเคราะห์ (ภูมิภาค + ซื้อซ้ำ) <span class="pill">ไฟล์ analytics-data.json จากจีติง</span></h2>
+  <div class="panel">
+    <div class="note">อัพไฟล์นี้ครั้งเดียว ข้อมูล "ขายดีตามภูมิภาค" และ "วงจรซื้อซ้ำ" จะขึ้นทุกแท็บอัตโนมัติ</div>
+    <div id="anDrop" style="border:2px dashed var(--border);border-radius:14px;padding:26px 20px;text-align:center;color:var(--sub);cursor:pointer;margin-top:10px;font-size:14px;">📂 คลิกเลือกไฟล์ analytics-data.json<input type="file" id="anFile" accept=".json" style="display:none;"></div>
+    <div id="anLog" class="note" style="margin-top:8px;"></div>
   </div>
   </div><div class="tabsec" data-t="live">
   <h2>🛍 มินิแอพ ABC Shop <span class="pill">เรียลไทม์</span></h2>
@@ -1019,6 +1056,80 @@ var MKTFRIENDS = {};
 var MF_SHOPS = ['V1','V2','V3','V4','V5','V6','V7','V8','V9','V13','V14','V15','V18'];
 var mfCurMon = null;
 try{ db.collection('dash_secure').doc('mktfriends').onSnapshot(function(s){ MKTFRIENDS=(s.data()||{}).m||{}; if(mfCurMon) renderMktFriends(mfCurMon); }); }catch(e){ blackbox('mfSub', e.message); }
+
+/* ══════════ 📦 ของเข้าคลัง (dash_open/instock) ══════════ */
+let INSTOCK=[], chInW=null;
+function inRender(){
+  const tb=document.getElementById('inDaily'); if(!tb) return;
+  const list=[...INSTOCK].sort((a,b)=>b.d.localeCompare(a.d));
+  tb.innerHTML = list.slice(0,30).map((x,i)=>`<tr><td>${x.d.slice(8)}/${x.d.slice(5,7)}</td><td>${x.t}</td><td class="r" style="color:var(--lime);font-weight:700;">${fmtN(x.q)}</td><td>${ROLE==='exec'?`<button onclick="inDel(${INSTOCK.indexOf(x)})" style="background:none;border:none;color:#ff6b6b;cursor:pointer;">✕</button>`:''}</td></tr>`).join('') || '<tr><td colspan="4" class="note">ยังไม่มีข้อมูลของเข้า — กรอกเพิ่มด้านล่าง</td></tr>';
+  if(ROLE==='exec'){ const f=document.getElementById('inForm'); if(f) f.style.display='block'; const d=document.getElementById('inD'); if(d&&!d.value) d.value=new Date().toISOString().slice(0,10); }
+  // weekly aggregate (ISO week by Monday)
+  const wk={};
+  INSTOCK.forEach(x=>{ const dt=new Date(x.d); const mon=new Date(dt); mon.setDate(dt.getDate()-((dt.getDay()+6)%7)); const k=mon.toISOString().slice(0,10); wk[k]=(wk[k]||0)+(+x.q||0); });
+  const ks=Object.keys(wk).sort().slice(-8);
+  if(chInW) chInW.destroy();
+  const cv=document.getElementById('chInWeek');
+  if(cv) chInW=new Chart(cv,{type:'bar',data:{labels:ks.map(k=>'สัปดาห์ '+k.slice(8)+'/'+k.slice(5,7)),datasets:[{label:'ของเข้า (ชิ้น)',data:ks.map(k=>wk[k]),backgroundColor:'#5db2ff',borderRadius:6}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}}}});
+  const today=new Date().toISOString().slice(0,10);
+  const tQ=INSTOCK.filter(x=>x.d===today).reduce((a,x)=>a+(+x.q||0),0);
+  const mon0=new Date(); mon0.setDate(mon0.getDate()-((mon0.getDay()+6)%7)); const wk0=mon0.toISOString().slice(0,10);
+  const wQ=wk[wk0]||0;
+  const kp=document.getElementById('inKpis');
+  if(kp) kp.innerHTML=`<div class="kpi"><b>${fmtN(tQ)}</b><span>ของเข้าวันนี้ (ชิ้น)</span></div><div class="kpi"><b>${fmtN(wQ)}</b><span>ของเข้าสัปดาห์นี้</span></div>`;
+}
+window.inAdd=async function(){
+  const d=document.getElementById('inD').value, t=document.getElementById('inT').value.trim(), q=+document.getElementById('inQ').value;
+  const msg=document.getElementById('inMsg');
+  if(!d||!t||!q){ msg.textContent='กรอกให้ครบ: วันที่ / รายการ / จำนวน'; return; }
+  INSTOCK.push({d,t,q});
+  try{ await db.collection('dash_open').doc('instock').set({list:INSTOCK}); msg.textContent='บันทึกแล้ว ✓'; document.getElementById('inT').value=''; document.getElementById('inQ').value=''; inRender(); }
+  catch(e){ msg.textContent='บันทึกไม่สำเร็จ: '+(e.code||e.message); }
+};
+window.inDel=async function(i){
+  if(!confirm('ลบรายการนี้?')) return;
+  INSTOCK.splice(i,1);
+  try{ await db.collection('dash_open').doc('instock').set({list:INSTOCK}); inRender(); }catch(e){}
+};
+try{ db.collection('dash_open').doc('instock').onSnapshot(function(s){ INSTOCK=(s.data()||{}).list||[]; inRender(); }); }catch(e){ blackbox('inSub', e.message); }
+
+/* ══════════ 📊 ภูมิภาค + วงจรซื้อซ้ำ (dash_open/analytics) ══════════ */
+const REGION_ORDER=['เหนือ','อีสาน','กลาง','ตะวันออก','ตะวันตก','ใต้'];
+function anRender(A){
+  if(!A) return;
+  const rc=document.getElementById('regionCards');
+  if(rc&&A.REGION){
+    rc.innerHTML=REGION_ORDER.filter(r=>A.REGION[r]).map(r=>{
+      const rows=A.REGION[r].slice(0,5).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid #1f1f1f;"><span>${i+1}. ${x.n}</span><b style="color:var(--lime);">${fmtN(x.u)} ชิ้น</b></div>`).join('');
+      return `<div class="kpi" style="text-align:left;align-items:flex-start;"><b style="font-size:15px;">${({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]||''} ภาค${r}</b><div style="width:100%;margin-top:6px;">${rows}</div></div>`;
+    }).join('');
+  }
+  const rb=document.getElementById('repBody');
+  if(rb&&A.REP){
+    rb.innerHTML=A.REP.map((x,i)=>{
+      const promo=Math.max(1,x.med-2);
+      return `<tr><td>${i+1}</td><td>${x.n}</td><td class="r" style="color:var(--lime);font-weight:800;">~${x.med} วัน</td><td class="r">${fmtN(x.cnt)}</td><td style="font-size:12px;">บรอดแคสต์/จัดโปร <b>ทุก ~${promo} วัน</b> หลังลูกค้าซื้อ</td></tr>`;
+    }).join('');
+  }
+}
+try{ db.collection('dash_open').doc('analytics').onSnapshot(function(s){ const j=(s.data()||{}).j; if(j){ try{ anRender(JSON.parse(j)); }catch(e){} } }); }catch(e){ blackbox('anSub', e.message); }
+
+/* uploader ไฟล์วิเคราะห์ (exec) */
+(function(){
+  const drop=document.getElementById('anDrop'), inp=document.getElementById('anFile'), log=document.getElementById('anLog');
+  if(!drop) return;
+  drop.onclick=()=>inp.click();
+  inp.onchange=async function(){
+    const f=inp.files[0]; if(!f) return;
+    try{
+      const txt=await f.text(); const A=JSON.parse(txt);
+      if(!A.REGION||!A.REP) throw new Error('ไฟล์ไม่ใช่ analytics-data.json');
+      await db.collection('dash_open').doc('analytics').set({j:txt, at:new Date().toISOString()});
+      log.textContent='✅ อัพเดตข้อมูลวิเคราะห์แล้ว ('+Object.keys(A.REGION).length+' ภูมิภาค, '+A.REP.length+' รุ่นซื้อซ้ำ)';
+      anRender(A);
+    }catch(e){ log.textContent='❌ '+(e.code||e.message); }
+  };
+})();
 function renderMktFriends(mk){
   mfCurMon = mk;
   var lbl=document.getElementById('mfMonLbl'); if(lbl) lbl.textContent=(MNAME[mk.slice(5)]||TH[mk]||mk)+' '+(+mk.slice(0,4)+543);
