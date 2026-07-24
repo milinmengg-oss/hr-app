@@ -269,6 +269,30 @@ export default {
       } catch (e) { return new Response("{}", { headers: CORS }); }
     }
 
+    // ── สถานะ มี/หมด "รายกลิ่น" สำหรับมินิแอพ (คีย์ = "รหัสรุ่น|กลิ่น(normalize)") ──
+    if (url0.pathname === "/flavors") {
+      const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
+      try {
+        const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+        let cursor;
+        do {
+          const l = await env.CONV.list({ prefix: "stk:", cursor });
+          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) sm[k.name.slice(4)] = +v; }
+          cursor = l.list_complete ? null : l.cursor;
+        } while (cursor);
+        const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
+        const out = {};
+        for (const nm in NM2ID) {
+          const parts = nm.split(" - ");
+          if (parts.length < 2) continue;              // ไม่มีกลิ่น (อุปกรณ์เสริม) ข้าม
+          const flav = parts.slice(1).join(" - ");
+          const key = NM2ID[nm] + "|" + norm(flav);
+          out[key] = (out[key] === true) || (sm[nm] > 0); // ถ้ามีตัวใดตัวหนึ่งเหลือ = กลิ่นนี้มีของ
+        }
+        return new Response(JSON.stringify(out), { headers: CORS });
+      } catch (e) { return new Response("{}", { headers: CORS }); }
+    }
+
     if (url0.pathname.startsWith("/xselly")) {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       if (request.method !== "POST") return new Response("ok", { status: 200 });

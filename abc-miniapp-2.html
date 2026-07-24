@@ -653,6 +653,14 @@
       background: rgba(189,251,0,.15);
       border-color: var(--lime); color: var(--lime);
     }
+    .flavor-chip.out {
+      opacity: .38; cursor: not-allowed; position: relative;
+      text-decoration: line-through; text-decoration-color: rgba(255,255,255,.5);
+    }
+    .flavor-chip.out small {
+      display: block; font-size: 9px; color: #ff6b6b;
+      text-decoration: none; font-weight: 700; margin-top: 1px;
+    }
     .pd-foot {
       padding: 10px 20px 4px;
       border-top: 1px solid var(--border); flex-shrink: 0;
@@ -2548,6 +2556,7 @@
     }
     // สต็อกเรียลไทม์จาก XSelly (ผ่าน จีทู Worker) — { productId: true(มีของ)/false(หมด) }
     let XIN = null;
+    let FLAVSTOCK = null; // { "รหัสรุ่น|กลิ่น": true/false } สถานะรายกลิ่น
     function applyLive() {
       if (!LIVE && !XIN) return;
       PRODUCTS.forEach(p => {
@@ -2574,9 +2583,33 @@
         })
         .catch(() => { if ((retry || 0) < 3) setTimeout(() => fetchXSellyStock((retry || 0) + 1), 3000); }); // Worker cold start → ลองซ้ำ
     }
+    function fetchFlavorStock(retry) {
+      fetch('https://abc-line-ai.milin-mengg.workers.dev/flavors')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          if (d && typeof d === 'object' && Object.keys(d).length) {
+            FLAVSTOCK = d;
+            // ถ้าหน้าสินค้าเปิดอยู่ ให้ render กลิ่นใหม่
+            if (pdProduct && document.getElementById('pdSheet').classList.contains('open')) {
+              try { refreshFlavorChips(); } catch (e) {}
+            }
+          } else if ((retry || 0) < 3) setTimeout(() => fetchFlavorStock((retry || 0) + 1), 3000);
+        })
+        .catch(() => { if ((retry || 0) < 3) setTimeout(() => fetchFlavorStock((retry || 0) + 1), 3000); });
+    }
+    function refreshFlavorChips() {
+      const p = pdProduct; if (!p) return;
+      document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f => {
+        const isOut = flavorOut(p.id, f);
+        const selCls = (selFlavor === f && !isOut) ? ' sel' : '';
+        return `<div class="flavor-chip${isOut ? ' out' : ''}${selCls}" onclick="selectFlavor('${f.replace(/'/g,"\\'")}',this)">${flavName(f)}${isOut ? '<br><small>หมด</small>' : ''}</div>`;
+      }).join('');
+    }
     function hydrateStock() {
       fetchXSellyStock();
+      fetchFlavorStock();
       setInterval(fetchXSellyStock, 120000); // รีเฟรชสต็อก XSelly ทุก 2 นาที
+      setInterval(fetchFlavorStock, 120000);
       fbReady(() => {
         fbDB.collection('shop_live').doc('stock').onSnapshot(snap => {
           const d = snap.data();
@@ -2713,9 +2746,10 @@
       document.getElementById('pdSub').innerHTML = `${subTxt(p)} · <span style=\"color:var(--sub);\">${soldTxt(p)}</span>`;
       document.getElementById('pdPrice').innerHTML = `฿${p.price.toLocaleString()}${p.orig ? ` <s style=\"color:var(--sub);font-size:13px;font-weight:500;\">฿${p.orig.toLocaleString()}</s>` : ''}`;
       document.getElementById('pdFlavHead').innerHTML = `${t('choose_flavor')} <span>(${p.flavors.length} ${t('flavors_unit')})</span>`;
-      document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f =>
-        `<div class="flavor-chip" onclick="selectFlavor('${f.replace(/'/g,"\\'")}',this)">${flavName(f)}</div>`
-      ).join('');
+      document.getElementById('pdFlavorGrid').innerHTML = p.flavors.map(f => {
+        const isOut = flavorOut(p.id, f);
+        return `<div class="flavor-chip${isOut ? ' out' : ''}" onclick="selectFlavor('${f.replace(/'/g,"\\'")}',this)">${flavName(f)}${isOut ? '<br><small>หมด</small>' : ''}</div>`;
+      }).join('');
       const btn = document.getElementById('pdAddBtn');
       btn.disabled = true; btn.textContent = t('pick_first');
       try{ renderPdComp(p); }catch(e){}
@@ -2723,7 +2757,16 @@
       document.getElementById('pdSheet').classList.add('open');
     }
 
+    // เช็คว่ากลิ่นนี้หมดมั้ย (จากข้อมูล XSelly รายกลิ่น)
+    function normFlav(s) { return String(s).trim().replace(/\s+/g, ' ').toLowerCase(); }
+    function flavorOut(pid, f) {
+      if (!FLAVSTOCK) return false; // ยังไม่โหลดข้อมูล → ถือว่ามีของไว้ก่อน
+      const v = FLAVSTOCK[pid + '|' + normFlav(f)];
+      return v === false;
+    }
+
     function selectFlavor(f, el) {
+      if (el && el.classList.contains('out')) { toast(t('out_toast') || 'กลิ่นนี้หมดชั่วคราวค่ะ'); return; }
       selFlavor = f;
       document.querySelectorAll('.flavor-chip').forEach(c => c.classList.remove('sel'));
       el.classList.add('sel');
