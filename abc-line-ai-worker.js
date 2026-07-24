@@ -409,6 +409,19 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // 💬 โชว์ "จุดกำลังพิมพ์" (loading animation) ให้ลูกค้าเห็นระหว่างจีทูคิดคำตอบ
     await lineLoading(TOKEN, userId);
 
+    // ⛔ รายชื่อรุ่นที่หมดสต็อกทั้งรุ่น (ทุกกลิ่นเหลือ 0) → ห้ามจีทูเอาไปแนะนำ
+    let outNote = "";
+    try {
+      if (env.CONV) {
+        const smAll = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+        const tot = {};
+        for (const nm in smAll) { const pre = nm.split(" - ")[0]; tot[pre] = (tot[pre] || 0) + (smAll[nm] > 0 ? smAll[nm] : 0); }
+        const outs = Object.keys(tot).filter(p => tot[p] === 0);
+        if (outs.length) outNote = "\n\n# ⛔ รุ่นที่หมดสต็อกตอนนี้ (ทุกกลิ่นเหลือ 0) — ห้ามเอาไปแนะนำ/เสนอลูกค้าเด็ดขาด เวลาลูกค้าขอคำแนะนำหรือถามว่ามีรุ่นไหนบ้าง ให้เสนอเฉพาะรุ่นที่ไม่อยู่ในลิสต์นี้เท่านั้น:\n" + outs.join(", ");
+      }
+    } catch (e) {}
+    const sysFull = sysPrompt + outNote;
+
     let reply, userForHistory;
 
     if (mtype === "image") {
@@ -425,7 +438,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           { type: "image_url", image_url: { url: dataUri } }
         ]
       };
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt }, ...history.slice(-8), visionMsg], VISION_MODELS);
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...history.slice(-8), visionMsg], VISION_MODELS);
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตอบรับ + ส่งต่อแอดมิน (จีทูเงียบแชทนี้ 12 ชม.)
         await muteNow();
@@ -463,7 +476,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           }
         }
       } catch (e) {}
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysPrompt + stockNote }, ...history.slice(-10), { role: "user", content: text }]);
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text }]);
       userForHistory = { role: "user", content: text };
     }
 
