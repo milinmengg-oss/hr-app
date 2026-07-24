@@ -346,7 +346,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       // คำปลุก: พิมพ์ #เปิดบอท ในแชทนั้น → จีทูกลับมาทันที
       if (mtype === "text" && /#?เปิดบอท|#bot/i.test(ev.message.text)) {
         await env.CONV.delete(muteKey);
-        await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕");
+        await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕", userId);
       }
       return; // เงียบให้แอดมินดูแล
     }
@@ -357,11 +357,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const t = ev.message.text.trim();
       if (/ติดต่อแอดมิน|คุยกับแอดมิน|ขอแอดมิน|ขอคุยกับคน|คุยกับคนจริง|แอดมินอยู่ไหม|แอดมินอยู่มั้ย|เรียกแอดมิน/.test(t)) {
         await muteNow(); // ส่งต่อให้คน — จีทูเงียบแชทนี้ 12 ชม.
-        await lineReply(TOKEN, replyToken, "รับเรื่องแล้วค่ะ เดี๋ยวแอดมินเข้ามาดูแลนะคะ รอสักครู่ค่ะ 🙏🏻💕");
+        await lineReply(TOKEN, replyToken, "รับเรื่องแล้วค่ะ เดี๋ยวแอดมินเข้ามาดูแลนะคะ รอสักครู่ค่ะ 🙏🏻💕", userId);
         return;
       }
       if (/เมนู|มีอะไรบ้าง|มีอะไรมั่ง|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t)) {
-        await lineReply(TOKEN, replyToken, MENU_MSG);
+        await lineReply(TOKEN, replyToken, MENU_MSG, userId);
         return;
       }
     }
@@ -386,7 +386,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       // ── ลูกค้าส่งรูป (มักเป็นเมนูที่วงกลมสินค้า) → ให้ AI อ่านรูป ──
       const dataUri = await getLineImage(ev.message.id, TOKEN);
       if (!dataUri) {
-        await lineReply(TOKEN, replyToken, "ขออภัยค่ะ รูปโหลดไม่ได้ 🙏🏻 รบกวนพิมพ์ชื่อรุ่น/กลิ่นที่ต้องการมาได้เลยนะคะ");
+        await lineReply(TOKEN, replyToken, "ขออภัยค่ะ รูปโหลดไม่ได้ 🙏🏻 รบกวนพิมพ์ชื่อรุ่น/กลิ่นที่ต้องการมาได้เลยนะคะ", userId);
         return;
       }
       const visionMsg = {
@@ -400,7 +400,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตอบรับ + ส่งต่อแอดมิน (จีทูเงียบแชทนี้ 12 ชม.)
         await muteNow();
-        await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕");
+        await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕", userId);
         return;
       }
       userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้]" };
@@ -452,7 +452,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
     }
 
-    await lineReply(TOKEN, replyToken, reply);
+    await lineReply(TOKEN, replyToken, reply, userId);
   } catch (e) {
     // เงียบไว้ ไม่ให้ webhook พัง
   }
@@ -468,6 +468,7 @@ async function askAI(apiKey, messages, models) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 500 }),
+        signal: AbortSignal.timeout(15000), // โมเดลไหนช้าเกิน 15 วิ ตัดทิ้ง ลองตัวถัดไป (กัน reply token หมดอายุ)
       });
       const data = await r.json();
       const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
@@ -481,10 +482,10 @@ async function askAI(apiKey, messages, models) {
   return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
 }
 
-async function lineReply(token, replyToken, text) {
+async function lineReply(token, replyToken, text, userId) {
   // LINE จำกัด ~5000 ตัวอักษร/ข้อความ
   const msg = text.slice(0, 4900);
-  await fetch("https://api.line.me/v2/bot/message/reply", {
+  const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -492,6 +493,18 @@ async function lineReply(token, replyToken, text) {
     },
     body: JSON.stringify({ replyToken, messages: [{ type: "text", text: msg }] }),
   });
+  if (!r.ok) {
+    console.log("LINE_REPLY_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
+    // แผนสอง: reply token หมดอายุ/ใช้ไปแล้ว → ส่งแบบ push แทน (ไม่ต้องใช้ token)
+    if (userId && userId !== "anon") {
+      const p = await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: userId, messages: [{ type: "text", text: msg }] }),
+      });
+      if (!p.ok) console.log("LINE_PUSH_FAIL status=" + p.status);
+    }
+  }
 }
 
 // โหลดรูปที่ลูกค้าส่งจาก LINE แล้วแปลงเป็น data URI (base64) สำหรับให้โมเดล vision อ่าน
