@@ -2565,11 +2565,14 @@
       applyFlash(FLASH_ITEMS, FLASH_END);
       try { renderHomeGrid(); renderFlash(); renderMenu(); renderFavs(); } catch (e) {}
     }
-    function fetchXSellyStock() {
+    function fetchXSellyStock(retry) {
       fetch('https://abc-line-ai.milin-mengg.workers.dev/instock')
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d && typeof d === 'object') { XIN = d; applyLive(); } })
-        .catch(() => {});
+        .then(d => {
+          if (d && typeof d === 'object' && Object.keys(d).length) { XIN = d; applyLive(); }
+          else if ((retry || 0) < 3) setTimeout(() => fetchXSellyStock((retry || 0) + 1), 3000);
+        })
+        .catch(() => { if ((retry || 0) < 3) setTimeout(() => fetchXSellyStock((retry || 0) + 1), 3000); }); // Worker cold start → ลองซ้ำ
     }
     function hydrateStock() {
       fetchXSellyStock();
