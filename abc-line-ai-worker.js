@@ -7,6 +7,7 @@
  *   LINE_TOKEN_V20      = Channel access token ของ LINE OA ร้าน V20
  *   LINE_SECRET_V20     = Channel secret ของ LINE OA ร้าน V20
  *   (เพิ่มร้านใหม่ = เพิ่ม LINE_TOKEN_Vxx / LINE_SECRET_Vxx + 1 บรรทัดใน SHOPS)
+ *   SLIPOK_KEY / SLIPOK_BRANCH = ตรวจสลิปอัตโนมัติกับ SlipOK (ไม่บังคับ — ถ้าไม่ตั้ง จีทูจะแค่รับสลิปเฉยๆ)
  * KV (ไม่บังคับ แต่แนะนำ เพื่อให้ AI จำบทสนทนาได้):
  *   ผูก KV namespace ชื่อ  CONV
  */
@@ -524,11 +525,37 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตอบรับ + ส่งต่อแอดมิน (จีทูเงียบแชทนี้)
         await muteNow("ส่งสลิปโอนเงิน 💸", "[ลูกค้าส่งสลิปโอนเงิน]");
-        // ถ้ามีออเดอร์ค้างของลูกค้าคนนี้ → อัพสถานะเป็น "ส่งสลิปแล้ว รอตรวจ"
+
+        // 🧾 ตรวจสลิปกับ SlipOK แล้วเทียบยอดกับออเดอร์
+        const ordKey = "ord:" + shopId + ":" + userId;
+        let expected = 0, ordObj = null;
         try {
-          const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
-          if (ok) { const o = JSON.parse(ok); o.status = "ส่งสลิปแล้ว รอตรวจยอด 🧾"; await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(o), { expirationTtl: 259200 }); }
+          const ok = await env.CONV.get(ordKey);
+          if (ok) { ordObj = JSON.parse(ok); const m = (ordObj.block || "").match(/ยอดรวม:\s*([\d,]+)/); if (m) expected = +m[1].replace(/,/g, ""); }
         } catch (e) {}
+
+        let statusLine = "ส่งสลิปแล้ว รอตรวจยอด 🧾";
+        try {
+          const sok = await checkSlip(env, TOKEN, ev.message.id);
+          if (sok) {
+            const d = sok.data || {};
+            if (sok.httpOk && sok.success && d.success) {
+              const slipAmt = Math.round((+d.amount || 0) * 100) / 100;
+              const recv = (d.receiver && (d.receiver.displayName || d.receiver.name)) || "";
+              if (!expected) statusLine = "สลิปแท้ ✅ ยอด " + slipAmt + " บาท → " + recv + " (ยังไม่มีออเดอร์ในระบบ รอแอดมินเช็ค)";
+              else if (Math.abs(slipAmt - expected) <= 1) statusLine = "สลิปผ่าน ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + " (รอแอดมินกดยืนยัน)";
+              else statusLine = "⚠️ ยอดไม่ตรง: สลิป " + slipAmt + " / ออเดอร์ " + expected + " → " + recv + " — แอดมินเช็คด่วน";
+            } else {
+              const msg = (sok.data && sok.data.message) || sok.message || ("code " + (sok.code || sok.status || "?"));
+              statusLine = "⛔ สลิปมีปัญหา: " + String(msg).slice(0, 70) + " — แอดมินเช็คด่วน";
+            }
+          }
+        } catch (e) {}
+
+        // อัพสถานะออเดอร์ + เหตุผลในคิวแชท ให้แอดมินเห็นผลตรวจ
+        try { if (ordObj) { ordObj.status = statusLine; await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 }); } } catch (e) {}
+        try { const mk = "mute:" + shopId + ":" + userId; const mv = await env.CONV.get(mk); if (mv) { const e2 = JSON.parse(mv); e2.reason = statusLine; await env.CONV.put(mk, JSON.stringify(e2), { expirationTtl: 3600 }); } } catch (e) {}
+
         await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕", userId);
         return;
       }
@@ -625,6 +652,29 @@ async function askAI(apiKey, messages, models) {
     }
   }
   return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
+}
+
+// ตรวจสลิปโอนเงินกับ SlipOK — ส่งรูปสลิปไปเช็ค (ยอด/บัญชีปลายทาง/ปลอม/ซ้ำ)
+async function checkSlip(env, token, messageId) {
+  try {
+    if (!env.SLIPOK_KEY || !env.SLIPOK_BRANCH) return null;
+    const r = await fetch("https://api-data.line.me/v2/bot/message/" + messageId + "/content", { headers: { Authorization: "Bearer " + token } });
+    if (!r.ok) return null;
+    const buf = await r.arrayBuffer();
+    const ct = r.headers.get("content-type") || "image/jpeg";
+    const ext = ct.indexOf("png") !== -1 ? "png" : "jpg";
+    const fd = new FormData();
+    fd.append("files", new Blob([buf], { type: ct }), "slip." + ext);
+    fd.append("log", "true"); // เก็บไว้ตรวจสลิปซ้ำ + เช็คบัญชีที่ผูกไว้
+    const sr = await fetch("https://api.slipok.com/api/line/apikey/" + env.SLIPOK_BRANCH, {
+      method: "POST",
+      headers: { "x-authorization": env.SLIPOK_KEY },
+      body: fd,
+      signal: AbortSignal.timeout(12000),
+    });
+    let j = {}; try { j = await sr.json(); } catch (e) {}
+    return { httpOk: sr.ok, status: sr.status, ...j };
+  } catch (e) { console.log("SLIPOK_ERR " + String(e).slice(0, 160)); return null; }
 }
 
 // ดึงชื่อลูกค้าจาก LINE (ใช้ทั้งคิวแชท + คิวออเดอร์)
