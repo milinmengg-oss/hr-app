@@ -839,10 +839,10 @@ async function lineReply(token, replyToken, text, userId) {
 // ── Flex Message: การ์ดต้อนรับ + ปุ่มดำโค้ง (กดแล้วส่งข้อความให้จีทูตอบต่อ) ──
 function btnDark(label, text) {
   return {
-    type: "box", layout: "vertical", backgroundColor: "#16A34A", cornerRadius: "14px",
-    paddingTop: "14px", paddingBottom: "14px", paddingStart: "12px", paddingEnd: "12px", margin: "sm",
+    type: "box", layout: "vertical", backgroundColor: "#1F2A44", cornerRadius: "20px",
+    paddingTop: "10px", paddingBottom: "10px", paddingStart: "8px", paddingEnd: "8px",
     action: { type: "message", label: label.slice(0, 20), text: text },
-    contents: [{ type: "text", text: label, color: "#FFFFFF", align: "center", weight: "bold", size: "md", wrap: false }]
+    contents: [{ type: "text", text: label, color: "#FFFFFF", align: "center", weight: "bold", size: "xs", wrap: false, adjustMode: "shrink-to-fit" }]
   };
 }
 function welcomeFlex() {
@@ -853,9 +853,9 @@ function welcomeFlex() {
       contents: [
         { type: "text", text: "ABC ยินดีต้อนรับค่ะ ✨", weight: "bold", size: "xl", color: "#16A34A", align: "center" },
         { type: "text", text: "แอดมินยินดีให้บริการค่ะ 💚\nเลือกเมนูด้านล่างได้เลยนะคะ", size: "sm", color: "#666666", align: "center", wrap: true, margin: "md" },
-        { type: "box", layout: "vertical", margin: "xl", spacing: "sm", contents: [
+        { type: "box", layout: "horizontal", margin: "lg", spacing: "sm", contents: [
           btnDark("🛒 เมนูสินค้า", "ดูเมนูสินค้า"),
-          btnDark("🚚 รูปแบบการจัดส่ง", "รูปแบบการจัดส่ง")
+          btnDark("🚚 การจัดส่ง", "รูปแบบการจัดส่ง")
         ] }
       ]
     }
