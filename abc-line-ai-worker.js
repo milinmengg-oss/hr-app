@@ -516,15 +516,23 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             const prevUser = history.filter(h => h.role === "user" && typeof h.content === "string").slice(-2).map(h => h.content).join(" ");
             let textLow = (prevUser + " " + text).toLowerCase();
             for (const th in ALIAS) textLow = textLow.split(th).join(ALIAS[th]);
-            const hit = [];
+            // ให้คะแนนแต่ละรายการ = จำนวน "คำในชื่อสินค้า" ที่ปรากฏในข้อความลูกค้า (ยิ่งตรงหลายคำ = ตรงรุ่น+กลิ่นมากสุด)
+            let scored = [];
             for (const nm of names) {
               const ntoks = nm.toLowerCase().split(/[^a-z0-9ก-๙%]+/).filter(w => w.length >= 3);
-              if (ntoks.some(t => textLow.includes(t))) { hit.push(nm); if (hit.length >= 40) break; }
+              let score = 0;
+              for (const t of ntoks) if (textLow.includes(t)) score++;
+              if (score > 0) scored.push({ nm, score });
             }
-            if (hit.length) {
+            if (scored.length) {
+              const maxScore = Math.max.apply(null, scored.map(x => x.score));
+              // ถ้ามีรายการที่ตรง ≥2 คำ (ตรงทั้งรุ่น+กลิ่น) → เอาเฉพาะพวกที่ตรงมากสุด ตัดพวกตรงคำเดียวที่รกทิ้ง
+              const keep = maxScore >= 2 ? scored.filter(x => x.score >= 2) : scored;
+              keep.sort((a, b) => b.score - a.score);
+              const hit = keep.slice(0, 12).map(x => x.nm);
               stockNote = "\n\n# สต็อกจริงตอนนี้ (อัพเดตอัตโนมัติจากคลัง — เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
                 hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ " + sm[nm] + " ชิ้น" : "❌ หมด")).join("\n") +
-                "\nกติกา: ตัวเลขสต็อกใช้จากรายการนี้เท่านั้น ห้ามกุเลขเอง ⛔ รุ่น/กลิ่นที่ลูกค้าพูดถึงแต่ \"ไม่มีชื่ออยู่ในรายการข้างบนแบบตรงตัว\" = คุณไม่รู้สต็อกของมัน ห้ามระบุจำนวนชิ้นเด็ดขาด ให้ตอบว่า \"เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻\" (รับออเดอร์ต่อได้ แต่ห้ามยืนยันว่ามีของ) ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
+                "\nกติกา: อ่านชื่อรุ่น+กลิ่นในแต่ละบรรทัดให้ตรงเป๊ะ ⛔ ห้ามเอาสถานะ (มีของ/หมด) ของรุ่นหรือกลิ่นหนึ่งไปตอบแทนอีกอันเด็ดขาด — เช่น 'MARBO 9K - องุ่น' กับ 'MARBO 9K - องุ่นลิ้นจี่' คนละตัวกัน ตัวเลขใช้จากรายการนี้เท่านั้น ห้ามกุเลขเอง ถ้ารุ่น/กลิ่นที่ลูกค้าพูดถึงไม่มีในรายการนี้แบบตรงตัว ให้ตอบ 'เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻' ถ้ากลิ่นที่ลูกค้าสั่งหมด ให้แจ้งว่าหมดชั่วคราวและแนะนำกลิ่นที่ยังมีของแทน";
             }
           }
         }
