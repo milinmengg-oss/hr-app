@@ -244,6 +244,24 @@ export default {
           if (uid) await env.CONV.delete("mute:" + shop + ":" + uid);
           return J({ ok: 1 });
         }
+        // 📦 รายการออเดอร์ที่จีทูปิดการขายได้ รอแอดมินลง XSelly
+        if (act === "orders") {
+          const list = await env.CONV.list({ prefix: "ord:" + shop + ":" });
+          const items = [];
+          for (const k of list.keys) {
+            const v = await env.CONV.get(k.name);
+            let e = {}; try { e = JSON.parse(v); } catch (x) {}
+            items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", block: e.block || "", status: e.status || "รอโอน 💰", t: e.t || 0 });
+          }
+          items.sort((a, b) => b.t - a.t);
+          return J({ orders: items });
+        }
+        // แอดมินกด "ลง XSelly แล้ว" → ลบออเดอร์ออกจากคิว
+        if (act === "orderdone") {
+          const uid = url0.searchParams.get("uid");
+          if (uid) await env.CONV.delete("ord:" + shop + ":" + uid);
+          return J({ ok: 1 });
+        }
       } catch (e) { return J({ err: String(e).slice(0, 100) }); }
       return new Response("unknown", { status: 404, headers: CORS });
     }
@@ -399,11 +417,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     const muteNow = async (reason, msg) => {
       try {
         if (!env.CONV) return;
-        let name = "";
-        try {
-          const pr = await fetch("https://api.line.me/v2/bot/profile/" + userId, { headers: { Authorization: "Bearer " + TOKEN } });
-          if (pr.ok) name = ((await pr.json()).displayName || "").slice(0, 40);
-        } catch (e) {}
+        const name = await lineProfileName(TOKEN, userId);
         const entry = { name, reason: reason || "เคสปัญหา", msg: (msg || "").slice(0, 120), t: Date.now(), uid: userId };
         await env.CONV.put(muteKey, JSON.stringify(entry), { expirationTtl: 3600 });
       } catch (e) {}
@@ -473,6 +487,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตอบรับ + ส่งต่อแอดมิน (จีทูเงียบแชทนี้)
         await muteNow("ส่งสลิปโอนเงิน 💸", "[ลูกค้าส่งสลิปโอนเงิน]");
+        // ถ้ามีออเดอร์ค้างของลูกค้าคนนี้ → อัพสถานะเป็น "ส่งสลิปแล้ว รอตรวจ"
+        try {
+          const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (ok) { const o = JSON.parse(ok); o.status = "ส่งสลิปแล้ว รอตรวจยอด 🧾"; await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(o), { expirationTtl: 259200 }); }
+        } catch (e) {}
         await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕", userId);
         return;
       }
@@ -514,6 +533,14 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
     await lineReply(TOKEN, replyToken, reply, userId);
 
+    // 📦 ถ้าจีทูสรุปออเดอร์ครบ (มีบล็อก "📦 สรุปออเดอร์") → เก็บเข้าคิวออเดอร์ให้แอดมินลง XSelly
+    try {
+      if (env.CONV && reply.indexOf("📦 สรุปออเดอร์") !== -1) {
+        const name = await lineProfileName(TOKEN, userId);
+        await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({ name, block: reply.slice(0, 1600), t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 }); // เก็บ 3 วัน
+      }
+    } catch (e) {}
+
     // ถ้า AI ส่งต่อเคสให้แอดมินหลังการขาย → เงียบแชทนี้ให้แอดมินดูแล (best-effort)
     try { if (reply.indexOf("แอดมินหลังการขาย") !== -1) await muteNow("เคสปัญหา/หลังการขาย ⚠️", (userForHistory && userForHistory.content) || ""); } catch (e) {}
 
@@ -551,6 +578,16 @@ async function askAI(apiKey, messages, models) {
     }
   }
   return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
+}
+
+// ดึงชื่อลูกค้าจาก LINE (ใช้ทั้งคิวแชท + คิวออเดอร์)
+async function lineProfileName(token, userId) {
+  if (!userId || userId === "anon") return "";
+  try {
+    const pr = await fetch("https://api.line.me/v2/bot/profile/" + userId, { headers: { Authorization: "Bearer " + token } });
+    if (pr.ok) return ((await pr.json()).displayName || "").slice(0, 40);
+  } catch (e) {}
+  return "";
 }
 
 // โชว์จุดกำลังพิมพ์ 3 สี (LINE loading animation) — ต้องมี userId จริง (ใช้ได้กับแชท 1:1)

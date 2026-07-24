@@ -37,6 +37,15 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 .qmsg{font-size:13px;color:#cfcfcf;margin-top:5px;line-height:1.5;}
 .qdone{width:100%;margin-top:10px;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .qdone:active{transform:scale(.98);}
+#orderbox{margin-top:18px;text-align:left;}
+#ocount{color:#bdfb00;}
+.ocard{background:#1a1f17;border:1px solid #333;border-left:3px solid #bdfb00;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
+.ostatus{font-size:11px;color:#bdfb00;background:#2a3315;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+.oblock{font-size:12.5px;color:#e2e2e2;margin-top:8px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#141414;border-radius:8px;padding:9px 10px;max-height:220px;overflow:auto;}
+.orow{display:flex;gap:8px;margin-top:10px;}
+.ocopy{flex:1;background:#222;border:1.5px solid #3a3a3a;color:#f2f2f2;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.odone{flex:1;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.ocopy:active,.odone:active{transform:scale(.98);}
 </style>
 </head>
 <body>
@@ -51,6 +60,11 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 
   <div id="panel" class="hidden">
     <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
+
+    <div id="orderbox">
+      <div class="qhead">📦 ออเดอร์รอลง XSelly <span id="ocount"></span></div>
+      <div id="orders"></div>
+    </div>
 
     <div id="queuebox">
       <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
@@ -109,7 +123,26 @@ async function markDone(uid){
   try{ await fetch(W+'/ctl/done?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadQueue(); refresh(); }catch(e){}
 }
 
-async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); loadQueue(); }catch(e){ $('msg').textContent=e.message; } }
+async function loadOrders(){
+  try{
+    const r=await fetch(W+'/ctl/orders?key='+encodeURIComponent(KEY)+'&shop=v20');
+    const d=await r.json(); const o=d.orders||[];
+    $('ocount').textContent = o.length? '('+o.length+')' : '';
+    if(!o.length){ $('orders').innerHTML='<div class="qempty">ยังไม่มีออเดอร์รอลง</div>'; return; }
+    $('orders').innerHTML = o.map(function(it){
+      const nm = it.name ? it.name : 'ลูกค้า';
+      const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,'');
+      return '<div class="ocard"><div class="qtop"><b>'+esc(nm)+'</b><span class="ostatus">'+esc(it.status)+'</span></div>'
+        + '<div class="oblock" id="'+bid+'">'+esc(it.block)+'</div>'
+        + '<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอก</button>'
+        + '<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลง XSelly แล้ว</button></div></div>';
+    }).join('');
+  }catch(e){}
+}
+function copyOrder(id,btn){ const t=document.getElementById(id).innerText; navigator.clipboard.writeText(t).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอก';},1500); }).catch(function(){}); }
+async function orderDone(uid){ try{ await fetch(W+'/ctl/orderdone?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadOrders(); }catch(e){} }
+
+async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); loadOrders(); loadQueue(); }catch(e){ $('msg').textContent=e.message; } }
 
 async function toggle(){
   $('msg').textContent='กำลังสั่งงาน…';
@@ -125,7 +158,7 @@ async function unmute(){
 
 let _poll=null;
 function init(){
-  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll); _poll=setInterval(loadQueue,20000); }
+  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll); _poll=setInterval(function(){loadOrders();loadQueue();},20000); }
   else{ $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden'); $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)'; }
 }
 init();
