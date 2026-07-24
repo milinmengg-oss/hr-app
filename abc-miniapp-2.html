@@ -2546,19 +2546,34 @@
       };
       document.head.appendChild(s1);
     }
+    // สต็อกเรียลไทม์จาก XSelly (ผ่าน จีทู Worker) — { productId: true(มีของ)/false(หมด) }
+    let XIN = null;
     function applyLive() {
-      if (!LIVE) return;
+      if (!LIVE && !XIN) return;
       PRODUCTS.forEach(p => {
-        const v = LIVE[p.id];
-        if (!v) return;
-        p.sold = v.so | 0;
-        p.out = (v.s | 0) <= 0 || !!v.off;
-        if (v.pr) p.base = v.pr;
+        const v = LIVE ? LIVE[p.id] : null;
+        if (v) {
+          p.sold = v.so | 0;
+          p.out = (v.s | 0) <= 0 || !!v.off;
+          if (v.pr) p.base = v.pr;
+        }
+        // XSelly คุมสถานะ มี/หมด (ทับค่าเดิม): ถ้า XSelly บอกว่ารุ่นนี้หมด → หมด
+        if (XIN && Object.prototype.hasOwnProperty.call(XIN, p.id)) {
+          p.out = (XIN[p.id] === false) || (v && !!v.off); // ยังเคารพปุ่มปิดขายของแอดมิน
+        }
       });
       applyFlash(FLASH_ITEMS, FLASH_END);
       try { renderHomeGrid(); renderFlash(); renderMenu(); renderFavs(); } catch (e) {}
     }
+    function fetchXSellyStock() {
+      fetch('https://abc-line-ai.milin-mengg.workers.dev/instock')
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d && typeof d === 'object') { XIN = d; applyLive(); } })
+        .catch(() => {});
+    }
     function hydrateStock() {
+      fetchXSellyStock();
+      setInterval(fetchXSellyStock, 120000); // รีเฟรชสต็อก XSelly ทุก 2 นาที
       fbReady(() => {
         fbDB.collection('shop_live').doc('stock').onSnapshot(snap => {
           const d = snap.data();

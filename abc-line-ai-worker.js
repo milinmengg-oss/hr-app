@@ -246,6 +246,28 @@ export default {
       return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, live_updates: live, stockmap: sm }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
     }
 
+    // ── สถานะ มี/หมด รายรุ่น สำหรับมินิแอพ (สาธารณะ ปลอดภัย: ส่งแค่ true/false ไม่ส่งจำนวน) ──
+    if (url0.pathname === "/instock") {
+      const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
+      try {
+        const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+        const nm2id = JSON.parse((await env.CONV.get("nm2id")) || "{}");
+        // ทับด้วยค่าล่าสุดจาก webhook (stk:*)
+        let cursor;
+        do {
+          const l = await env.CONV.list({ prefix: "stk:", cursor });
+          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) sm[k.name.slice(4)] = +v; }
+          cursor = l.list_complete ? null : l.cursor;
+        } while (cursor);
+        // รวมยอดต่อรุ่น (product id) → รุ่นไหนรวมแล้ว > 0 = มีของ
+        const total = {};
+        for (const nm in nm2id) { const id = nm2id[nm]; total[id] = (total[id] || 0) + (sm[nm] > 0 ? sm[nm] : 0); }
+        const out = {};
+        for (const id in total) out[id] = total[id] > 0; // true = มีของ, false = หมด
+        return new Response(JSON.stringify(out), { headers: CORS });
+      } catch (e) { return new Response("{}", { headers: CORS }); }
+    }
+
     if (url0.pathname.startsWith("/xselly")) {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       if (request.method !== "POST") return new Response("ok", { status: 200 });
@@ -289,7 +311,7 @@ export default {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden (key)", { status: 403, headers: CORS });
       if (request.method !== "POST") return new Response("method", { status: 405, headers: CORS });
       const which = url0.pathname.split("/")[2];
-      if (!["skumap", "stockmap"].includes(which)) return new Response("unknown", { status: 404, headers: CORS });
+      if (!["skumap", "stockmap", "nm2id"].includes(which)) return new Response("unknown", { status: 404, headers: CORS });
       try {
         const txt = await request.text();
         const obj = JSON.parse(txt); // ตรวจว่าเป็น JSON จริง
