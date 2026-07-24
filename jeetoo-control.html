@@ -1,4 +1,4 @@
-<!DOCTYPE html> <!--v1-->
+<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -25,6 +25,18 @@ h1{font-size:20px;display:flex;align-items:center;justify-content:center;gap:9px
 input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;text-align:center;}
 #msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;}
 .hidden{display:none;}
+#queuebox{margin-top:18px;text-align:left;}
+.qhead{font-size:14px;font-weight:800;color:#f2f2f2;margin-bottom:8px;text-align:center;}
+#qcount{color:#ff5d5d;}
+.qempty{font-size:13px;color:#7a7a7a;text-align:center;padding:10px 0;}
+.qcard{background:#1f1f1f;border:1px solid #333;border-left:3px solid #ff5d5d;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
+.qtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.qtop b{font-size:15px;color:#fff;}
+.qtime{font-size:11px;color:#8a8a8a;white-space:nowrap;}
+.qreason{font-size:12.5px;color:#ffb86b;margin-top:3px;font-weight:600;}
+.qmsg{font-size:13px;color:#cfcfcf;margin-top:5px;line-height:1.5;}
+.qdone{width:100%;margin-top:10px;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.qdone:active{transform:scale(.98);}
 </style>
 </head>
 <body>
@@ -39,8 +51,14 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 
   <div id="panel" class="hidden">
     <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
-    <button class="sub" onclick="unmute()">🔓 ปลดล็อกทุกแชทที่แอดมินดูแลค้างอยู่</button>
-    <div class="muted">💡 ปิด = จีทูเงียบทุกแชท (แอดมินคุมเองหมด) · เปิด = กลับมาตอบอัตโนมัติ<br>แชทที่มีสลิป/เคสปัญหา จีทูจะเงียบให้เอง 1 ชม. อยู่แล้ว</div>
+
+    <div id="queuebox">
+      <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
+      <div id="queue"></div>
+    </div>
+
+    <button class="sub" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
+    <div class="muted">💡 พอลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน จีทูจะเงียบแชทนั้นแล้วขึ้นในรายการข้างบนให้เอง · แอดมินเข้าไปตอบใน LINE OA แล้วกด "✅ เสร็จ" เพื่อให้จีทูกลับมาดูแลต่อ</div>
   </div>
   <div id="msg"></div>
 </div>
@@ -69,7 +87,29 @@ function render(on,muted){
   t.className='bigbtn '+(on?'turnoff':'turnon');
 }
 
-async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); }catch(e){ $('msg').textContent=e.message; } }
+function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
+
+async function loadQueue(){
+  try{
+    const r=await fetch(W+'/ctl/queue?key='+encodeURIComponent(KEY)+'&shop=v20');
+    const d=await r.json(); const q=d.queue||[];
+    $('qcount').textContent = q.length? '('+q.length+')' : '';
+    if(!q.length){ $('queue').innerHTML='<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>'; return; }
+    $('queue').innerHTML = q.map(function(it){
+      const nm = it.name ? it.name : 'ลูกค้า (ไม่ทราบชื่อ)';
+      return '<div class="qcard"><div class="qtop"><b>'+esc(nm)+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
+        + '<div class="qreason">'+esc(it.reason)+'</div>'
+        + (it.msg? '<div class="qmsg">“'+esc(it.msg)+'”</div>':'')
+        + '<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ ดูแลเสร็จแล้ว (จีทูกลับมาตอบ)</button></div>';
+    }).join('');
+  }catch(e){}
+}
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+async function markDone(uid){
+  try{ await fetch(W+'/ctl/done?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadQueue(); refresh(); }catch(e){}
+}
+
+async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); loadQueue(); }catch(e){ $('msg').textContent=e.message; } }
 
 async function toggle(){
   $('msg').textContent='กำลังสั่งงาน…';
@@ -83,8 +123,9 @@ async function unmute(){
   catch(e){ $('msg').textContent=e.message; }
 }
 
+let _poll=null;
 function init(){
-  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); }
+  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll); _poll=setInterval(loadQueue,20000); }
   else{ $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden'); $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)'; }
 }
 init();
