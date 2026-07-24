@@ -234,17 +234,7 @@ export default {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
       const sk = JSON.parse((await env.CONV.get("skumap")) || "{}");
-      // ทับด้วยค่าล่าสุดจาก webhook (stk:*)
-      let live = 0;
-      try {
-        let cursor;
-        do {
-          const l = await env.CONV.list({ prefix: "stk:", cursor });
-          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) { sm[k.name.slice(4)] = +v; live++; } }
-          cursor = l.list_complete ? null : l.cursor;
-        } while (cursor);
-      } catch (e) {}
-      return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, live_updates: live, stockmap: sm }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
+      return new Response(JSON.stringify({ skumap_count: Object.keys(sk).length, stockmap: sm }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
     }
 
     // ── สถานะ มี/หมด รายรุ่น สำหรับมินิแอพ (สาธารณะ ปลอดภัย: ส่งแค่ true/false ไม่ส่งจำนวน) ──
@@ -253,13 +243,6 @@ export default {
       try {
         const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
         const nm2id = NM2ID; // ตารางจับคู่ ชื่อกลิ่น→รหัสรุ่นมินิแอพ (ฝังในโค้ด ไม่ต้อง seed)
-        // ทับด้วยค่าล่าสุดจาก webhook (stk:*)
-        let cursor;
-        do {
-          const l = await env.CONV.list({ prefix: "stk:", cursor });
-          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) sm[k.name.slice(4)] = +v; }
-          cursor = l.list_complete ? null : l.cursor;
-        } while (cursor);
         // รวมยอดต่อรุ่น (product id) → รุ่นไหนรวมแล้ว > 0 = มีของ
         const total = {};
         for (const nm in nm2id) { const id = nm2id[nm]; total[id] = (total[id] || 0) + (sm[nm] > 0 ? sm[nm] : 0); }
@@ -274,12 +257,6 @@ export default {
       const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
       try {
         const sm = JSON.parse((await env.CONV.get("stockmap")) || "{}");
-        let cursor;
-        do {
-          const l = await env.CONV.list({ prefix: "stk:", cursor });
-          for (const k of l.keys) { const v = await env.CONV.get(k.name); if (v !== null) sm[k.name.slice(4)] = +v; }
-          cursor = l.list_complete ? null : l.cursor;
-        } while (cursor);
         const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
         const out = {};
         for (const nm in NM2ID) {
@@ -315,13 +292,15 @@ export default {
           const items = (body && body.data && body.data.items) || [];
           if (items.length && env.CONV) {
             const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
-            // เขียนแยกรายตัว (stk:ชื่อ) — ห้ามเขียนทับแผนที่ใหญ่ ไม่งั้นข้อมูล seed หายเพราะ race condition
+            // รวมทุกกลิ่นในรอบนี้ แล้วเขียน stockmap ครั้งเดียว (ประหยัดโควต้าเขียน KV: 1 write/รอบ แทน N)
+            const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
             let n = 0;
             for (const it of items) {
               if (!it || !it.sku) continue; // sku อาจเป็นค่าว่างตาม doc
               const nm = skumap[it.sku] || it.sku;
-              await env.CONV.put("stk:" + nm, String(+it.new)); n++;
+              stock[nm] = +it.new; n++;
             }
+            if (n) await env.CONV.put("stockmap", JSON.stringify(stock));
             console.log("XSELLY_OK items=" + n);
           }
         } catch (e) { console.log("XSELLY_ERR " + String(e).slice(0, 200)); }
@@ -427,6 +406,9 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       ? "\n\n# ข้อมูลชำระเงินของร้าน (แจ้งลูกค้าเฉพาะเมื่อลูกค้าพร้อมโอน/ยืนยันออเดอร์/ถามเลขบัญชี — ห้ามแจ้งพร่ำเพรื่อ)\nเมื่อถึงตอนให้โอน ให้ส่งข้อมูลนี้เป๊ะ:\n" + payInfo
       : "");
 
+    // 💬 โชว์ "จุดกำลังพิมพ์" (loading animation) ให้ลูกค้าเห็นระหว่างจีทูคิดคำตอบ
+    await lineLoading(TOKEN, userId);
+
     let reply, userForHistory;
 
     if (mtype === "image") {
@@ -474,11 +456,6 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               if (ntoks.some(t => textLow.includes(t))) { hit.push(nm); if (hit.length >= 40) break; }
             }
             if (hit.length) {
-              // ทับด้วยค่าล่าสุดจาก webhook (stk:ชื่อ) เฉพาะตัวที่โดนถาม
-              try {
-                const ov = await Promise.all(hit.map(nm => env.CONV.get("stk:" + nm)));
-                ov.forEach((v, i) => { if (v !== null) sm[hit[i]] = +v; });
-              } catch (e) {}
               stockNote = "\n\n# สต็อกจริงตอนนี้ (อัพเดตอัตโนมัติจากคลัง — เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
                 hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ " + sm[nm] + " ชิ้น" : "❌ หมด")).join("\n") +
                 "\nกติกา: ตัวเลขสต็อกใช้จากรายการนี้เท่านั้น ห้ามกุเลขเอง ⛔ รุ่น/กลิ่นที่ลูกค้าพูดถึงแต่ \"ไม่มีชื่ออยู่ในรายการข้างบนแบบตรงตัว\" = คุณไม่รู้สต็อกของมัน ห้ามระบุจำนวนชิ้นเด็ดขาด ให้ตอบว่า \"เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻\" (รับออเดอร์ต่อได้ แต่ห้ามยืนยันว่ามีของ) ถ้าลูกค้าจะสั่งของที่หมด ให้แจ้งว่าสินค้าหมดชั่วคราวค่ะ และแนะนำกลิ่น/รุ่นใกล้เคียงที่ยังมีของแทน ห้ามรับออเดอร์ของที่หมด";
@@ -490,18 +467,21 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       userForHistory = { role: "user", content: text };
     }
 
-    // ถ้า AI ส่งต่อเคสให้แอดมินหลังการขาย → เงียบแชทนี้ให้แอดมินดูแล
-    if (reply.indexOf("แอดมินหลังการขาย") !== -1) await muteNow();
-
-    // บันทึกประวัติ (เก็บ 20 ข้อความล่าสุด, อยู่ 1 ชม.)
-    if (env.CONV) {
-      const next = [...history, userForHistory, { role: "assistant", content: reply }].slice(-20);
-      await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
-    }
-
+    // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
     await lineReply(TOKEN, replyToken, reply, userId);
+
+    // ถ้า AI ส่งต่อเคสให้แอดมินหลังการขาย → เงียบแชทนี้ให้แอดมินดูแล (best-effort)
+    try { if (reply.indexOf("แอดมินหลังการขาย") !== -1) await muteNow(); } catch (e) {}
+
+    // บันทึกประวัติ (best-effort — ถ้าโควต้าเขียน KV เต็ม ก็ข้ามไป ไม่กระทบการตอบ)
+    try {
+      if (env.CONV) {
+        const next = [...history, userForHistory, { role: "assistant", content: reply }].slice(-20);
+        await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+      }
+    } catch (e) { console.log("HIST_SKIP " + String(e).slice(0, 80)); }
   } catch (e) {
-    // เงียบไว้ ไม่ให้ webhook พัง
+    console.log("HANDLE_ERR " + String(e).slice(0, 150));
   }
 }
 
@@ -527,6 +507,18 @@ async function askAI(apiKey, messages, models) {
     }
   }
   return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
+}
+
+// โชว์จุดกำลังพิมพ์ 3 สี (LINE loading animation) — ต้องมี userId จริง (ใช้ได้กับแชท 1:1)
+async function lineLoading(token, userId) {
+  if (!userId || userId === "anon") return;
+  try {
+    await fetch("https://api.line.me/v2/bot/chat/loading/start", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId: userId, loadingSeconds: 20 }),
+    });
+  } catch (e) {}
 }
 
 async function lineReply(token, replyToken, text, userId) {
