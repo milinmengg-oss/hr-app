@@ -535,6 +535,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         } catch (e) {}
 
         let statusLine = "ส่งสลิปแล้ว รอตรวจยอด 🧾";
+        // ข้อความตอบลูกค้า (แสดงผลตรวจสลิปในแชทเลย เหมือน SlipOK)
+        let customerMsg = "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕";
         try {
           const sok = await checkSlip(env, TOKEN, ev.message.id);
           if (sok) {
@@ -542,12 +544,23 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             if (sok.httpOk && sok.success && d.success) {
               const slipAmt = Math.round((+d.amount || 0) * 100) / 100;
               const recv = (d.receiver && (d.receiver.displayName || d.receiver.name)) || "";
-              if (!expected) statusLine = "สลิปแท้ ✅ ยอด " + slipAmt + " บาท → " + recv + " (ยังไม่มีออเดอร์ในระบบ รอแอดมินเช็ค)";
-              else if (Math.abs(slipAmt - expected) <= 1) statusLine = "สลิปผ่าน ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + " (รอแอดมินกดยืนยัน)";
-              else statusLine = "⚠️ ยอดไม่ตรง: สลิป " + slipAmt + " / ออเดอร์ " + expected + " → " + recv + " — แอดมินเช็คด่วน";
+              if (!expected) {
+                statusLine = "สลิปแท้ ✅ ยอด " + slipAmt + " บาท → " + recv + " (ยังไม่มีออเดอร์ในระบบ รอแอดมินเช็ค)";
+                customerMsg = "✅ ตรวจสอบสลิปเรียบร้อยค่ะ\nยอดโอน " + slipAmt + " บาท เข้าบัญชีร้านถูกต้อง 🙏🏻\nรอแอดมินยืนยันและจัดส่งให้นะคะ ขอบคุณค่ะ 💕";
+              } else if (Math.abs(slipAmt - expected) <= 1) {
+                statusLine = "สลิปผ่าน ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + " (รอแอดมินกดยืนยัน)";
+                customerMsg = "✅ ตรวจสอบการชำระเงินเรียบร้อยค่ะ\nยอด " + slipAmt + " บาท ตรงกับออเดอร์ เข้าบัญชีร้านถูกต้อง 🎉\nรอแอดมินยืนยันและจัดส่งให้นะคะ ขอบคุณที่อุดหนุนค่ะ 💕";
+              } else {
+                statusLine = "⚠️ ยอดไม่ตรง: สลิป " + slipAmt + " / ออเดอร์ " + expected + " → " + recv + " — แอดมินเช็คด่วน";
+                customerMsg = "⚠️ ตรวจสอบสลิปแล้วนะคะ\nยอดในสลิป " + slipAmt + " บาท แต่ยอดออเดอร์คือ " + expected + " บาท ไม่ตรงกันค่ะ 🙏🏻\nรบกวนเช็คอีกครั้ง เดี๋ยวแอดมินเข้ามาดูแลให้นะคะ";
+              }
             } else {
-              const msg = (sok.data && sok.data.message) || sok.message || ("code " + (sok.code || sok.status || "?"));
-              statusLine = "⛔ สลิปมีปัญหา: " + String(msg).slice(0, 70) + " — แอดมินเช็คด่วน";
+              const msg = (sok.data && sok.data.message) || sok.message || "ตรวจสอบไม่ผ่าน";
+              const m = String(msg);
+              statusLine = "⛔ สลิปมีปัญหา: " + m.slice(0, 70) + " — แอดมินเช็คด่วน";
+              if (/บัญชี.*ไม่ตรง|ไม่ตรง.*บัญชี|ผู้รับ/.test(m)) customerMsg = "⚠️ ตรวจสอบสลิปแล้ว บัญชีผู้รับไม่ตรงกับบัญชีของร้านนะคะ 🙏🏻\nรบกวนตรวจสอบว่าโอนเข้าบัญชีที่ถูกต้องไหมคะ เดี๋ยวแอดมินเข้ามาดูแลค่ะ";
+              else if (/ซ้ำ|duplicate|เคย/.test(m)) customerMsg = "⚠️ สลิปนี้เคยถูกใช้ยืนยันไปแล้วนะคะ 🙏🏻\nรบกวนส่งสลิปการโอนของรายการนี้อีกครั้ง เดี๋ยวแอดมินเข้ามาดูแลค่ะ";
+              else customerMsg = "⚠️ ตรวจสอบสลิปไม่ผ่านนะคะ 🙏🏻 รบกวนส่งสลิปที่ชัดเจน (เห็น QR code) อีกครั้ง หรือรอแอดมินเข้ามาดูแลค่ะ";
             }
           }
         } catch (e) {}
@@ -556,7 +569,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         try { if (ordObj) { ordObj.status = statusLine; await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 }); } } catch (e) {}
         try { const mk = "mute:" + shopId + ":" + userId; const mv = await env.CONV.get(mk); if (mv) { const e2 = JSON.parse(mv); e2.reason = statusLine; await env.CONV.put(mk, JSON.stringify(e2), { expirationTtl: 3600 }); } } catch (e) {}
 
-        await lineReply(TOKEN, replyToken, "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบยอดและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕", userId);
+        await lineReply(TOKEN, replyToken, customerMsg, userId);
         return;
       }
       userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้]" };
