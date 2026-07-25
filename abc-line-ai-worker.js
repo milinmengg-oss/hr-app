@@ -61,11 +61,15 @@ function findPrice(modelText) {
   for (const k of PRICE_KEYS) if (t.indexOf(k.toUpperCase()) !== -1) return { key: k, price: PRICE[k] };
   return null;
 }
+// หัวน้ำยาใหญ่ Big Pod (โปร 4 ชิ้นส่งฟรี) | หัวน้ำยาเล็ก (โปร 10 หัวส่งฟรี)
+const BIGPOD = ["RELX BOOST POD", "RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO"];
+const SMALLPOD = ["INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"];
 function catOf(key) {
   if (/^เครื่อง/.test(key)) return "device";
-  if (/\(KIT\)/.test(key)) return "kit";
-  if (["RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "RELX BOOST POD", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO", "INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"].indexOf(key) !== -1) return "head";
-  return "disp"; // พอตใช้แล้วทิ้ง
+  if (/\(KIT\)/.test(key)) return "bigpod";          // ชุด KIT นับรวมกับ Big Pod (4 ชิ้นส่งฟรี)
+  if (BIGPOD.indexOf(key) !== -1) return "bigpod";     // หัวน้ำยาใหญ่ Big Pod → 4 ชิ้นส่งฟรี
+  if (SMALLPOD.indexOf(key) !== -1) return "smallpod"; // หัวน้ำยาเล็ก → 10 หัวส่งฟรี
+  return "disp"; // พอตใช้แล้วทิ้ง → 4 แท่งส่งฟรี
 }
 function cloneTier(n) { return n >= 1000 ? 190 : n >= 500 ? 200 : n >= 300 ? 210 : n >= 200 ? 220 : n >= 100 ? 230 : n >= 50 ? 240 : n >= 20 ? 250 : 290; }
 // แยกรายการจากบล็อก "ทวนคำสั่งซื้อ" (รูปแบบบรรทัด: รุ่น | กลิ่น | จำนวน)
@@ -88,20 +92,21 @@ function parseItems(reply) {
 function computeOrder(items) {
   let cloneQty = 0;
   for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
-  let goods = 0, disp = 0, head = 0, kit = 0; const rows = [];
+  let goods = 0, disp = 0, small = 0, big = 0; const rows = [];
   for (const it of items) {
+    const isFree = /แถม|ฟรี|free/i.test(it.flavor || "") || /แถม|\(ฟรี\)/.test(it.model || "");
     const p = findPrice(it.model);
     let unit = p ? p.price : 0;
     const key = p ? p.key : it.model;
     if (p && p.key === "MARBO 9K (โคลน)" && cloneQty >= 20) unit = cloneTier(cloneQty);
+    if (isFree) unit = 0;
     const line = unit * it.qty;
     goods += line;
-    const c = p ? catOf(p.key) : "disp";
-    if (c === "disp") disp += it.qty; else if (c === "head") head += it.qty; else if (c === "kit") kit += it.qty;
-    const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + " x" + it.qty;
-    rows.push({ label, line, unknown: !p });
+    if (!isFree) { const c = p ? catOf(p.key) : "disp"; if (c === "disp") disp += it.qty; else if (c === "smallpod") small += it.qty; else if (c === "bigpod") big += it.qty; }
+    const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + (isFree ? "" : " x" + it.qty) + (isFree ? " (แถมฟรี 🎁)" : "");
+    rows.push({ label, line, unknown: !p, free: isFree });
   }
-  const freeShip = disp >= 4 || head >= 10 || kit >= 4 || cloneQty >= 20;
+  const freeShip = disp >= 4 || small >= 10 || big >= 4 || cloneQty >= 20;
   const ship = freeShip ? 0 : 40;
   return { rows, goods, ship, total: goods + ship, freeShip };
 }
@@ -153,11 +158,20 @@ https://cutt.ly/abc-menu"
 - ⛔ นอกจาก 40 (Flash) กับ 0 (ฟรีตามโปร) ห้ามจีทูพูดตัวเลขค่าส่งอื่นเด็ดขาด
 
 ## 🎁 โปรหลัก (เข้าเงื่อนไข = ส่งฟรีพัสดุ | คละยี่ห้อได้ | ซื้อหลายโปรรวมกันได้)
-- หัวน้ำยาเล็ก (หัวพอตเปลี่ยน) ครบ 10 หัว → ส่งฟรี
+- หัวน้ำยาเล็ก (หัวพอตราคา 120-140: INFY PLUS, MARBO ZERO, RELX INFINITY, RELX LARGE, RELX ULTRA) ครบ 10 หัว → ส่งฟรี
 - พอตใช้แล้วทิ้ง ครบ 4 แท่ง → ส่งฟรี
-- หัวน้ำยาใหญ่ (Big Pod) และ/หรือ ชุดพร้อมสูบ (KIT) รวมครบ 4 ชิ้น → ส่งฟรี
+- หัวน้ำยาใหญ่ Big Pod (RELX BOOST POD, RELX POD CLEAR 18K, ELFBAR SWAP, ESKO BAR SWITCH, KS QUIK PRO, M SWITCH, VAZER RELOAD, ABC TANK, ABC LEGO) และ/หรือ ชุด KIT รวมครบ 4 ชิ้น → ส่งฟรี
 - Iqos (คอต/ไส้) ครบ 2 คอต → ส่งฟรี
+⛔ RELX BOOST POD / ABC LEGO / หัวราคา 299-390 = "Big Pod" (โปร 4 ชิ้น) ไม่ใช่หัวน้ำยาเล็ก (10 หัว) — อย่าสับสน
 เวลาลูกค้าซื้อใกล้ครบเงื่อนไข ให้เชียร์ให้ครบเพื่อรับส่งฟรี (เช่น ซื้อสูบทิ้ง 3 แท่ง → "รับเพิ่มอีก 1 แท่งครบ 4 แท่ง ส่งฟรีเลยนะคะ 💕")
+
+## 🎁 โปรแถมสินค้า (ไม่ส่งฟรี — แต่แถมของฟรี | ซื้อร่วมโปรหลักได้)
+- ซื้อเครื่อง (Device) → แถมฟรี 1 หัวน้ำยา (ให้ลูกค้าเลือกหัวน้ำยาเล็ก 1 หัว)
+- ABC LEGO / RELX BOOST POD / RELX POD CLEAR (Big Pod) ซื้อครบ 5 หัว → แถมฟรีเครื่องเปล่า 1 เครื่อง (มูลค่า 250 บาท)
+วิธีใส่ของแถมในออเดอร์: เพิ่มบรรทัดของแถมโดยเขียนคำว่า "แถมฟรี" ในช่องกลิ่น เช่น
+- <รุ่นของแถม> | แถมฟรี | 1
+ระบบจะคิดราคาของแถม = 0 อัตโนมัติ ⛔ อย่าคิดเงินของแถม
+เวลาลูกค้าซื้อเข้าเงื่อนไข ให้เสนอของแถมด้วย (เช่น ซื้อเครื่อง → "แถมฟรีหัวน้ำยา 1 หัวนะคะ เลือกกลิ่นไหนดีคะ 💕")
 
 ⛔⛔ กฎบังคับก่อนคิดค่าส่งทุกครั้ง (ห้ามลืม):
 1) "พอตใช้แล้วทิ้ง" = ทุกรุ่นในหมวด [พอตใช้แล้วทิ้ง] ด้านล่าง (เช่น ABC 8K, SONIC 8K, MARBO 9K, MARBO 10K, RELX SPARTA, INFY, ESKO, CARNIVAL ฯลฯ ทุกตัวนับเป็นสูบทิ้งหมด)
