@@ -165,8 +165,10 @@ function riderFee(lat, lng) {
   return { km: Math.round(km * 10) / 10, fee };
 }
 // ดึงพิกัด lat,lng จากข้อความลิงก์ Google Maps (หลายรูปแบบ)
-function extractLatLng(s) {
-  if (!s) return null;
+function extractLatLng(s0) {
+  if (!s0) return null;
+  let s = s0;
+  try { const d = decodeURIComponent(s0); if (d !== s0) s = s0 + " " + d; } catch (e) {} // เผื่อพิกัดถูกเข้ารหัสใน URL (หน้า consent)
   const pats = [/@(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /!3d(-?\d{1,2}\.\d{2,})!4d(-?\d{2,3}\.\d{2,})/, /[?&](?:q|ll|daddr|destination|sll)=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /[?&]center=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /(-?\d{1,2}\.\d{4,}),\s*(-?\d{2,3}\.\d{4,})/];
   for (const p of pats) { const m = s.match(p); if (m) { const la = +m[1], lo = +m[2]; if (la >= 5 && la <= 21 && lo >= 96 && lo <= 106) return { lat: la, lng: lo }; } }
   // ลิงก์แบบเส้นทาง (dir) เก็บพิกัดเป็น !1d<lng>!2d<lat> (สลับ) — ดึงเลข !Nd ทั้งหมดแล้วแยกด้วยช่วงพิกัดไทย
@@ -527,7 +529,10 @@ export default {
         if (act === "status") {
           const off = await env.CONV.get("botoff:" + shop);
           const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });
-          return J({ on: !off, muted: list.keys.length });
+          // นับเฉพาะคีย์ที่มีค่าจริง (list ของ KV อาจโชว์คีย์ที่เพิ่งลบ/หมดอายุค้างได้ชั่วคราว)
+          let muted = 0;
+          for (const k of list.keys) { if (await env.CONV.get(k.name)) muted++; }
+          return J({ on: !off, muted });
         }
         if (act === "on") { await env.CONV.delete("botoff:" + shop); return J({ ok: 1, on: true }); }
         if (act === "off") { await env.CONV.put("botoff:" + shop, "1"); return J({ ok: 1, on: false }); }
@@ -543,6 +548,7 @@ export default {
           const items = [];
           for (const k of list.keys) {
             const v = await env.CONV.get(k.name);
+            if (!v) continue; // คีย์ค้าง (เพิ่งลบ/หมดอายุ) — ข้าม
             let e = {}; try { e = JSON.parse(v); } catch (x) {}
             items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", reason: e.reason || "เคสปัญหา", msg: e.msg || "", t: e.t || 0 });
           }
