@@ -88,8 +88,9 @@ function parseItems(reply) {
   }
   return items;
 }
-// คิดเงินจากรายการ → ราคาต่อชิ้น + ยอดรวม + ค่าส่ง (โปรส่งฟรี/เรทขายส่ง)
-function computeOrder(items) {
+// คิดเงินจากรายการ → ราคาต่อชิ้น + ยอดรวม + ค่าส่ง (โปรส่งฟรี/เรทขายส่ง/ส่งด่วน)
+// expressFee != null → ลูกค้าเลือกส่งด่วน ใช้ค่าส่งด่วนแทน (ไม่เข้าโปรส่งฟรี)
+function computeOrder(items, expressFee) {
   let cloneQty = 0;
   for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
   let goods = 0, disp = 0, small = 0, big = 0; const rows = [];
@@ -109,9 +110,13 @@ function computeOrder(items) {
   // 🎁 ของแถมอัตโนมัติ: Big Pod (หัวน้ำยาใหญ่) ครบ 5 หัว → แถมเครื่องเปล่า 1 เครื่อง (มูลค่า 250)
   if (big >= 5 && !rows.some(r => r.free && /เครื่อง/.test(r.label)))
     rows.push({ label: "เครื่องเปล่า (แถมฟรี 🎁 มูลค่า 250)", line: 0, free: true });
+  if (expressFee != null) {
+    // ส่งด่วน: ใช้ค่าส่งด่วนตามระยะทาง (ไม่เข้าโปรส่งฟรีพัสดุ)
+    return { rows, goods, ship: expressFee, total: goods + expressFee, freeShip: false, express: true };
+  }
   const freeShip = disp >= 4 || small >= 10 || big >= 4 || cloneQty >= 20;
   const ship = freeShip ? 0 : 40;
-  return { rows, goods, ship, total: goods + ship, freeShip };
+  return { rows, goods, ship, total: goods + ship, freeShip, express: false };
 }
 
 // 🩹 แก้ SKU ใหม่ที่ยังไม่มีในตารางชื่อ (skumap) — ฝังในโค้ด ไม่ต้อง re-seed
@@ -138,6 +143,29 @@ function riderFee(lat, lng) {
   const km = distKm(SHOP_LOC.lat, SHOP_LOC.lng, lat, lng) * ROAD_FACTOR;
   const fee = Math.max(RIDER_BASE, Math.round((RIDER_BASE + km * RIDER_PER_KM) / 5) * 5) + RIDER_SURCHARGE;
   return { km: Math.round(km * 10) / 10, fee };
+}
+// ดึงพิกัด lat,lng จากข้อความลิงก์ Google Maps (หลายรูปแบบ)
+function extractLatLng(s) {
+  if (!s) return null;
+  const pats = [/@(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /!3d(-?\d{1,2}\.\d{2,})!4d(-?\d{2,3}\.\d{2,})/, /[?&](?:q|ll|daddr|destination|sll)=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /[?&]center=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /(-?\d{1,2}\.\d{4,}),\s*(-?\d{2,3}\.\d{4,})/];
+  for (const p of pats) { const m = s.match(p); if (m) { const la = +m[1], lo = +m[2]; if (la >= 5 && la <= 21 && lo >= 96 && lo <= 106) return { lat: la, lng: lo }; } }
+  return null;
+}
+// แปลงลิงก์แผนที่ (รวมลิงก์ย่อ goo.gl) → พิกัด
+async function resolveMapLink(text) {
+  const um = text.match(/https?:\/\/[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s]*/i);
+  if (!um) return extractLatLng(text);
+  let ll = extractLatLng(um[0]);
+  if (ll) return ll;
+  try {
+    const r = await fetch(um[0], { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) });
+    ll = extractLatLng(r.url || "");
+    if (ll) return ll;
+    const body = await r.text();
+    ll = extractLatLng(body);
+    if (ll) return ll;
+  } catch (e) { console.log("MAP_RESOLVE_ERR " + String(e).slice(0, 80)); }
+  return null;
 }
 const EXPRESS_MSG = "อนุญาตแจ้งรอบส่งด่วนนะคะ 💕\nรอบส่งนับจากเวลาที่ลูกค้าชำระเงิน + ลงออเดอร์เรียบร้อยค่ะ 💲\n\n08.00 - 10.30 → รอบส่งออก 11.30 น.\n11.00 - 11.30 → รอบส่งออก 12.30 น.\n12.00 - 12.30 → รอบส่งออก 13.30 น.\n13.00 - 13.30 → รอบส่งออก 14.30 น.\n14.00 - 14.30 → รอบส่งออก 15.30 น.\n15.00 - 15.30 → รอบส่งออก 16.30 น.\n16.00 - 16.30 → รอบส่งออก 17.30 น.\n17.00 - 17.30 → รอบส่งออก 18.30 น.\n18.00 - 18.30 → รอบส่งออก 19.30 น.\n19.00 - 19.30 → รอบส่งออก 20.30 น.\n20.00 - 20.45 → รอบส่งออก 21.30 น.\nหลัง 20.45 น. → รอบส่งออก 10.30 น. (วันถัดไป)\n\nนับจากรอบส่งออก รอรับสินค้าประมาณ 3-5 ชม. จะได้รับพัสดุค่ะ (เป็นการประมาณเวลาเท่านั้น)\n❌ หากไม่สะดวกรับสาย รบกวนแจ้งสถานที่วางสินค้าล่วงหน้านะคะ\n❌ เมื่อไรเดอร์ถึงปลายทางแล้วติดต่อลูกค้าไม่ได้ภายใน 15 นาที สินค้าจะถูกตีกลับค่ะ 🙏🏻";
 
@@ -171,7 +199,7 @@ https://cutt.ly/abc-menu"
 # ค่าส่ง + โปรโมชั่น (กฎเหล็ก — ยึดตามนี้เท่านั้น ห้ามแต่งเพิ่มเอง)
 ## ค่าส่ง
 - ขนส่งเอกชน (พัสดุปกติ) = 40 บาท ทั่วประเทศ / ฟรี ถ้าเข้าเงื่อนไข "โปรหลัก" หรือ "เรทขายส่ง" ด้านล่าง
-- ส่งด่วน (เฉพาะ กทม.+ปริมณฑล) = คิดตามระยะทาง ให้ขอลูกค้า "แชร์โลเคชั่น (ปักหมุด)" มา แล้วระบบจะคำนวณค่าส่งด่วนให้อัตโนมัติ (⛔ จีทูอย่ากุตัวเลขเอง ถ้ายังไม่มีหมุด — พอลูกค้าปักหมุดระบบจะตอบค่าส่งให้เอง)
+- ส่งด่วน (เฉพาะ กทม.+ปริมณฑล) = คิดตามระยะทาง ให้ขอลูกค้า "แชร์โลเคชั่น (ปักหมุด) หรือส่งลิงก์ Google Maps" มา แล้วระบบจะคำนวณค่าส่งด่วนให้อัตโนมัติ (⛔ จีทูอย่ากุตัวเลขเอง ถ้ายังไม่มีหมุด/ลิงก์ — พอลูกค้าส่งหมุดหรือลิงก์แผนที่มา ระบบจะตอบค่าส่งให้เอง)
 - ⛔ นอกจาก 40 (ขนส่งเอกชน) กับ 0 (ฟรีตามโปร) ห้ามจีทูพูดตัวเลขค่าส่งอื่นเด็ดขาด
 - ⛔⛔ ห้ามบอกชื่อบริษัทขนส่งที่ร้านใช้เด็ดขาด (ห้ามพูด Flash, Kerry, J&T, ไปรษณีย์, Grab, Lalamove ฯลฯ) — ถ้าลูกค้าถามว่าส่งขนส่งอะไร ให้ตอบแค่ "ใช้ขนส่งเอกชนค่ะ 🙏🏻" (ส่งด่วนเรียกว่า 'รอบส่งด่วน' เฉยๆ ห้ามระบุยี่ห้อ)
 
@@ -681,6 +709,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const la = ev.message.latitude, lo = ev.message.longitude;
       if (typeof la === "number" && typeof lo === "number") {
         const { km, fee } = riderFee(la, lo);
+        // จำค่าส่งด่วนของลูกค้าคนนี้ไว้ (2 ชม.) เผื่อสั่งของแล้วต้องคิดค่าส่งด่วนในการ์ด
+        try { if (env.CONV) await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify({ fee, km, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
         await lineReply(TOKEN, replyToken, "เช็คค่าส่งด่วนให้แล้วนะคะ 🛵💨\nระยะทางประมาณ " + km + " กม. → ค่าส่งด่วนประมาณ " + fee + " บาทค่ะ\n(เป็นราคาประมาณ อาจปรับตามรอบ/สภาพจราจร) รับแบบส่งด่วนไหมคะ 💕\n\nหรือถ้ารับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับใน 2-3 วันค่ะ 📦", userId);
       } else {
         await lineReply(TOKEN, replyToken, "รบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาอีกครั้งนะคะ เดี๋ยวเช็คค่าส่งด่วนให้ค่ะ 🙏🏻", userId);
@@ -723,6 +753,24 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       }
       if (/รอบส่ง|รอบส่งด่วน|กี่โมงส่ง|ส่งกี่โมง|รอบจัดส่ง|ส่งด่วนกี่โมง|รอบรถ/.test(t)) {
         await lineReply(TOKEN, replyToken, EXPRESS_MSG, userId);
+        return;
+      }
+      // 🗺️ ลูกค้าส่งลิงก์ Google Maps (ปักหมุด) → ดึงพิกัด + คำนวณค่าส่งด่วนให้
+      if (/https?:\/\/[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google)/i.test(t)) {
+        const ll = await resolveMapLink(t);
+        if (ll) {
+          const { km, fee } = riderFee(ll.lat, ll.lng);
+          try { if (env.CONV) await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify({ fee, km, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
+          await lineReply(TOKEN, replyToken, "เช็คค่าส่งด่วนจากหมุดที่ส่งมาแล้วนะคะ 🛵💨\nระยะทางประมาณ " + km + " กม. → ค่าส่งด่วนประมาณ " + fee + " บาทค่ะ\n(เป็นราคาประมาณ อาจปรับตามรอบ/สภาพจราจร) รับแบบส่งด่วนไหมคะ 💕\n\nหรือรับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับใน 2-3 วันค่ะ 📦", userId);
+        } else {
+          await lineReply(TOKEN, replyToken, "ขออภัยค่ะ อ่านพิกัดจากลิงก์นี้ไม่ได้ 🙏🏻 รบกวนกดปุ่ม + ในแชท → เลือก 'ตำแหน่งที่ตั้ง' → ปักหมุดจุดจัดส่ง → กดส่ง มาอีกครั้งนะคะ เดี๋ยวคำนวณค่าส่งด่วนให้ค่ะ 🛵", userId);
+        }
+        return;
+      }
+      // ลูกค้าเปลี่ยนใจเป็นพัสดุปกติ → ล้างค่าส่งด่วนที่จำไว้
+      if (/พัสดุปกติ|ส่งธรรมดา|ส่งปกติ|แบบพัสดุ|เอาพัสดุ|ไม่เอาส่งด่วน|flash|แฟลช/i.test(t)) {
+        try { if (env.CONV) await env.CONV.delete("exp:" + shopId + ":" + userId); } catch (e) {}
+        await lineReply(TOKEN, replyToken, "รับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับภายใน 2-3 วันค่ะ 📦 (ซื้อครบโปรส่งฟรีได้ด้วยนะคะ) รับกลิ่นไหน กี่ชิ้นดีคะ 💕", userId);
         return;
       }
       if (/รูปแบบการจัดส่ง|วิธีการจัดส่ง|การจัดส่ง|ค่าส่งเท่าไหร่|ค่าจัดส่ง|ส่งยังไง|จัดส่งยังไง|ส่งแบบไหน/.test(t)) {
@@ -909,7 +957,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (notReady) {
         await lineReply(TOKEN, replyToken, "รับกลิ่นไหน จำนวนกี่ชิ้นดีคะ 💕 (บอกรุ่น+กลิ่น+จำนวนมาได้เลยนะคะ)", userId);
       } else if (items.length) {
-        const calc = computeOrder(items);
+        // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
+        let expFee = null;
+        try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; } } } catch (e) {}
+        const calc = computeOrder(items, expFee);
         await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(calc), userId);
         // เก็บออเดอร์ด้วยยอดที่โค้ดคิด (ให้ SlipOK เทียบยอดถูก)
         try {
@@ -1152,7 +1203,7 @@ function orderConfirmFlex(o) {
     { type: "separator", margin: "lg" }
   ];
   body.push(sumRow("ยอดสินค้า", fmt(o.goods) + " บาท"));
-  body.push(sumRow("ค่าส่ง", (o.ship ? fmt(o.ship) : "0") + " บาท" + (o.freeShip ? " (ฟรี)" : "")));
+  body.push(sumRow(o.express ? "ค่าส่งด่วน 🛵" : "ค่าส่ง", (o.ship ? fmt(o.ship) : "0") + " บาท" + (o.freeShip ? " (ฟรี)" : "")));
   body.push({ type: "box", layout: "horizontal", margin: "md", contents: [
     { type: "text", text: "รวม", weight: "bold", size: "md", color: "#333333", gravity: "center" },
     { type: "text", text: fmt(o.total) + " บาท", weight: "bold", size: "xl", color: "#111418", align: "end" }
