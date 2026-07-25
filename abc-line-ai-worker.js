@@ -149,9 +149,11 @@ https://cutt.ly/abc-menu"
 ค่าส่ง <40 หรือ 0 (ฟรี เมื่อเข้าโปรส่งฟรี/เรทขายส่ง)>
 รวมยอดชำระ <ราคาสินค้า+ค่าส่ง>
 
-✅ รบกวนลูกค้าเช็คสินค้าที่แอดมินสรุปให้ถูกต้องนะคะ เพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ
-จากนั้นแจ้งเลขบัญชีร้าน (จาก "ข้อมูลชำระเงินของร้าน" ถ้ามี) แล้วปิดท้ายว่า "โอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยนะคะ ระบบจะตรวจสลิปให้อัตโนมัติค่ะ 💕"
-⛔ ห้ามถามที่อยู่ ห้ามขอชื่อผู้รับ/เบอร์/ที่อยู่ ในขั้นนี้เด็ดขาด
+⛔ ให้จบแค่บรรทัด "รวมยอดชำระ" เท่านั้น — ห้ามแจ้งเลขบัญชี ห้ามบอกให้โอน ห้ามขอที่อยู่ในขั้นนี้เด็ดขาด
+(ระบบจะแปลงบล็อกนี้เป็นการ์ด "ยืนยันรายการสั่งซื้อ" + ปุ่มยืนยันให้อัตโนมัติ พอลูกค้ากดยืนยัน ระบบจะส่งการ์ดเลขบัญชีให้เอง คุณไม่ต้องพิมพ์เลขบัญชี)
+
+## ขั้น 1.5 — ลูกค้ากด/พิมพ์ "ยืนยัน" → ระบบส่งการ์ดเลขบัญชีให้เอง (คุณไม่ต้องทำ)
+⛔ ห้ามพิมพ์เลขบัญชีเอง ระบบจัดการให้แล้ว
 
 ## ขั้น 2 — ลูกค้าโอนแล้วส่งสลิป → ระบบตรวจสลิปและขอที่อยู่ให้อัตโนมัติ (คุณไม่ต้องทำเอง)
 ⛔ คุณ (จีทู) ห้ามขอที่อยู่เองเด็ดขาด ระบบจะขอที่อยู่ให้เองหลังสลิปผ่านแล้วเท่านั้น
@@ -569,6 +571,26 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         await lineFlex(TOKEN, replyToken, "ABC ยินดีต้อนรับค่ะ ✨", welcomeFlex(), userId);
         return;
       }
+      // ✅ ลูกค้ากด/พิมพ์ "ยืนยัน" หลังการ์ดทวนออเดอร์ → ส่งการ์ดสรุปยอด+เลขบัญชี+ปุ่มคัดลอก
+      if (/^ยืนยัน(รายการ)?[\s!.]*$/.test(t) && env.CONV) {
+        try {
+          const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (ok) {
+            const b = JSON.parse(ok).block || "";
+            const total = (b.match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/) || ["", ""])[1];
+            const pay = env["PAY_" + shopId.toUpperCase()] || "";
+            if (total && pay) {
+              const acctNo = (pay.match(/\d[\d\- ]{5,}\d/) || [""])[0].replace(/\s/g, "");
+              const pl = pay.split("\n").map(s => s.trim()).filter(Boolean);
+              const bankName = (pl.find(l => /ธนาคาร|bank|kbank|กสิกร|กรุง|ไทยพาณิชย์|scb|ktb|bbl|ออมสิน|ทหารไทย|ttb|uob|ยูโอบี/i.test(l)) || pl[0] || "").replace(/เลข.*/, "").trim();
+              const owner = (pl.find(l => /ชื่อ|นาย|นาง|น\.ส|หจก|บจก|บริษัท|ร้าน/.test(l) && l.indexOf(acctNo) === -1) || pl[pl.length - 1] || "").replace(/ชื่อบัญชี|ชื่อ\s*:?/, "").trim();
+              await lineFlex(TOKEN, replyToken, "สรุปรายการสั่งซื้อ + เลขบัญชี", payFlex(total, [bankName, acctNo, owner], acctNo), userId);
+              return;
+            }
+          }
+        } catch (e) {}
+        // ถ้าไม่มีออเดอร์ค้าง ให้ปล่อยผ่านไปให้ AI ตอบปกติ
+      }
       if ((/แอดมิน/.test(t) && /ติดต่อ|คุย|ขอ|เรียก|หา|อยู่ไหม|อยู่ไหน|อยู่มั้ย|อยู่ป่าว|หน่อย|ช่วย/.test(t)) || /คุยกับคน|คนจริง|เจ้าหน้าที่|พนักงาน|ขอสายด่วน/.test(t)) {
         await muteNow("ขอคุยแอดมิน", t); // ส่งต่อให้คน — จีทูเงียบแชทนี้
         await lineReply(TOKEN, replyToken, "รับเรื่องแล้วค่ะ เดี๋ยวแอดมินเข้ามาดูแลนะคะ รอสักครู่ค่ะ 🙏🏻💕", userId);
@@ -741,7 +763,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
 
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
-    await lineReply(TOKEN, replyToken, reply, userId);
+    // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → ส่งเป็นการ์ด Flex "ยืนยันรายการ" แทนข้อความธรรมดา
+    if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1 && /รวมยอดชำระ\s*[\d,]+/.test(reply)) {
+      await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(parseOrder(reply)), userId);
+    } else {
+      await lineReply(TOKEN, replyToken, reply, userId);
+    }
 
     // 📦 ถ้าจีทูสรุปออเดอร์ครบ (มีบล็อก "📦 สรุปออเดอร์" + ช่องสินค้ามีค่าจริง) → เก็บเข้าคิวออเดอร์
     // กันบล็อกเปล่า: บรรทัด "สินค้า:" ต้องตามด้วยตัวอักษรจริง (ไม่ใช่ว่าง/ขึ้นบรรทัดทันที)
@@ -891,6 +918,82 @@ function welcomeFlex() {
         ] }
       ]
     }
+  };
+}
+// แยกข้อมูลออเดอร์จากข้อความ "ทวนคำสั่งซื้อ" ที่ AI สร้าง → เอาไปทำการ์ด
+function parseOrder(reply) {
+  const num = (re) => { const m = reply.match(re); return m ? m[1].replace(/,/g, "") : ""; };
+  const goods = num(/ยอดสินค้า\s*([\d,]+)/);
+  const ship = num(/ค่าส่ง\s*([\d,]+)/);
+  const total = num(/รวมยอดชำระ\s*([\d,]+)/);
+  // บรรทัดรายการสินค้า = ระหว่างหัวข้อ "ทวนคำสั่งซื้อ" กับ "ยอดสินค้า"
+  const lines = reply.split("\n").map(s => s.trim()).filter(Boolean);
+  let items = [], started = false;
+  for (const ln of lines) {
+    if (ln.indexOf("ทวนคำสั่งซื้อ") !== -1) { started = true; continue; }
+    if (/^ยอดสินค้า/.test(ln)) break;
+    if (started) { const t = ln.replace(/^[-•●]\s*/, "").trim(); if (t && !/ตรวจสอบ|ถูกต้อง|ผิดพลาด/.test(t)) items.push(t); }
+  }
+  return { items, goods, ship, total };
+}
+// การ์ด 1: ยืนยันรายการสั่งซื้อ (โทนเขียว ABC) + ปุ่ม "ยืนยันรายการ"
+function orderConfirmFlex(o) {
+  const itemRows = (o.items.length ? o.items : ["(รายการสินค้า)"]).map(t => ({ type: "text", text: t, size: "sm", color: "#333333", wrap: true, margin: "sm" }));
+  const sumRow = (label, val) => ({ type: "box", layout: "horizontal", margin: "sm", contents: [
+    { type: "text", text: label, size: "sm", color: "#888888" },
+    { type: "text", text: val, size: "sm", color: "#555555", align: "end" }
+  ] });
+  const body = [
+    { type: "text", text: "กรุณาตรวจสอบความถูกต้อง", size: "xs", color: "#999999" },
+    { type: "box", layout: "vertical", margin: "md", contents: itemRows },
+    { type: "separator", margin: "lg" }
+  ];
+  if (o.goods) body.push(sumRow("ยอดสินค้า", o.goods + " บาท"));
+  body.push(sumRow("ค่าส่ง", (o.ship || "0") + " บาท"));
+  body.push({ type: "box", layout: "horizontal", margin: "md", contents: [
+    { type: "text", text: "รวม", weight: "bold", size: "md", color: "#333333", gravity: "center" },
+    { type: "text", text: (o.total || o.goods) + " บาท", weight: "bold", size: "xl", color: "#16A34A", align: "end" }
+  ] });
+  return {
+    type: "bubble",
+    header: { type: "box", layout: "vertical", backgroundColor: "#16A34A", paddingAll: "16px",
+      contents: [{ type: "text", text: "👑 ยืนยันรายการสั่งซื้อ", color: "#FFFFFF", weight: "bold", size: "lg" }] },
+    body: { type: "box", layout: "vertical", paddingAll: "18px", contents: body },
+    footer: { type: "box", layout: "vertical", paddingAll: "14px", spacing: "sm", contents: [
+      { type: "text", text: "👇 กดปุ่มด้านล่างเพื่อยืนยันรายการ", size: "xs", color: "#888888", align: "center" },
+      { type: "box", layout: "vertical", backgroundColor: "#16A34A", cornerRadius: "10px", paddingAll: "13px",
+        action: { type: "message", label: "ยืนยันรายการ", text: "ยืนยัน" },
+        contents: [{ type: "text", text: "✅ ยืนยันรายการ", color: "#FFFFFF", weight: "bold", align: "center", size: "md" }] },
+      { type: "text", text: "หรือพิมพ์ 'ยืนยัน' ได้เลยค่ะ 🙏🏻", size: "xxs", color: "#aaaaaa", align: "center" }
+    ] }
+  };
+}
+// การ์ด 2: สรุปยอด + แจ้งบัญชี (โทนเขียว) + ปุ่มคัดลอกเลขบัญชี (clipboard จริง)
+function payFlex(total, bankLines, acctNo) {
+  const bankRows = bankLines.map((t, i) => ({ type: "text", text: t, size: i === 1 ? "xxl" : "sm", weight: i === 1 ? "bold" : "regular", color: i === 1 ? "#16A34A" : "#333333", wrap: true, margin: i === 0 ? "none" : "sm" }));
+  return {
+    type: "bubble",
+    header: { type: "box", layout: "vertical", backgroundColor: "#16A34A", paddingAll: "16px",
+      contents: [{ type: "text", text: "👑 สรุปรายการสั่งซื้อ", color: "#FFFFFF", weight: "bold", size: "lg" }] },
+    body: { type: "box", layout: "vertical", paddingAll: "18px", contents: [
+      { type: "box", layout: "horizontal", contents: [
+        { type: "text", text: "รวมยอดโอน", weight: "bold", size: "md", color: "#333333", gravity: "center" },
+        { type: "text", text: total + " บาท ✅", weight: "bold", size: "lg", color: "#16A34A", align: "end", gravity: "center" }
+      ] },
+      { type: "separator", margin: "lg" },
+      { type: "text", text: "โอนเข้าบัญชี", size: "xs", color: "#999999", margin: "lg" },
+      { type: "box", layout: "vertical", margin: "sm", contents: bankRows },
+      { type: "box", layout: "vertical", backgroundColor: "#FFF7E6", cornerRadius: "8px", paddingAll: "12px", margin: "lg", contents: [
+        { type: "text", text: "📸 เมื่อโอนเงินเสร็จแล้ว รบกวนส่งเป็นรูปสลิปจากแอปธนาคารเท่านั้น", size: "xs", color: "#9a6a00", wrap: true },
+        { type: "text", text: "❌ ไม่รับรูปถ่ายจากกล้องมือถือ", size: "xs", color: "#c0392b", wrap: true, margin: "sm" }
+      ] }
+    ] },
+    footer: { type: "box", layout: "vertical", paddingAll: "14px", contents: [
+      { type: "box", layout: "vertical", backgroundColor: "#16A34A", cornerRadius: "10px", paddingAll: "13px",
+        action: { type: "clipboard", label: "คัดลอกเลขบัญชี", clipboardText: acctNo },
+        contents: [{ type: "text", text: "📋 คัดลอกเลขบัญชี", color: "#FFFFFF", weight: "bold", align: "center", size: "md" }] },
+      { type: "text", text: "โอนแล้วรบกวนส่งสลิปมาเลยนะคะ 🙏🏻", size: "xxs", color: "#aaaaaa", align: "center", margin: "sm" }
+    ] }
   };
 }
 async function lineFlex(token, replyToken, altText, contents, userId) {
