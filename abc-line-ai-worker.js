@@ -149,16 +149,22 @@ function extractLatLng(s) {
   if (!s) return null;
   const pats = [/@(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /!3d(-?\d{1,2}\.\d{2,})!4d(-?\d{2,3}\.\d{2,})/, /[?&](?:q|ll|daddr|destination|sll)=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /[?&]center=(-?\d{1,2}\.\d{2,}),(-?\d{2,3}\.\d{2,})/, /(-?\d{1,2}\.\d{4,}),\s*(-?\d{2,3}\.\d{4,})/];
   for (const p of pats) { const m = s.match(p); if (m) { const la = +m[1], lo = +m[2]; if (la >= 5 && la <= 21 && lo >= 96 && lo <= 106) return { lat: la, lng: lo }; } }
+  // ลิงก์แบบเส้นทาง (dir) เก็บพิกัดเป็น !1d<lng>!2d<lat> (สลับ) — ดึงเลข !Nd ทั้งหมดแล้วแยกด้วยช่วงพิกัดไทย
+  const dd = [...s.matchAll(/!\dd(-?\d{1,3}\.\d{3,})/g)].map(m => +m[1]);
+  let lat = null, lng = null;
+  for (const v of dd) { if (v >= 5 && v <= 21 && lat == null) lat = v; else if (v >= 96 && v <= 106 && lng == null) lng = v; }
+  if (lat != null && lng != null) return { lat, lng };
   return null;
 }
-// แปลงลิงก์แผนที่ (รวมลิงก์ย่อ goo.gl) → พิกัด
+// แปลงลิงก์แผนที่ (รวมลิงก์ย่อ goo.gl / ลิงก์ไม่มี https://) → พิกัด
 async function resolveMapLink(text) {
-  const um = text.match(/https?:\/\/[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s]*/i);
+  const um = text.match(/(?:https?:\/\/)?[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s]*/i);
   if (!um) return extractLatLng(text);
   let ll = extractLatLng(um[0]);
   if (ll) return ll;
+  let url = um[0]; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
   try {
-    const r = await fetch(um[0], { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) });
+    const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) });
     ll = extractLatLng(r.url || "");
     if (ll) return ll;
     const body = await r.text();
@@ -758,8 +764,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         await lineReply(TOKEN, replyToken, EXPRESS_MSG, userId);
         return;
       }
-      // 🗺️ ลูกค้าส่งลิงก์ Google Maps (ปักหมุด) → ดึงพิกัด + คำนวณค่าส่งด่วนให้
-      if (/https?:\/\/[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google)/i.test(t)) {
+      // 🗺️ ลูกค้าส่งลิงก์ Google Maps (ปักหมุด) → ดึงพิกัด + คำนวณค่าส่งด่วนให้ (รองรับลิงก์ไม่มี https://)
+      if (/(?:https?:\/\/)?[^\s]*(?:maps\.app\.goo\.gl|goo\.gl\/maps|google\.[a-z.]+\/maps|maps\.google)/i.test(t)) {
         const ll = await resolveMapLink(t);
         if (ll) {
           const { km, fee } = riderFee(ll.lat, ll.lng);
