@@ -422,8 +422,18 @@ https://cutt.ly/abc-menu"
 
 // ===== main =====
 export default {
+  // ⏰ Cron: ตามลูกค้าค้างจ่าย — เตือนออเดอร์ "รอโอน" ที่เกินเวลา (ต้องตั้ง Cron Trigger ใน Cloudflare)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(followUpUnpaid(env));
+  },
   async fetch(request, env, ctx) {
     const url0 = new URL(request.url);
+    // ทดสอบ cron ด้วยมือ: /cron?key=<XSELLY_KEY> (รันรอบเตือนเดี๋ยวนั้น)
+    if (url0.pathname === "/cron") {
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      const n = await followUpUnpaid(env);
+      return new Response("followup done, reminded=" + n, { status: 200 });
+    }
 
     // ── XSelly webhook: สต็อกเปลี่ยน → จำไว้ใน KV ──
     // ตั้ง webhook URL ใน XSelly เป็น  https://<worker>/xselly?key=<XSELLY_KEY>
@@ -946,6 +956,45 @@ async function askAI(apiKey, messages, models) {
     }
   }
   return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
+}
+
+// ⏰ ตามลูกค้าค้างจ่าย: วนออเดอร์ "รอโอน" ที่เกินเวลา → ส่งข้อความเตือน (push)
+// เตือนครั้งที่ 1 หลัง 1 ชม. | ครั้งที่ 2 หลัง 6 ชม. | ชำระแล้ว/แอดมินดูแล = ข้าม
+async function followUpUnpaid(env) {
+  if (!env.CONV) return 0;
+  const now = Date.now(), H = 3600000;
+  let reminded = 0;
+  try {
+    const list = await env.CONV.list({ prefix: "ord:" });
+    for (const k of list.keys) {
+      try {
+        const raw = await env.CONV.get(k.name);
+        if (!raw) continue;
+        const o = JSON.parse(raw);
+        if (!o.uid || o.uid === "anon") continue;
+        if (o.status && o.status.indexOf("✅") !== -1) continue;      // ชำระแล้ว → ไม่เตือน
+        const parts = k.name.split(":"); const shop = parts[1];
+        if (await env.CONV.get("mute:" + shop + ":" + o.uid)) continue; // แอดมินกำลังดูแล → ไม่เตือน
+        const age = now - (o.t || 0), remind = o.remind || 0;
+        let msg = "";
+        if (remind === 0 && age >= 1 * H)
+          msg = "สวัสดีค่ะคุณลูกค้า 💕 ร้าน ABC เห็นว่าออเดอร์ของคุณลูกค้ายังไม่ได้ชำระเงินนะคะ 🥰\nสนใจรับสินค้าอยู่ไหมคะ? โอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยค่ะ เดี๋ยวจัดส่งให้ทันทีนะคะ 📦✨";
+        else if (remind === 1 && age >= 6 * H)
+          msg = "รบกวนแจ้งเตือนอีกครั้งนะคะ 🙏🏻 ออเดอร์ของคุณลูกค้ายังรอการชำระเงินอยู่ค่ะ\nถ้ายังสนใจรับสินค้า รบกวนโอน + ส่งสลิปภายในวันนี้นะคะ 💕 (ถ้าไม่สะดวกแล้วแจ้งแอดมินได้เลยค่ะ)";
+        if (!msg) continue;
+        const token = env["LINE_TOKEN_" + (shop || "").toUpperCase()];
+        if (!token) continue;
+        const r = await fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ to: o.uid, messages: [{ type: "text", text: msg }] }),
+        });
+        if (r.ok) { o.remind = remind + 1; o.lastRemind = now; await env.CONV.put(k.name, JSON.stringify(o), { expirationTtl: 259200 }); reminded++; }
+        else console.log("FOLLOWUP_PUSH_FAIL " + r.status);
+      } catch (e) {}
+    }
+  } catch (e) { console.log("FOLLOWUP_ERR " + String(e).slice(0, 150)); }
+  return reminded;
 }
 
 // ตรวจสลิปโอนเงินกับ SlipOK — ส่งรูปสลิปไปเช็ค (ยอด/บัญชีปลายทาง/ปลอม/ซ้ำ)
