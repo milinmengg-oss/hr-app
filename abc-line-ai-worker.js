@@ -966,7 +966,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         try {
           if (env.CONV) {
             const itemBlock = calc.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
-            const block = "📦 ออเดอร์ (รอโอน)\n" + itemBlock + "\nยอดสินค้า " + calc.goods + "\nค่าส่ง " + calc.ship + "\nรวมยอดชำระ " + calc.total;
+            const block = "📦 ออเดอร์ (รอโอน)\n" + itemBlock + "\nยอดสินค้า " + calc.goods + "\n" + (calc.express ? "ค่าส่งด่วน " : "ค่าส่ง ") + calc.ship + "\nรวมยอดชำระ " + calc.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
             const name = await lineProfileName(TOKEN, userId);
             await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({ name, block, t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 });
             orderStored = true;
