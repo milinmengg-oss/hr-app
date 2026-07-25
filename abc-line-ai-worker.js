@@ -37,6 +37,75 @@ const VISION_MODELS = [
 // ===== ข้อความเมนู (ส่งทันทีเมื่อลูกค้าขอเมนู/ถามมีอะไรบ้าง) =====
 const NM2ID = {"ABC LEGO - ดับเบิ้ลมิ้นต์ 3%":1,"ABC LEGO - น้ำแร่ 3%":1,"ABC LEGO - มิกซ์เบอร์รี่ 3%":1,"ABC LEGO - องุ่น 3%":1,"ABC LEGO - โคล่า 3%":1,"ABC LEGO - ชามะลิ 3%":1,"ABC LEGO - สับปะรด 3%":1,"ABC LEGO - แตงโม 3%":1,"ABC LEGO - ดับเบิ้ลมิ้นต์ 5%":1,"ABC LEGO - มิกซ์เบอร์รี่ 5%":1,"ABC LEGO - องุ่น 5%":1,"ABC LEGO - แตงโม 5%":1,"ABC TANK - ดับเบิ้ลมิ้นต์ 3%":2,"ABC TANK - บลูเบอร์รี่เย็น 3%":2,"ABC TANK - พีชสตรอว์เบอร์รี่ 3%":2,"ABC TANK - มิกซ์เบอร์รี่ 3%":2,"ABC TANK - แตงโม 3%":2,"ABC TANK - องุ่น 3%":2,"ABC TANK - องุ่นลิ้นจี่ 3%":2,"ABC TANK - โคล่า 3%":2,"ABC TANK - ดับเบิ้ลมิ้นต์ 5%":2,"ABC TANK - แตงโม 5%":2,"ABC TANK - องุ่น 5%":2,"ABC TANK - โคล่า 5%":2,"ABC 8K - กล้วย":15,"ABC 8K - ดับเบิ้ลมิ้นต์":15,"ABC 8K - แตงโม":15,"ABC 8K - น้ำแร่":15,"ABC 8K - บลูไอซ์":15,"ABC 8K - มิกซ์เบอร์รี่":15,"ABC 8K - ลิ้นจี่":15,"ABC 8K - โคล่า":15,"ABC 8K - สตรอว์เบอร์รี่":15,"ABC 8K - สับปะรด":15,"ABC 8K - องุ่น":15,"ABC 8K - องุ่นอโล":15,"CARNIVAL 20K - กัมมี่":16,"CARNIVAL 20K - โคล่า":16,"CARNIVAL 20K - ดับเบิ้ลมิ้นต์":16,"CARNIVAL 20K - แตงโมไอซ์":16,"CARNIVAL 20K - บลูเบอร์รี่":16,"CARNIVAL 20K - พีชสตรอว์เบอร์รี่":16,"CARNIVAL 20K - สตรอว์เบอร์รี่":16,"CARNIVAL 20K - ส้มโซดา":16,"CARNIVAL 20K - องุ่น":16,"CARNIVAL 20K - องุ่นลิ้นจี่":16,"CARNIVAL 20K - องุ่นว่านหางจระเข้":16,"CARNIVAL 20K - สับปะรด":16,"CARNIVAL 20K - ยาคูลท์":16,"CARNIVAL 20K - แยมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - แยมบลูเบอร์รี่":16,"CARNIVAL 20K - ลิ้นจี่ไอซ์":16,"CARNIVAL 20K - ไอติมเผือก":16,"CARNIVAL 20K - ไอติมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - เมล่อน":16,"CARNIVAL 20K - เรดบลู":16,"DUAL SMASH 20K - แตงโม":17,"DUAL SMASH 20K - มิ้นต์":17,"DUAL SMASH 20K - โคล่า":17,"DUAL SMASH 20K - นมกล้วย":17,"DUAL SMASH 20K - น้ำแร่":17,"DUAL SMASH 20K - องุ่น":17,"DUAL SMASH 20K - องุ่นอโล":17,"DUAL SMASH 20K - สตรอว์เบอร์รี่":17,"DUAL SMASH 20K - แอปเปิ้ล":17,"DUAL SMASH 20K - ชาหลงจิน":17,"DUAL SMASH 20K - ฮันนี่เลม่อน":17,"DUAL SMASH 20K - ยาคูลท์":17,"เครื่อง DUAL SMASH - สีดำ":42,"ELFBAR SWAP 25K - ฝรั่งมะม่วงส้ม":3,"ELFBAR SWAP 25K - พีชสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - มะม่วง":3,"ELFBAR SWAP 25K - เมล่อน":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่ชีสเค้ก":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่องุ่นแอปเปิ้ล":3,"ELFBAR SWAP 25K - หมากฝรั่งแตงโม":3,"ELFBAR SWAP 25K - องุ่น":3,"ELFBAR SWAP 25K - ไอติมซอเลโร่":3,"ELFBAR SWAP 25K - ไอติมสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - แอปเปิ้ลลิ้นจี่":3,"ELFBAR SWAP 25K - โคล่าเย็น":3,"ELFBAR SWAP 25K - มะนาวเย็น":3,"ELFBAR SWAP 25K - ชามะลิ":3,"ELFBAR SWAP 25K - ชาหลงจิน":3,"ELFBAR SWAP 25K - ชาองุ่นกวนอิน":3,"ELFBAR SWAP 25K - ดับเบิ้ลมิ้นต์":3,"ELFBAR SWAP 25K - น้ำแร่":3,"ELFBAR SWAP 25K - องุ่นเย็น":3,"ELFBAR 15K - องุ่นว่านหางจระเข้":18,"ELFBAR 15K - บลูเบอร์รี่เย็น":18,"ELFBAR 15K - องุ่นเย็น":18,"ELFBAR 15K - องุ่นเยลลี่":18,"ELFBAR 15K - มะม่วงเขียว":18,"ELFBAR 15K - ฝรั่งเย็น":18,"ELFBAR 15K - โคล่าเลม่อน":18,"ELFBAR 15K - ชามะนาว":18,"ELFBAR 15K - แฟนต้าลิ้นจี่":18,"ELFBAR 15K - พีชเย็น":18,"ELFBAR 15K - องุ่นซากุระ":18,"ELFBAR 15K - สตรอว์เบอร์รี่เย็น":18,"ELFBAR 15K - พีชสตรอว์เบอร์รี่":18,"ELFBAR 15K - เบอร์รี่":18,"ELFBAR 15K - เมล่อนแตงโม":18,"ELFBAR 15K - แตงโม":18,"เครื่อง ELFBAR JOINONE - สีเขียว":43,"เครื่อง ELFBAR JOINONE - สีดำ":43,"เครื่อง ELFBAR JOINONE - สีแดง":43,"เครื่อง ELFBAR JOINONE - สีน้ำเงิน":43,"เครื่อง ELFBAR JOINONE - สีม่วง":43,"เครื่อง ELFBAR JOINONE - สีส้ม":43,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โคล่า":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แตงโมเย็น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แตงโมเลม่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  บลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  ฝรั่ง":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิกซ์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  เมล่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โยเกิร์ต":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   ลิ้นจี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่กล้วย":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   สับปะรด":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  องุ่น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แอปเปิ้ลอโล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แยมบลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - เมนทอล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - ช็อคโกแลตมิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะพร้าว":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะม่วง":4,"ESKO BAR 20K - โคล่า":19,"ESKO BAR 20K - แตงโม":19,"ESKO BAR 20K - แตงโมสตรอว์เบอร์รี่":19,"ESKO BAR 20K - บลูเบอร์รี่ไอซ์":19,"ESKO BAR 20K - บับเบิ้ลกัม":19,"ESKO BAR 20K - เบอร์รี่องุ่น":19,"ESKO BAR 20K - ฝรั่ง":19,"ESKO BAR 20K - มิกซ์เบอร์รี่":19,"ESKO BAR 20K - เมล่อน":19,"ESKO BAR 20K - สตรอว์เบอร์รี่":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กล้วย":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กีวี่":19,"ESKO BAR 20K - องุ่น":19,"ESKO BAR 20K - องุ่นเคียวโฮ":19,"ESKO BAR 20K - แอปเปิ้ลว่านหางจระเข้":19,"ESKO BAR 20K - ลิ้นจี่เย็น":19,"ESKO BAR 20K - ดับเบิ้ลมิ้นต์":19,"ESKO BAR 20K - กล้วยเย็น":19,"ESKO BAR 20K - มะม่วง":19,"ESKO BAR 20K - น้ำแร่":19,"ESKO BAR 20K - เรดเลม่อนโซดา":19,"ESKO BAR 20K - มิ้นต์เอ็กซ์ตร้า 5%":19,"ESKO BAR SWITCH 20K (KIT) - โคล่า":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเย็น":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเลม่อน":38,"ESKO BAR SWITCH 20K (KIT) - บลูเบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - ฝรั่ง":38,"ESKO BAR SWITCH 20K (KIT) - มิกซ์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - มิ้นต์":38,"ESKO BAR SWITCH 20K (KIT) - เมล่อน":38,"ESKO BAR SWITCH 20K (KIT) - โยเกิร์ต":38,"ESKO BAR SWITCH 20K (KIT) - ลิ้นจี่":38,"ESKO BAR SWITCH 20K (KIT) - สตรอว์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) -  สตรอว์เบอร์รี่กล้วย":38,"ESKO BAR SWITCH 20K (KIT) - สับปะรด":38,"ESKO BAR SWITCH 20K (KIT) - องุ่น":38,"ESKO BAR SWITCH 20K (KIT) -  แอปเปิ้ลอโล":38,"FREEBASE ESKOLIQ 30ML - โคล่า":60,"FREEBASE ESKOLIQ 30ML - มิกซ์เบอร์รี่":60,"FREEBASE ESKOLIQ 30ML - ไอซ์บลาสต์":60,"SALTNIC ESKOLIQ 30ML - โคล่า":58,"SALTNIC ESKOLIQ 30ML - มิกซ์เบอร์รี่":58,"INFY BAR 15K - โคล่าเลม่อน":22,"INFY BAR 15K - ซีซอล์ทเลม่อน":22,"INFY BAR 15K - แตงโม":22,"INFY BAR 15K - แตงโมลิ้นจี่":22,"INFY BAR 15K - พีชสตรอว์เบอร์รี่":22,"INFY BAR 15K - บลูเบอร์รี่":22,"INFY BAR 15K - แฟนต้าองุ่น":22,"INFY BAR 15K - มะม่วงโยเกิร์ต":22,"INFY BAR 15K - มิกซ์เบอร์รี่":22,"INFY BAR 15K - มิ้นต์":22,"INFY BAR 15K - เมล่อน":22,"INFY BAR 15K - ลิ้นจี่":22,"INFY BAR 15K - ลูกอมเปรี้ยว":22,"INFY BAR 15K - สตรอว์เบอร์รี่แตงโม":22,"INFY BAR 15K - องุ่นเคียวโฮ":22,"INFY BAR 15K - องุ่นลิ้นจี่":22,"INFY BAR 15K - มะนาว":22,"INFY BAR 15K - สับปะรดมะนาว":22,"INFY BAR 15K - โคล่า":22,"INFY BAR 15K - องุ่นแอปเปิ้ล":22,"INFY BAR PRO 20K - ดับเบิ้ลมิ้นต์":23,"INFY BAR PRO 20K - บลูไอซ์":23,"INFY BAR PRO 20K - โคล่า":23,"INFY BAR PRO 20K - มิกซ์เบอร์รี่":23,"INFY BAR PRO 20K - ลูกอมเรนโบว์":23,"INFY BAR PRO 20K - เบอร์รี่ชมพู":23,"INFY BAR PRO 20K - ลิ้นจี่เย็น":23,"INFY BAR PRO 20K - แตงโม":23,"INFY BAR PRO 20K - แตงโมสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - แตงโมลิ้นจี่":23,"INFY BAR PRO 20K - หมากฝรั่งแตงโม":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - พีชสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กล้วย":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กีวี่":23,"INFY BAR PRO 20K - องุ่น":23,"INFY BAR PRO 20K - องุ่นลิ้นจี่":23,"INFY BAR PRO 20K - องุ่นว่านหางจระเข้":23,"INFY BAR PRO 20K - แตงโมมิ้นต์":23,"INFY BAR PRO 20K - ยาคูลท์":23,"INFY BAR PRO 20K - เรดบลู":23,"INFY BAR PRO 20K - มัทฉะลาเต้":23,"INFY BAR PRO 20K - ฝรั่งเสาวรส":23,"INFY BAR PRO 20K - ราสเบอร์รี่แตงโม":23,"INFY BAR PRO 20K - ไอติมสตรอว์เบอร์รี่":23,"INFY 12K - โคล่า":20,"INFY 12K - แตงโมลิ้นจี่":20,"INFY 12K - น้ำแร่":20,"INFY 12K - บลูเบอร์รี่":20,"INFY 12K - พีช":20,"INFY 12K - มิกซ์เบอร์รี่":20,"INFY 12K - มิกซ์สตรอว์เบอร์รี่":20,"INFY 12K - มิ้นต์":20,"INFY 12K - เมล่อน":20,"INFY 12K - ลิ้นจี่":20,"INFY 12K - ลูกอมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่กล้วย":20,"INFY 12K - สตรอว์เบอร์รี่กีวี่":20,"INFY 12K - สตรอว์เบอร์รี่แตงโม":20,"INFY 12K - องุ่นเคียวโฮ":20,"INFY 12K - องุ่นซากุระ":20,"INFY 12K - องุ่นโยโย่":20,"INFY 12K - องุ่นแอปเปิ้ล":20,"INFY 12K - ไอศกรีมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่ราสเบอร์รี่":20,"INFY 12K - สไปร์ท":20,"INFY 12K - ส้มโซดา":20,"INFY 12K - หมากฝรั่งแตงโม":20,"INFY 12K - เลม่อนชมพู":20,"INFY 12K - ราสเบอร์รี่มัลเบอร์รี่":20,"INFY 12K - กัมมี่แบร์":20,"INFY 12K - ชาอู่หลงพีช":20,"INFY 12K - องุ่นหน้าร้อน":20,"INFY 12K - บานาน่าท๊อฟฟี่":20,"INFY 12K - ลิ้นจี่ราสเบอร์รี่":20,"INFY 20K - บลูเบอร์รี่":21,"INFY 20K - แตงโมลิ้นจี่":21,"INFY 20K - ลิ้นจี่":21,"INFY 20K - มิกซ์เบอร์รี่":21,"INFY 20K - มิ้นต์":21,"INFY 20K - สตรอว์เบอร์รี่กีวี่":21,"INFY 20K - สตรอว์เบอร์รี่แตงโม":21,"INFY 20K - องุ่นแอปเปิ้ล":21,"INFY 20K - องุ่นเคียวโฮ":21,"INFY 20K - องุ่นโยโย่":21,"INFY 20K - องุ่นลิ้นจี่":21,"INFY 20K - องุ่นอโล":21,"INFY 20K - พีช":21,"INFY 20K - แอปเปิ้ลอโล":21,"INFY 20K - สปาร์คกิ้งเลม่อน":21,"INFY 20K - น้ำแร่":21,"INFY 20K - โคล่า":21,"INFY 20K - สตรอว์เบอร์รี่กล้วย":21,"INFY 20K - เมนทอลฟรีซ":21,"INFY 20K - หมากฝรั่งองุ่น":21,"INFY 20K - หมากฝรั่งแตงโม":21,"INFY PLUS - โคล่า":10,"INFY PLUS - ชามะลิ":10,"INFY PLUS - แตงโมลิ้นจี่":10,"INFY PLUS - แตงโมสตรอว์เบอร์รี่":10,"INFY PLUS - น้ำส้มโซดา":10,"INFY PLUS - บลูเบอร์รี่":10,"INFY PLUS - พีช":10,"INFY PLUS - มะม่วงพีช":10,"INFY PLUS - มิ้นต์":10,"INFY PLUS - เยลลี่องุ่น":10,"INFY PLUS - ลิ้นจี่":10,"INFY PLUS - ลิ้นจี่ราสเบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่องุ่น":10,"INFY PLUS - สไปร์ท":10,"INFY PLUS - หมากฝรั่งองุ่น":10,"INFY PLUS - องุ่นกัมมี่":10,"INFY PLUS - องุ่นเคียวโฮ":10,"INFY PLUS - องุ่นแอปเปิ้ล":10,"INFY PLUS - แอปเปิ้ลแดง":10,"INFY PLUS - ไอศกรีมสตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งเปรี้ยว":10,"INFY PLUS - แอปเปิ้ลอโล":10,"INFY PLUS - เชอร์รี่สตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งสับปะรด":10,"INFY PLUS - ซีซอล์ทเลม่อน":10,"INFY PLUS - ผลไม้รวม":10,"INFY PLUS - แตงโมราสเบอร์รี่":10,"เครื่อง IQOS ILUMA I ONE - สีฟ้า":55,"เครื่อง IQOS ILUMA I ONE - สีส้ม":55,"เครื่อง IQOS ILUMA I ONE - สีม่วง":55,"เครื่อง IQOS ILUMA I ONE - สีดำ":55,"เครื่อง IQOS ILUMA I ONE - สีเขียว":55,"เครื่อง IQOS ILUMA I PRIME - สีดำ":56,"เครื่อง IQOS ILUMA I PRIME - สีฟ้า":56,"เครื่อง IQOS ILUMA I PRIME - สีเลือดหมู":56,"เครื่อง IQOS ILUMA I PRIME - สีเขียว":56,"เครื่อง IQOS ILUMA I PRIME - สีม่วง":56,"เครื่อง IQOS ILUMA I STANDARD - สีดำ":57,"เครื่อง IQOS ILUMA I STANDARD - สีฟ้า":57,"เครื่อง IQOS ILUMA I STANDARD - สีเขียว":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วงอ่อน":57,"เครื่อง IQOS ILUMA I STANDARD - สีส้ม":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วง":57,"TEREA IN - GREEN":52,"TEREA IN - BRIGHT WAVE":52,"TEREA IN - BLUE":52,"TEREA IN - BLACK GREEN":52,"TEREA IN - PURPLE WAVE":52,"TEREA IN - BRONZE":52,"TEREA IN - SIENNA":52,"TEREA IN - DIMENSION APRICITY":52,"TEREA IN - DIMENSION YUGEN":52,"TEREA IN - GOLDEN EDITION":52,"TEREA IN - RIVIERA PEARL":52,"TEREA IN - BERRINE EDITION":52,"TEREA IN - AUBURN EDITION":52,"TEREA IN - MULINT EDITION":52,"TEREA IN - SUN PEARL":52,"TEREA IN - BLACK RUBY":52,"TEREA IN - OASIS PEARL":52,"TEREA IN - BERMIN PEARL":52,"TEREA IN - PERINT PEARL":52,"TEREA JP - BALANCED REGULAR":53,"TEREA JP - BLACK MENTHOL":53,"TEREA JP - BLACK PURPLE MENTHOL":53,"TEREA JP - BLACK RUBY MENTHOL":53,"TEREA JP - FUSION MENTHOL":53,"TEREA JP - MENTHOL":53,"TEREA JP - MINT":53,"TEREA JP - OASIS PEARL":53,"TEREA JP - TROPICAL MENTHOL":53,"TEREA JP - PURPLE MENTHOL":53,"TEREA JP - REGULAR":53,"TEREA JP - RICH REGULAR":53,"TEREA JP - SMOOTH REGULAR":53,"TEREA JP - SUN PEARL":53,"TEREA JP - YELLOW MENTHOL":53,"TEREA JP - WARM REGULAR":53,"TEREA JP - BLACK FUCHSIA MENTHOL":53,"TEREA JP - BRIGHT MENTHOL":53,"TEREA JP - BLACK YELLOW MENTHOL":53,"TEREA JP - BLACK SUNSHINE MENTHOL":53,"TEREA JP - RUBY REGULAR":53,"TEREA JP - RIVIERA PEARL":53,"TEREA JP - CLEAR REGULAR":53,"TEREA JP - SHINE PEARL":53,"TEREA JP - VELVET PEARL":53,"TEREA JP - STARLING PEARL":53,"TEREA JP - STELLAR PEARL":53,"TEREA MY - ZING WAVE":54,"TEREA MY - TURQUOISE":54,"TEREA MY - RUSSET":54,"TEREA MY - BLUE":54,"TEREA MY - BLACK GREEN":54,"TEREA MY - PURPLE WAVE":54,"TEREA MY - SIENNA":54,"TEREA MY - OASIS PEARL":54,"TEREA MY - SUN PEARL":54,"TEREA MY - AMBER":54,"JOIWAY 12K - โคล่าเลม่อน":24,"JOIWAY 12K - โคล่า":24,"JOIWAY 12K - ลิ้นจี่":24,"JOIWAY 12K - แตงโม":24,"JOIWAY 12K - แอปเปิ้ลเขียว":24,"JOIWAY 12K - แฟนต้าเขียว":24,"JOIWAY 12K - เมล่อนฮอกไกโด":24,"JOIWAY 12K - มิ้นต์":24,"JOIWAY 12K - ส้มโซดา":24,"JOIWAY 12K - บลูเบอร์รี่":24,"JOIWAY 12K - องุ่น":24,"JOIWAY 12K - เสาวรส":24,"JOIWAY 12K - ลูกอมเรนโบว์":24,"JOIWAY 12K - สตรอว์เบอร์รี่":24,"JOIWAY 12K - ชามะนาว":24,"JOIWAY 12K - คุกกี้":24,"JOIWAY TWINS 20K - โคล่า / แอปเปิ้ลเขียว":25,"JOIWAY TWINS 20K - โคล่า / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - ลิ้นจี่ / คุกกี้":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / มิ้นต์":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - มิ้นต์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / บลูเบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / แตงโม":25,"JOIWAY TWINS 20K - องุ่น / ลิ้นจี่":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / คุกกี้":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / แตงโม":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / ลูกอมเรนโบว์":25,"JOIWAY TWINS 20K - แตงโม / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / สตรอว์เบอร์รี่":25,"KARDINAL POUCH - MANGO (3MG)":63,"KARDINAL POUCH - PEPPERMINT (3MG)":63,"KARDINAL POUCH - COLA (3MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (3MG)":63,"KARDINAL POUCH - ICE MINT (3MG)":63,"KARDINAL POUCH - PEPPERMINT (6MG)":63,"KARDINAL POUCH - COLA (6MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (6MG)":63,"KARDINAL POUCH - ICE MINT (6MG)":63,"KARDINAL POUCH - MANGO (6MG)":63,"KS QUIK PRO 15K (หัวน้ำยา) - โคล่าเลม่อน":5,"KS QUIK PRO 15K (หัวน้ำยา) - ชานม":5,"KS QUIK PRO 15K (หัวน้ำยา) - แตงโม":5,"KS QUIK PRO 15K (หัวน้ำยา) - น้ำแร่":5,"KS QUIK PRO 15K (หัวน้ำยา) - บลูเบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - เมนทอล":5,"KS QUIK PRO 15K (หัวน้ำยา) - โยเกิร์ต":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่แบล็คเคอร์แรนท์":5,"KS QUIK PRO 15K (หัวน้ำยา) - เลม่อนโซดา":5,"KS QUIK PRO 15K (หัวน้ำยา) - สตรอว์เบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - สับปะรด":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่น":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - แอปเปิ้ลเปรี้ยว":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นเบอร์รี่":5,"KS Quik 6K - โคล่าเลม่อน":26,"KS Quik 6K - ชานมอู่หลง":26,"KS Quik 6K - แตงโม":26,"KS Quik 6K - น้ำแร่":26,"KS Quik 6K - บลูเบอร์รี่":26,"KS Quik 6K - ฝรั่ง":26,"KS Quik 6K - มะนาว":26,"KS Quik 6K - มะม่วง":26,"KS Quik 6K - มิกซ์เบอร์รี่":26,"KS Quik 6K - เมนทอล":26,"KS Quik 6K - เมล่อน":26,"KS Quik 6K - ยาสูบครีม":26,"KS Quik 6K - ยาสูบคลาสสิค":26,"KS Quik 6K - ลิ้นจี่":26,"KS Quik 6K - สตรอว์เบอร์รี่":26,"KS Quik 6K - สับปะรด":26,"KS Quik 6K - องุ่น":26,"KS Quik 6K - ไอศกรีมสตรอว์เบอร์รี่":26,"KS QUIK PRO 15K (KIT) - โคล่าเลม่อน":39,"KS QUIK PRO 15K (KIT) - ชานม":39,"KS QUIK PRO 15K (KIT) - แตงโม":39,"KS QUIK PRO 15K (KIT) - น้ำแร่":39,"KS QUIK PRO 15K (KIT) - บลูเบอร์รี่":39,"KS QUIK PRO 15K (KIT) - เมนทอล":39,"KS QUIK PRO 15K (KIT) - โยเกิร์ต":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่แบล็คเคอร์แรนท์":39,"KS QUIK PRO 15K (KIT) - เลม่อนโซดา":39,"KS QUIK PRO 15K (KIT) - สตรอว์เบอร์รี่":39,"KS QUIK PRO 15K (KIT) - สับปะรด":39,"KS QUIK PRO 15K (KIT) - องุ่น":39,"KS QUIK PRO 15K (KIT) - องุ่นลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - แอปเปิ้ลเปรี้ยว":39,"KS QUIK PRO 15K (KIT) - องุ่นเบอร์รี่":39,"LANA IRIS 24K - ชากวนอิน 3%":27,"LANA IRIS 24K - แตงโม 3%":27,"LANA IRIS 24K - น้ำแร่ 3%":27,"LANA IRIS 24K - ฝรั่ง 3%":27,"LANA IRIS 24K - มิกซ์เบอร์รี่ 3%":27,"LANA IRIS 24K - มิ้นต์ 3%":27,"LANA IRIS 24K - ลิ้นจี่ 3%":27,"LANA IRIS 24K - สตรอว์เบอร์รี่ 3%":27,"LANA IRIS 24K - สับปะรด 3%":27,"LANA IRIS 24K - ส้มองุ่น 3%":27,"LANA IRIS 24K - องุ่น 3%":27,"LANA IRIS 24K - โคล่า 3%":27,"LANA IRIS 24K - เลม่อนโคล่า 3%":27,"LANA IRIS 24K - ชากวนอิน 5%":27,"LANA IRIS 24K - มิ้นต์ 5%":27,"M SWITCH - ดับเบิ้ลมิ้นต์":6,"M SWITCH - บลูเบอร์รี่เย็น":6,"M SWITCH - พีชสตรอว์เบอร์รี่":6,"M SWITCH - มะม่วงเสาวรส":6,"M SWITCH - มิกซ์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่แตงโม":6,"M SWITCH - หมากฝรั่งแตงโม":6,"M SWITCH - องุ่น":6,"M SWITCH - องุ่นลิ้นจี่":6,"M SWITCH - องุ่นว่านหางจระเข้":6,"M SWITCH - เบอร์รี่ชมพู":6,"M SWITCH - แตงโม":6,"M SWITCH - แบล็คเบอร์รี่":6,"M SWITCH - แอปเปิ้ลว่านหางจระเข้":6,"M SWITCH - โคล่า":6,"M SWITCH - องุ่นเคียวโฮ":6,"MARBO 9K - โคล่า":29,"MARBO 9K - ดับเบิ้ลมิ้นต์":29,"MARBO 9K - แตงโม":29,"MARBO 9K - บลูไอซ์":29,"MARBO 9K - เบอร์รี่ชมพู":29,"MARBO 9K - พีช":29,"MARBO 9K - พีชสตรอว์เบอร์รี่":29,"MARBO 9K - แฟนต้าส้ม":29,"MARBO 9K - มิกซ์เบอร์รี่":29,"MARBO 9K - เยลลี่":29,"MARBO 9K - ลูกอมเรนโบว์":29,"MARBO 9K - สตรอว์เบอร์รี่":29,"MARBO 9K - สปาร์คกิ้งเลม่อน":29,"MARBO 9K - หมากฝรั่งแตงโม":29,"MARBO 9K - องุ่น":29,"MARBO 9K - องุ่นลิ้นจี่":29,"MARBO 9K - องุ่นว่านหางจระเข้":29,"MARBO 9K - แอปเปิ้ลเขียว":29,"MARBO 9K - สตรอว์เบอร์รี่มิลค์เชค":29,"MARBO 9K - เมนทอลฟรีส":29,"MARBO 9K - องุ่นเคียวโฮ":29,"MARBO 9K - แอปเปิ้ลเลม่อน":29,"MARBO 9K - บลูเบอร์รี่มิ้นต์":29,"MARBO 9K -  สตรอว์เบอร์รี่กีวี่":29,"MARBO 10K - บลูไอซ์":28,"MARBO 10K - เบอร์รี่ชมพู":28,"MARBO 10K - เบอร์รี่รวม":28,"MARBO 10K - แตงโม":28,"MARBO 10K - แตงโมมิ้นต์":28,"MARBO 10K - โคล่า":28,"MARBO 10K - มัทฉะลาเต้":28,"MARBO 10K - เมนทอล":28,"MARBO 10K - เลม่อนมิ้นต์":28,"MARBO 10K - สตรอว์เบอร์รี่กีวี่":28,"MARBO 10K - องุ่น":28,"MARBO 10K - องุ่นเคียวโฮ":28,"เครื่อง M ZERO NANO - สีดำ":46,"เครื่อง M ZERO NANO - สีขาว":46,"เครื่อง M ZERO NANO - สีชมพู":46,"เครื่อง M ZERO NANO - สีฟ้า":46,"เครื่อง M ZERO PRO - สีเขียว":47,"เครื่อง M ZERO PRO - สีชมพู":47,"เครื่อง M ZERO PRO - สีแดง":47,"เครื่อง M ZERO PRO - สีเงิน":47,"เครื่อง M ZERO PRO - สีดำ":47,"เครื่อง M ZERO PRO - สีเหลืองดำ":47,"เครื่อง M ZERO PRO - สีฟ้าม่วง":47,"เครื่อง M ZERO PRO - สีดำชมพู":47,"เครื่อง M SWITCH - สีดำ":44,"เครื่อง M SWITCH KIT - ดับเบิ้ลมิ้นต์":40,"เครื่อง M SWITCH KIT - บลูเบอร์รี่เย็น":40,"เครื่อง M SWITCH KIT - พีชสตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - มะม่วงเสาวรส":40,"เครื่อง M SWITCH KIT - มิกซ์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่แตงโม":40,"เครื่อง M SWITCH KIT - หมากฝรั่งแตงโม":40,"เครื่อง M SWITCH KIT - องุ่น":40,"เครื่อง M SWITCH KIT - องุ่นลิ้นจี่":40,"เครื่อง M SWITCH KIT - องุ่นว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - เบอร์รี่ชมพู":40,"เครื่อง M SWITCH KIT - แตงโม":40,"เครื่อง M SWITCH KIT - แบล็คเบอร์รี่":40,"เครื่อง M SWITCH KIT - แอปเปิ้ลว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - โคล่า":40,"เครื่อง M SWITCH KIT - องุ่นเคียวโฮ":40,"FREEBASE MARBO 30ML - ทอง":61,"FREEBASE MARBO 30ML - ชมพู":61,"FREEBASE MARBO 30ML - ฟ้า":61,"FREEBASE MARBO 30ML - ม่วง":61,"SALTNIC MARBO 30ML - เขียว":59,"SALTNIC MARBO 30ML - ชมพู":59,"SALTNIC MARBO 30ML - ดำ":59,"SALTNIC MARBO 30ML - ทอง":59,"SALTNIC MARBO 30ML - น้ำเงิน":59,"SALTNIC MARBO 30ML - ม่วง":59,"SALTNIC MARBO 30ML - เงิน":59,"SALTNIC MARBO 30ML - แดง":59,"SALTNIC MARBO 30ML 50% - ม่วง":59,"MARBO ZERO - เกรปฟรุต":11,"MARBO ZERO - โคล่า":11,"MARBO ZERO - ชาผลไม้":11,"MARBO ZERO - ชาอู่หลง":11,"MARBO ZERO - ซิก้าร์":11,"MARBO ZERO - แตงโม":11,"MARBO ZERO - น้ำแร่":11,"MARBO ZERO - บลูเบอร์รี่":11,"MARBO ZERO - พีช":11,"MARBO ZERO - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO - มะม่วง":11,"MARBO ZERO - มิกซ์เบอร์รี่":11,"MARBO ZERO - มิ้นต์":11,"MARBO ZERO - ลิ้นจี่":11,"MARBO ZERO - เลม่อน":11,"MARBO ZERO - ส้มยูสุ":11,"MARBO ZERO - สับปะรด":11,"MARBO ZERO - องุ่น":11,"MARBO ZERO - องุ่นว่านหางจระเข้":11,"MARBO ZERO - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - โคล่า":11,"MARBO ZERO 5% - แตงโม":11,"MARBO ZERO 5% - เบอร์รี่ชมพู":11,"MARBO ZERO 5% - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO 5% - มิกซ์เบอร์รี่":11,"MARBO ZERO 5% - มิ้นต์":11,"MARBO ZERO 5% - สตรอว์เบอร์รี่กล้วย":11,"MARBO ZERO 5% - องุ่น":11,"MARBO ZERO 5% - องุ่นว่านหางจระเข้":11,"MARBO ZERO 5% - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - มิ้นต์ฟรีซ":11,"MARBO 9K (โคลน) - ดับเบิ้ลมิ้นต์":30,"MARBO 9K (โคลน) - บลูไอซ์":30,"MARBO 9K (โคลน) - พีช":30,"MARBO 9K (โคลน) - พีชสตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - มิกซ์เบอร์รี่":30,"MARBO 9K (โคลน) - ลูกอมเรนโบว์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - สปาร์คกิ้งเลม่อน":30,"MARBO 9K (โคลน) - หมากฝรั่งแตงโม":30,"MARBO 9K (โคลน) - องุ่น":30,"MARBO 9K (โคลน) - องุ่นลิ้นจี่":30,"MARBO 9K (โคลน) - องุ่นว่านหางจระเข้":30,"MARBO 9K (โคลน) - เบอร์รี่ชมพู":30,"MARBO 9K (โคลน) - เยลลี่":30,"MARBO 9K (โคลน) - แตงโม":30,"MARBO 9K (โคลน) - แฟนต้าส้ม":30,"MARBO 9K (โคลน) - แอปเปิ้ลเขียว":30,"MARBO 9K (โคลน) - โคล่า":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่มิลค์เชค":30,"MARBO 9K (โคลน) - เมนทอลฟรีส":30,"MARBO 9K (โคลน) - องุ่นเคียวโฮ":30,"MARBO 9K (โคลน) - แอปเปิ้ลเลม่อน":30,"MARBO 9K (โคลน) - บลูเบอร์รี่มิ้นต์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่กีวี่":30,"เครื่อง M SWITCH - สีดำ (โคลน)":44,"FREEBASE PHATJUICE 30ML - องุ่นยาว":62,"RELX BOOST POD - กล้วย":7,"RELX BOOST POD - บลูเบอร์รี่":7,"RELX BOOST POD - โคล่า":7,"RELX BOOST POD - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD - องุ่น":7,"RELX BOOST POD - ชามะลิ":7,"RELX BOOST POD - ลูกอมเลม่อนมิ้นต์":7,"RELX BOOST POD - น้ำแร่":7,"RELX BOOST POD - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD - สับปะรด":7,"RELX BOOST POD - ฝรั่ง":7,"RELX BOOST POD - ลูกอม":7,"RELX BOOST POD - แตงโม":7,"RELX BOOST POD - สตรอว์เบอร์รี่แตงโม":7,"RELX BOOST POD - เบอร์รี่ชมพู":7,"RELX BOOST POD - มะเฟือง":7,"RELX BOOST POD - คูลมิ้นต์":7,"RELX BOOST POD  - ลิ้นจี่":7,"RELX BOOST POD  - สเปียร์มิ้นต์":7,"RELX BOOST POD  - หมากฝรั่งแตงโม":7,"RELX BOOST POD  - แอปเปิ้ลว่านหางจระเข้":7,"RELX BOOST POD  - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD  - สตรอว์เบอร์รี่กล้วย":7,"RELX BOOST POD 5% - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD 5% - องุ่น":7,"RELX BOOST POD 5% - แตงโม":7,"RELX BOOST POD 5% - ยาสูบคลาสสิค":7,"RELX BOOST POD 5% - โคล่า":7,"RELX BOOST POD 5% - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD 5% - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD 5% - สตรอว์เบอร์รี่กล้วย":7,"RELX CLEAR 18K 3% - กาแฟโกปิโก้":8,"RELX CLEAR 18K 3% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 3% - แตงโม":8,"RELX CLEAR 18K 3% - น้ำส้มโซดา":8,"RELX CLEAR 18K 3% - น้ำแร่":8,"RELX CLEAR 18K 3% - สเปียร์มิ้นต์":8,"RELX CLEAR 18K 3% - สับปะรด":8,"RELX CLEAR 18K 3% - องุ่นอโล":8,"RELX CLEAR 18K 3% - องุ่น":8,"RELX CLEAR 18K 3% - แอปเปิ้ลเขียว":8,"RELX POD CLEAR 18K 3% - รวมมิตรเบอร์รี่":8,"RELX POD CLEAR 18K 3% - ไอติมสตรอว์เบอร์รี่":8,"RELX POD CLEAR 18K 3% - โคล่า":8,"RELX POD CLEAR 18K 3% - สตรอว์เบอร์รี่โซดา":8,"RELX POD CLEAR 18K 3% - มะม่วงเสาวรส":8,"RELX POD CLEAR 18K 3% - เมล่อน":8,"RELX CLEAR 18K 5% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 5% - แตงโม":8,"RELX CLEAR 18K 5% - องุ่น":8,"RELX DIVA 30K 3% - โคล่า":31,"RELX DIVA 30K 3% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 3% - แตงโม":31,"RELX DIVA 30K 3% - น้ำแร่":31,"RELX DIVA 30K 3% - น้ำส้มโซดา":31,"RELX DIVA 30K 3% - มะม่วงเสาวรส":31,"RELX DIVA 30K 3% - มิกซ์เบอร์รี่":31,"RELX DIVA 30K 3% - เมล่อน":31,"RELX DIVA 30K 3% - สเปียร์มิ้นต์":31,"RELX DIVA 30K 3% - องุ่น":31,"RELX DIVA 30K 3% - องุ่นอโล":31,"RELX DIVA 30K 3% - ไอติมสตรอว์เบอร์รี่":31,"RELX DIVA 30K 5% - กาแฟโกปิโก้":31,"RELX DIVA 30K 5% - โคล่า":31,"RELX DIVA 30K 5% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 5% - แตงโม":31,"RELX DIVA 30K 5% - องุ่น":31,"RELX SMASH GO 12K - แอปเปิ้ล 3%":32,"RELX SMASH GO 12K - เสาวรส 3%":32,"RELX SMASH GO 12K - องุ่น 3%":32,"RELX SMASH GO 12K - องุ่นลิ้นจี่ 3%":32,"RELX SMASH GO 12K - พีชสตรอว์เบอร์รี่ 3%":32,"RELX SMASH GO 12K - มะม่วง 3%":32,"RELX SMASH GO 12K - แตงโม 3%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 3%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 3%":32,"RELX SMASH GO 12K - โคล่า 3%":32,"RELX SMASH GO 12K - ชาอู่หลง 3%":32,"RELX SMASH GO 12K - บลูเบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - เบอร์รี่ชมพู 3%":32,"RELX SMASH GO 12K - ฝรั่ง 3%":32,"RELX SMASH GO 12K - ลิ้นจี่ 3%":32,"RELX SMASH GO 12K - สตรอว์เบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - สับปะรดเย็น 3%":32,"RELX SMASH GO 12K - องุ่นอโล 3%":32,"RELX SMASH GO 12K - หมากฝรั่งแตงโม 3%":32,"RELX SMASH GO 12K - แตงโม 5%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 5%":32,"RELX SMASH GO 12K - องุ่น 5%":32,"RELX SMASH GO 12K - โคล่า 5%":32,"RELX SMASH GO 12K - คูลมิ้นต์ 5%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 5%":32,"RELX SMASH GO 12K - ยาสูบคลาสสิค 5%":32,"RELX SMASH GO 12K - สเปียร์มิ้นต์ 5%":32,"RELX SPARTA 20K - โคล่า":33,"RELX SPARTA 20K - ชาอู่หลง":33,"RELX SPARTA 20K - ดับเบิ้ลมิ้นต์":33,"RELX SPARTA 20K - แตงโม":33,"RELX SPARTA 20K - น้ำแร่":33,"RELX SPARTA 20K - บลูเบอร์รี่":33,"RELX SPARTA 20K - พีชสตรอเบอร์รี่":33,"RELX SPARTA 20K - เยลลี่":33,"RELX SPARTA 20K - รวมมิตรเบอร์รี่":33,"RELX SPARTA 20K - ราสเบอร์รี่มิ้นติ์":33,"RELX SPARTA 20K - ลูกกวาด":33,"RELX SPARTA 20K - สตรอเบอร์รี่":33,"RELX SPARTA 20K - สัปปะรด":33,"RELX SPARTA 20K - องุ่น":33,"RELX SPARTA 20K - องุ่นลิ้นจี่":33,"RELX SPARTA 20K - แอปเปิ้ล":33,"RELX SPARTA 20K - เบอร์รี่ชมพู":33,"RELX SPARTA 20K - โพล่าร์มิ้นต์":33,"RELX SPARTA 20K - หมากฝรั่งแตงโม":33,"RELX SPARTA 20K - ลิ้นจี่":33,"RELX SPARTA 20K - องุ่นอโล":33,"เครื่อง RELX CREATOR 20K - สีดำ":48,"เครื่อง RELX CREATOR 20K - สีเทา-เหลือง":48,"เครื่อง RELX ESSENTIAL 2 - สีเทา":49,"เครื่อง RELX ESSENTIAL 2 - สีดำ":49,"เครื่อง RELX ESSENTIAL 2 - สีเงิน":49,"เครื่อง RELX ESSENTIAL 2 - สีฟ้าม่วง":49,"เครื่อง RELX INFINITY 2+ - สีเขียว":50,"เครื่อง RELX INFINITY 2+ - สีเงิน":50,"เครื่อง RELX INFINITY 2+ - สีดำ":50,"เครื่อง RELX INFINITY 2+ - สีเทา":50,"เครื่อง RELX INFINITY 2+ - สีบรอนซ์ทอง":50,"เครื่อง RELX INFINITY 2+ - สีโรสโกลด์":50,"เครื่อง RELX INFINITY 2+ - สีขาว":50,"RELX INFINITY - โคล่า":12,"RELX INFINITY - ชาเขียวมะลิ":12,"RELX INFINITY - ชาดอกชบาเย็น":12,"RELX INFINITY - ชาดำเย็น":12,"RELX INFINITY - ชาไทย":12,"RELX INFINITY - ชาพีช":12,"RELX INFINITY - ชามะนาวเย็น":12,"RELX INFINITY - ชาหลงจินเย็น":12,"RELX INFINITY - ชาอู่หลงเย็น":12,"RELX INFINITY - แตงโม":12,"RELX INFINITY - ถั่วเขียว":12,"RELX INFINITY - นํ้าส้มโซดา":12,"RELX INFINITY - น้ำเขียวโซดา":12,"RELX INFINITY - น้ำผึ้งส้มโอ":12,"RELX INFINITY - เผือก":12,"RELX INFINITY - ฝรั่ง":12,"RELX INFINITY - มะนาวเย็น":12,"RELX INFINITY - มะม่วง":12,"RELX INFINITY - เมล่อน":12,"RELX INFINITY - รูทเบียร์":12,"RELX INFINITY - ลิ้นจี่":12,"RELX INFINITY - ไวท์คอฟฟี่":12,"RELX INFINITY - สตรอว์เบอร์รี่":12,"RELX INFINITY - สไปรท์":12,"RELX INFINITY - เสาวรส":12,"RELX INFINITY - องุ่น":12,"RELX INFINITY - องุ่นเขียว":12,"RELX INFINITY - องุ่นแอปเปิ้ล":12,"RELX INFINITY - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - แตงโม":12,"RELX INFINITY 5% - เปปเปอร์มิ้นต์":12,"RELX INFINITY 5% - มิกซ์เบอร์รี่":12,"RELX INFINITY 5% - มิ้นต์เอ็กซ์ตร้า":12,"RELX INFINITY 5% - มิ้นต์ฟรีซ":12,"RELX INFINITY 5% - ยาสูบคลาสสิค":12,"RELX INFINITY 5% - ยาสูบร้อน":12,"RELX INFINITY 5% - เลม่อนมิ้นต์":12,"RELX INFINITY 5% - สเปียร์มิ้นต์":12,"RELX INFINITY 5% - องุ่น":12,"RELX INFINITY 5% - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - ซิตรัส":12,"RELX INFINITY 5% - ยาสูบมิ้นต์":12,"RELX INFINITY 5% - ราสเบอร์รี่มิ้นต์":12,"RELX INFINITY 5% - ไอซ์สปาร์คกิ้ง":12,"RELX INFINITY 5% - สตรอว์เบอร์รี่":12,"RELX INFINITY 5% - สับปะรด":12,"RELX LARGE - ลิ้นจี่":13,"RELX LARGE - องุ่น":13,"RELX LARGE - องุ่นแอปเปิ้ล":13,"RELX LARGE - แอปเปิ้ลเขียว":13,"RELX LARGE 5% - โคล่า":13,"RELX LARGE 5% - ชาหลงจิน":13,"RELX LARGE 5% - บลูเบอร์รี่":13,"RELX LARGE 5% - พีช":13,"RELX LARGE 5% - พีชสตรอว์เบอร์รี่":13,"RELX ULTRA 3% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 3% - แตงโม":14,"RELX ULTRA 3% - บลูเบอร์รี่":14,"RELX ULTRA 3% - เบอร์รี่ชมพู":14,"RELX ULTRA 3% - มะม่วงเขียว":14,"RELX ULTRA 3% - องุ่นอโล":14,"RELX ULTRA 5% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 5% - พีชสตรอว์เบอร์รี่":14,"RELX ULTRA 5% - มิกซ์เบอร์รี่":14,"RELX ULTRA 5% - ลิ้นจี่":14,"RELX ULTRA 5% - สับปะรด":14,"RELX ULTRA 5% - องุ่นอโล":14,"RELX ULTRA 5% - แอปเปิ้ลอโล":14,"RELX ULTRA 5% - โคล่า":14,"RELX ULTRA 5% - เบอร์รี่ชมพู":14,"SONIC 8K - กัมมี่แบร์":34,"SONIC 8K - โคล่า":34,"SONIC 8K - แตงโม":34,"SONIC 8K - น้ำแร่":34,"SONIC 8K - มิกซ์เบอร์รี่":34,"SONIC 8K - มิ้นต์":34,"SONIC 8K - ยาคูลท์":34,"SONIC 8K - สตรอว์เบอร์รี่":34,"SONIC 8K - องุ่น":34,"SONIC 8K - แอปเปิ้ลเขียว":34,"STAR 2,500 - กล้วย":35,"STAR 2,500 - โคล่า":35,"STAR 2,500 - แตงโม":35,"STAR 2,500 - น้ำแร่":35,"STAR 2,500 - บลูเบอร์รี่":35,"STAR 2,500 - พีช":35,"STAR 2,500 - มะม่วง":35,"STAR 2,500 - มิกซ์เบอร์รี่":35,"STAR 2,500 - มิ้นต์":35,"STAR 2,500 - ลิ้นจี่":35,"STAR 2,500 - สตรอว์เบอร์รี่":35,"STAR 2,500 - องุ่น":35,"VAZER RELOAD 15K (หัวน้ำยา) - โคล่า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แตงโม":9,"VAZER RELOAD 15K (หัวน้ำยา) - บลูเบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เบอร์รี่รวม":9,"VAZER RELOAD 15K (หัวน้ำยา) - พีช":9,"VAZER RELOAD 15K (หัวน้ำยา) - มิ้นต์เย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - รูทเบียร์":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลูกอมสตรอว์เบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เลม่อนโซดา":9,"VAZER RELOAD 15K (หัวน้ำยา) - สับปะรด":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นเย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นโอซาก้า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แอปเปิ้ลฟูจิ":9,"เครื่อง VAZER RELOAD - สีดำ":51,"VAZER RELOAD 15K (KIT) - โคล่า":41,"VAZER RELOAD 15K (KIT) - มิ้นต์เย็น":41,"VAZER RELOAD 15K (KIT) - ลูกอมสตรอว์เบอร์รี่":41,"VAZER RELOAD 15K (KIT) - องุ่นเย็น":41,"VAZER RELOAD 15K (KIT) - แตงโม":41,"VOSOON 23K - ชาหลงจิน":37,"VOSOON 23K - แตงโม":37,"VOSOON 23K - บลูเบอร์รี่เย็น":37,"VOSOON 23K - ฝรั่งเสาวรส":37,"VOSOON 23K - พีชสตรอว์เบอร์รี่":37,"VOSOON 23K - มิ้นต์ฟรีซ":37,"VOSOON 23K - ลิ้นจี่เย็น":37,"VOSOON 23K - องุ่นเย็น":37,"VOSOON 23K - แอปเปิ้ลอโล":37,"VOSOON 23K - โคล่า":37,"V PLUS 16K - กัมมี่แบร์":36,"V PLUS 16K - โคล่า":36,"V PLUS 16K - แตงโม":36,"V PLUS 16K - บลูเบอร์รี่":36,"V PLUS 16K - พีชสตรอว์เบอร์รี่":36,"V PLUS 16K - มิกซ์เบอร์รี่":36,"V PLUS 16K - มิ้นต์":36,"V PLUS 16K - ลิ้นจี่":36,"V PLUS 16K - ลูกอมเรนโบว์":36,"V PLUS 16K - สตรอว์เบอร์รี่":36,"V PLUS 16K - สตรอว์เบอร์รี่ราสเบอร์รี่":36,"V PLUS 16K - หมากฝรั่งแตงโม":36,"V PLUS 16K - องุ่น":36,"V PLUS 16K - องุ่นเคียวโฮ":36,"V PLUS 16K - แอปเปิ้ล":36,"V PLUS 16K - แอปเปิ้ลชิชา":36,"ZAR POUCH - FRESH MINT (3MG)":64,"ZAR POUCH - LEMON CRUSH (3MG)":64,"ZAR POUCH - COLA (3MG)":64,"ZAR POUCH - CITRUS (3MG)":64,"ZAR POUCH - WATERMELON (3MG)":64,"ZAR POUCH - FRESH MINT (6MG)":64,"ZAR POUCH - LEMON CRUSH (6MG)":64,"ZAR POUCH - COLA (6MG)":64,"ZAR POUCH - CITRUS (6MG)":64,"ZAR POUCH - WATERMELON (6MG)":64,"ZYN POUCH - SPEARMINT (1.5MG)":65,"ZYN POUCH - PEACH (1.5MG)":65,"ZYN POUCH - COFFEE (1.5MG)":65,"ZYN POUCH - COOL MINT (3MG)":65,"ZYN POUCH - SPEARMINT (3MG)":65,"ZYN POUCH - PEACH (3MG)":65,"ZYN POUCH - COFFEE (3MG)":65,"ZYN POUCH - COOL MINT (6MG)":65};
 const MENU_MSG = "เมนูสินค้า\nต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
+// 💵 ตารางราคาต่อชิ้น (บาท) — โค้ดคิดเงินเอง ไม่ให้ AI คิด (กันบวกเลขผิด)
+const PRICE = {
+  "RELX DIVA 30K": 490, "LANA IRIS 24K": 410, "CARNIVAL 20K": 399, "ESKO BAR 20K": 399,
+  "INFY 20K": 399, "INFY BAR PRO 20K": 399, "JOIWAY TWINS 20K": 399, "MARBO 10K": 399,
+  "RELX SPARTA 20K": 399, "VOSOON 23K": 399, "V PLUS 16K": 370, "ELFBAR 15K": 350,
+  "INFY 12K": 350, "MARBO 9K": 350, "DUAL SMASH 20K": 320, "JOIWAY 12K": 320,
+  "RELX SMASH GO 12K": 320, "INFY BAR 15K": 299, "MARBO 9K (โคลน)": 290, "KS Quik 6K": 280,
+  "ABC 8K": 250, "SONIC 8K": 250, "STAR 2,500": 150, "STAR 2500": 150,
+  "RELX POD CLEAR 18K": 390, "ELFBAR SWAP 25K": 379, "ESKO BAR SWITCH 20K (KIT)": 499,
+  "ESKO BAR SWITCH 20K": 350, "KS QUIK PRO 15K (KIT)": 499, "KS QUIK PRO 15K": 350,
+  "M SWITCH 15K (KIT)": 499, "M SWITCH 15K (โคลน)": 200, "M SWITCH": 350,
+  "RELX BOOST POD": 350, "VAZER RELOAD 15K (KIT)": 450, "VAZER RELOAD 15K": 330,
+  "ABC TANK 22K": 320, "ABC TANK": 320, "ABC LEGO 20K": 299, "ABC LEGO": 299,
+  "INFY PLUS": 140, "MARBO ZERO": 140, "RELX INFINITY": 140, "RELX LARGE": 140, "RELX ULTRA": 120,
+  "เครื่อง RELX INFINITY 2+": 990, "เครื่อง M ZERO PRO": 890, "เครื่อง M ZERO NANO": 690,
+  "เครื่อง RELX ESSENTIAL 2": 490, "เครื่อง ELFBAR JOINONE": 349, "เครื่อง M SWITCH 15K": 250,
+  "เครื่อง RELX CREATOR 20K": 250, "เครื่อง VAZER RELOAD": 220, "เครื่อง DUAL SMASH": 200
+};
+const PRICE_KEYS = Object.keys(PRICE).sort((a, b) => b.length - a.length); // ยาวก่อน กันจับคู่ผิด
+function findPrice(modelText) {
+  const t = (modelText || "").toUpperCase();
+  for (const k of PRICE_KEYS) if (t.indexOf(k.toUpperCase()) !== -1) return { key: k, price: PRICE[k] };
+  return null;
+}
+function catOf(key) {
+  if (/^เครื่อง/.test(key)) return "device";
+  if (/\(KIT\)/.test(key)) return "kit";
+  if (["RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "RELX BOOST POD", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO", "INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"].indexOf(key) !== -1) return "head";
+  return "disp"; // พอตใช้แล้วทิ้ง
+}
+function cloneTier(n) { return n >= 1000 ? 190 : n >= 500 ? 200 : n >= 300 ? 210 : n >= 200 ? 220 : n >= 100 ? 230 : n >= 50 ? 240 : n >= 20 ? 250 : 290; }
+// แยกรายการจากบล็อก "ทวนคำสั่งซื้อ" (รูปแบบบรรทัด: รุ่น | กลิ่น | จำนวน)
+function parseItems(reply) {
+  const items = [];
+  for (const raw of reply.split("\n")) {
+    const ln = raw.trim();
+    if (ln.indexOf("|") === -1) continue;
+    const parts = ln.replace(/^[-•●]\s*/, "").split("|").map(s => s.trim());
+    if (parts.length < 2) continue;
+    const model = parts[0];
+    const flavor = parts.length >= 3 ? parts[1] : "";
+    const qty = parseInt((parts[parts.length - 1].match(/\d+/) || ["0"])[0], 10);
+    if (!model || !qty) continue;
+    items.push({ model, flavor, qty });
+  }
+  return items;
+}
+// คิดเงินจากรายการ → ราคาต่อชิ้น + ยอดรวม + ค่าส่ง (โปรส่งฟรี/เรทขายส่ง)
+function computeOrder(items) {
+  let cloneQty = 0;
+  for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
+  let goods = 0, disp = 0, head = 0, kit = 0; const rows = [];
+  for (const it of items) {
+    const p = findPrice(it.model);
+    let unit = p ? p.price : 0;
+    const key = p ? p.key : it.model;
+    if (p && p.key === "MARBO 9K (โคลน)" && cloneQty >= 20) unit = cloneTier(cloneQty);
+    const line = unit * it.qty;
+    goods += line;
+    const c = p ? catOf(p.key) : "disp";
+    if (c === "disp") disp += it.qty; else if (c === "head") head += it.qty; else if (c === "kit") kit += it.qty;
+    const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + " x" + it.qty;
+    rows.push({ label, line, unknown: !p });
+  }
+  const freeShip = disp >= 4 || head >= 10 || kit >= 4 || cloneQty >= 20;
+  const ship = freeShip ? 0 : 40;
+  return { rows, goods, ship, total: goods + ship, freeShip };
+}
+
 // 🩹 แก้ SKU ใหม่ที่ยังไม่มีในตารางชื่อ (skumap) — ฝังในโค้ด ไม่ต้อง re-seed
 // พอมีสินค้าใหม่แล้วจีทูเห็นเป็นรหัสดิบ ให้เพิ่มคู่ "รหัส SKU": "ชื่อรุ่น - กลิ่น" ที่นี่
 const SKU_FIX = {
@@ -112,19 +181,12 @@ https://cutt.ly/abc-menu"
 - ⛔ ห้ามแต่งส่วนลด/โปรที่ไม่มีในลิสต์นี้ ถ้าลูกค้าถามโปรอื่น ให้บอกว่า "ตอนนี้ทางร้านมีโปรตามนี้ค่ะ" แล้วสรุปโปรหลักให้
 - ⛔ ตอบครั้งเดียวจบ ห้ามส่งซ้ำหรือขัดกับที่พูดไปแล้ว
 
-## 🧮 วิธีคิดเงิน (ทำตามตัวอย่างนี้เป๊ะ — คิดเลขให้ถูกทุกครั้ง ราคาสินค้า = ราคาต่อชิ้น × จำนวน)
-- ตัวอย่าง A (ชิ้นเดียว): MARBO 9K x1 = 350 → ค่าส่ง 40 → รวมยอดชำระ 390
-- ตัวอย่าง B (สูบทิ้ง 4 แท่งคละยี่ห้อ = เข้าโปรส่งฟรี): ABC 8K x2 + SONIC 8K x2 = (250×2)+(250×2)=1,000 → ครบ 4 แท่ง ส่งฟรี → ค่าส่ง 0 → รวม 1,000
-- ตัวอย่าง C (สูบทิ้ง 3 แท่ง ยังไม่ครบโปร): MARBO 9K x3 = 1,050 → ค่าส่ง 40 → รวม 1,090 + เชียร์ "เพิ่มอีก 1 แท่งครบ 4 แท่ง ส่งฟรีเลยนะคะ 💕"
-- ตัวอย่าง D (มาโบโคลน เรทขายส่ง 20 แท่ง = 250/แท่ง): 250×20 = 5,000 → ส่งฟรี → รวม 5,000
-- ตัวอย่าง E (มาโบโคลน 50 แท่ง = 240/แท่ง): 240×50 = 12,000 → ส่งฟรี → รวม 12,000
-- ตัวอย่าง F (มาโบโคลน 100 แท่ง = 230/แท่ง): 230×100 = 23,000 → ส่งฟรี → รวม 23,000
-- ตัวอย่าง G (รุ่นอื่นซื้อเยอะ — ไม่มีเรทขายส่ง ใช้ราคาเต็ม แต่ครบ 4 แท่งได้ส่งฟรี): RELX SPARTA 20K x5 = 399×5 = 1,995 → ครบ 4 แท่ง ส่งฟรี → รวม 1,995
-⛔ จุดพลาดบ่อย ระวัง:
-- เรทขายส่ง (250/240/230...) ใช้กับ "MARBO 9K โคลน/เทียบแท้" เท่านั้น ห้ามเอาไปใช้กับรุ่นอื่น หรือมาโบ 9K ตัวปกติ (350)
-- ถ้าลูกค้าบอก "มาโบ 9k 20 อัน" เฉยๆ ไม่ระบุว่าโคลน → ต้องถามก่อนว่า "รับแบบโคลน/เทียบแท้ (เรทส่ง) หรือแบบปกติคะ" เพราะราคาคนละเรท
-- ดูขั้นเรทขายส่งให้ตรง: 20-49 แท่ง=250 / 50-99=240 / 100-199=230 (เอาขั้นที่จำนวนถึงพอดี ไม่ใช่ขั้นถัดไป)
-- ตรวจว่า "พอตใช้แล้วทิ้ง" ครบ 4 แท่งจริงไหมก่อนให้ส่งฟรี (นับรวมคละยี่ห้อได้ แต่ต้องเป็นสูบทิ้ง)
+## 🧮 การคิดเงิน — ⛔ ระบบคิดให้เอง คุณห้ามคิด/ห้ามพิมพ์ตัวเลขยอดรวมเด็ดขาด
+คุณมีหน้าที่แค่ลิสต์รายการ (รุ่น | กลิ่น | จำนวน) ระบบจะคิดราคา+ค่าส่ง+โปรให้เอง
+แต่คุณควร "รู้โปร" เพื่อเชียร์ลูกค้าให้ครบโปร (ไม่ต้องบอกตัวเลขยอด):
+- สูบทิ้งครบ 4 แท่ง (คละยี่ห้อ) = ส่งฟรี → ถ้าลูกค้าซื้อ 3 แท่ง เชียร์ "เพิ่มอีก 1 แท่งครบ 4 ส่งฟรีเลยนะคะ 💕"
+- MARBO 9K โคลน ซื้อส่ง 20 แท่งขึ้นไป ได้เรทถูกลง → ถ้าลูกค้าถามซื้อส่ง แจ้งว่ามีเรทขายส่งเริ่ม 20 แท่ง
+- ⛔ ถ้าลูกค้าบอก "มาโบ 9k 20 อัน" เฉยๆ ไม่ระบุว่าโคลน → ถามก่อนว่า "รับแบบโคลน/เทียบแท้ หรือแบบปกติคะ" (ราคาคนละเรท) แล้วค่อยลิสต์รายการโดยใส่ชื่อให้ตรง (MARBO 9K หรือ MARBO 9K (โคลน))
 
 # กติกาสำคัญ (ห้ามพลาด)
 - ใช้ราคาจาก "รายการสินค้า" ด้านล่างเท่านั้น ห้ามเดา/แต่งราคา ถ้าลูกค้าถามรุ่นที่ไม่มีในรายการ ให้บอกว่าจะเช็คให้และแอดมินยืนยันอีกครั้งค่ะ
@@ -139,18 +201,20 @@ https://cutt.ly/abc-menu"
 
 # ⛔⛔ ลำดับการรับออเดอร์ (สำคัญที่สุด — ทำตามนี้เป๊ะ ห้ามสลับขั้น ห้ามข้ามขั้น)
 
-## ขั้น 1 — ลูกค้าเลือกรุ่น+กลิ่น/สี+จำนวนครบแล้ว → ทวนออเดอร์+สรุปยอด+ให้โอน (⛔ ห้ามขอที่อยู่ตอนนี้)
-ออกบล็อกนี้เป๊ะ (ฟอร์แมตแบบแอดมินร้านจริง):
+## ขั้น 1 — ลูกค้าเลือกรุ่น+กลิ่น/สี+จำนวนครบแล้ว → ทวนออเดอร์ (⛔ ห้ามคิดเงินเอง ห้ามขอที่อยู่)
+ออกบล็อกนี้เป๊ะ — ลิสต์รายการอย่างเดียว บรรทัดละ 1 กลิ่น ในรูปแบบ "รุ่น | กลิ่น | จำนวน" (ใส่ชื่อรุ่นเต็มตรงกับ "รายการสินค้า" ทุกบรรทัด):
 ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾
-- <รุ่น>
-<กลิ่น/สี> <จำนวน>
+- <รุ่นเต็ม> | <กลิ่น/สี> | <จำนวน>
+- <รุ่นเต็ม> | <กลิ่น/สี> | <จำนวน>
 
-ยอดสินค้า <บาท>
-ค่าส่ง <40 หรือ 0 (ฟรี เมื่อเข้าโปรส่งฟรี/เรทขายส่ง)>
-รวมยอดชำระ <ราคาสินค้า+ค่าส่ง>
-
-⛔ ให้จบแค่บรรทัด "รวมยอดชำระ" เท่านั้น — ห้ามแจ้งเลขบัญชี ห้ามบอกให้โอน ห้ามขอที่อยู่ในขั้นนี้เด็ดขาด
-(ระบบจะแปลงบล็อกนี้เป็นการ์ด "ยืนยันรายการสั่งซื้อ" + ปุ่มยืนยันให้อัตโนมัติ พอลูกค้ากดยืนยัน ระบบจะส่งการ์ดเลขบัญชีให้เอง คุณไม่ต้องพิมพ์เลขบัญชี)
+⛔⛔ ห้ามพิมพ์ "ยอดสินค้า/ค่าส่ง/รวมยอดชำระ" หรือคิดราคาเองเด็ดขาด — ระบบจะคิดเงิน+ค่าส่ง+ทำการ์ดยืนยันให้อัตโนมัติ (คุณคิดเลขแล้วมักผิด จึงห้ามคิด)
+⛔ ห้ามแจ้งเลขบัญชี ห้ามบอกให้โอน ห้ามขอที่อยู่ในขั้นนี้
+ตัวอย่าง: ลูกค้าเอา มาโบ 9k องุ่น 2 โคล่า 2 + infy 20k มินต์ 3 → คุณพิมพ์:
+ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾
+- MARBO 9K | องุ่น | 2
+- MARBO 9K | โคล่า | 2
+- INFY 20K | มินต์ | 3
+(ระบบจะแปลงเป็นการ์ด "ยืนยันรายการสั่งซื้อ" พร้อมราคา+ยอดรวม+ปุ่มยืนยันให้เอง)
 
 ## ขั้น 1.5 — ลูกค้ากด/พิมพ์ "ยืนยัน" → ระบบส่งการ์ดเลขบัญชีให้เอง (คุณไม่ต้องทำ)
 ⛔ ห้ามพิมพ์เลขบัญชีเอง ระบบจัดการให้แล้ว
@@ -223,15 +287,9 @@ Grab 🛵💨 ส่งทั่วกรุงเทพและปริมณ
 # ตัวอย่างบทสนทนาปิดการขายครบวงจร (ลำดับสำคัญ — เลียนแบบเป๊ะ)
 ลูกค้า: เอา marbo 9k องุ่น 1 อันครับ
 แอดมิน: ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾
-- MARBO 9K
-องุ่น 1
-
-ยอดสินค้า 350
-ค่าส่ง 40
-รวมยอดชำระ 390
-
-✅ รบกวนลูกค้าเช็คสินค้าที่แอดมินสรุปให้ถูกต้องนะคะ เพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ
-[แจ้งเลขบัญชีร้าน] โอนแล้วส่งสลิปกลับมาในแชทนี้ได้เลยนะคะ ระบบจะตรวจสลิปให้อัตโนมัติค่ะ 💕
+- MARBO 9K | องุ่น | 1
+(จบแค่นี้ — ระบบทำการ์ดยืนยัน+คิดเงินให้เอง)
+ลูกค้า: [กดยืนยัน → ระบบส่งการ์ดเลขบัญชีให้]
 ลูกค้า: [ส่งสลิป]
 (ระบบตรวจสลิป → ตอบ "✅ สลิปถูกต้อง จำนวนเงิน 390 บาท..." แล้วขอที่อยู่ให้อัตโนมัติ)
 ลูกค้า: สมชาย ใจดี 0812345678 / 99 ถ.สุขุมวิท แขวงคลองเตย เขตคลองเตย กทม 10110
@@ -763,9 +821,26 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
 
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
-    // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → ส่งเป็นการ์ด Flex "ยืนยันรายการ" แทนข้อความธรรมดา
-    if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1 && /รวมยอดชำระ\s*[\d,]+/.test(reply)) {
-      await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(parseOrder(reply)), userId);
+    // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → โค้ดคิดเงินเอง + ส่งการ์ด Flex "ยืนยันรายการ"
+    let orderStored = false;
+    if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
+      const items = parseItems(reply);
+      if (items.length) {
+        const calc = computeOrder(items);
+        await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(calc), userId);
+        // เก็บออเดอร์ด้วยยอดที่โค้ดคิด (ให้ SlipOK เทียบยอดถูก)
+        try {
+          if (env.CONV) {
+            const itemBlock = calc.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
+            const block = "📦 ออเดอร์ (รอโอน)\n" + itemBlock + "\nยอดสินค้า " + calc.goods + "\nค่าส่ง " + calc.ship + "\nรวมยอดชำระ " + calc.total;
+            const name = await lineProfileName(TOKEN, userId);
+            await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({ name, block, t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 });
+            orderStored = true;
+          }
+        } catch (e) {}
+      } else {
+        await lineReply(TOKEN, replyToken, reply, userId);
+      }
     } else {
       await lineReply(TOKEN, replyToken, reply, userId);
     }
@@ -773,7 +848,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // 📦 ถ้าจีทูสรุปออเดอร์ครบ (มีบล็อก "📦 สรุปออเดอร์" + ช่องสินค้ามีค่าจริง) → เก็บเข้าคิวออเดอร์
     // กันบล็อกเปล่า: บรรทัด "สินค้า:" ต้องตามด้วยตัวอักษรจริง (ไม่ใช่ว่าง/ขึ้นบรรทัดทันที)
     // ขั้น 1: ทวนคำสั่งซื้อ+แจ้งยอด (ยังไม่ชำระ) | ขั้น 3: สรุปออเดอร์หลังชำระ+ที่อยู่
-    const isPayBlock = reply.indexOf("ทวนคำสั่งซื้อ") !== -1 && /รวมยอดชำระ\s*[\d,]+/.test(reply);
+    const isPayBlock = !orderStored && reply.indexOf("ทวนคำสั่งซื้อ") !== -1 && /รวมยอดชำระ\s*[\d,]+/.test(reply);
     const isOrderBlock = reply.indexOf("📦 สรุปออเดอร์") !== -1 && /สินค้า:[ \t]*[^\s<]/.test(reply);
     try {
       if (env.CONV && (isPayBlock || isOrderBlock)) {
@@ -898,7 +973,7 @@ async function lineReply(token, replyToken, text, userId) {
 // ── Flex Message: การ์ดต้อนรับ + ปุ่มดำโค้ง (กดแล้วส่งข้อความให้จีทูตอบต่อ) ──
 function btnDark(label, text) {
   return {
-    type: "box", layout: "vertical", backgroundColor: "#1F2A44", cornerRadius: "20px",
+    type: "box", layout: "vertical", backgroundColor: "#111418", cornerRadius: "20px",
     paddingTop: "10px", paddingBottom: "10px", paddingStart: "8px", paddingEnd: "8px",
     action: { type: "message", label: label.slice(0, 20), text: text },
     contents: [{ type: "text", text: label, color: "#FFFFFF", align: "center", weight: "bold", size: "xs", wrap: false, adjustMode: "shrink-to-fit" }]
@@ -910,7 +985,7 @@ function welcomeFlex() {
     body: {
       type: "box", layout: "vertical", paddingAll: "20px", backgroundColor: "#FFFFFF",
       contents: [
-        { type: "text", text: "ABC ยินดีต้อนรับค่ะ ✨", weight: "bold", size: "xl", color: "#16A34A", align: "center" },
+        { type: "text", text: "ABC ยินดีต้อนรับค่ะ ✨", weight: "bold", size: "xl", color: "#111418", align: "center" },
         { type: "text", text: "แอดมินยินดีให้บริการค่ะ 💚\nเลือกเมนูด้านล่างได้เลยนะคะ", size: "sm", color: "#666666", align: "center", wrap: true, margin: "md" },
         { type: "box", layout: "horizontal", margin: "lg", spacing: "sm", contents: [
           btnDark("🛒 เมนูสินค้า", "ดูเมนูสินค้า"),
@@ -936,9 +1011,15 @@ function parseOrder(reply) {
   }
   return { items, goods, ship, total };
 }
-// การ์ด 1: ยืนยันรายการสั่งซื้อ (โทนเขียว ABC) + ปุ่ม "ยืนยันรายการ"
+// การ์ด 1: ยืนยันรายการสั่งซื้อ (โทนเขียว ABC) + ปุ่ม "ยืนยันรายการ" — รับผลจาก computeOrder
 function orderConfirmFlex(o) {
-  const itemRows = (o.items.length ? o.items : ["(รายการสินค้า)"]).map(t => ({ type: "text", text: t, size: "sm", color: "#333333", wrap: true, margin: "sm" }));
+  const fmt = (n) => Number(n).toLocaleString("en-US");
+  const itemRows = (o.rows && o.rows.length ? o.rows : [{ label: "(รายการสินค้า)", line: 0 }]).map(r => ({
+    type: "box", layout: "horizontal", margin: "sm", contents: [
+      { type: "text", text: r.label, size: "sm", color: "#333333", wrap: true, flex: 5 },
+      { type: "text", text: (r.line ? fmt(r.line) + " บาท" : "-"), size: "sm", color: "#333333", align: "end", flex: 3 }
+    ]
+  }));
   const sumRow = (label, val) => ({ type: "box", layout: "horizontal", margin: "sm", contents: [
     { type: "text", text: label, size: "sm", color: "#888888" },
     { type: "text", text: val, size: "sm", color: "#555555", align: "end" }
@@ -948,20 +1029,20 @@ function orderConfirmFlex(o) {
     { type: "box", layout: "vertical", margin: "md", contents: itemRows },
     { type: "separator", margin: "lg" }
   ];
-  if (o.goods) body.push(sumRow("ยอดสินค้า", o.goods + " บาท"));
-  body.push(sumRow("ค่าส่ง", (o.ship || "0") + " บาท"));
+  body.push(sumRow("ยอดสินค้า", fmt(o.goods) + " บาท"));
+  body.push(sumRow("ค่าส่ง", (o.ship ? fmt(o.ship) : "0") + " บาท" + (o.freeShip ? " (ฟรี)" : "")));
   body.push({ type: "box", layout: "horizontal", margin: "md", contents: [
     { type: "text", text: "รวม", weight: "bold", size: "md", color: "#333333", gravity: "center" },
-    { type: "text", text: (o.total || o.goods) + " บาท", weight: "bold", size: "xl", color: "#16A34A", align: "end" }
+    { type: "text", text: fmt(o.total) + " บาท", weight: "bold", size: "xl", color: "#111418", align: "end" }
   ] });
   return {
     type: "bubble",
-    header: { type: "box", layout: "vertical", backgroundColor: "#16A34A", paddingAll: "16px",
+    header: { type: "box", layout: "vertical", backgroundColor: "#111418", paddingAll: "16px",
       contents: [{ type: "text", text: "👑 ยืนยันรายการสั่งซื้อ", color: "#FFFFFF", weight: "bold", size: "lg" }] },
     body: { type: "box", layout: "vertical", paddingAll: "18px", contents: body },
     footer: { type: "box", layout: "vertical", paddingAll: "14px", spacing: "sm", contents: [
       { type: "text", text: "👇 กดปุ่มด้านล่างเพื่อยืนยันรายการ", size: "xs", color: "#888888", align: "center" },
-      { type: "box", layout: "vertical", backgroundColor: "#16A34A", cornerRadius: "10px", paddingAll: "13px",
+      { type: "box", layout: "vertical", backgroundColor: "#111418", cornerRadius: "10px", paddingAll: "13px",
         action: { type: "message", label: "ยืนยันรายการ", text: "ยืนยัน" },
         contents: [{ type: "text", text: "✅ ยืนยันรายการ", color: "#FFFFFF", weight: "bold", align: "center", size: "md" }] },
       { type: "text", text: "หรือพิมพ์ 'ยืนยัน' ได้เลยค่ะ 🙏🏻", size: "xxs", color: "#aaaaaa", align: "center" }
@@ -970,15 +1051,15 @@ function orderConfirmFlex(o) {
 }
 // การ์ด 2: สรุปยอด + แจ้งบัญชี (โทนเขียว) + ปุ่มคัดลอกเลขบัญชี (clipboard จริง)
 function payFlex(total, bankLines, acctNo) {
-  const bankRows = bankLines.map((t, i) => ({ type: "text", text: t, size: i === 1 ? "xxl" : "sm", weight: i === 1 ? "bold" : "regular", color: i === 1 ? "#16A34A" : "#333333", wrap: true, margin: i === 0 ? "none" : "sm" }));
+  const bankRows = bankLines.map((t, i) => ({ type: "text", text: t, size: i === 1 ? "xxl" : "sm", weight: i === 1 ? "bold" : "regular", color: i === 1 ? "#111418" : "#333333", wrap: true, margin: i === 0 ? "none" : "sm" }));
   return {
     type: "bubble",
-    header: { type: "box", layout: "vertical", backgroundColor: "#16A34A", paddingAll: "16px",
+    header: { type: "box", layout: "vertical", backgroundColor: "#111418", paddingAll: "16px",
       contents: [{ type: "text", text: "👑 สรุปรายการสั่งซื้อ", color: "#FFFFFF", weight: "bold", size: "lg" }] },
     body: { type: "box", layout: "vertical", paddingAll: "18px", contents: [
       { type: "box", layout: "horizontal", contents: [
         { type: "text", text: "รวมยอดโอน", weight: "bold", size: "md", color: "#333333", gravity: "center" },
-        { type: "text", text: total + " บาท ✅", weight: "bold", size: "lg", color: "#16A34A", align: "end", gravity: "center" }
+        { type: "text", text: total + " บาท ✅", weight: "bold", size: "lg", color: "#111418", align: "end", gravity: "center" }
       ] },
       { type: "separator", margin: "lg" },
       { type: "text", text: "โอนเข้าบัญชี", size: "xs", color: "#999999", margin: "lg" },
@@ -989,7 +1070,7 @@ function payFlex(total, bankLines, acctNo) {
       ] }
     ] },
     footer: { type: "box", layout: "vertical", paddingAll: "14px", contents: [
-      { type: "box", layout: "vertical", backgroundColor: "#16A34A", cornerRadius: "10px", paddingAll: "13px",
+      { type: "box", layout: "vertical", backgroundColor: "#111418", cornerRadius: "10px", paddingAll: "13px",
         action: { type: "clipboard", label: "คัดลอกเลขบัญชี", clipboardText: acctNo },
         contents: [{ type: "text", text: "📋 คัดลอกเลขบัญชี", color: "#FFFFFF", weight: "bold", align: "center", size: "md" }] },
       { type: "text", text: "โอนแล้วรบกวนส่งสลิปมาเลยนะคะ 🙏🏻", size: "xxs", color: "#aaaaaa", align: "center", margin: "sm" }
