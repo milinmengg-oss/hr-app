@@ -185,25 +185,28 @@ async function resolveMapLink(text) {
   let ll = extractLatLng(um[0]);
   if (ll) return ll;
   let url = um[0]; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-  const H = { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", "Accept-Language": "th,en" };
-  try {
-    // ตาม redirect ทีละชั้น (ลิงก์ย่อ goo.gl → maps เต็ม) เช็คพิกัดทุกชั้น
-    let cur = url;
-    for (let hop = 0; hop < 6; hop++) {
-      const r = await fetch(cur, { redirect: "manual", headers: H, signal: AbortSignal.timeout(6000) });
-      const loc = r.headers.get("location");
-      if (loc) { ll = extractLatLng(loc); if (ll) return ll; if (!/^https?:/i.test(loc)) break; cur = loc; continue; }
-      // ไม่มี redirect ต่อ = หน้าเป้าหมาย → อ่าน body หาพิกัด
-      ll = extractLatLng(r.url || cur); if (ll) return ll;
-      const body = await r.text();
-      ll = extractLatLng(body);
-      if (ll) return ll;
-      // แพทเทิร์นในเนื้อหน้า Google Maps: [null,null,LAT,LNG] หรือ ",LAT,LNG,"
-      const bm = body.match(/\[null,null,(-?\d{1,2}\.\d{4,}),(-?\d{2,3}\.\d{4,})\]/) || body.match(/"latitude":(-?\d{1,2}\.\d{3,})[,}].*?"longitude":(-?\d{2,3}\.\d{3,})/);
-      if (bm && +bm[1] >= 5 && +bm[1] <= 21 && +bm[2] >= 96 && +bm[2] <= 106) return { lat: +bm[1], lng: +bm[2] };
-      break;
-    }
-  } catch (e) { console.log("MAP_RESOLVE_ERR " + String(e).slice(0, 80)); }
+  // ลองหลาย User-Agent — bot crawler มักได้หน้าเต็มโดยไม่โดน consent (วิธีเดียวกับที่ LINE ดึง preview)
+  const UAS = [
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+    "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+  ];
+  for (const ua of UAS) {
+    try {
+      let cur = url;
+      for (let hop = 0; hop < 6; hop++) {
+        const r = await fetch(cur, { redirect: "manual", headers: { "User-Agent": ua, "Accept-Language": "th,en" }, signal: AbortSignal.timeout(6000) });
+        const loc = r.headers.get("location");
+        if (loc) { ll = extractLatLng(loc); if (ll) return ll; if (!/^https?:/i.test(loc) || /consent\.google/.test(loc)) break; cur = loc; continue; }
+        ll = extractLatLng(r.url || cur); if (ll) return ll;
+        const body = await r.text();
+        ll = extractLatLng(body);
+        if (ll) return ll;
+        const bm = body.match(/\[null,null,(-?\d{1,2}\.\d{4,}),(-?\d{2,3}\.\d{4,})\]/) || body.match(/"latitude":(-?\d{1,2}\.\d{3,})[,}].*?"longitude":(-?\d{2,3}\.\d{3,})/) || body.match(/center=(-?\d{1,2}\.\d{3,})%2C(-?\d{2,3}\.\d{3,})/);
+        if (bm && +bm[1] >= 5 && +bm[1] <= 21 && +bm[2] >= 96 && +bm[2] <= 106) return { lat: +bm[1], lng: +bm[2] };
+        break;
+      }
+    } catch (e) { console.log("MAP_RESOLVE_ERR(" + ua.slice(0, 10) + ") " + String(e).slice(0, 60)); }
+  }
   return null;
 }
 const EXPRESS_MSG = "อนุญาตแจ้งรอบส่งด่วนนะคะ 💕\nรอบส่งนับจากเวลาที่ลูกค้าชำระเงิน + ลงออเดอร์เรียบร้อยค่ะ 💲\n\n08.00 - 10.30 → รอบส่งออก 11.30 น.\n11.00 - 11.30 → รอบส่งออก 12.30 น.\n12.00 - 12.30 → รอบส่งออก 13.30 น.\n13.00 - 13.30 → รอบส่งออก 14.30 น.\n14.00 - 14.30 → รอบส่งออก 15.30 น.\n15.00 - 15.30 → รอบส่งออก 16.30 น.\n16.00 - 16.30 → รอบส่งออก 17.30 น.\n17.00 - 17.30 → รอบส่งออก 18.30 น.\n18.00 - 18.30 → รอบส่งออก 19.30 น.\n19.00 - 19.30 → รอบส่งออก 20.30 น.\n20.00 - 20.45 → รอบส่งออก 21.30 น.\nหลัง 20.45 น. → รอบส่งออก 10.30 น. (วันถัดไป)\n\nนับจากรอบส่งออก รอรับสินค้าประมาณ 3-5 ชม. จะได้รับพัสดุค่ะ (เป็นการประมาณเวลาเท่านั้น)\n❌ หากไม่สะดวกรับสาย รบกวนแจ้งสถานที่วางสินค้าล่วงหน้านะคะ\n❌ เมื่อไรเดอร์ถึงปลายทางแล้วติดต่อลูกค้าไม่ได้ภายใน 15 นาที สินค้าจะถูกตีกลับค่ะ 🙏🏻";
