@@ -119,6 +119,26 @@ function computeOrder(items, expressFee) {
   return { rows, goods, ship, total: goods + ship, freeShip, express: false };
 }
 
+// เช็คสต็อกของ 1 รายการ (รุ่น+กลิ่น) จาก stockmap → คืนจำนวนคงเหลือ (null = หาไม่เจอ ข้ามการเช็ค)
+// คืน max ของรายการที่แมตช์ (ถ้ามีกลิ่นใกล้เคียงที่ยังมีของ = ไม่บล็อก กันบล็อกผิด)
+function findStockForItem(sm, model, flavor) {
+  if (!flavor) return null;
+  const norm = (s) => (s || "").toLowerCase().replace(/[\s%]|ml|20k|18k|15k|9k|10k|12k|24k|30k|23k|16k|8k|6k/g, "");
+  const nf = norm(flavor);
+  if (nf.length < 2) return null;
+  const mtoks = (model || "").toLowerCase().split(/[^a-z0-9ก-๙]+/).filter(w => w.length >= 2 && !/^\d+k?$/.test(w));
+  let best = null;
+  for (const k in sm) {
+    const kl = k.toLowerCase();
+    if (norm(k).indexOf(nf) === -1) continue;         // ชื่อกลิ่นต้องอยู่ในคีย์
+    let ms = 0; for (const t of mtoks) if (kl.indexOf(t) !== -1) ms++;
+    if (mtoks.length && ms === 0) continue;            // รุ่นต้องแชร์ token อย่างน้อย 1
+    const q = sm[k] > 0 ? sm[k] : 0;
+    if (best === null || q > best) best = q;
+  }
+  return best;
+}
+
 // 🩹 แก้ SKU ใหม่ที่ยังไม่มีในตารางชื่อ (skumap) — ฝังในโค้ด ไม่ต้อง re-seed
 // พอมีสินค้าใหม่แล้วจีทูเห็นเป็นรหัสดิบ ให้เพิ่มคู่ "รหัส SKU": "ชื่อรุ่น - กลิ่น" ที่นี่
 const SKU_FIX = {
@@ -163,13 +183,24 @@ async function resolveMapLink(text) {
   let ll = extractLatLng(um[0]);
   if (ll) return ll;
   let url = um[0]; if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+  const H = { "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15", "Accept-Language": "th,en" };
   try {
-    const r = await fetch(url, { redirect: "follow", headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) });
-    ll = extractLatLng(r.url || "");
-    if (ll) return ll;
-    const body = await r.text();
-    ll = extractLatLng(body);
-    if (ll) return ll;
+    // ตาม redirect ทีละชั้น (ลิงก์ย่อ goo.gl → maps เต็ม) เช็คพิกัดทุกชั้น
+    let cur = url;
+    for (let hop = 0; hop < 6; hop++) {
+      const r = await fetch(cur, { redirect: "manual", headers: H, signal: AbortSignal.timeout(6000) });
+      const loc = r.headers.get("location");
+      if (loc) { ll = extractLatLng(loc); if (ll) return ll; if (!/^https?:/i.test(loc)) break; cur = loc; continue; }
+      // ไม่มี redirect ต่อ = หน้าเป้าหมาย → อ่าน body หาพิกัด
+      ll = extractLatLng(r.url || cur); if (ll) return ll;
+      const body = await r.text();
+      ll = extractLatLng(body);
+      if (ll) return ll;
+      // แพทเทิร์นในเนื้อหน้า Google Maps: [null,null,LAT,LNG] หรือ ",LAT,LNG,"
+      const bm = body.match(/\[null,null,(-?\d{1,2}\.\d{4,}),(-?\d{2,3}\.\d{4,})\]/) || body.match(/"latitude":(-?\d{1,2}\.\d{3,})[,}].*?"longitude":(-?\d{2,3}\.\d{3,})/);
+      if (bm && +bm[1] >= 5 && +bm[1] <= 21 && +bm[2] >= 96 && +bm[2] <= 106) return { lat: +bm[1], lng: +bm[2] };
+      break;
+    }
   } catch (e) { console.log("MAP_RESOLVE_ERR " + String(e).slice(0, 80)); }
   return null;
 }
@@ -963,8 +994,22 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const items = parseItems(reply);
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
       const notReady = !items.length || items.some(it => /ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(it.flavor) || !(it.qty > 0));
+      // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — กันออกการ์ดขายกลิ่นที่หมด
+      let outOfStock = null;
+      try {
+        if (env.CONV) {
+          const smChk = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+          for (const it of items) {
+            if (/แถม|ฟรี/i.test(it.flavor || "")) continue; // ของแถม ข้าม
+            const q = findStockForItem(smChk, it.model, it.flavor);
+            if (q !== null && q <= 0) { outOfStock = it; break; }
+          }
+        }
+      } catch (e) {}
       if (notReady) {
         await lineReply(TOKEN, replyToken, "รับกลิ่นไหน จำนวนกี่ชิ้นดีคะ 💕 (บอกรุ่น+กลิ่น+จำนวนมาได้เลยนะคะ)", userId);
+      } else if (outOfStock) {
+        await lineReply(TOKEN, replyToken, "ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕", userId);
       } else if (items.length) {
         // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
         let expFee = null;
