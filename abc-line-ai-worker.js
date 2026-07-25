@@ -525,7 +525,10 @@ export default {
           for (const k of list.keys) {
             const v = await env.CONV.get(k.name);
             let e = {}; try { e = JSON.parse(v); } catch (x) {}
-            items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", block: e.block || "", status: e.status || "รอโอน 💰", t: e.t || 0 });
+            const st = e.status || "รอโอน 💰";
+            // โชว์เฉพาะออเดอร์ที่ "ชำระแล้ว ✅" (พร้อมลง XSelly) — ออเดอร์รอโอนยังเก็บไว้ (ระบบเตือน) แต่ไม่ขึ้นคิว
+            if (st.indexOf("✅") === -1) continue;
+            items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", block: e.block || "", status: st, t: e.t || 0 });
           }
           items.sort((a, b) => b.t - a.t);
           return J({ orders: items });
