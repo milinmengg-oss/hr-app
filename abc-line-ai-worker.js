@@ -1052,7 +1052,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → โค้ดคิดเงินเอง + ส่งการ์ด Flex "ยืนยันรายการ"
     let orderStored = false;
     if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
-      const items = parseItems(reply);
+      let items = parseItems(reply);
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
       const notReady = !items.length || items.some(it => /ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(it.flavor) || !(it.qty > 0));
       // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — คัดรายการที่หมดออก แล้วไปต่อกับตัวที่มีของ (กันวนซ้ำ)
