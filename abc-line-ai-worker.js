@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-fix-items-let";
+const BUILD = "2026-07-26-b2-ask-model-color";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -240,6 +240,8 @@ https://cutt.ly/abc-menu"
 # คำที่ลูกค้าเรียก (สแลง) → รุ่นที่หมายถึง (สำคัญ อย่าตอบตัวเดียวถ้าคำนั้นหมายถึงหลายรุ่น)
 - "หัวเลโก้" / "เลโก้" / "หัวแบบเติม" / "หัวเติมน้ำยา" / "หัวเติมเอง" = หัวพอตแบบเติมน้ำยาเอง (refillable) — ร้านมี 3 ตัว: (1) RELX BOOST POD = 350 บาท (2) ABC LEGO 20K = 299 บาท (3) RELX POD CLEAR 18K = 390 บาท → เวลาลูกค้าถามหัวเลโก้/หัวเติม ให้เสนอทั้ง 3 ตัวนี้พร้อมราคา แล้วถามว่าสนใจตัวไหน ⛔ ห้ามตอบแค่ ABC LEGO ตัวเดียว
 - "หัวพอต" เฉยๆ (ไม่ระบุรุ่น) = ถามต่อว่าลูกค้าหมายถึงหัวของเครื่องรุ่นไหนคะ (RELX / INFY / MARBO ฯลฯ)
+- "มาโบสวิช" / "มาโบสวิต" / "m swich" / "เอ็มสวิช" = M SWITCH (หัว 350 / เครื่อง 250 / KIT 499) — คนละตัวกับ MARBO 9K
+- "เอสโค่สวิต" / "esko swict" = ESKO BAR SWITCH (หัว 350 / KIT 499 — ไม่มีเครื่องเปล่าแยก)
 
 # ค่าส่ง + โปรโมชั่น (กฎเหล็ก — ยึดตามนี้เท่านั้น ห้ามแต่งเพิ่มเอง)
 ## ค่าส่ง
@@ -470,7 +472,18 @@ https://cutt.ly/abc-menu"
 - M SWITCH 15K (KIT) = 499 บาท (มี 17 กลิ่น/สี)
 - VAZER RELOAD 15K (KIT) = 450 บาท (มี 5 กลิ่น/สี)
 
-[เครื่อง (Device)]
+[เครื่อง (Device) — เครื่องเปล่ามีหลายแบบ แบ่งตามหัวที่ใช้]
+⛔ ถ้าลูกค้าขอ "เครื่องเปล่า" เฉยๆ ไม่ระบุรุ่น → ห้ามเดา ให้ถามก่อนว่า "ใช้กับหัวรุ่นไหนคะ (เช่น RELX / ELFBAR / M SWITCH / ESKO / VAZER / MARBO ZERO)" แล้วแนะนำเครื่องที่ตรงกัน
+จับคู่เครื่อง ↔ หัวที่ใช้ (ตามแบรนด์):
+- เครื่อง RELX CREATOR 20K → ใช้กับหัว Big Pod ของ RELX (RELX POD CLEAR / BOOST POD)
+- เครื่อง ELFBAR JOINONE → ใช้กับหัว ELFBAR SWAP 25K
+- เครื่อง M SWITCH 15K → ใช้กับหัว M SWITCH
+- เครื่อง VAZER RELOAD → ใช้กับหัว VAZER RELOAD 15K
+- เครื่อง DUAL SMASH → ใช้กับหัว DUAL SMASH 20K
+- เครื่อง RELX INFINITY 2+ / RELX ESSENTIAL 2 → ใช้กับหัวเล็ก RELX INFINITY (140)
+- เครื่อง M ZERO PRO / M ZERO NANO → ใช้กับหัวเล็ก MARBO ZERO (140)
+- เครื่องเอสโค่ (ESKO SWITCH): ไม่มีขายเครื่องเปล่าแยก มีเป็นชุด KIT เครื่อง+หัว = ESKO BAR SWITCH 20K (KIT) 499 บาท → เสนอ KIT แทน
+- ถ้าลูกค้าถามเครื่องรุ่นที่ไม่อยู่ในลิสต์ → "เดี๋ยวแอดมินเช็คให้อีกครั้งนะคะ 🙏🏻"
 - เครื่อง RELX INFINITY 2+ = 990 บาท (มี 7 กลิ่น/สี)
 - เครื่อง M ZERO PRO = 890 บาท (มี 8 กลิ่น/สี)
 - เครื่อง M ZERO NANO = 690 บาท (มี 4 กลิ่น/สี)
@@ -1079,7 +1092,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const outNote2 = outList.length ? ("ขออภัยค่ะ 🙏🏻 " + outList.map(x => x.model + " กลิ่น" + x.flavor).join(", ") + " หมดชั่วคราวค่ะ (ตัดออกจากรายการให้แล้วนะคะ)\n\n") : "";
       if (okItems.length) items = okItems;
       if (notReady) {
-        await lineReply(TOKEN, replyToken, "รับกลิ่นไหน จำนวนกี่ชิ้นดีคะ 💕 (บอกรุ่น+กลิ่น+จำนวนมาได้เลยนะคะ)", userId);
+        // ถามให้ตรงรุ่น: เครื่อง = ถามสี/จำนวน | อื่นๆ = ถามกลิ่น/จำนวน
+        const m0 = (items[0] && items[0].model) || "";
+        const isDevice = /เครื่อง/.test(m0) || /เครื่อง/.test(reply);
+        const ask = m0
+          ? ("รับ " + m0 + (isDevice ? " สีไหน" : " กลิ่นไหน") + " จำนวนกี่" + (isDevice ? "เครื่อง" : "ชิ้น") + "ดีคะ 💕")
+          : "รับรุ่นไหน กลิ่น/สีอะไร จำนวนเท่าไหร่ดีคะ 💕";
+        await lineReply(TOKEN, replyToken, ask, userId);
       } else if (outOfStock) {
         await lineReply(TOKEN, replyToken, "ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕", userId);
       } else if (items.length) {
