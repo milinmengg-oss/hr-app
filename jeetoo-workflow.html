@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>จีทู (Jeetoo) — ระบบ AI ตอบแชทลูกค้า | ABC</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Kanit',sans-serif;background:#0a0c0f;color:#e8eaed;line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto;padding:0 22px}
+.acc{color:#3ddc84}
+/* HERO */
+.hero{padding:70px 0 50px;text-align:center;background:radial-gradient(ellipse at 50% -10%,rgba(61,220,132,.13),transparent 62%)}
+.logo{display:inline-flex;align-items:center;gap:11px;background:#12161b;border:1px solid #222a31;border-radius:99px;padding:8px 20px;font-size:14px;letter-spacing:.5px;color:#9aa5b1;margin-bottom:26px}
+.logo b{color:#3ddc84}
+h1{font-size:52px;font-weight:700;letter-spacing:-1px;margin-bottom:14px}
+h1 span{background:linear-gradient(120deg,#3ddc84,#7af5b0);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.sub{font-size:19px;color:#98a2ad;font-weight:300;max-width:640px;margin:0 auto 34px}
+.stats{display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+.stat{background:#11151a;border:1px solid #1e252c;border-radius:16px;padding:18px 26px;min-width:150px}
+.stat .n{font-size:28px;font-weight:600;color:#3ddc84;line-height:1.2}
+.stat .l{font-size:13px;color:#8b95a1;font-weight:300}
+/* SECTION */
+section{padding:56px 0}
+.stitle{font-size:13px;letter-spacing:2.5px;color:#3ddc84;font-weight:500;margin-bottom:8px}
+h2{font-size:32px;font-weight:600;margin-bottom:8px;letter-spacing:-.5px}
+.lead{color:#8b95a1;font-weight:300;margin-bottom:34px;font-size:16px}
+/* FLOW */
+.flow{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:20px;position:relative;padding-bottom:26px}
+.step:last-child{padding-bottom:0}
+.step:not(:last-child)::before{content:"";position:absolute;left:23px;top:52px;bottom:2px;width:2px;background:linear-gradient(#243039,#1a2128)}
+.num{flex-shrink:0;width:48px;height:48px;border-radius:14px;background:#11161c;border:1px solid #26313a;display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:600;color:#3ddc84;z-index:1}
+.step.auto .num{background:linear-gradient(140deg,#12331f,#0e2418);border-color:#2c6b45}
+.body{flex:1;background:#0f1317;border:1px solid #1c242b;border-radius:16px;padding:18px 22px}
+.body h3{font-size:18px;font-weight:500;margin-bottom:6px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.tag{font-size:11px;font-weight:400;padding:3px 10px;border-radius:99px;background:#13301f;color:#4fe094;border:1px solid #245537}
+.tag.man{background:#2a2113;color:#e0b64f;border-color:#553f24}
+.body p{color:#93a0ad;font-size:14.5px;font-weight:300}
+.chat{margin-top:12px;display:flex;flex-direction:column;gap:7px}
+.bub{max-width:82%;padding:9px 14px;border-radius:14px;font-size:13.5px;font-weight:300;white-space:pre-line}
+.bub.c{align-self:flex-end;background:#25412f;color:#c8f0d8;border-bottom-right-radius:4px}
+.bub.j{align-self:flex-start;background:#171d24;color:#c3ccd6;border-bottom-left-radius:4px;border:1px solid #222b33}
+/* GRID */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:14px}
+.card{background:#0f1317;border:1px solid #1c242b;border-radius:16px;padding:20px;transition:.2s}
+.card:hover{border-color:#2d5f42;transform:translateY(-2px)}
+.card .ic{font-size:24px;margin-bottom:10px;display:block}
+.card h4{font-size:15.5px;font-weight:500;margin-bottom:5px}
+.card p{font-size:13.5px;color:#8b95a1;font-weight:300}
+/* COMPARE */
+.cmp{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.col{border-radius:18px;padding:24px}
+.col.old{background:#14100f;border:1px solid #33241f}
+.col.new{background:#0c1712;border:1px solid #235238}
+.col h4{font-size:17px;font-weight:500;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.col.old h4{color:#e0a04f}.col.new h4{color:#4fe094}
+.row{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid #ffffff0d;font-size:14px;font-weight:300}
+.row:first-of-type{border-top:none}
+.row b{font-weight:500}
+.col.new .row b{color:#4fe094}
+/* NOTE */
+.note{background:#0f1317;border:1px solid #1c242b;border-left:3px solid #3ddc84;border-radius:12px;padding:18px 22px;font-size:14.5px;color:#98a2ad;font-weight:300}
+.note b{color:#e8eaed;font-weight:500}
+footer{padding:44px 0 60px;text-align:center;color:#5b656f;font-size:13px;font-weight:300;border-top:1px solid #171d23;margin-top:30px}
+@media(max-width:720px){h1{font-size:34px}.cmp{grid-template-columns:1fr}.sub{font-size:16px}h2{font-size:25px}}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wrap">
+    <div class="logo">🤖 <b>จีทู</b> · Jeetoo AI &nbsp;|&nbsp; ร้าน ABC</div>
+    <h1>ระบบ AI <span>ตอบแชทลูกค้า</span><br>อัตโนมัติ 24 ชั่วโมง</h1>
+    <p class="sub">ตั้งแต่ลูกค้าทักเข้ามา จนปิดการขายและส่งเข้าหลังบ้าน — จีทูทำเองทั้งหมด แอดมินเข้ามาดูแลเฉพาะเคสพิเศษ</p>
+    <div class="stats">
+      <div class="stat"><div class="n">24 ชม.</div><div class="l">ตอบไม่มีวันหยุด</div></div>
+      <div class="stat"><div class="n">3-5 วิ</div><div class="l">ความเร็วตอบเฉลี่ย</div></div>
+      <div class="stat"><div class="n">ไม่จำกัด</div><div class="l">คุยพร้อมกันกี่คนก็ได้</div></div>
+      <div class="stat"><div class="n">~1 บาท</div><div class="l">ต้นทุนต่อ 1 ออเดอร์</div></div>
+    </div>
+  </div>
+</div>
+
+<section>
+  <div class="wrap">
+    <div class="stitle">WORKFLOW</div>
+    <h2>ขั้นตอนการทำงาน</h2>
+    <p class="lead">🟢 = จีทูทำเอง &nbsp;·&nbsp; 🟡 = แอดมินทำ</p>
+
+    <div class="flow">
+
+      <div class="step auto">
+        <div class="num">1</div>
+        <div class="body">
+          <h3>ลูกค้าทักเข้ามา <span class="tag">จีทูทำเอง</span></h3>
+          <p>ทักครั้งแรก จีทูส่งการ์ดต้อนรับพร้อมปุ่ม "เมนูสินค้า" และ "รูปแบบการจัดส่ง" ให้ลูกค้ากดดูได้ทันที</p>
+          <div class="chat">
+            <div class="bub c">สวัสดีครับ</div>
+            <div class="bub j">สวัสดีค่ะ ยินดีต้อนรับสู่ร้าน ABC 💕
+[ 📋 เมนูสินค้า ]  [ 🚚 รูปแบบการจัดส่ง ]</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">2</div>
+        <div class="body">
+          <h3>แนะนำสินค้า · ตอบคำถาม <span class="tag">จีทูทำเอง</span></h3>
+          <p>รู้จักสินค้าครบ 65 รุ่น 900+ กลิ่น ราคา โปรโมชั่น เงื่อนไขส่งฟรี เข้าใจคำเรียกแบบลูกค้าไทย เช่น "มาโบสวิช" "หัวเลโก้" "เอลบาสวอฟ" และเช็คสต็อกจริงก่อนตอบว่ามีของไหม</p>
+          <div class="chat">
+            <div class="bub c">เครื่องเปล่ามาโบ</div>
+            <div class="bub j">ใช้กับหัวรุ่นไหนคะ 💕
+· ถ้าใช้หัว M SWITCH → เครื่อง M SWITCH 15K 250 บาท
+· ถ้าใช้หัว MARBO ZERO → M ZERO PRO 890 / NANO 690 บาท</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">3</div>
+        <div class="body">
+          <h3>คิดเงิน · ทวนออเดอร์ <span class="tag">จีทูทำเอง</span></h3>
+          <p>ระบบคำนวณราคาเอง 100% (ไม่ให้ AI คิดเลข จึงไม่มีทางคิดผิด) รวมราคาต่อชิ้น · เช็คโปรส่งฟรีอัตโนมัติ · เรทขายส่งตามจำนวน · ของแถมตามโปร แล้วส่งการ์ดสรุปให้ลูกค้ากดยืนยัน</p>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">4</div>
+        <div class="body">
+          <h3>คิดค่าส่งด่วนจากพิกัดจริง <span class="tag">จีทูทำเอง</span></h3>
+          <p>ลูกค้าปักหมุด หรือวางลิงก์ Google Maps มา จีทูคำนวณระยะทางจากร้านแล้วแจ้งค่าส่งด่วนได้ทันที · หรือเลือกพัสดุปกติ 40 บาททั่วประเทศ</p>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">5</div>
+        <div class="body">
+          <h3>รับสลิป · ตรวจสอบอัตโนมัติ <span class="tag">จีทูทำเอง</span></h3>
+          <p>ลูกค้าโอนแล้วส่งสลิป ระบบตรวจสอบกับธนาคารทันที — เช็คยอดตรง เช็คบัญชีปลายทาง และจับสลิปซ้ำ/สลิปปลอมได้ ถ้าผิดปกติจะส่งต่อให้แอดมินตรวจเอง</p>
+          <div class="chat">
+            <div class="bub c">[ ส่งรูปสลิป ]</div>
+            <div class="bub j">ตรวจสอบยอดเรียบร้อยค่ะ ✅
+รบกวนแจ้ง ชื่อ-เบอร์-ที่อยู่จัดส่งด้วยนะคะ 📍</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">6</div>
+        <div class="body">
+          <h3>ขอที่อยู่ (เฉพาะคนที่จ่ายแล้ว) <span class="tag">จีทูทำเอง</span></h3>
+          <p>ขอที่อยู่หลังเงินเข้าเท่านั้น ลดงานที่ไม่จบการขาย · ลูกค้าเก่าพิมพ์แค่ "ที่เดิม" ระบบดึงที่อยู่เดิมมาปิดออเดอร์ให้เลย</p>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">7</div>
+        <div class="body">
+          <h3>ส่งออเดอร์เข้าหลังบ้าน <span class="tag">จีทูทำเอง</span></h3>
+          <p>ออเดอร์ที่จ่ายแล้วเท่านั้นถึงจะขึ้นหลังบ้าน พร้อมเสียงเตือน + ปุ่มคัดลอก ชื่อ / เบอร์ / ที่อยู่ / รายการ แยกช่อง แอดมินก็อปวางลงระบบส่งของได้ทันที</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="num">8</div>
+        <div class="body">
+          <h3>แอดมินแพ็คของ · ส่งของ <span class="tag man">แอดมินทำ</span></h3>
+          <p>ขั้นตอนเดียวที่ยังใช้คน — แพ็คสินค้าและยิงเลขพัสดุ (อนาคตต่อ API กับระบบส่งของได้ ให้อัตโนมัติทั้งเส้น)</p>
+        </div>
+      </div>
+
+      <div class="step auto">
+        <div class="num">9</div>
+        <div class="body">
+          <h3>ตามลูกค้าค้างจ่ายให้เอง <span class="tag">จีทูทำเอง</span></h3>
+          <p>ลูกค้าที่สรุปออเดอร์แล้วยังไม่โอน ระบบทักตามให้ 1 ครั้งหลัง 1 ชั่วโมง (ตั้งใจให้ครั้งเดียว เพื่อไม่ให้ลูกค้ารำคาญจนบล็อกร้าน)</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stitle">CAPABILITIES</div>
+    <h2>สิ่งที่จีทูทำได้</h2>
+    <p class="lead">ความสามารถที่ใส่ไว้แล้วและใช้งานจริงได้ทันที</p>
+    <div class="grid">
+      <div class="card"><span class="ic">🧠</span><h4>รู้จักสินค้าทั้งร้าน</h4><p>65 รุ่น 900+ กลิ่น ราคา โปร เงื่อนไขส่งฟรี ครบทุกตัว</p></div>
+      <div class="card"><span class="ic">🗣️</span><h4>เข้าใจภาษาลูกค้า</h4><p>สะกดผิด พิมพ์ย่อ เรียกชื่อเล่นสินค้า — เข้าใจหมด</p></div>
+      <div class="card"><span class="ic">🧮</span><h4>คิดเงินไม่มีพลาด</h4><p>ระบบคิดเงินเอง ไม่ให้ AI คิดเลข จึงไม่มีคิดราคาผิด</p></div>
+      <div class="card"><span class="ic">📦</span><h4>เช็คสต็อกก่อนขาย</h4><p>ของหมดจะไม่รับออเดอร์ แล้วเสนอกลิ่นอื่นแทน</p></div>
+      <div class="card"><span class="ic">🧾</span><h4>ตรวจสลิปอัตโนมัติ</h4><p>เช็คยอด บัญชี และจับสลิปซ้ำ/ปลอมได้</p></div>
+      <div class="card"><span class="ic">🛵</span><h4>คิดค่าส่งด่วนเอง</h4><p>จากหมุดหรือลิงก์แผนที่ที่ลูกค้าส่งมา</p></div>
+      <div class="card"><span class="ic">💾</span><h4>จำลูกค้าเก่าได้</h4><p>พิมพ์ "ที่เดิม" ปิดออเดอร์ได้เลย ไม่ต้องพิมพ์ที่อยู่ใหม่</p></div>
+      <div class="card"><span class="ic">🔔</span><h4>ตามลูกค้าค้างจ่าย</h4><p>ทักตามให้เองครั้งเดียว ไม่กวนลูกค้า</p></div>
+      <div class="card"><span class="ic">🔒</span><h4>รักษาข้อมูลบริษัท</h4><p>ไม่บอกจำนวนสต็อก ไม่บอกชื่อขนส่ง ไม่บอกข้อมูลภายใน</p></div>
+      <div class="card"><span class="ic">⚖️</span><h4>เลี่ยงเรื่องอ่อนไหว</h4><p>คำถามกฎหมาย/สุขภาพ ตอบตามกรอบ แล้วส่งต่อแอดมิน</p></div>
+      <div class="card"><span class="ic">🙋</span><h4>รู้ว่าเมื่อไหร่ต้องเรียกคน</h4><p>เคสมีปัญหา/ขอคุยแอดมิน จีทูเงียบแล้วแจ้งเข้าหลังบ้าน</p></div>
+      <div class="card"><span class="ic">🏪</span><h4>รองรับหลายร้าน</h4><p>ระบบเดียวใช้ได้กับ LINE OA ทุกร้านในเครือ (V1–V20)</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stitle">IMPACT</div>
+    <h2>ต่างจากเดิมยังไง</h2>
+    <p class="lead">เทียบการรับแชทด้วยแอดมิน กับใช้จีทู</p>
+    <div class="cmp">
+      <div class="col old">
+        <h4>👤 แอดมินตอบเอง</h4>
+        <div class="row"><span>เวลาทำงาน</span><b>ตามกะ มีเวลาปิด</b></div>
+        <div class="row"><span>ตอบพร้อมกัน</span><b>ทีละไม่กี่แชท</b></div>
+        <div class="row"><span>ลูกค้ารอ</span><b>นาที–ชั่วโมง</b></div>
+        <div class="row"><span>คิดราคา</span><b>มีโอกาสผิด</b></div>
+        <div class="row"><span>ช่วงยิงแอด</span><b>แชททะลักตอบไม่ทัน</b></div>
+        <div class="row"><span>ต้นทุน</span><b>เงินเดือน/คน</b></div>
+      </div>
+      <div class="col new">
+        <h4>🤖 จีทูตอบ</h4>
+        <div class="row"><span>เวลาทำงาน</span><b>24 ชม. ไม่มีวันหยุด</b></div>
+        <div class="row"><span>ตอบพร้อมกัน</span><b>ไม่จำกัดจำนวน</b></div>
+        <div class="row"><span>ลูกค้ารอ</span><b>3-5 วินาที</b></div>
+        <div class="row"><span>คิดราคา</span><b>ระบบคิด ไม่ผิด</b></div>
+        <div class="row"><span>ช่วงยิงแอด</span><b>รับได้ทุกแชท</b></div>
+        <div class="row"><span>ต้นทุน</span><b>~1 บาท / ออเดอร์</b></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stitle">CONTROL</div>
+    <h2>แอดมินยังคุมได้ตลอด</h2>
+    <p class="lead">จีทูไม่ได้ทำงานแบบปล่อยเบลอ — มีหลังบ้านคุมทุกอย่าง</p>
+    <div class="grid">
+      <div class="card"><span class="ic">⏸️</span><h4>ปิดจีทูได้ทันที</h4><p>กดปุ่มเดียว แอดมินกลับมาตอบเองทั้งหมด</p></div>
+      <div class="card"><span class="ic">🙋</span><h4>ปิดเฉพาะบางแชท</h4><p>เคสไหนต้องใช้คน จีทูจะถอยให้อัตโนมัติ</p></div>
+      <div class="card"><span class="ic">📋</span><h4>เห็นออเดอร์ที่จ่ายแล้ว</h4><p>พร้อมปุ่มคัดลอกข้อมูลลงระบบส่งของ</p></div>
+      <div class="card"><span class="ic">🔊</span><h4>เสียงเตือนของใหม่</h4><p>มีออเดอร์/แชทรอ เตือนทันทีไม่ตกหล่น</p></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="stitle">NEXT</div>
+    <h2>ก้าวต่อไป</h2>
+    <div class="note">
+      <b>พร้อมเปิดใช้จริง</b> — ระบบรับลูกค้าได้ครบทั้งเส้นทางแล้ว แนะนำเริ่มยิงแอดงบน้อย 1–2 วันแรก โดยแอดมินเปิดหลังบ้านดูคู่ไปด้วย เมื่อผ่านฉลุยจึงเร่งงบเต็มที่<br><br>
+      <b>พัฒนาต่อได้อีก</b> — เชื่อม API ระบบส่งของให้ยิงเลขพัสดุอัตโนมัติ · แนะนำสินค้าที่มักซื้อคู่กันเพื่อเพิ่มยอดต่อบิล · สรุปยอดขายรายวันส่งเข้าไลน์ผู้บริหาร
+    </div>
+  </div>
+</section>
+
+<footer>
+  จีทู (Jeetoo) — ระบบ AI ตอบแชทลูกค้า · ร้าน ABC<br>เอกสารนำเสนอภายใน
+</footer>
+
+</body>
+</html>
