@@ -53,6 +53,24 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 .chip:active{transform:scale(.96);}
 .chip.ok{background:#1c3b1c;border-color:#2e7d32;color:#9be29b;}
 .bell{text-align:center;color:#ffd479;font-size:13px;font-weight:700;margin:6px 0 0;min-height:18px;}
+.opause{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.opause:active{transform:scale(.98);}
+.sechead{font-size:11px;letter-spacing:1.5px;color:#7a7a7a;text-align:left;margin:22px 0 8px;font-weight:600;}
+#chatwrap{margin-top:8px;border-top:1px solid #2b2b2b;padding-top:16px;text-align:left;}
+.cbar{width:100%;background:#141414;border:1px solid #2b2b2b;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;color:#cfcfcf;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;}
+.cbar:active{transform:scale(.99);}
+.cbar span{color:#8a8a8a;font-size:12px;font-weight:600;}
+#chatlist{margin-top:8px;background:#1a1a1a;border-radius:12px;padding:6px 12px;}
+.crow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #262626;}
+.crow:last-child{border-bottom:none;}
+.cname{font-size:13px;color:#e8eaed;min-width:0;}
+.cname i{font-style:normal;font-size:11.5px;color:#8a8a8a;}
+.cname.off{color:#8a8a8a;}
+.cname.off i{color:#e0b64f;}
+.cbtn{border-radius:10px;padding:5px 11px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.cbtn.stop{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;}
+.cbtn.go{background:#13301f;border:1.5px solid #245537;color:#4fe094;}
+.cbtn:active{transform:scale(.96);}
 </style>
 </head>
 <body>
@@ -69,6 +87,8 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
   <div id="panel" class="hidden">
     <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
 
+    <div class="sechead">งานที่ต้องทำ</div>
+
     <div id="orderbox">
       <div class="qhead">📦 ออเดอร์รอลง XSelly <span id="ocount"></span></div>
       <div id="orders"></div>
@@ -77,6 +97,14 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
     <div id="queuebox">
       <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
       <div id="queue"></div>
+    </div>
+
+    <div id="chatwrap">
+      <button class="cbar" onclick="toggleChats()">
+        <span style="color:#cfcfcf;font-size:13.5px;">🙋 คุมแชทรายคน</span>
+        <span id="cinfo">แตะเพื่อดู ▾</span>
+      </button>
+      <div id="chatlist" class="hidden"></div>
     </div>
 
     <button class="sub" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
@@ -181,6 +209,7 @@ async function loadOrders(){
         + (chips? '<div class="chips">'+chips+'</div>':'')
         + '<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอกทั้งหมด</button>'
         + '<button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
+        + '<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
         + '<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลง XSelly แล้ว</button></div></div>';
     }).join('');
     return o.length;
@@ -191,7 +220,38 @@ function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ c
 function openChat(){ window.open('https://chat.line.biz/','_blank'); }
 async function orderDone(uid){ try{ await fetch(W+'/ctl/orderdone?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadOrders(); }catch(e){} }
 
-async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); }catch(e){ $('msg').textContent=e.message; } }
+/* 🙋 คุมแชทรายคน — ซ่อนไว้ใต้ปุ่ม ไม่กวนงานประจำวัน */
+let _chatsOpen=false;
+function toggleChats(){ _chatsOpen=!_chatsOpen; if(_chatsOpen){ $('chatlist').classList.remove('hidden'); loadChats(); } else { $('chatlist').classList.add('hidden'); $('cinfo').textContent='แตะเพื่อดู ▾'; } }
+async function loadChats(){
+  if(!_chatsOpen) return;
+  try{
+    const r=await fetch(W+'/ctl/chats?key='+encodeURIComponent(KEY)+'&shop=v20');
+    const d=await r.json(); const c=d.chats||[];
+    $('cinfo').textContent = c.length? c.length+' แชท ▴' : 'ไม่มีแชท ▴';
+    if(!c.length){ $('chatlist').innerHTML='<div class="qempty">ยังไม่มีแชทใน 2 วันนี้</div>'; return; }
+    $('chatlist').innerHTML = c.map(function(it){
+      const nm = it.name || 'ลูกค้า (ไม่ทราบชื่อ)';
+      return '<div class="crow"><div class="cname'+(it.muted?' off':'')+'">'+esc(nm)
+        + ' <i>· '+(it.muted? esc(it.reason||'แอดมินคุมอยู่') : timeAgo(it.t))+'</i></div>'
+        + (it.muted
+            ? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ ให้จีทูต่อ</button>'
+            : '<button class="cbtn stop" onclick="mute1(\''+it.uid+'\')">⏸ ปิดจีทู</button>')
+        + '</div>';
+    }).join('');
+  }catch(e){}
+}
+async function mute1(uid,btn){
+  if(btn){ btn.textContent='⏸…'; }
+  try{ await fetch(W+'/ctl/mute1?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'});
+    $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว — แอดมินคุมเอง'; loadChats(); loadQueue(); refresh(); }catch(e){}
+}
+async function unmute1(uid){
+  try{ await fetch(W+'/ctl/done?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'});
+    $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
+}
+
+async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); loadChats(); }catch(e){ $('msg').textContent=e.message; } }
 
 async function toggle(){
   $('msg').textContent='กำลังสั่งงาน…';

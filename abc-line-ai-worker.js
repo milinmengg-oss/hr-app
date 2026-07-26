@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-d2-newskus";
+const BUILD = "2026-07-26-d3-chatctl";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -763,6 +763,31 @@ export default {
           items.sort((a, b) => b.t - a.t);
           return J({ queue: items });
         }
+        // 👥 รายชื่อแชทที่จีทูคุยอยู่ (2 วันล่าสุด) + สถานะว่าแอดมินคุมอยู่ไหม
+        if (act === "chats") {
+          const list = await env.CONV.list({ prefix: "chat:" + shop + ":" });
+          const items = [];
+          for (const k of list.keys) {
+            const v = await env.CONV.get(k.name);
+            if (!v) continue;
+            let e = {}; try { e = JSON.parse(v); } catch (x) {}
+            const uid = e.uid || k.name.split(":").pop();
+            const m = await env.CONV.get("mute:" + shop + ":" + uid);
+            let reason = ""; if (m) { try { reason = JSON.parse(m).reason || ""; } catch (x) {} }
+            items.push({ uid, name: e.name || "", t: e.t || 0, muted: !!m, reason });
+          }
+          items.sort((a, b) => b.t - a.t);
+          return J({ chats: items.slice(0, 30) });
+        }
+        // ⏸ แอดมินสั่งปิดจีทูเฉพาะแชทนี้เอง
+        if (act === "mute1") {
+          const uid = url0.searchParams.get("uid");
+          if (uid) {
+            let nm = ""; try { const c = await env.CONV.get("chat:" + shop + ":" + uid); if (c) nm = JSON.parse(c).name || ""; } catch (x) {}
+            await env.CONV.put("mute:" + shop + ":" + uid, JSON.stringify({ uid, name: nm, reason: "แอดมินปิดเอง 🙋", msg: "", t: Date.now() }), { expirationTtl: 172800 });
+          }
+          return J({ ok: 1 });
+        }
         // แอดมินกดว่า "ดูแลเสร็จแล้ว" แชทเดียว → จีทูกลับมาตอบแชทนั้น
         if (act === "done") {
           const uid = url0.searchParams.get("uid");
@@ -1434,6 +1459,15 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
       }
     } catch (e) { console.log("HIST_SKIP " + String(e).slice(0, 80)); }
+    // 👥 จดรายชื่อแชทที่คุยอยู่ (ให้แอดมินเลือกปิดจีทูรายคนได้ในหลังบ้าน) — เก็บ 2 วัน
+    try {
+      if (env.CONV) {
+        let nm = "";
+        try { const old = await env.CONV.get("chat:" + shopId + ":" + userId); if (old) nm = (JSON.parse(old).name || ""); } catch (x) {}
+        if (!nm) { try { nm = await lineProfileName(TOKEN, userId); } catch (x) {} }
+        await env.CONV.put("chat:" + shopId + ":" + userId, JSON.stringify({ name: nm, t: Date.now(), uid: userId }), { expirationTtl: 172800 });
+      }
+    } catch (e) {}
   } catch (e) {
     console.log("HANDLE_ERR " + String(e).slice(0, 150));
   }
