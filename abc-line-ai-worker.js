@@ -816,6 +816,25 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
         return;
       }
+      // 💾 ลูกค้าเก่าพิมพ์ "ที่เดิม" หลังชำระเงิน → ปิดออเดอร์ด้วยที่อยู่ที่บันทึกไว้ (โค้ดจัดการเอง)
+      if (/^(ที่เดิม|ส่งที่เดิม|ใช้ที่เดิม|ที่อยู่เดิม)[\s!.ค่ะครับ]*$/.test(t) && env.CONV) {
+        try {
+          const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
+          const ov = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (cv && ov) {
+            const c = JSON.parse(cv), o = JSON.parse(ov);
+            if (c.addr && o.status && o.status.indexOf("✅") !== -1) {
+              // เติมที่อยู่ลงออเดอร์ + ตั้งสถานะพร้อมจัดส่ง
+              o.block = (o.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "") + "\nชื่อผู้รับ: " + (c.name || "-") + "\nเบอร์: " + (c.tel || "-") + "\nที่อยู่: " + c.addr + "\nชำระ: โอน (ตรวจสลิปผ่านแล้ว ✅)";
+              o.status = "ชำระแล้ว ✅ (พร้อมจัดส่ง)";
+              await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(o), { expirationTtl: 259200 });
+              await lineReply(TOKEN, replyToken, "รับทราบค่ะ ส่งที่เดิมนะคะ 📍\n" + (c.name ? c.name + " " : "") + (c.tel ? c.tel + "\n" : "") + c.addr + "\n\nแอดมินลงออเดอร์ให้เรียบร้อยค่ะ 🎉 จะได้รับสินค้าภายใน 2-3 วันนะคะ ขอบคุณที่อุดหนุนค่ะ 💕", userId);
+              return;
+            }
+          }
+        } catch (e) {}
+        // ไม่มีข้อมูล/ยังไม่จ่าย → ปล่อยให้ AI ตอบตามปกติ
+      }
       // 🛵 ลูกค้าพูดถึงส่งด่วน/คิดค่าส่ง (โค้ดตอบเอง ไม่ผ่าน AI — กัน AI กุข้อมูล/ส่งต่อแอดมินผิดๆ)
       if (/^(ส่งด่วน|เอาส่งด่วน|ด่วน|คิดค่าส่ง|เช็คค่าส่ง|คิดค่าส่งด่วน|เช็คค่าส่งด่วน|ค่าส่งด่วน)[\s!.?]*$/.test(t)) {
         let exp = null;
@@ -871,7 +890,15 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (outs.length) outNote = "\n\n# ⛔⛔ รุ่นที่หมดสต็อกตอนนี้ (ทุกกลิ่นเหลือ 0) — ทั้ง 'ห้ามแนะนำ' และ 'ห้ามรับออเดอร์'\nรุ่นในลิสต์นี้: (1) ห้ามเอาไปแนะนำ/เสนอ (2) ถ้าลูกค้าสั่งรุ่นนี้ ⛔ ห้ามออกบล็อกทวนคำสั่งซื้อ/สรุปยอดเด็ดขาด ให้ตอบว่า 'ขออภัยค่ะ รุ่นนี้ของหมด/รอของเข้าอยู่นะคะ 🙏🏻 เดี๋ยวแอดมินแจ้งอีกครั้งค่ะ' แล้วเสนอรุ่นที่มีของแทน:\n" + outs.join(", ");
       }
     } catch (e) {}
-    const sysFull = sysPrompt + outNote;
+    // 💾 ลูกค้าเก่า → บอก AI ว่ามีที่อยู่บันทึกไว้ (ให้เสนอ "ส่งที่เดิม" ได้)
+    let custNote = "";
+    try {
+      if (env.CONV) {
+        const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
+        if (cv) { const c = JSON.parse(cv); if (c && c.addr) custNote = "\n\n# ลูกค้าคนนี้เป็นลูกค้าเก่า เคยสั่งซื้อสำเร็จแล้ว\n- ชื่อ: " + (c.name || "-") + " เบอร์: " + (c.tel || "-") + "\n- ที่อยู่ที่เคยส่ง: " + c.addr + "\n→ ตอนขอที่อยู่ ให้ถามว่า \"ส่งที่เดิมไหมคะ\" ก่อน (ลูกค้าพิมพ์ 'ที่เดิม' ระบบจัดการให้เอง) ⛔ ห้ามเอาที่อยู่ไปพูดถึงโดยไม่จำเป็น"; }
+      }
+    } catch (e) {}
+    const sysFull = sysPrompt + outNote + custNote;
 
     let reply, userForHistory;
 
@@ -901,7 +928,15 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           if (ok) { ordObj = JSON.parse(ok); const m = (ordObj.block || "").match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/); if (m) expected = +m[1].replace(/,/g, ""); }
         } catch (e) {}
 
-        const ADDR_FORM = "\n\nรบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕";
+        // 💾 ลูกค้าเก่ามีที่อยู่บันทึกไว้ → เสนอ "ส่งที่เดิม" แทนฟอร์มเต็ม
+        let ADDR_FORM = "\n\nรบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕";
+        try {
+          const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
+          if (cv) {
+            const c = JSON.parse(cv);
+            if (c && c.addr) ADDR_FORM = "\n\n📍 ส่งที่เดิมไหมคะ?\n" + (c.name ? "ชื่อผู้รับ: " + c.name + "\n" : "") + (c.tel ? "เบอร์: " + c.tel + "\n" : "") + "ที่อยู่: " + c.addr + "\n\nพิมพ์ \"ที่เดิม\" ได้เลยค่ะ หรือส่งที่อยู่ใหม่มาก็ได้นะคะ 💕";
+          }
+        } catch (e) {}
 
         let statusLine = "ส่งสลิปแล้ว รอตรวจยอด 🧾";
         let customerMsg = "ได้รับสลิปแล้วค่ะ 🙏🏻 รอแอดมินตรวจสอบและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕";
@@ -1066,6 +1101,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         let status = isOrderBlock ? "ชำระแล้ว ✅ (พร้อมจัดส่ง)" : "รอโอน 💰";
         try { const prev = await env.CONV.get(ordKey); if (prev) { const pj = JSON.parse(prev); if (pj.status && pj.status.indexOf("✅") !== -1 && !isOrderBlock) status = pj.status; } } catch (e) {}
         await env.CONV.put(ordKey, JSON.stringify({ name, block: reply.slice(0, 1600), t: Date.now(), status, uid: userId }), { expirationTtl: 259200 }); // เก็บ 3 วัน
+        // 💾 จำลูกค้า: ออเดอร์สำเร็จ (มีที่อยู่ครบ) → บันทึกชื่อ/เบอร์/ที่อยู่ไว้ถาวร ครั้งหน้าถาม "ส่งที่เดิมไหม"
+        if (isOrderBlock) {
+          const gn = (re) => { const m = reply.match(re); return m ? m[1].trim().slice(0, 200) : ""; };
+          const cName = gn(/ชื่อผู้รับ:[ \t]*(.+)/), cTel = gn(/เบอร์:[ \t]*(.+)/), cAddr = gn(/ที่อยู่:[ \t]*(.+)/);
+          if (cAddr && cAddr.indexOf("<") === -1) await env.CONV.put("cust:" + shopId + ":" + userId, JSON.stringify({ name: cName, tel: cTel, addr: cAddr, t: Date.now() }));
+        }
       }
     } catch (e) {}
 
