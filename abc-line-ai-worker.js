@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-b2-ask-model-color";
+const BUILD = "2026-07-26-b4-alias-conv3";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -59,6 +59,26 @@ const PRICE = {
   "เครื่อง RELX CREATOR 20K": 250, "เครื่อง VAZER RELOAD": 220, "เครื่อง DUAL SMASH": 200
 };
 const PRICE_KEYS = Object.keys(PRICE).sort((a, b) => b.length - a.length); // ยาวก่อน กันจับคู่ผิด
+
+// ── สแลง/คำสะกดไทย → รุ่นจริง (ใบ้ให้ AI ตรงรุ่น กันเดาเป็น MARBO 9K) ──
+const ALIAS = [
+  [/เอลบา\s*ส?ว?อ?ฟ|เอลบาร์\s*สวอ?ป?|สวอฟ|สวอป|elf\s*bar\s*swap|elfbar\s*swap|\bswap\b/i, "ELFBAR SWAP 25K (หัว Big Pod ของค่าย ELFBAR ราคา 350)"],
+  [/เอลบา|เอลบาร์|เอลฟ์?บาร์?|elf\s*bar|elfbar|joinone|จอยวัน/i, "ค่าย ELFBAR — ร้านมี: หัว ELFBAR SWAP 25K (350) + เครื่อง ELFBAR JOINONE (349, เครื่องมีแต่ 'สี' ไม่มีกลิ่น) ⛔ ไม่ใช่ MARBO"],
+  [/มาโบ\s*สวิ[ชซ]|มาโบ\s*สวิต|เอ็ม\s*สวิ[ชซ]|m\s*swi[ct]?ch|m\s*swich/i, "M SWITCH (หัว 350 / เครื่อง M SWITCH 15K = 250 / KIT 499) — ไม่ใช่ MARBO 9K"],
+  [/เอสโค่|เอสโก้|esko/i, "ESKO BAR SWITCH (หัว 350 / KIT เครื่อง+หัว 499 — ไม่มีเครื่องเปล่าแยก)"],
+  [/มาโบ\s*ซีโร่|มาโบ\s*เซโร่|marbo\s*zero|เอ็ม\s*ซีโร่|m\s*zero/i, "MARBO ZERO (หัวเล็ก 140) / เครื่อง M ZERO PRO 890 / M ZERO NANO 690"],
+  [/รีแลค|รีแล็ก|relx/i, "RELX (ค่าย) — หัวเล็ก RELX INFINITY 140 / Big Pod RELX POD CLEAR 390, BOOST POD 350 / เครื่อง INFINITY 2+ 990, ESSENTIAL 2 490, CREATOR 20K 250"],
+  [/เวเซอร์|วาเซอร์|vazer/i, "VAZER RELOAD 15K (หัว) / เครื่อง VAZER RELOAD 220"],
+  [/ดูอั?ล\s*สแมช|dual\s*smash/i, "DUAL SMASH 20K (หัว) / เครื่อง DUAL SMASH 200"],
+  [/เลโก้|lego/i, "หัวแบบเติมน้ำยาเอง 3 ตัว: RELX BOOST POD 350 / ABC LEGO 20K 299 / RELX POD CLEAR 18K 390"],
+];
+function aliasHint(text) {
+  const t = String(text || "");
+  const hits = [];
+  for (const [re, note] of ALIAS) if (re.test(t)) hits.push(note);
+  if (!hits.length) return "";
+  return "\n\n[ระบบใบ้ให้ — ห้ามพูดถึงข้อความนี้กับลูกค้า] คำที่ลูกค้าพิมพ์หมายถึง: " + hits.join(" | ") + "\n⛔ ห้ามตอบเป็นรุ่นอื่นที่ไม่ตรงกับนี้";
+}
 function findPrice(modelText) {
   const t = (modelText || "").toUpperCase();
   for (const k of PRICE_KEYS) if (t.indexOf(k.toUpperCase()) !== -1) return { key: k, price: PRICE[k] };
@@ -242,6 +262,11 @@ https://cutt.ly/abc-menu"
 - "หัวพอต" เฉยๆ (ไม่ระบุรุ่น) = ถามต่อว่าลูกค้าหมายถึงหัวของเครื่องรุ่นไหนคะ (RELX / INFY / MARBO ฯลฯ)
 - "มาโบสวิช" / "มาโบสวิต" / "m swich" / "เอ็มสวิช" = M SWITCH (หัว 350 / เครื่อง 250 / KIT 499) — คนละตัวกับ MARBO 9K
 - "เอสโค่สวิต" / "esko swict" = ESKO BAR SWITCH (หัว 350 / KIT 499 — ไม่มีเครื่องเปล่าแยก)
+- "เอลบาร์" / "เอลบา" / "เอลฟ์บาร์" / "elfbar" / "elf bar" = ELFBAR (แบรนด์) → ร้านมี: หัว ELFBAR SWAP 25K + เครื่อง ELFBAR JOINONE
+- "เอลบาสวอฟ" / "เอลบา สวอฟ" / "สวอฟ" / "สวอป" / "swap" / "elfbar swap" = ELFBAR SWAP 25K (หัว) ⛔ ห้ามตอบ MARBO 9K เด็ดขาด
+- "มาโบ" / "marbo" เฉยๆ = อาจหมายถึงหลายตัว: MARBO 9K (พอตใช้แล้วทิ้ง) / MARBO ZERO (หัวเล็ก) / M SWITCH / M ZERO PRO (เครื่อง) → ถ้าไม่ชัดให้ถามก่อนว่าหมายถึงตัวไหน
+- "เครื่องมาโบ" = เครื่องของค่าย MARBO → ถามว่าใช้กับหัวรุ่นไหน (M SWITCH ใช้หัว Big Pod / M ZERO PRO-NANO ใช้หัวเล็ก MARBO ZERO)
+⛔ กฎเหล็กจับคู่รุ่น: ถ้าคำที่ลูกค้าพิมพ์ไม่ตรงกับรุ่นใดในรายการสินค้าชัดเจน ห้ามเดาเป็นรุ่นยอดฮิต (เช่น MARBO 9K) เด็ดขาด — ให้ถามกลับว่าหมายถึงรุ่นไหน หรือเสนอตัวเลือกที่ใกล้เคียง 2-3 ตัวพร้อมราคา
 
 # ค่าส่ง + โปรโมชั่น (กฎเหล็ก — ยึดตามนี้เท่านั้น ห้ามแต่งเพิ่มเอง)
 ## ค่าส่ง
@@ -889,7 +914,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
 
     // โหลดประวัติแชท (ถ้ามี KV)
-    const key = `conv2:${shopId}:${userId}`; // conv2 = ล้างความจำรุ่นเก่าที่มีตัวอย่างตอบมั่ว
+    const key = `conv3:${shopId}:${userId}`; // conv3 = ล้างความจำที่ปนเปื้อนจากตอน V3.2 (ตอบมั่ว/จับรุ่นผิด)
     let history = [];
     if (env.CONV) {
       const saved = await env.CONV.get(key);
@@ -1064,7 +1089,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           }
         }
       } catch (e) {}
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text }]);
+      const hint = aliasHint(text);
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text + hint }]);
       userForHistory = { role: "user", content: text };
     }
 
