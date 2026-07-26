@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-b8-vision";
+const BUILD = "2026-07-26-b9-aitest";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -560,6 +560,27 @@ export default {
     if (url0.pathname === "/version") {
       return new Response(JSON.stringify({ build: BUILD, model: MODELS[0] }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
+    // 🩺 ตรวจสุขภาพ AI: /aitest — ยิงจริงทุกโมเดล แล้วบอกว่าตัวไหนผ่าน/ตัวไหนพัง เพราะอะไร (เช่น เครดิตหมด)
+    if (url0.pathname === "/aitest") {
+      const out = [];
+      if (!env.OPENROUTER_KEY) return new Response(JSON.stringify({ error: "ไม่พบ OPENROUTER_KEY ใน Cloudflare" }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+      for (const model of MODELS) {
+        const t0 = Date.now();
+        try {
+          const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${env.OPENROUTER_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model, messages: [{ role: "user", content: "ตอบคำเดียวว่า OK" }], max_tokens: 10 }),
+            signal: AbortSignal.timeout(12000),
+          });
+          const data = await r.json();
+          const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+          out.push({ model, ms: Date.now() - t0, ok: !!txt, status: r.status, reply: txt || null, error: (data && data.error) ? JSON.stringify(data.error).slice(0, 300) : null });
+        } catch (e) { out.push({ model, ms: Date.now() - t0, ok: false, error: String(e).slice(0, 200) }); }
+      }
+      const good = out.filter(o => o.ok).length;
+      return new Response(JSON.stringify({ build: BUILD, สรุป: good ? ("ใช้ได้ " + good + "/" + out.length + " โมเดล") : "⛔ พังทุกโมเดล — ดู error ด้านล่าง (มักเป็นเครดิต OpenRouter หมด หรือ API key ผิด)", ผล: out }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+    }
     // ทดสอบ cron ด้วยมือ: /cron?key=<XSELLY_KEY> (รันรอบเตือนเดี๋ยวนั้น)
     if (url0.pathname === "/cron") {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
@@ -877,7 +898,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         return;
       }
       // 🟡 นิโคตินเพ้า (Nicotine Pouch) — ซองอมเหงือก คนละอย่างกับพอต (ต้องเช็คก่อนบล็อกสุขภาพ)
-      if (/นิโคตินเพ้า|นิโคติน\s*เพ้า|นิโคตินพัช|นิค\s*เพ้า|^เพ้า|\bpouch\b|นิโคตินpouch|ซองอม|อมเหงือก|kardinal|คาร์ดินอล|\bzyn\b|\bzar\b/i.test(t)) {
+      if (/นิโคติ[น้ิ]*\s*เพ[้า]*า?|นิโคตินพัช|นิค\s*เพ้า|เพ้า|\bpouch\b|ซองอม|อมเหงือก|kardinal|คาร์ดินอล|\bzyn\b|\bzar\b/i.test(t)) {
         await lineReply(TOKEN, replyToken,
           "นิโคตินเพ้า (Nicotine Pouch) คือซองนิโคตินแบบ \"อม\" ค่ะ 💕\n" +
           "สอดไว้ใต้ริมฝีปากบน ระหว่างเหงือกกับริมฝีปาก อมได้ประมาณ 20-40 นาทีแล้วทิ้ง\n" +
