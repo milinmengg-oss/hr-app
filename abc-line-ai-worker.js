@@ -21,13 +21,13 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-b9-aitest";
+const BUILD = "2026-07-26-c1-timeout25";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
   "qwen/qwen-2.5-72b-instruct",
-  "meta-llama/llama-3.3-70b-instruct:free",
-  "google/gemini-2.0-flash-exp:free",
+  "meta-llama/llama-3.3-70b-instruct",   // (ตัว :free ถูกปิดแล้ว → ใช้ตัวปกติ)
+  "google/gemini-2.5-flash",             // สำรองสุดท้าย เร็วและเสถียร
 ];
 
 // ===== โมเดลอ่านรูป (vision) — ใช้ตอนลูกค้าส่งรูปเมนูที่วงกลม =====
@@ -564,14 +564,19 @@ export default {
     if (url0.pathname === "/aitest") {
       const out = [];
       if (!env.OPENROUTER_KEY) return new Response(JSON.stringify({ error: "ไม่พบ OPENROUTER_KEY ใน Cloudflare" }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+      // ?full=1 → ทดสอบด้วย prompt จริงทั้งก้อน (วัดเวลาจริงที่ลูกค้าเจอ)
+      const full = url0.searchParams.get("full") === "1";
+      const testMsgs = full
+        ? [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: "ไอคอสคืออะไร" }]
+        : [{ role: "user", content: "ตอบคำเดียวว่า OK" }];
       for (const model of MODELS) {
         const t0 = Date.now();
         try {
           const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${env.OPENROUTER_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model, messages: [{ role: "user", content: "ตอบคำเดียวว่า OK" }], max_tokens: 10 }),
-            signal: AbortSignal.timeout(12000),
+            body: JSON.stringify({ model, messages: testMsgs, max_tokens: full ? 300 : 10, temperature: 0.2 }),
+            signal: AbortSignal.timeout(30000),
           });
           const data = await r.json();
           const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
@@ -1260,7 +1265,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
 }
 
 async function askAI(apiKey, messages, models) {
-  for (const model of (models || MODELS)) {
+  const list = models || MODELS;
+  let idx = 0;
+  for (const model of list) {
+    // ตัวแรกให้เวลาคิดนาน (prompt ความรู้สินค้ายาว ใช้เวลา) ตัวสำรองให้สั้นลง กัน reply token หมดอายุ
+    const limitMs = idx === 0 ? 25000 : 12000;
+    idx++;
     try {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
         method: "POST",
@@ -1269,7 +1279,7 @@ async function askAI(apiKey, messages, models) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 500 }),
-        signal: AbortSignal.timeout(9000), // โมเดลไหนช้าเกิน 15 วิ ตัดทิ้ง ลองตัวถัดไป (กัน reply token หมดอายุ)
+        signal: AbortSignal.timeout(limitMs), // ตัวแรก 25 วิ / ตัวสำรอง 12 วิ (ถ้า reply token หมดอายุ ระบบส่งแบบ push แทนอยู่แล้ว)
       });
       const data = await r.json();
       const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
