@@ -21,8 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 const MODELS = [
-  "deepseek/deepseek-v3.2",              // หลัก: ฉลาดกว่า + output ถูกกว่า V3 ~57% + context 131K
-  "deepseek/deepseek-chat",              // สำรอง 1: V3 เดิม (ถ้า V3.2 ล่ม/ตอบแปลก)
+  "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
   "qwen/qwen-2.5-72b-instruct",
   "meta-llama/llama-3.3-70b-instruct:free",
   "google/gemini-2.0-flash-exp:free",
@@ -817,6 +816,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
         return;
       }
+      // ⚖️ คำถามข้อกฎหมาย/ความเสี่ยง — โค้ดตอบเอง (โมเดล AI มักปฏิเสธ ทำให้ขึ้น "ระบบขัดข้อง")
+      if (/โดนจับ|ผิดกฎหมาย|ถูกกฎหมาย|กฎหมาย|ตำรวจ|โดนปรับ|ติดคุก|จับได้|ของผิด|เถื่อน/.test(t)) {
+        await muteNow("ถามเรื่องข้อกฎหมาย ⚖️", t);
+        await lineReply(TOKEN, replyToken, "ขออภัยด้วยนะคะ 🙏🏻 เรื่องข้อกฎหมายแอดมินไม่สามารถให้คำแนะนำได้ค่ะ\nรบกวนศึกษาข้อมูลจากหน่วยงานที่เกี่ยวข้องโดยตรงนะคะ\n\nถ้ามีคำถามเรื่องสินค้าหรือการสั่งซื้อ ยินดีให้บริการค่ะ 💕 (เดี๋ยวแอดมินเข้ามาดูแลต่อนะคะ)", userId);
+        return;
+      }
       // 💾 ลูกค้าเก่าพิมพ์ "ที่เดิม" หลังชำระเงิน → ปิดออเดอร์ด้วยที่อยู่ที่บันทึกไว้ (โค้ดจัดการเอง)
       if (/^(ที่เดิม|ส่งที่เดิม|ใช้ที่เดิม|ที่อยู่เดิม)[\s!.ค่ะครับ]*$/.test(t) && env.CONV) {
         try {
@@ -1050,18 +1055,22 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const items = parseItems(reply);
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
       const notReady = !items.length || items.some(it => /ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(it.flavor) || !(it.qty > 0));
-      // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — กันออกการ์ดขายกลิ่นที่หมด
-      let outOfStock = null;
+      // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — คัดรายการที่หมดออก แล้วไปต่อกับตัวที่มีของ (กันวนซ้ำ)
+      let outList = [], okItems = items;
       try {
         if (env.CONV) {
           const smChk = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+          okItems = [];
           for (const it of items) {
-            if (/แถม|ฟรี/i.test(it.flavor || "")) continue; // ของแถม ข้าม
+            if (/แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม
             const q = findStockForItem(smChk, it.model, it.flavor);
-            if (q !== null && q <= 0) { outOfStock = it; break; }
+            if (q !== null && q <= 0) outList.push(it); else okItems.push(it);
           }
         }
-      } catch (e) {}
+      } catch (e) { okItems = items; }
+      const outOfStock = (okItems.length === 0 && outList.length) ? outList[0] : null;
+      const outNote2 = outList.length ? ("ขออภัยค่ะ 🙏🏻 " + outList.map(x => x.model + " กลิ่น" + x.flavor).join(", ") + " หมดชั่วคราวค่ะ (ตัดออกจากรายการให้แล้วนะคะ)\n\n") : "";
+      if (okItems.length) items = okItems;
       if (notReady) {
         await lineReply(TOKEN, replyToken, "รับกลิ่นไหน จำนวนกี่ชิ้นดีคะ 💕 (บอกรุ่น+กลิ่น+จำนวนมาได้เลยนะคะ)", userId);
       } else if (outOfStock) {
@@ -1147,7 +1156,8 @@ async function askAI(apiKey, messages, models) {
       console.log("AI_EXCEPTION model=" + model + " " + String(e).slice(0, 200));
     }
   }
-  return "ขออภัยค่ะ ระบบขัดข้องชั่วคราว เดี๋ยวแอดมินติดต่อกลับนะคะ 🙏";
+  // ทุกโมเดลตอบไม่ได้ (มักเกิดตอนโมเดลปฏิเสธคำถามบางประเภท) → ตอบสุภาพ ไม่บอกลูกค้าว่าระบบพัง
+  return "รอสักครู่นะคะ 🙏🏻 แอดมินหลังการขายจะเข้ามาดูแลให้บริการค่ะ 💕";
 }
 
 // ⏰ ตามลูกค้าค้างจ่าย: วนออเดอร์ "รอโอน" ที่เกินเวลา → ส่งข้อความเตือน (push)
