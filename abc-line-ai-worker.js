@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-c4-noleak";
+const BUILD = "2026-07-26-c6-narrowguard";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1258,18 +1258,25 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       let items = parseItems(reply);
       // 🧯 กันจีทู "ลอกรายการจากตัวอย่าง/ออเดอร์เก่า": รุ่นในบล็อกต้องเคยโผล่ในบทสนทนานี้จริง
       try {
-        const convText = history.slice(-8).map(h => typeof h.content === "string" ? h.content : "").join("\n") + "\n" + (ev.message && ev.message.text ? ev.message.text : "");
-        const allowed = new Set();
-        const cn = normTH(convText);
-        for (const k of FLAVOR_KEYS) if (cn.indexOf(normTH(k)) !== -1) allowed.add(normTH(k));
-        for (const [re, key] of TH_MODEL) if (re.test(convText)) allowed.add(normTH(key));
-        if (allowed.size) {
-          const keep = items.filter(it => { const m = normTH(it.model); for (const a of allowed) if (m.indexOf(a) !== -1 || a.indexOf(m) !== -1) return true; return false; });
-          if (keep.length && keep.length !== items.length) items = keep;          // ตัดรายการที่ลูกค้าไม่ได้สั่งทิ้ง
-          else if (!keep.length) {                                                 // มั่วทั้งบล็อก → ไม่ออกการ์ด ถามใหม่
+        // ดูเฉพาะบริบท "สดๆ" (2 เทิร์นล่าสุด + ข้อความนี้ + คำพูดของจีทูในรอบนี้ที่ไม่ใช่บรรทัดรายการ)
+        // ⛔ ไม่ดูประวัติเก่ากว่านั้น กันรุ่นจากออเดอร์ก่อนหน้าหลุดเข้ามาในการ์ด
+        const replyContext = reply.split("\n").filter(l => l.indexOf("|") === -1).join("\n");
+        const convText = history.slice(-4).map(h => typeof h.content === "string" ? h.content : "").join("\n")
+          + "\n" + (ev.message && ev.message.text ? ev.message.text : "") + "\n" + replyContext;
+        // narrow = สิ่งที่พูดถึง "เดี๋ยวนี้" (ข้อความล่าสุด + คำพูดจีทูรอบนี้) | wide = 2 เทิร์นล่าสุด (เผื่อสั่งเพิ่มทีละอย่าง)
+        const narrowText = (ev.message && ev.message.text ? ev.message.text : "") + "\n" + replyContext
+          + "\n" + (history.length ? String(history[history.length - 1].content || "") : "");
+        const mk = (txt) => { const s = new Set(), n = normTH(txt); for (const k of FLAVOR_KEYS) if (n.indexOf(normTH(k)) !== -1) s.add(normTH(k)); for (const [re, key] of TH_MODEL) if (re.test(txt)) s.add(normTH(key)); return s; };
+        const wide = mk(convText), narrow = mk(narrowText);
+        const hit = (it, set) => { const m = normTH(it.model); for (const a of set) if (m.indexOf(a) !== -1 || a.indexOf(m) !== -1) return true; return false; };
+        if (wide.size) {
+          const keep = items.filter(it => hit(it, wide));
+          const okNow = narrow.size ? items.some(it => hit(it, narrow)) : true; // ต้องมีอย่างน้อย 1 ตัวที่ตรงกับสิ่งที่คุยกันอยู่ตอนนี้
+          if (!keep.length || !okNow) {                                          // มั่ว/ลอกของเก่า → ไม่ออกการ์ด ถามใหม่
             await lineReply(TOKEN, replyToken, "ขออนุญาตทวนอีกครั้งนะคะ 🙏🏻 รบกวนแจ้ง รุ่น + กลิ่น/สี + จำนวน ที่ต้องการอีกทีค่ะ เดี๋ยวสรุปออเดอร์ให้ถูกต้องนะคะ 💕", userId);
             return;
           }
+          if (keep.length !== items.length) items = keep;                         // ตัดรายการที่ลูกค้าไม่ได้สั่งทิ้ง
         }
       } catch (e) {}
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
