@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-c7-flavorpct";
+const BUILD = "2026-07-26-c8-stockage";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -642,6 +642,29 @@ export default {
       for (const k in FLAVORS) { const v = FLAVORS[k]; sku += v.f.length; lines.push(k + " = " + v.p + " บาท | " + (v.f.length ? v.f.length + " กลิ่น/สี: " + v.f.join(" · ") : "(ไม่มีตัวเลือก)")); }
       return new Response("จีทูรู้จัก " + Object.keys(FLAVORS).length + " รุ่น / " + sku + " กลิ่น-สี\n\n" + lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
+    // ⏱ สถานะความสดของสต็อก + ตั้งค่ากันขายของที่ข้อมูลเก่า: /stockage?key=...  (&set=24 = เปิดใช้ที่ 24 ชม. | &set=0 = ปิด)
+    if (url0.pathname === "/stockage") {
+      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      const setv = url0.searchParams.get("set");
+      if (setv !== null) await env.CONV.put("stockmaxage", String(Math.max(0, parseInt(setv, 10) || 0)));
+      const maxAge = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
+      const ts = JSON.parse((await env.CONV.get("stockts")) || "{}");
+      const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+      const last = parseInt((await env.CONV.get("stockmap_t")) || "0", 10);
+      const now3 = Date.now(), H = 3600000;
+      let fresh = 0, stale = 0, never = 0, inStock = 0;
+      for (const nm in sm) {
+        if (sm[nm] > 0) inStock++;
+        if (!ts[nm]) never++; else if ((now3 - ts[nm]) / H <= (maxAge || 24)) fresh++; else stale++;
+      }
+      return new Response(JSON.stringify({
+        โหมดกันขายของข้อมูลเก่า: maxAge ? ("เปิด — ถ้าข้อมูลเก่ากว่า " + maxAge + " ชม. จะให้แอดมินเช็คก่อน") : "ปิด (ตั้งค่าด้วย ?set=24)",
+        อัปเดตล่าสุดจาก_XSelly: last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "ยังไม่เคยมี webhook เข้ามาเลย",
+        ชั่วโมงที่ผ่านมา: last ? Math.round((now3 - last) / H * 10) / 10 : null,
+        กลิ่นทั้งหมด: Object.keys(sm).length, มีของ: inStock,
+        ข้อมูลสด: fresh, ข้อมูลเก่า: stale, ไม่เคยอัปเดตเลย: never
+      }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+    }
     // 🩺 ตรวจสุขภาพ AI: /aitest — ยิงจริงทุกโมเดล แล้วบอกว่าตัวไหนผ่าน/ตัวไหนพัง เพราะอะไร (เช่น เครดิตหมด)
     if (url0.pathname === "/aitest") {
       const out = [];
@@ -811,13 +834,15 @@ export default {
             const skumap = JSON.parse((await env.CONV.get("skumap")) || "{}");
             // รวมทุกกลิ่นในรอบนี้ แล้วเขียน stockmap ครั้งเดียว (ประหยัดโควต้าเขียน KV: 1 write/รอบ แทน N)
             const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+            const stockts = JSON.parse((await env.CONV.get("stockts")) || "{}"); // ⏱ จำว่าแต่ละกลิ่นอัปเดตล่าสุดเมื่อไหร่
+            const now2 = Date.now();
             let n = 0;
             for (const it of items) {
               if (!it || !it.sku) continue; // sku อาจเป็นค่าว่างตาม doc
               const nm = SKU_FIX[it.sku] || skumap[it.sku] || it.sku;
-              stock[nm] = +it.new; n++;
+              stock[nm] = +it.new; stockts[nm] = now2; n++;
             }
-            if (n) await env.CONV.put("stockmap", JSON.stringify(stock));
+            if (n) { await env.CONV.put("stockmap", JSON.stringify(stock)); await env.CONV.put("stockts", JSON.stringify(stockts)); await env.CONV.put("stockmap_t", String(now2)); }
             console.log("XSELLY_OK items=" + n);
           }
         } catch (e) { console.log("XSELLY_ERR " + String(e).slice(0, 200)); }
@@ -1284,18 +1309,33 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
       const notReady = !items.length || items.some(it => /ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(it.flavor) || !(it.qty > 0));
       // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — คัดรายการที่หมดออก แล้วไปต่อกับตัวที่มีของ (กันวนซ้ำ)
-      let outList = [], okItems = items;
+      let outList = [], okItems = items, staleList = [];
       try {
         if (env.CONV) {
           const smChk = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+          // ⏱ กันขายของที่ "ข้อมูลสต็อกเก่าเกินไป" (เปิด/ปิดที่ /stockage?key=...&set=ชั่วโมง | 0 = ปิด)
+          const maxAgeH = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
+          const tsMap = maxAgeH ? JSON.parse((await env.CONV.get("stockts")) || "{}") : null;
+          const nowT = Date.now();
           okItems = [];
           for (const it of items) {
             if (/แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม
             const q = findStockForItem(smChk, it.model, it.flavor);
-            if (q !== null && q <= 0) outList.push(it); else okItems.push(it);
+            if (q !== null && q <= 0) { outList.push(it); continue; }
+            if (maxAgeH && tsMap) { // ข้อมูลว่ามีของ แต่ไม่ได้อัปเดตมานาน → ให้แอดมินเช็คก่อน
+              let t = 0;
+              for (const nm in tsMap) if (normTH(nm).indexOf(normTH(it.model)) !== -1 && normTH(nm).indexOf(normTH(it.flavor)) !== -1) { t = Math.max(t, tsMap[nm]); }
+              if (!t || (nowT - t) / 3600000 > maxAgeH) { staleList.push(it); continue; }
+            }
+            okItems.push(it);
           }
         }
-      } catch (e) { okItems = items; }
+      } catch (e) { okItems = items; staleList = []; }
+      if (staleList.length) { // มีของที่ต้องเช็คก่อน → ไม่ปิดการขายเอง ส่งต่อแอดมิน
+        await muteNow("⏱ ต้องเช็คสต็อกก่อนยืนยัน: " + staleList.map(x => x.model + " " + x.flavor).join(", "), (ev.message && ev.message.text) || "");
+        await lineReply(TOKEN, replyToken, "ขอเช็คของให้ก่อนนะคะ 🙏🏻\n" + staleList.map(x => "• " + x.model + " กลิ่น" + x.flavor).join("\n") + "\n\nเดี๋ยวแอดมินยืนยันจำนวนที่มีแล้วสรุปออเดอร์ให้ทันทีค่ะ 💕", userId);
+        return;
+      }
       const outOfStock = (okItems.length === 0 && outList.length) ? outList[0] : null;
       const outNote2 = outList.length ? ("ขออภัยค่ะ 🙏🏻 " + outList.map(x => x.model + " กลิ่น" + x.flavor).join(", ") + " หมดชั่วคราวค่ะ (ตัดออกจากรายการให้แล้วนะคะ)\n\n") : "";
       if (okItems.length) items = okItems;
