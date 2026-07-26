@@ -46,12 +46,20 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 .ocopy{flex:1;background:#222;border:1.5px solid #3a3a3a;color:#f2f2f2;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .odone{flex:1;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .ocopy:active,.odone:active{transform:scale(.98);}
+.ochat{flex:1;background:#0f2a3d;border:1.5px solid #1f6feb;color:#9fd0ff;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.ochat:active{transform:scale(.98);}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
+.chip{background:#1b1b1b;border:1px solid #3a3a3a;color:#cfcfcf;border-radius:999px;padding:5px 11px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+.chip:active{transform:scale(.96);}
+.chip.ok{background:#1c3b1c;border-color:#2e7d32;color:#9be29b;}
+.bell{text-align:center;color:#ffd479;font-size:13px;font-weight:700;margin:6px 0 0;min-height:18px;}
 </style>
 </head>
 <body>
 <div class="box">
   <h1><span class="dot" id="dot"></span> จีทู — ร้าน V20</h1>
   <div class="status" id="status">กำลังเช็คสถานะ…</div>
+  <div class="bell" id="bell"></div>
 
   <div id="keybox">
     <input type="password" id="key" placeholder="ใส่รหัส (XSELLY_KEY) ครั้งแรกครั้งเดียว">
@@ -103,20 +111,47 @@ function render(on,muted){
 
 function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
 
+/* 🔔 แจ้งเตือนของใหม่: เสียงติ๊ง + ตัวเลขบนแท็บ */
+var _seenO=null,_seenQ=null,_firstLoad=true,_actx=null;
+function ding(){
+  try{
+    _actx=_actx||new (window.AudioContext||window.webkitAudioContext)();
+    if(_actx.state==='suspended') _actx.resume();
+    [880,1320].forEach(function(f,i){
+      const o=_actx.createOscillator(),g=_actx.createGain(),t0=_actx.currentTime+i*0.16;
+      o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t0);
+      g.gain.exponentialRampToValueAtTime(0.25,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.30);
+      o.connect(g); g.connect(_actx.destination); o.start(t0); o.stop(t0+0.32);
+    });
+  }catch(e){}
+}
+function setBadge(o,q){
+  const n=(o||0)+(q||0);
+  document.title = (n? '('+n+') ':'') + 'จีทู — แผงควบคุม';
+  const b=$('bell'); if(b) b.textContent = n? '🔔 มีของใหม่ '+n+' รายการ' : '';
+}
+function alertNew(oc,qc){
+  if(_firstLoad){ _seenO=oc; _seenQ=qc; _firstLoad=false; setBadge(oc,qc); return; }
+  if((_seenO!==null&&oc>_seenO)||(_seenQ!==null&&qc>_seenQ)) ding();
+  _seenO=oc; _seenQ=qc; setBadge(oc,qc);
+}
+
 async function loadQueue(){
   try{
     const r=await fetch(W+'/ctl/queue?key='+encodeURIComponent(KEY)+'&shop=v20');
     const d=await r.json(); const q=d.queue||[];
     $('qcount').textContent = q.length? '('+q.length+')' : '';
-    if(!q.length){ $('queue').innerHTML='<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>'; return; }
+    if(!q.length){ $('queue').innerHTML='<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>'; return 0; }
     $('queue').innerHTML = q.map(function(it){
       const nm = it.name ? it.name : 'ลูกค้า (ไม่ทราบชื่อ)';
       return '<div class="qcard"><div class="qtop"><b>'+esc(nm)+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
         + '<div class="qreason">'+esc(it.reason)+'</div>'
         + (it.msg? '<div class="qmsg">“'+esc(it.msg)+'”</div>':'')
-        + '<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ ดูแลเสร็จแล้ว (จีทูกลับมาตอบ)</button></div>';
+        + '<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
+        + '<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ ดูแลเสร็จแล้ว</button></div></div>';
     }).join('');
-  }catch(e){}
+    return q.length;
+  }catch(e){ return 0; }
 }
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 async function markDone(uid){
@@ -128,21 +163,35 @@ async function loadOrders(){
     const r=await fetch(W+'/ctl/orders?key='+encodeURIComponent(KEY)+'&shop=v20');
     const d=await r.json(); const o=d.orders||[];
     $('ocount').textContent = o.length? '('+o.length+')' : '';
-    if(!o.length){ $('orders').innerHTML='<div class="qempty">ยังไม่มีออเดอร์รอลง</div>'; return; }
+    if(!o.length){ $('orders').innerHTML='<div class="qempty">ยังไม่มีออเดอร์รอลง</div>'; return 0; }
     $('orders').innerHTML = o.map(function(it){
       const nm = it.name ? it.name : 'ลูกค้า';
       const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,'');
+      const b=it.block||'';
+      const pick=function(re){ const m=b.match(re); return m? m[1].trim() : ''; };
+      const cName=pick(/ชื่อผู้รับ:[ \t]*(.+)/), cTel=pick(/เบอร์:[ \t]*(.+)/), cAddr=pick(/ที่อยู่:[ \t]*(.+)/);
+      const items=(b.split('\n').filter(function(l){return /^-\s/.test(l.trim());}).join('\n'))||'';
+      let chips='';
+      if(cName) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cName).replace(/"/g,'&quot;')+')">👤 ชื่อ</button>';
+      if(cTel) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cTel).replace(/"/g,'&quot;')+')">📞 เบอร์</button>';
+      if(cAddr) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cAddr).replace(/"/g,'&quot;')+')">📍 ที่อยู่</button>';
+      if(items) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(items).replace(/"/g,'&quot;')+')">🛒 รายการ</button>';
       return '<div class="ocard"><div class="qtop"><b>'+esc(nm)+'</b><span class="ostatus">'+esc(it.status)+'</span></div>'
-        + '<div class="oblock" id="'+bid+'">'+esc(it.block)+'</div>'
-        + '<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอก</button>'
+        + '<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'
+        + (chips? '<div class="chips">'+chips+'</div>':'')
+        + '<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอกทั้งหมด</button>'
+        + '<button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
         + '<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลง XSelly แล้ว</button></div></div>';
     }).join('');
-  }catch(e){}
+    return o.length;
+  }catch(e){ return 0; }
 }
-function copyOrder(id,btn){ const t=document.getElementById(id).innerText; navigator.clipboard.writeText(t).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอก';},1500); }).catch(function(){}); }
+function copyOrder(id,btn){ const t=document.getElementById(id).innerText; navigator.clipboard.writeText(t).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอกทั้งหมด';},1500); }).catch(function(){}); }
+function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(function(){btn.textContent=o; btn.classList.remove('ok');},1200); }).catch(function(){}); }
+function openChat(){ window.open('https://chat.line.biz/','_blank'); }
 async function orderDone(uid){ try{ await fetch(W+'/ctl/orderdone?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadOrders(); }catch(e){} }
 
-async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); loadOrders(); loadQueue(); }catch(e){ $('msg').textContent=e.message; } }
+async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); }catch(e){ $('msg').textContent=e.message; } }
 
 async function toggle(){
   $('msg').textContent='กำลังสั่งงาน…';
@@ -158,7 +207,10 @@ async function unmute(){
 
 let _poll=null;
 function init(){
-  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll); _poll=setInterval(function(){loadOrders();loadQueue();},20000); }
+  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll);
+    _poll=setInterval(async function(){ const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); },20000);
+    document.addEventListener('click',function once(){ try{ _actx=_actx||new (window.AudioContext||window.webkitAudioContext)(); if(_actx.state==='suspended')_actx.resume(); }catch(e){} document.removeEventListener('click',once); });
+  }
   else{ $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden'); $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)'; }
 }
 init();
