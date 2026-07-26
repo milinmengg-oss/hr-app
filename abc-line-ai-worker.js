@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-c9-stockage-open";
+const BUILD = "2026-07-26-d1-stockbuffer";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -650,6 +650,11 @@ export default {
         if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("ต้องใส่ ?key=<XSELLY_KEY> ถึงจะเปลี่ยนค่าได้ค่ะ", { status: 403 });
         await env.CONV.put("stockmaxage", String(Math.max(0, parseInt(setv, 10) || 0)));
       }
+      const bufv = url0.searchParams.get("buf");
+      if (bufv !== null) {
+        if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("ต้องใส่ ?key=<XSELLY_KEY> ถึงจะเปลี่ยนค่าได้ค่ะ", { status: 403 });
+        await env.CONV.put("stockbuffer", String(Math.max(0, parseInt(bufv, 10) || 0)));
+      }
       const maxAge = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
       const ts = JSON.parse((await env.CONV.get("stockts")) || "{}");
       const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
@@ -664,6 +669,7 @@ export default {
         โหมดกันขายของข้อมูลเก่า: maxAge ? ("เปิด — ถ้าข้อมูลเก่ากว่า " + maxAge + " ชม. จะให้แอดมินเช็คก่อน") : "ปิด (ตั้งค่าด้วย ?set=24)",
         อัปเดตล่าสุดจาก_XSelly: last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "ยังไม่เคยมี webhook เข้ามาเลย",
         ชั่วโมงที่ผ่านมา: last ? Math.round((now3 - last) / H * 10) / 10 : null,
+        กันชนสต็อก: "เหลือ ≤ " + parseInt((await env.CONV.get("stockbuffer")) || "1", 10) + " ชิ้น = ถือว่าหมด (เปลี่ยนด้วย ?buf=N&key=...)",
         กลิ่นทั้งหมดในระบบ: Object.keys(sm).length,
         ข้อมูลสด: fresh, ข้อมูลเก่า: stale, ไม่เคยอัปเดตเลย: never,
         สรุป: last ? "webhook ทำงานอยู่ ✅" : "⛔ XSelly ไม่เคยส่งข้อมูลมาเลย — สต็อกที่จีทูใช้คือข้อมูลตอนตั้งค่าครั้งแรก (ต้องให้เดฟตั้ง webhook)"
@@ -788,8 +794,9 @@ export default {
         const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
         const nm2id = NM2ID; // ตารางจับคู่ ชื่อกลิ่น→รหัสรุ่นมินิแอพ (ฝังในโค้ด ไม่ต้อง seed)
         // รวมยอดต่อรุ่น (product id) → รุ่นไหนรวมแล้ว > 0 = มีของ
+        const bufA = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
         const total = {};
-        for (const nm in nm2id) { const id = nm2id[nm]; total[id] = (total[id] || 0) + (sm[nm] > 0 ? sm[nm] : 0); }
+        for (const nm in nm2id) { const id = nm2id[nm]; total[id] = (total[id] || 0) + (sm[nm] > bufA ? sm[nm] : 0); }
         const out = {};
         for (const id in total) out[id] = total[id] > 0; // true = มีของ, false = หมด
         return new Response(JSON.stringify(out), { headers: CORS });
@@ -801,6 +808,7 @@ export default {
       const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
       try {
         const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+        const bufB = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
         const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
         const out = {};
         for (const nm in NM2ID) {
@@ -808,7 +816,7 @@ export default {
           if (parts.length < 2) continue;              // ไม่มีกลิ่น (อุปกรณ์เสริม) ข้าม
           const flav = parts.slice(1).join(" - ");
           const key = NM2ID[nm] + "|" + norm(flav);
-          out[key] = (out[key] === true) || (sm[nm] > 0); // ถ้ามีตัวใดตัวหนึ่งเหลือ = กลิ่นนี้มีของ
+          out[key] = (out[key] === true) || (sm[nm] > bufB); // ถ้ามีตัวใดตัวหนึ่งเหลือเกินกันชน = กลิ่นนี้มีของ
         }
         return new Response(JSON.stringify(out), { headers: CORS });
       } catch (e) { return new Response("{}", { headers: CORS }); }
@@ -1317,6 +1325,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       try {
         if (env.CONV) {
           const smChk = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+          // 🛡 กันชนสต็อก: เหลือน้อยกว่า/เท่ากับ N ชิ้น = ถือว่าไม่พร้อมขาย (มักเป็นเศษค้างในระบบ ไม่ใช่ของจริง)
+          const buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
           // ⏱ กันขายของที่ "ข้อมูลสต็อกเก่าเกินไป" (เปิด/ปิดที่ /stockage?key=...&set=ชั่วโมง | 0 = ปิด)
           const maxAgeH = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
           const tsMap = maxAgeH ? JSON.parse((await env.CONV.get("stockts")) || "{}") : null;
@@ -1325,7 +1335,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           for (const it of items) {
             if (/แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม
             const q = findStockForItem(smChk, it.model, it.flavor);
-            if (q !== null && q <= 0) { outList.push(it); continue; }
+            if (q !== null && q <= buf) { outList.push(it); continue; }   // เหลือ ≤ กันชน = ถือว่าหมด
             if (maxAgeH && tsMap) { // ข้อมูลว่ามีของ แต่ไม่ได้อัปเดตมานาน → ให้แอดมินเช็คก่อน
               let t = 0;
               for (const nm in tsMap) if (normTH(nm).indexOf(normTH(it.model)) !== -1 && normTH(nm).indexOf(normTH(it.flavor)) !== -1) { t = Math.max(t, tsMap[nm]); }
