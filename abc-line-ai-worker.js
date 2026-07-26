@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-c8-stockage";
+const BUILD = "2026-07-26-c9-stockage-open";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -644,9 +644,12 @@ export default {
     }
     // ⏱ สถานะความสดของสต็อก + ตั้งค่ากันขายของที่ข้อมูลเก่า: /stockage?key=...  (&set=24 = เปิดใช้ที่ 24 ชม. | &set=0 = ปิด)
     if (url0.pathname === "/stockage") {
-      if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
+      // อ่านสถานะ = เปิดได้เลย (ไม่โชว์จำนวนสต็อกจริง) | เปลี่ยนค่า ?set= = ต้องมี key
       const setv = url0.searchParams.get("set");
-      if (setv !== null) await env.CONV.put("stockmaxage", String(Math.max(0, parseInt(setv, 10) || 0)));
+      if (setv !== null) {
+        if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("ต้องใส่ ?key=<XSELLY_KEY> ถึงจะเปลี่ยนค่าได้ค่ะ", { status: 403 });
+        await env.CONV.put("stockmaxage", String(Math.max(0, parseInt(setv, 10) || 0)));
+      }
       const maxAge = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
       const ts = JSON.parse((await env.CONV.get("stockts")) || "{}");
       const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
@@ -661,8 +664,9 @@ export default {
         โหมดกันขายของข้อมูลเก่า: maxAge ? ("เปิด — ถ้าข้อมูลเก่ากว่า " + maxAge + " ชม. จะให้แอดมินเช็คก่อน") : "ปิด (ตั้งค่าด้วย ?set=24)",
         อัปเดตล่าสุดจาก_XSelly: last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "ยังไม่เคยมี webhook เข้ามาเลย",
         ชั่วโมงที่ผ่านมา: last ? Math.round((now3 - last) / H * 10) / 10 : null,
-        กลิ่นทั้งหมด: Object.keys(sm).length, มีของ: inStock,
-        ข้อมูลสด: fresh, ข้อมูลเก่า: stale, ไม่เคยอัปเดตเลย: never
+        กลิ่นทั้งหมดในระบบ: Object.keys(sm).length,
+        ข้อมูลสด: fresh, ข้อมูลเก่า: stale, ไม่เคยอัปเดตเลย: never,
+        สรุป: last ? "webhook ทำงานอยู่ ✅" : "⛔ XSelly ไม่เคยส่งข้อมูลมาเลย — สต็อกที่จีทูใช้คือข้อมูลตอนตั้งค่าครั้งแรก (ต้องให้เดฟตั้ง webhook)"
       }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     // 🩺 ตรวจสุขภาพ AI: /aitest — ยิงจริงทุกโมเดล แล้วบอกว่าตัวไหนผ่าน/ตัวไหนพัง เพราะอะไร (เช่น เครดิตหมด)
