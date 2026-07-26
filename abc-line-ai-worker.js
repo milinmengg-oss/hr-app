@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-c2-flavors911";
+const BUILD = "2026-07-26-c3-priceall";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -108,6 +108,8 @@ const TH_MODEL = [
   [/เอสเซนเชียล|essential/i, "เครื่อง RELX ESSENTIAL 2"],
 ];
 
+// เติมราคาจากฐานสินค้าจริงเข้า PRICE ทุกรุ่นที่ยังไม่มี (กันราคาหลุด → การ์ดขึ้น "-" แล้วยอดรวมขาด)
+for (const k in FLAVORS) if (!(k in PRICE)) PRICE[k] = FLAVORS[k].p;
 const FLAVOR_KEYS = Object.keys(FLAVORS).sort((a,b)=>b.length-a.length);
 function normTH(s){ return String(s||"").toUpperCase().replace(/[\s\-_.]/g,""); }
 function flavorHint(text){
@@ -156,6 +158,7 @@ function findPrice(modelText) {
 const BIGPOD = ["RELX BOOST POD", "RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO"];
 const SMALLPOD = ["INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"];
 function catOf(key) {
+  if (/POUCH|SALTNIC|FREEBASE|IQOS|ไส้บุหรี่/i.test(key)) return "other"; // ไม่เข้าโปรส่งฟรีของพอต
   if (/^เครื่อง/.test(key)) return "device";
   if (/\(KIT\)/.test(key)) return "bigpod";          // ชุด KIT นับรวมกับ Big Pod (4 ชิ้นส่งฟรี)
   if (BIGPOD.indexOf(key) !== -1) return "bigpod";     // หัวน้ำยาใหญ่ Big Pod → 4 ชิ้นส่งฟรี
