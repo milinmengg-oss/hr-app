@@ -21,7 +21,8 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 const MODELS = [
-  "deepseek/deepseek-chat",              // หลัก: เชื่อฟังกฎแม่น + ถูก
+  "deepseek/deepseek-v3.2",              // หลัก: ฉลาดกว่า + output ถูกกว่า V3 ~57% + context 131K
+  "deepseek/deepseek-chat",              // สำรอง 1: V3 เดิม (ถ้า V3.2 ล่ม/ตอบแปลก)
   "qwen/qwen-2.5-72b-instruct",
   "meta-llama/llama-3.3-70b-instruct:free",
   "google/gemini-2.0-flash-exp:free",
