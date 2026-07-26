@@ -20,6 +20,9 @@ const SHOPS = {
 
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
+// 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
+const BUILD = "2026-07-26-fix-items-let";
+
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
   "qwen/qwen-2.5-72b-instruct",
@@ -511,6 +514,10 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url0 = new URL(request.url);
+    // 🔎 เช็คว่า Cloudflare รันโค้ดเวอร์ชันไหนอยู่ (เปิด /version ในเบราว์เซอร์)
+    if (url0.pathname === "/version") {
+      return new Response(JSON.stringify({ build: BUILD, model: MODELS[0] }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+    }
     // ทดสอบ cron ด้วยมือ: /cron?key=<XSELLY_KEY> (รันรอบเตือนเดี๋ยวนั้น)
     if (url0.pathname === "/cron") {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
