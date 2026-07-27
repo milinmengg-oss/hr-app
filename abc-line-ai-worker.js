@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-g3-nosilence";
+const BUILD = "2026-07-27-h1-simulate";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -877,6 +877,69 @@ export default {
         จำนวนปุ่ม: q ? q.items.length : 0,
         ปุ่ม: q ? q.items.map(x => x.action.label) : [],
         มีสต็อกในระบบ: sm ? Object.keys(sm).length : 0
+      }, null, 1), { headers: { "content-type": "application/json; charset=utf-8" } });
+    }
+    // 🧪 ห้องทดลอง: ยิงคำถามลูกค้าเข้าระบบเต็มรูปแบบ โดยไม่ต้องผ่าน LINE
+    //    /simulate?t=คำถาม            → 1 คำถาม
+    //    /simulate?t=ถาม1||ถาม2||ถาม3 → หลายคำถาม (สูงสุด 6 ต่อครั้ง กันหมดเวลา)
+    //    ระบบจะตรวจให้อัตโนมัติว่าคำตอบผิดกฎร้านตรงไหนบ้าง
+    if (url0.pathname === "/simulate") {
+      const qs = (url0.searchParams.get("t") || "").split("||").map(x => x.trim()).filter(Boolean).slice(0, 6);
+      if (!qs.length) return new Response("ใส่ ?t=คำถามลูกค้า (คั่นหลายคำถามด้วย ||)", { status: 400 });
+      let sm = {}, buf = 1;
+      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) {}
+      // รุ่นที่หมดทุกกลิ่น (ใช้ตรวจว่าจีทูเผลอเสนอของหมดไหม)
+      const soldOutModels = [];
+      for (const k in FLAVORS) {
+        const f = FLAVORS[k].f || []; if (!f.length) continue;
+        if (f.every(x => { let q = null; try { q = findStockForItem(sm, k, x); } catch (e) {} return q !== null && q <= buf; })) soldOutModels.push(k);
+      }
+      const out = [];
+      for (const t of qs) {
+        const t0 = Date.now();
+        const hint = aliasHint(t) + flavorHint(t, sm, buf) + brandHint(t, sm, buf);
+        let reply = "";
+        try {
+          reply = await Promise.race([
+            askAI(env.OPENROUTER_KEY, [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: t + hint }]),
+            new Promise(res => setTimeout(() => res("__TIMEOUT__"), 30000))
+          ]);
+        } catch (e) { reply = "__ERROR__ " + String(e).slice(0, 100); }
+        const secs = Math.round((Date.now() - t0) / 100) / 10;
+        // ── ตรวจอัตโนมัติ ──
+        const bad = [];
+        if (reply === "__TIMEOUT__") bad.push("⏱ เกิน 30 วิ (ลูกค้าจะเจออาการเงียบ)");
+        if (!reply || reply.length < 5) bad.push("🕳 ตอบว่าง");
+        if (/\d[\d\- ]{7,}\d/.test(reply) && /ธนาคาร|บัญชี|กสิกร|ไทยพาณิชย์|กรุงเทพ|กรุงไทย/.test(reply)) bad.push("🏦 มีเลขบัญชีหลุดก่อนลูกค้ายืนยัน");
+        if (/kerry|flash|j&t|เจแอนด์ที|ไปรษณีย์|ems|ไทยโพสต์|shopee ?express|best ?express/i.test(reply)) bad.push("🚚 บอกชื่อขนส่ง (ห้าม)");
+        if (/เหลือ\s*\d+\s*(ชิ้น|แท่ง|หัว|อัน)|มีอยู่\s*\d+\s*(ชิ้น|แท่ง)/.test(reply)) bad.push("🔢 บอกจำนวนสต็อก (ห้าม)");
+        if (/เหลือน้อย|จำนวนจำกัด|ใกล้หมด|รีบก่อนหมด/.test(reply)) bad.push("🔢 ใบ้ระดับสต็อก (ห้าม)");
+        if (/ส่วนลด|ลดให้|ลดราคา|ลดพิเศษ|discount/.test(reply) && !/ไม่มีส่วนลด|ไม่สามารถลด/.test(reply)) bad.push("💸 เสนอส่วนลดเอง (ห้าม)");
+        if (/แถม/.test(reply) && /เครื่องเปล่า|เครื่องฟรี/.test(reply) && !/LEGO|TANK|SWAP|SWITCH|BOOST|POD CLEAR|VAZER|KS QUIK PRO|KIT|Big ?Pod|หัวน้ำยา/i.test(reply)) bad.push("🎁 แถมเครื่องเปล่าให้พอตใช้แล้วทิ้ง (ไม่มีโปรนี้)");
+        if (/ปลายทาง|COD/i.test(reply) && !/ไม่มี(บริการ)?(เก็บ)?ปลายทาง|ไม่รับปลายทาง/.test(reply)) bad.push("💵 พูดถึงเก็บปลายทาง (ร้านไม่มี)");
+        const pushed = soldOutModels.filter(mm => reply.indexOf(mm) !== -1 && !/หมด|รอของ|ของเข้า/.test(reply));
+        if (pushed.length) bad.push("📦 เสนอรุ่นที่หมดเกลี้ยง: " + pushed.slice(0, 3).join(", "));
+        // การ์ด?
+        let card = null;
+        if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
+          const items = parseItems(reply);
+          if (items.length) {
+            const c = computeOrder(items, null);
+            card = { รายการ: c.rows.map(r => r.label + " = " + r.line), ยอดสินค้า: c.goods, ค่าส่ง: c.ship, รวม: c.total };
+            const wrong = items.filter(it => { let q = null; try { q = findStockForItem(sm, it.model, it.flavor); } catch (e) {} return q !== null && q <= buf; });
+            if (wrong.length) bad.push("❌ ออกการ์ดสินค้าที่หมด: " + wrong.map(x => x.model + " " + x.flavor).join(", "));
+          } else bad.push("🧾 มีบล็อกทวนคำสั่งซื้อ แต่อ่านรายการไม่ออก");
+        }
+        const qr = buildQuickReply(reply, t, sm, buf);
+        out.push({ ลูกค้าถาม: t, วินาที: secs, จีทูตอบ: reply, ออกการ์ด: card, ปุ่ม: qr ? qr.items.map(x => x.action.label) : [], ปัญหาที่ตรวจพบ: bad });
+      }
+      const fail = out.filter(x => x.ปัญหาที่ตรวจพบ.length).length;
+      return new Response(JSON.stringify({
+        build: BUILD,
+        ทดสอบ: out.length + " ข้อ",
+        ผ่าน: (out.length - fail) + "/" + out.length,
+        เวลาเฉลี่ย: Math.round(out.reduce((a, b) => a + b.วินาที, 0) / out.length * 10) / 10 + " วิ",
+        ผลลัพธ์: out
       }, null, 1), { headers: { "content-type": "application/json; charset=utf-8" } });
     }
     if (url0.pathname === "/syncstock") {
