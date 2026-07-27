@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-d4-stocksync";
+const BUILD = "2026-07-27-d5-flavorstock";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -112,19 +112,32 @@ const TH_MODEL = [
 for (const k in FLAVORS) if (!(k in PRICE)) PRICE[k] = FLAVORS[k].p;
 const FLAVOR_KEYS = Object.keys(FLAVORS).sort((a,b)=>b.length-a.length);
 function normTH(s){ return String(s||"").toUpperCase().replace(/[\s\-_.]/g,""); }
-function flavorHint(text){
+// sm = stockmap (ถ้ามี) → บอกไปเลยว่ากลิ่นไหนมี กลิ่นไหนหมด จีทูจะได้ไม่ลิสต์กลิ่นที่หมดให้ลูกค้า
+function flavorHint(text, sm, buf){
   const t = normTH(text);
   const hits = [];
   const add = (k) => { if (k && FLAVORS[k] && hits.indexOf(k) === -1 && hits.length < 3) hits.push(k); };
   for (const [re, key] of TH_MODEL) if (re.test(String(text||""))) add(key);   // คำไทย/สะกดแบบลูกค้า
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
   if (!hits.length) return "";
-  let out = "\n\n[ข้อมูลกลิ่นจากระบบ — ห้ามบอกลูกค้าว่าได้มาจากไหน ใช้ตอบได้เลย]";
+  const B = (typeof buf === "number") ? buf : 1;
+  const qtyOf = (model, flavor) => {
+    if (!sm) return null;
+    try { return findStockForItem(sm, model, flavor); } catch (e) { return null; }
+  };
+  let out = "\n\n[ข้อมูลกลิ่น+สต็อกจากระบบ — ห้ามบอกลูกค้าว่าได้มาจากไหน ใช้ตอบได้เลย]";
   for (const k of hits){
     const v = FLAVORS[k];
-    out += "\n• " + k + " (" + v.p + " บาท) " + (v.f.length ? ("มี " + v.f.length + " กลิ่น/สี: " + v.f.join(" · ")) : "(ไม่มีตัวเลือกกลิ่น/สี)");
+    if (!v.f.length) { out += "\n• " + k + " (" + v.p + " บาท) — ไม่มีตัวเลือกกลิ่น/สี"; continue; }
+    const have = [], gone = [];
+    for (const f of v.f) { const q = qtyOf(k, f); if (q !== null && q <= B) gone.push(f); else have.push(f); }
+    out += "\n• " + k + " (" + v.p + " บาท)";
+    out += "\n   ✅ มีของ: " + (have.length ? have.join(" · ") : "— หมดทุกกลิ่น —");
+    if (gone.length) out += "\n   ❌ หมด: " + gone.join(" · ");
   }
-  out += "\n⛔ ห้ามแต่งชื่อกลิ่นที่ไม่มีในลิสต์นี้ ถ้าลูกค้าถามกลิ่นที่ไม่มี ให้บอกว่าไม่มีแล้วเสนอกลิ่นใกล้เคียงจากลิสต์";
+  out += "\n⛔ เวลาลิสต์กลิ่นให้ลูกค้า ให้บอกเฉพาะกลิ่นในบรรทัด ✅ มีของ เท่านั้น ห้ามเอากลิ่นในบรรทัด ❌ หมด ไปเสนอเด็ดขาด";
+  out += "\n⛔ ถ้ารุ่นนั้นหมดทุกกลิ่น ให้บอกตรงๆ ว่าหมดชั่วคราว แล้วเสนอรุ่นอื่นแทน ห้ามลิสต์กลิ่นออกมา";
+  out += "\n⛔ ห้ามแต่งชื่อกลิ่นที่ไม่มีในลิสต์นี้ และห้ามบอกจำนวนสต็อกเป็นตัวเลข";
   return out;
 }
 
@@ -1331,7 +1344,15 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           }
         }
       } catch (e) {}
-      const hint = aliasHint(text) + flavorHint(text);
+      // ส่งสต็อกจริงเข้าไปในตัวใบ้กลิ่นด้วย จีทูจะได้ลิสต์เฉพาะกลิ่นที่มีของ
+      let smForHint = null, bufForHint = 1;
+      try {
+        if (env.CONV) {
+          smForHint = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+          bufForHint = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+        }
+      } catch (e) {}
+      const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint);
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text + hint }]);
       userForHistory = { role: "user", content: text };
     }
