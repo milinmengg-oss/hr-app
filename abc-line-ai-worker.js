@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-h3-noguess";
+const BUILD = "2026-07-27-h4-checkfix";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -930,7 +930,17 @@ export default {
         if (/ส่วนลด|ลดให้|ลดราคา|ลดพิเศษ|discount/.test(reply) && !/ไม่มีส่วนลด|ไม่สามารถลด/.test(reply)) bad.push("💸 เสนอส่วนลดเอง (ห้าม)");
         if (/แถม/.test(reply) && /เครื่องเปล่า|เครื่องฟรี/.test(reply) && !/LEGO|TANK|SWAP|SWITCH|BOOST|POD CLEAR|VAZER|KS QUIK PRO|KIT|Big ?Pod|หัวน้ำยา/i.test(reply)) bad.push("🎁 แถมเครื่องเปล่าให้พอตใช้แล้วทิ้ง (ไม่มีโปรนี้)");
         if (/ปลายทาง|COD/i.test(reply) && !/ไม่มี[^\n]{0,20}ปลายทาง|ไม่รับ[^\n]{0,20}ปลายทาง|ไม่สามารถ[^\n]{0,20}ปลายทาง/.test(reply)) bad.push("💵 พูดถึงเก็บปลายทาง (ร้านไม่มี)");
-        const pushed = soldOutModels.filter(mm => reply.indexOf(mm) !== -1 && !/หมด|รอของ|ของเข้า/.test(reply));
+        // ⚠️ ต้องไม่นับกรณีชื่อรุ่นเป็นส่วนหนึ่งของอีกรุ่น เช่น "ESKO BAR SWITCH 20K" อยู่ใน "ESKO BAR SWITCH 20K (KIT)"
+        const pushed = soldOutModels.filter(mm => {
+          if (/หมด|รอของ|ของเข้า/.test(reply)) return false;
+          let i = reply.indexOf(mm);
+          while (i !== -1) {
+            const after = reply.slice(i + mm.length, i + mm.length + 8);
+            if (!/^\s*[(（]/.test(after)) return true;   // ไม่ได้ตามด้วยวงเล็บ = พูดถึงรุ่นนี้จริง
+            i = reply.indexOf(mm, i + 1);
+          }
+          return false;
+        });
         if (pushed.length) bad.push("📦 เสนอรุ่นที่หมดเกลี้ยง: " + pushed.slice(0, 3).join(", "));
         // การ์ด?
         let card = null;
