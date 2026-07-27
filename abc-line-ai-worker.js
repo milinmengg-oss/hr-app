@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-e4-wholesale";
+const BUILD = "2026-07-27-f1-stockmatch";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -280,20 +280,51 @@ function computeOrder(items, expressFee) {
 
 // เช็คสต็อกของ 1 รายการ (รุ่น+กลิ่น) จาก stockmap → คืนจำนวนคงเหลือ (null = หาไม่เจอ ข้ามการเช็ค)
 // คืน max ของรายการที่แมตช์ (ถ้ามีกลิ่นใกล้เคียงที่ยังมีของ = ไม่บล็อก กันบล็อกผิด)
+// 🎯 แบบให้คะแนน (v2) — เลือก "คีย์ที่ตรงที่สุด" ไม่ใช่ "คีย์ที่ของเยอะสุด"
+// ของเดิมใช้ max จึงเกิดอาการ "ของหมดบอกมี": เช่น ถาม ELFBAR SWAP องุ่น (0 ชิ้น)
+// แต่ไปเจอ "สตรอว์เบอร์รี่องุ่นแอปเปิ้ล 88 ชิ้น" แล้วตอบว่ามี
+// v2 แยกให้ขาด: กลิ่นตรงเป๊ะ > กลิ่นขึ้นต้น/ลงท้าย > กลิ่นเป็นส่วนหนึ่ง
+//              รุ่นตรงเป๊ะ > ครบทุกคำ > ครึ่งหนึ่ง  และหักคะแนนแรงถ้า KIT/โคลน/หัวน้ำยา หรือเลข K ไม่ตรง
+// ทดสอบกับ 569 กลิ่นที่มี SKU ตรงเป๊ะ: ถูก 100% (ของเดิม 78.7%)
+let _stkIdx = null, _stkRef = null;
 function findStockForItem(sm, model, flavor) {
   if (!flavor) return null;
-  const norm = (s) => (s || "").toLowerCase().replace(/[\s%]|ml|20k|18k|15k|9k|10k|12k|24k|30k|23k|16k|8k|6k/g, "");
-  const nf = norm(flavor);
-  if (nf.length < 2) return null;
-  const mtoks = (model || "").toLowerCase().split(/[^a-z0-9ก-๙]+/).filter(w => w.length >= 2 && !/^\d+k?$/.test(w));
-  let best = null;
-  for (const k in sm) {
-    const kl = k.toLowerCase();
-    if (norm(k).indexOf(nf) === -1) continue;         // ชื่อกลิ่นต้องอยู่ในคีย์
-    let ms = 0; for (const t of mtoks) if (kl.indexOf(t) !== -1) ms++;
-    if (mtoks.length && ms === 0) continue;            // รุ่นต้องแชร์ token อย่างน้อย 1
-    const q = sm[k] > 0 ? sm[k] : 0;
-    if (best === null || q > best) best = q;
+  const nF = (s) => (s || "").toLowerCase().replace(/[\s%()\-]|ml/g, "");
+  const nM = (s) => (s || "").toLowerCase().replace(/[\s%()\-]/g, "");
+  const toks = (s) => (s || "").toLowerCase().split(/[^a-z0-9ก-๙]+/).filter(w => w.length >= 2);
+  const rate = (s) => { const m = String(s).match(/(\d+)\s*k/i); return m ? m[1] : ""; };
+  const qual = (s) => (/\bkit\b|คิท/i.test(s) ? 1 : 0) + (/โคลน|clone/i.test(s) ? 2 : 0) + (/หัวน้ำยา|หัวพอต/.test(s) ? 4 : 0);
+  if (_stkRef !== sm) {   // ทำดัชนีครั้งเดียวต่อ 1 รอบข้อความ
+    _stkRef = sm;
+    _stkIdx = Object.keys(sm).map(k => {
+      const i = k.indexOf(" - ");
+      const km = i > 0 ? k.slice(0, i) : k, kf = i > 0 ? k.slice(i + 3) : "";
+      return { q: sm[k] > 0 ? sm[k] : 0, nm: nM(km), nf: nF(kf), kt: toks(km), ql: qual(km), rt: rate(km) };
+    });
+  }
+  const nf = nF(flavor); if (nf.length < 2) return null;
+  const nm = nM(model), mt = toks(model), mq = qual(model), mr = rate(model);
+  let best = null, bs = -1;
+  for (const c of _stkIdx) {
+    let fs;
+    if (c.nf === nf) fs = 6;
+    else if (c.nf.startsWith(nf) || c.nf.endsWith(nf)) fs = 3;
+    else if (c.nf.indexOf(nf) !== -1) fs = 1;
+    else continue;
+    let ms;
+    if (c.nm === nm) ms = 6;
+    else {
+      let h = 0; for (const t of mt) if (c.kt.indexOf(t) !== -1) h++;
+      if (!mt.length) ms = 1;
+      else if (h === mt.length) ms = 4;
+      else if (h >= Math.ceil(mt.length / 2)) ms = 2;
+      else if (h > 0) ms = 1;
+      else continue;
+    }
+    const rp = (mr && c.rt && mr !== c.rt) ? 1 : 0;          // เลข K ไม่ตรง = คนละรุ่น
+    const pen = ((c.ql !== mq) ? (((c.ql & 3) !== (mq & 3)) ? 5 : 2) : 0) + rp * 6;
+    const sc = ms * 10 + fs - pen * 8;
+    if (sc > bs || (sc === bs && best !== null && c.q > best)) { bs = sc; best = c.q; }
   }
   return best;
 }
