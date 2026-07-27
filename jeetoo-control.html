@@ -71,6 +71,11 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 .cbtn.stop{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;}
 .cbtn.go{background:#13301f;border:1.5px solid #245537;color:#4fe094;}
 .cbtn:active{transform:scale(.96);}
+#stockwrap{margin-top:18px;border-top:1px solid #2b2b2b;padding-top:16px;text-align:left;}
+#stockpanel{margin-top:8px;background:#1a1a1a;border-radius:12px;padding:14px;}
+.stnote{font-size:12px;color:#8a8a8a;line-height:1.6;margin-bottom:10px;}
+#stockfile{width:100%;background:#222;border:1.5px solid #333;border-radius:10px;padding:10px;color:#cfcfcf;font-family:inherit;font-size:12.5px;}
+#stpre{margin-top:10px;color:#bdfb00;}
 </style>
 </head>
 <body>
@@ -99,6 +104,19 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
       <div id="queue"></div>
     </div>
 
+    <div id="stockwrap">
+      <button class="cbar" onclick="toggleStock()">
+        <span style="color:#cfcfcf;font-size:13.5px;">📦 อัปเดตสต็อกจากไฟล์ XSelly</span>
+        <span id="sinfo">แตะเพื่อเปิด ▾</span>
+      </button>
+      <div id="stockpanel" class="hidden">
+        <div class="stnote">export ไฟล์ "สินค้าคงคลัง" จาก XSelly (ติ๊ก SKU + คำอธิบายสินค้า + หมวดหมู่ + รวม column ชื่อสินค้า) แล้วเลือกไฟล์ที่นี่</div>
+        <input type="file" id="stockfile" accept=".xlsx,.xls" onchange="pickStock()">
+        <div id="stpre" class="stnote"></div>
+        <button class="sub" id="stbtn" style="display:none" onclick="uploadStock()">⬆️ อัปเดตสต็อกเข้าระบบจีทู</button>
+      </div>
+    </div>
+
     <div id="chatwrap">
       <button class="cbar" onclick="toggleChats()">
         <span style="color:#cfcfcf;font-size:13.5px;">🙋 คุมแชทรายคน</span>
@@ -113,6 +131,7 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
   <div id="msg"></div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const W='https://abc-line-ai.milin-mengg.workers.dev';
 let KEY=localStorage.getItem('g2key')||'';
@@ -219,6 +238,55 @@ function copyOrder(id,btn){ const t=document.getElementById(id).innerText; navig
 function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(function(){btn.textContent=o; btn.classList.remove('ok');},1200); }).catch(function(){}); }
 function openChat(){ window.open('https://chat.line.biz/','_blank'); }
 async function orderDone(uid){ try{ await fetch(W+'/ctl/orderdone?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadOrders(); }catch(e){} }
+
+/* 📦 อัปเดตสต็อกจากไฟล์ XSelly — อ่านไฟล์ในเครื่อง แปลงเป็นตารางสต็อก แล้วส่งเข้าระบบจีทู */
+let _stockOpen=false, _stockData=null, _skuData=null;
+function toggleStock(){ _stockOpen=!_stockOpen; $('stockpanel').classList.toggle('hidden',!_stockOpen); $('sinfo').textContent=_stockOpen?'เปิดอยู่ ▴':'แตะเพื่อเปิด ▾'; }
+function pickStock(){
+  const f=$('stockfile').files[0]; if(!f) return;
+  $('stpre').textContent='กำลังอ่านไฟล์…'; $('stbtn').style.display='none';
+  const rd=new FileReader();
+  rd.onload=function(e){
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      let hdr=-1;
+      for(let i=0;i<Math.min(rows.length,10);i++){ if(String(rows[i][0]||'').indexOf('ชื่อสินค้า')!==-1){hdr=i;break;} }
+      if(hdr<0) throw new Error('ไม่พบหัวตาราง — ต้อง export จากเมนู "สินค้าคงคลัง"');
+      const H=rows[hdr].map(function(x){return String(x||'').trim();});
+      const cSku=H.indexOf('SKU'), cQty=H.indexOf('พร้อมขาย'), cName=H.indexOf('คำอธิบายสินค้า');
+      if(cSku<0||cQty<0) throw new Error('ไฟล์ไม่มีคอลัมน์ SKU หรือ พร้อมขาย');
+      if(cName<0) throw new Error('ไฟล์ไม่มีคอลัมน์ "คำอธิบายสินค้า" — ตอน export ต้องติ๊กช่องนี้ด้วย');
+      const stock={}, sku={};
+      let n=0, have=0;
+      for(let i=hdr+1;i<rows.length;i++){
+        const r=rows[i]; const s=String(r[cSku]||'').trim(); const nm=String(r[cName]||'').trim();
+        if(!s||!nm) continue;
+        const q=parseInt(String(r[cQty]||'0').replace(/[^0-9-]/g,''),10)||0;
+        stock[nm]=q; sku[s]=nm; n++; if(q>1) have++;
+      }
+      if(!n) throw new Error('อ่านข้อมูลไม่ได้สักแถว');
+      _stockData=stock; _skuData=sku;
+      $('stpre').innerHTML='✅ อ่านได้ <b>'+n+'</b> รายการ · มีของ <b>'+have+'</b> · หมด <b>'+(n-have)+'</b>';
+      $('stbtn').style.display='block';
+    }catch(err){ _stockData=null; $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ '+esc(err.message)+'</span>'; }
+  };
+  rd.readAsArrayBuffer(f);
+}
+async function uploadStock(){
+  if(!_stockData) return;
+  const b=$('stbtn'); b.textContent='กำลังอัปเดต…'; b.disabled=true;
+  try{
+    const p=W+'/seed/stockmap?key='+encodeURIComponent(KEY);
+    const r1=await fetch(p,{method:'POST',body:JSON.stringify(_stockData)});
+    const t1=await r1.text();
+    if(!r1.ok) throw new Error(t1);
+    await fetch(W+'/seed/skumap?key='+encodeURIComponent(KEY),{method:'POST',body:JSON.stringify(_skuData)});
+    $('stpre').innerHTML='🎉 อัปเดตสต็อกเข้าระบบจีทูแล้ว ('+Object.keys(_stockData).length+' รายการ)';
+    $('msg').textContent='✅ สต็อกอัปเดตแล้ว จีทูจะใช้ตัวเลขใหม่ทันที';
+  }catch(err){ $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ อัปเดตไม่สำเร็จ: '+esc(String(err.message||err))+'</span>'; }
+  b.textContent='⬆️ อัปเดตสต็อกเข้าระบบจีทู'; b.disabled=false;
+}
 
 /* 🙋 คุมแชทรายคน — ซ่อนไว้ใต้ปุ่ม ไม่กวนงานประจำวัน */
 let _chatsOpen=false;
