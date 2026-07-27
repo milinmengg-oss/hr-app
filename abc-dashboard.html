@@ -1104,6 +1104,20 @@ window.inDel=async function(i){
 try{ db.collection('dash_open').doc('instock').onSnapshot(function(s){ INSTOCK=(s.data()||{}).list||[]; inRender(); }); }catch(e){ blackbox('inSub', e.message); }
 
 
+
+/* จังหวัด → ภูมิภาค (ใช้สรุปว่าสินค้าตัวนี้ขายดีภาคไหน — ไลน์บรอดแคสต์ได้เป็นรายภาค) */
+const P2R = (function(){
+  const R = {
+    'เหนือ': ['เชียงใหม่','เชียงราย','ลำปาง','ลำพูน','แม่ฮ่องสอน','น่าน','พะเยา','แพร่','อุตรดิตถ์','ตาก','สุโขทัย','พิษณุโลก','พิจิตร','กำแพงเพชร','เพชรบูรณ์','นครสวรรค์','อุทัยธานี'],
+    'อีสาน': ['นครราชสีมา','บุรีรัมย์','สุรินทร์','ศรีสะเกษ','อุบลราชธานี','ยโสธร','ชัยภูมิ','อำนาจเจริญ','บึงกาฬ','หนองบัวลำภู','ขอนแก่น','อุดรธานี','เลย','หนองคาย','มหาสารคาม','ร้อยเอ็ด','กาฬสินธุ์','สกลนคร','นครพนม','มุกดาหาร'],
+    'กลาง': ['กรุงเทพมหานคร','นนทบุรี','ปทุมธานี','สมุทรปราการ','สมุทรสาคร','สมุทรสงคราม','นครปฐม','พระนครศรีอยุธยา','อ่างทอง','ลพบุรี','สิงห์บุรี','ชัยนาท','สระบุรี','สุพรรณบุรี'],
+    'ตะวันออก': ['ชลบุรี','ระยอง','จันทบุรี','ตราด','ฉะเชิงเทรา','ปราจีนบุรี','นครนายก','สระแก้ว'],
+    'ตะวันตก': ['กาญจนบุรี','ราชบุรี','เพชรบุรี','ประจวบคีรีขันธ์'],
+    'ใต้': ['นครศรีธรรมราช','กระบี่','พังงา','ภูเก็ต','สุราษฎร์ธานี','ระนอง','ชุมพร','สงขลา','สตูล','ตรัง','พัทลุง','ปัตตานี','ยะลา','นราธิวาส']
+  };
+  const m = {}; for(const r in R) R[r].forEach(p=>m[p]=r); return m;
+})();
+
 /* ══════════ 🔍 ดูแผนที่จากสินค้า (สินค้าตัวนี้จังหวัดไหนสั่งเยอะสุด) ══════════ */
 window.__prodIdx = null;
 function buildProdIndex(){
@@ -1140,7 +1154,16 @@ window.pickProduct = function(name){
     return v ? d3.interpolateRgb('#0d1a2e','#4da3ff')(Math.max(.15, Math.sqrt(v/mx))) : '#141414';
   });
   const tot = arr.reduce((s,x)=>s+x[1],0);
-  if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวม <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b> (สีน้ำเงินเข้ม = สั่งเยอะ · เทา = ไม่ติดอันดับขายดีของจังหวัดนั้น)';
+  const byRegion = {};
+  arr.forEach(([p,v])=>{ const r=P2R[p]; if(r) byRegion[r]=(byRegion[r]||0)+v; });
+  const regArr = Object.entries(byRegion).sort((a,b)=>b[1]-a[1]);
+  const topReg = regArr[0]? regArr[0][0] : '-';
+  const bcProd = '📣 '+name+' — สินค้าขายดีของภาค'+topReg+'!\nคนแถวคุณสั่งกันเยอะที่สุดในประเทศ 🔥\nสั่งเลยที่แชทนี้ พร้อมส่งทันที 🛵💨';
+  if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวม <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
+    + regArr.map(([r,v],i)=>'<span class="pill" style="'+(i===0?'background:#12304d;color:#4da3ff;border:1px solid #1f5fa5;':'')+'font-size:12px;">'+({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]+' '+r+' '+fmtN(v)+'</span>').join('')
+    + '</div>'
+    + '<button class="search" style="cursor:pointer;margin-top:8px;font-size:12px;max-width:340px;" onclick="copyBC(this,'+JSON.stringify(bcProd).replace(/"/g,'&quot;')+')">📣 ก็อปบรอดแคสต์สินค้านี้ → ภาค'+topReg+'</button>';
   if(list) list.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;">' +
     arr.slice(0,18).map(([p,v],i)=>'<div onclick="renderProv(\''+p+'\')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#0f0f0f;border-radius:8px;cursor:pointer;">'
       +'<span style="width:20px;color:var(--sub);font-size:11px;">'+(i+1)+'</span>'
