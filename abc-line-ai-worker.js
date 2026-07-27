@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-i3-cpufix";
+const BUILD = "2026-07-27-i4-lasterr";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1029,6 +1029,12 @@ export default {
         ผลลัพธ์: out
       }, null, 1), { headers: { "content-type": "application/json; charset=utf-8" } });
     }
+    // 🐞 ดูสาเหตุที่จีทูพังล่าสุด: /lasterr
+    if (url0.pathname === "/lasterr") {
+      const v = (env.CONV && await env.CONV.get("lasterr")) || "";
+      return new Response(v || JSON.stringify({ ผล: "ยังไม่มี error ค้างอยู่ ✅", build: BUILD }, null, 1),
+        { headers: { "content-type": "application/json; charset=utf-8" } });
+    }
     if (url0.pathname === "/syncstock") {
       const out = await syncStockBaseline(env, true);
       return new Response(JSON.stringify(out, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
@@ -2029,6 +2035,16 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     } catch (e) {}
   } catch (e) {
     console.log("HANDLE_ERR " + String(e).slice(0, 150));
+    // 📝 จดสาเหตุไว้ให้เปิดดูได้ที่ /lasterr (ไม่ต้องเข้า Cloudflare)
+    try {
+      if (env.CONV) await env.CONV.put("lasterr", JSON.stringify({
+        t: new Date().toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }),
+        build: BUILD,
+        ข้อความลูกค้า: String((ev.message && ev.message.text) || "").slice(0, 60),
+        error: String(e && e.message || e).slice(0, 300),
+        ตำแหน่ง: String((e && e.stack) || "").split("\n").slice(0, 4).join(" | ").slice(0, 500)
+      }), { expirationTtl: 86400 });
+    } catch (e3) {}
     // 🛟 กันเงียบขั้นสุดท้าย: ไม่ว่าจะพังตรงไหน ลูกค้าต้องได้ข้อความเสมอ
     try {
       const uid = (ev.source && ev.source.userId) || "";
