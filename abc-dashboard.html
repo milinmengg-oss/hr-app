@@ -1136,32 +1136,42 @@ function buildProdIndex(){
   sel.innerHTML = '<option value="">— ยอดขายรวมทุกสินค้า —</option>' +
     names.map(n=>{ const tot=Object.values(idx[n]).reduce((s,v)=>s+v,0); return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+' ('+fmtN(tot)+' ชิ้น)</option>'; }).join('');
 }
+window.__selRegion = null;
+window.pickRegion = function(r){
+  window.__selRegion = (window.__selRegion===r)? null : r;
+  const sel = document.getElementById('prodPick');
+  if(sel && sel.value) window.pickProduct(sel.value);
+};
 window.pickProduct = function(name){
   const info = document.getElementById('prodPickInfo'), list = document.getElementById('prodProvList');
   if(!window.__prodIdx) buildProdIndex();
   if(!name){
+    window.__selRegion = null;
     const maxR = Math.max(...Object.values(GEO).map(g=>g.r??g.o));
     if(window.__mapPaths) window.__mapPaths.attr('fill', f=>{ const g=GEO[EN2TH[f.properties.name]]; const t=g?Math.sqrt((g.r??g.o)/maxR):0; return d3.interpolateRgb('#20290a','#bdfb00')(Math.max(.06,t)); });
     if(info) info.textContent='เลือกสินค้า 1 ตัว → แผนที่จะเปลี่ยนเป็นความเข้มตามจังหวัดที่สั่งสินค้านั้นมากที่สุด';
     if(list) list.innerHTML='';
     return;
   }
-  const m = window.__prodIdx[name] || {};
+  const m0 = window.__prodIdx[name] || {};
+  const m = window.__selRegion ? Object.fromEntries(Object.entries(m0).filter(([p])=>P2R[p]===window.__selRegion)) : m0;
   const arr = Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  const arrAll = Object.entries(m0).sort((a,b)=>b[1]-a[1]);
   const mx = arr.length? arr[0][1] : 1;
   if(window.__mapPaths) window.__mapPaths.attr('fill', f=>{
     const v = m[EN2TH[f.properties.name]] || 0;
     return v ? d3.interpolateRgb('#0d1a2e','#4da3ff')(Math.max(.15, Math.sqrt(v/mx))) : '#141414';
   });
-  const tot = arr.reduce((s,x)=>s+x[1],0);
+  const tot = arrAll.reduce((s,x)=>s+x[1],0);
   const byRegion = {};
-  arr.forEach(([p,v])=>{ const r=P2R[p]; if(r) byRegion[r]=(byRegion[r]||0)+v; });
+  arrAll.forEach(([p,v])=>{ const r=P2R[p]; if(r) byRegion[r]=(byRegion[r]||0)+v; });
   const regArr = Object.entries(byRegion).sort((a,b)=>b[1]-a[1]);
   const topReg = regArr[0]? regArr[0][0] : '-';
   const bcProd = '📣 '+name+' — สินค้าขายดีของภาค'+topReg+'!\nคนแถวคุณสั่งกันเยอะที่สุดในประเทศ 🔥\nสั่งเลยที่แชทนี้ พร้อมส่งทันที 🛵💨';
   if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวม <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
-    + regArr.map(([r,v],i)=>'<span class="pill" style="'+(i===0?'background:#12304d;color:#4da3ff;border:1px solid #1f5fa5;':'')+'font-size:12px;">'+({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]+' '+r+' '+fmtN(v)+'</span>').join('')
+    + regArr.map(([r,v],i)=>'<span class="pill" onclick="pickRegion(\''+r+'\')" style="cursor:pointer;'+((window.__selRegion===r)?'background:#12304d;color:#4da3ff;border:1px solid #1f5fa5;':(i===0&&!window.__selRegion?'border:1px solid #1f5fa5;':''))+'font-size:12px;">'+({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]+' '+r+' '+fmtN(v)+'</span>').join('')
+    + (window.__selRegion? '<span class="pill" onclick="pickRegion(null)" style="cursor:pointer;background:#2a1a13;color:#e0b64f;font-size:12px;">✕ ล้างตัวกรองภาค</span>':'')
     + '</div>'
     + '<button class="search" style="cursor:pointer;margin-top:8px;font-size:12px;max-width:340px;" onclick="copyBC(this,'+JSON.stringify(bcProd).replace(/"/g,'&quot;')+')">📣 ก็อปบรอดแคสต์สินค้านี้ → ภาค'+topReg+'</button>';
   if(list) list.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;">' +
