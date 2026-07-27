@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-e2-blockfake";
+const BUILD = "2026-07-27-e3-multilang";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -139,6 +139,56 @@ function flavorHint(text, sm, buf){
   out += "\n⛔ ถ้ารุ่นนั้นหมดทุกกลิ่น ให้บอกตรงๆ ว่าหมดชั่วคราว แล้วเสนอรุ่นอื่นแทน ห้ามลิสต์กลิ่นออกมา";
   out += "\n⛔ ห้ามแต่งชื่อกลิ่นที่ไม่มีในลิสต์นี้ และห้ามบอกจำนวนสต็อกเป็นตัวเลข";
   return out;
+}
+
+
+// ===== 🌏 รองรับลูกค้าต่างชาติ (ไทย / อังกฤษ / จีน / ญี่ปุ่น) =====
+// ตรวจภาษาจากตัวอักษรที่ลูกค้าพิมพ์ แล้วจำไว้ทั้งบทสนทนา (คนไทยไม่กระทบเลย)
+function detectLang(t) {
+  const s = String(t || "");
+  if (/[\u0E00-\u0E7F]/.test(s)) return "th";                     // ไทย
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(s)) return "ja";       // ฮิระงะนะ/คาตากานะ = ญี่ปุ่น
+  if (/[\u4E00-\u9FFF]/.test(s)) return "zh";                     // ตัวจีน
+  if (/[A-Za-z]{3,}/.test(s)) return "en";                          // อังกฤษ
+  return "";                                                        // อ่านไม่ออก (ตัวเลข/อิโมจิ) = ไม่เปลี่ยนภาษา
+}
+const LANG_NAME = { th: "ภาษาไทย", en: "English", zh: "中文（简体）", ja: "日本語" };
+const T = {
+  askItem: {
+    en: "Which model, flavor and how many would you like? 💕",
+    zh: "请问您需要哪个型号、什么口味、要几个呢？💕",
+    ja: "どのモデル・フレーバー・数量をご希望でしょうか？💕"
+  },
+  outStock: {
+    en: (m, f) => "Sorry 🙏🏻 " + m + " (" + f + ") is temporarily out of stock.\nWould you like to choose another flavor, or shall our admin suggest one that's available? 💕",
+    zh: (m, f) => "抱歉 🙏🏻 " + m + "（" + f + "）目前暂时缺货。\n您要换其他口味吗？或者由客服为您推荐有货的口味？💕",
+    ja: (m, f) => "申し訳ございません 🙏🏻 " + m + "（" + f + "）は現在品切れです。\n他のフレーバーをお選びいただくか、在庫のあるものをご案内しましょうか？💕"
+  },
+  addrForm: {
+    en: "\n\nPlease send your delivery details 📍\nName:\nAddress:\nDistrict / City:\nProvince:\nPostcode:\nPhone:\nThank you 🙏🏻💕",
+    zh: "\n\n请提供收件信息 📍\n收件人：\n详细地址：\n区/市：\n府/省：\n邮编：\n电话：\n谢谢您 🙏🏻💕",
+    ja: "\n\nお届け先をお送りください 📍\nお名前：\nご住所：\n市区町村：\n県：\n郵便番号：\nお電話番号：\nよろしくお願いします 🙏🏻💕"
+  },
+  waitAdmin: {
+    en: "One moment please 🙏🏻 Our admin will take care of you shortly 💕",
+    zh: "请稍等 🙏🏻 客服马上为您服务 💕",
+    ja: "少々お待ちください 🙏🏻 担当スタッフがすぐにご案内いたします 💕"
+  },
+  checkStock: {
+    en: "Let me check the stock for you first 🙏🏻 Our admin will confirm and finalize your order right away 💕",
+    zh: "我先为您确认库存 🙏🏻 客服确认后马上为您整理订单 💕",
+    ja: "在庫を確認いたします 🙏🏻 スタッフが確認後、すぐにご注文をまとめます 💕"
+  },
+  reAsk: {
+    en: "Could you confirm again please 🙏🏻 — model + flavor + quantity. I'll prepare the correct order for you 💕",
+    zh: "麻烦您再确认一次 🙏🏻 —— 型号 + 口味 + 数量，我马上为您整理订单 💕",
+    ja: "もう一度ご確認ください 🙏🏻 — モデル・フレーバー・数量 を教えてください 💕"
+  }
+};
+function L(key, lang, a, b) {
+  const v = T[key] && T[key][lang];
+  if (!v) return null;                      // ไทย (หรือไม่มีคำแปล) = ใช้ข้อความไทยเดิม
+  return typeof v === "function" ? v(a, b) : v;
 }
 
 const PRICE_KEYS = Object.keys(PRICE).sort((a, b) => b.length - a.length); // ยาวก่อน กันจับคู่ผิด
@@ -1189,6 +1239,16 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
 
     // โหลดประวัติแชท (ถ้ามี KV)
+    // 🌏 ภาษาที่ลูกค้าใช้ (จำไว้ทั้งบทสนทนา) — คนไทยได้ข้อความไทยเหมือนเดิมทุกอย่าง
+    let LANG = "th";
+    try {
+      if (env.CONV) {
+        const saved = await env.CONV.get("lang:" + shopId + ":" + userId);
+        if (saved) LANG = saved;
+        const d = detectLang(ev.message && ev.message.text ? ev.message.text : "");
+        if (d && d !== LANG) { LANG = d; await env.CONV.put("lang:" + shopId + ":" + userId, d, { expirationTtl: 604800 }); }
+      }
+    } catch (e) {}
     const key = `conv3:${shopId}:${userId}`; // conv3 = ล้างความจำที่ปนเปื้อนจากตอน V3.2 (ตอบมั่ว/จับรุ่นผิด)
     let history = [];
     if (env.CONV) {
@@ -1387,7 +1447,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
       } catch (e) {}
       const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint);
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text + hint }]);
+      const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]);
       userForHistory = { role: "user", content: text };
     }
 
@@ -1434,7 +1495,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           const keep = items.filter(it => hit(it, wide));
           const okNow = narrow.size ? items.some(it => hit(it, narrow)) : true; // ต้องมีอย่างน้อย 1 ตัวที่ตรงกับสิ่งที่คุยกันอยู่ตอนนี้
           if (!keep.length || !okNow) {                                          // มั่ว/ลอกของเก่า → ไม่ออกการ์ด ถามใหม่
-            await lineReply(TOKEN, replyToken, "ขออนุญาตทวนอีกครั้งนะคะ 🙏🏻 รบกวนแจ้ง รุ่น + กลิ่น/สี + จำนวน ที่ต้องการอีกทีค่ะ เดี๋ยวสรุปออเดอร์ให้ถูกต้องนะคะ 💕", userId);
+            await lineReply(TOKEN, replyToken, L("reAsk", LANG) || "ขออนุญาตทวนอีกครั้งนะคะ 🙏🏻 รบกวนแจ้ง รุ่น + กลิ่น/สี + จำนวน ที่ต้องการอีกทีค่ะ เดี๋ยวสรุปออเดอร์ให้ถูกต้องนะคะ 💕", userId);
             return;
           }
           if (keep.length !== items.length) items = keep;                         // ตัดรายการที่ลูกค้าไม่ได้สั่งทิ้ง
@@ -1469,7 +1530,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       } catch (e) { okItems = items; staleList = []; }
       if (staleList.length) { // มีของที่ต้องเช็คก่อน → ไม่ปิดการขายเอง ส่งต่อแอดมิน
         await muteNow("⏱ ต้องเช็คสต็อกก่อนยืนยัน: " + staleList.map(x => x.model + " " + x.flavor).join(", "), (ev.message && ev.message.text) || "");
-        await lineReply(TOKEN, replyToken, "ขอเช็คของให้ก่อนนะคะ 🙏🏻\n" + staleList.map(x => "• " + x.model + " กลิ่น" + x.flavor).join("\n") + "\n\nเดี๋ยวแอดมินยืนยันจำนวนที่มีแล้วสรุปออเดอร์ให้ทันทีค่ะ 💕", userId);
+        await lineReply(TOKEN, replyToken, L("checkStock", LANG) || ("ขอเช็คของให้ก่อนนะคะ 🙏🏻\n" + staleList.map(x => "• " + x.model + " กลิ่น" + x.flavor).join("\n") + "\n\nเดี๋ยวแอดมินยืนยันจำนวนที่มีแล้วสรุปออเดอร์ให้ทันทีค่ะ 💕"), userId);
         return;
       }
       const outOfStock = (okItems.length === 0 && outList.length) ? outList[0] : null;
@@ -1480,12 +1541,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         const m0 = (items[0] && items[0].model) || "";
         // เครื่อง = ถามสี | หัวน้ำยา/พอต = ถามกลิ่น (ดูจากชื่อรุ่นเท่านั้น ห้ามดูจากคำตอบ AI ที่อาจพิมพ์คำว่า "เครื่อง" ปนมา)
         const isDevice = /^เครื่อง/.test(m0.trim()) || /IQOS ILUMA/i.test(m0);
-        const ask = m0
+        const askTr = L("askItem", LANG);
+        const ask = askTr ? (m0 ? (m0 + " — " + askTr) : askTr) : m0
           ? ("รับ " + m0 + (isDevice ? " สีไหน" : " กลิ่นไหน") + " จำนวนกี่" + (isDevice ? "เครื่อง" : "ชิ้น") + "ดีคะ 💕")
           : "รับรุ่นไหน กลิ่น/สีอะไร จำนวนเท่าไหร่ดีคะ 💕";
         await lineReply(TOKEN, replyToken, ask, userId);
       } else if (outOfStock) {
-        await lineReply(TOKEN, replyToken, "ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕", userId);
+        await lineReply(TOKEN, replyToken, L("outStock", LANG, outOfStock.model, outOfStock.flavor) || ("ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕"), userId);
       } else if (items.length) {
         // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
         let expFee = null;
