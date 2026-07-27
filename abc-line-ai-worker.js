@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-i4-lasterr";
+const BUILD = "2026-07-27-i5-scopefix";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1620,6 +1620,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
 
     let reply, userForHistory;
     let smForQR = null, bufForQR = 1;   // สต็อกสำหรับสร้างปุ่ม Quick Reply
+    let msgText = "";                   // ข้อความที่ลูกค้าพิมพ์ (ใช้ได้ทั้งฟังก์ชัน ไม่ติดขอบเขตบล็อก)
 
     if (mtype === "image") {
       // ── ลูกค้าส่งรูป (มักเป็นเมนูที่วงกลมสินค้า) → ให้ AI อ่านรูป ──
@@ -1736,6 +1737,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     } else {
       // ── ข้อความปกติ ──
       const text = ev.message.text.trim();
+      msgText = text;
       // 🔍 เช็คสต็อกจริง (จาก XSelly webhook) เฉพาะรายการที่เกี่ยวกับข้อความลูกค้า
       let stockNote = "";
       try {
@@ -1825,7 +1827,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → โค้ดคิดเงินเอง + ส่งการ์ด Flex "ยืนยันรายการ"
     let orderStored = false;
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
-    const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(text || "").trim());
+    const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(msgText || "").trim());
     if (saidNo) {
       try { if (env.CONV) { await env.CONV.delete("ord:" + shopId + ":" + userId); await env.CONV.delete("card:" + shopId + ":" + userId); } } catch (e) {}
       await lineReply(TOKEN, replyToken, "รับทราบค่ะ ยกเลิกรายการให้เรียบร้อยแล้วนะคะ 🙏🏻\nถ้าสนใจสินค้าตัวไหนอีก ทักมาได้ตลอดเลยค่ะ 💕", userId);
@@ -1923,13 +1925,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         // เคสจริง: ลูกค้าถาม "มาโบ มีกลิ่นไรบ้าง" / "ราคาส่งยกลัง" → จีทูเด้งการ์ด "องุ่น x1" ทั้งที่ไม่เคยสั่ง
         // กติกา: ทุกกลิ่นในการ์ด ต้องเคยปรากฏในข้อความที่ "ลูกค้าพิมพ์เอง" (ย้อนหลัง 8 ข้อความ) เท่านั้น
         try {
-          const custSaid = [String(text || "")].concat(
+          const custSaid = [String(msgText || "")].concat(
             history.slice(-8).filter(h => h.role === "user").map(h => typeof h.content === "string" ? h.content : "")
           ).join(" ");
           const nrm = (x) => String(x || "").toLowerCase().replace(/[\s%()\-\.]/g, "");
           const cn = nrm(custSaid);
           const fromImage = /\[ลูกค้าส่งรูป/.test(String((userForHistory && userForHistory.content) || ""));
-          const okConfirm = /ยืนยัน|ตกลง|เอาเลย|สั่งเลย|จัดมา|รับเลย/.test(String(text || ""));
+          const okConfirm = /ยืนยัน|ตกลง|เอาเลย|สั่งเลย|จัดมา|รับเลย/.test(String(msgText || ""));
           if (!fromImage && !okConfirm) {
             const ghost = items.filter(it => it.flavor && nrm(it.flavor).length >= 2 && cn.indexOf(nrm(it.flavor)) === -1);
             if (ghost.length) {
@@ -1945,7 +1947,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               } catch (e) {}
               await lineReply(TOKEN, replyToken,
                 "ขออนุญาตเช็คอีกครั้งนะคะ 🙏🏻 คุณลูกค้ารับ " + mdl + " กลิ่นไหน จำนวนกี่ชิ้นดีคะ" + list,
-                userId, buildQuickReply("รับ " + mdl + " กลิ่นไหนดีคะ", text, smForQR, bufForQR));
+                userId, buildQuickReply("รับ " + mdl + " กลิ่นไหนดีคะ", msgText, smForQR, bufForQR));
               return;
             }
           }
@@ -1963,7 +1965,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             const prev = await env.CONV.get("card:" + shopId + ":" + userId);
             if (prev) {
               const pj = JSON.parse(prev);
-              const wantAgain = /ยืนยัน|สั่งเลย|เอาเลย|ตกลง|ขอการ์ด|สรุปยอด|เท่าไหร่|ราคารวม/.test(String(text || ""));
+              const wantAgain = /ยืนยัน|สั่งเลย|เอาเลย|ตกลง|ขอการ์ด|สรุปยอด|เท่าไหร่|ราคารวม/.test(String(msgText || ""));
               if (pj.sig === sig && (Date.now() - pj.t) < 1800000 && !wantAgain) dup = true;
             }
           }
@@ -1986,10 +1988,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           }
         } catch (e) {}
       } else {
-        await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, text, smForQR, bufForQR));
+        await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, msgText, smForQR, bufForQR));
       }
     } else {
-      await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, text, smForQR, bufForQR));
+      await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, msgText, smForQR, bufForQR));
     }
 
     // 📦 ถ้าจีทูสรุปออเดอร์ครบ (มีบล็อก "📦 สรุปออเดอร์" + ช่องสินค้ามีค่าจริง) → เก็บเข้าคิวออเดอร์
