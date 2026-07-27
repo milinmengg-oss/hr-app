@@ -1,4 +1,4 @@
-<!DOCTYPE html> <!--dw-->
+<!DOCTYPE html>
 <html lang="th">
 <head>
 <meta charset="UTF-8">
@@ -126,6 +126,15 @@ td.r,th.r{text-align:right;}
 
   </div><div class="tabsec" data-t="geo">
   <h2>🗺️ แผนที่ยอดขายรายจังหวัด <span class="pill">ม.ค.–มิ.ย. 2569 · คลิกจังหวัดบนแผนที่เพื่อดูรายละเอียด · สีเข้ม = ยอดขายสูง</span></h2>
+  <div class="panel" style="margin-bottom:10px;">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <b style="font-size:14px;">🔍 ดูแผนที่จากสินค้า</b>
+      <select id="prodPick" class="search" style="max-width:340px;min-width:220px;" onchange="pickProduct(this.value)"><option value="">— ยอดขายรวมทุกสินค้า —</option></select>
+      <button class="search" style="cursor:pointer;max-width:150px;" onclick="document.getElementById('prodPick').value='';pickProduct('')">↺ ดูยอดรวม</button>
+    </div>
+    <div class="note" id="prodPickInfo" style="margin-top:6px;">เลือกสินค้า 1 ตัว → แผนที่จะเปลี่ยนเป็นความเข้มตามจังหวัดที่สั่งสินค้านั้นมากที่สุด</div>
+    <div id="prodProvList" style="margin-top:8px;"></div>
+  </div>
   <div class="grid2">
     <div class="panel" style="display:flex;align-items:flex-start;justify-content:center;"><div id="thMapWrap" style="width:100%;max-width:470px;"><div class="note" style="text-align:center;padding:40px 0;">กำลังโหลดแผนที่…</div></div></div>
     <div class="panel" id="pvPanel" style="max-height:660px;overflow-y:auto;">คลิกจังหวัดบนแผนที่</div>
@@ -379,6 +388,7 @@ function start(){
 
   const provArr = Object.entries(GEO).filter(([k])=>k!=='ไม่ระบุ').sort((a,b)=>(b[1].r??b[1].o)-(a[1].r??a[1].o));
   initMap();
+  try{ buildProdIndex(); }catch(e){}
 
   window.renderProvTable = function(){
     const q=(pq||'').trim();
@@ -696,7 +706,7 @@ async function initMap(){
     const maxR = Math.max(...Object.values(GEO).map(g=>g.r??g.o));
     const wrap = d3.select('#thMapWrap'); wrap.html('');
     const svg = wrap.append('svg').attr('viewBox',`0 0 ${W} ${H}`).style('width','100%').style('touch-action','manipulation');
-    svg.selectAll('path').data(gj.features).join('path')
+    window.__mapPaths = svg.selectAll('path').data(gj.features).join('path')
       .attr('d', path)
       .attr('fill', f=>{ const g=GEO[EN2TH[f.properties.name]]; const t=g?Math.sqrt((g.r??g.o)/maxR):0; return d3.interpolateRgb('#20290a','#bdfb00')(Math.max(.06,t)); })
       .attr('stroke','#0d0d0d').attr('stroke-width',.7).style('cursor','pointer')
@@ -1093,6 +1103,53 @@ window.inDel=async function(i){
 };
 try{ db.collection('dash_open').doc('instock').onSnapshot(function(s){ INSTOCK=(s.data()||{}).list||[]; inRender(); }); }catch(e){ blackbox('inSub', e.message); }
 
+
+/* ══════════ 🔍 ดูแผนที่จากสินค้า (สินค้าตัวนี้จังหวัดไหนสั่งเยอะสุด) ══════════ */
+window.__prodIdx = null;
+function buildProdIndex(){
+  const idx = {};
+  for(const p in GEO){
+    const g = GEO[p]||{};
+    (g.sku||[]).forEach(([name,qty])=>{ (idx[name]=idx[name]||{})[p]=(idx[name][p]||0)+qty; });
+  }
+  window.__prodIdx = idx;
+  const sel = document.getElementById('prodPick');
+  if(!sel) return;
+  const names = Object.keys(idx).sort((a,b)=>{
+    const sa=Object.values(idx[a]).reduce((s,v)=>s+v,0), sb=Object.values(idx[b]).reduce((s,v)=>s+v,0);
+    return sb-sa;
+  });
+  sel.innerHTML = '<option value="">— ยอดขายรวมทุกสินค้า —</option>' +
+    names.map(n=>{ const tot=Object.values(idx[n]).reduce((s,v)=>s+v,0); return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+' ('+fmtN(tot)+' ชิ้น)</option>'; }).join('');
+}
+window.pickProduct = function(name){
+  const info = document.getElementById('prodPickInfo'), list = document.getElementById('prodProvList');
+  if(!window.__prodIdx) buildProdIndex();
+  if(!name){
+    const maxR = Math.max(...Object.values(GEO).map(g=>g.r??g.o));
+    if(window.__mapPaths) window.__mapPaths.attr('fill', f=>{ const g=GEO[EN2TH[f.properties.name]]; const t=g?Math.sqrt((g.r??g.o)/maxR):0; return d3.interpolateRgb('#20290a','#bdfb00')(Math.max(.06,t)); });
+    if(info) info.textContent='เลือกสินค้า 1 ตัว → แผนที่จะเปลี่ยนเป็นความเข้มตามจังหวัดที่สั่งสินค้านั้นมากที่สุด';
+    if(list) list.innerHTML='';
+    return;
+  }
+  const m = window.__prodIdx[name] || {};
+  const arr = Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  const mx = arr.length? arr[0][1] : 1;
+  if(window.__mapPaths) window.__mapPaths.attr('fill', f=>{
+    const v = m[EN2TH[f.properties.name]] || 0;
+    return v ? d3.interpolateRgb('#0d1a2e','#4da3ff')(Math.max(.15, Math.sqrt(v/mx))) : '#141414';
+  });
+  const tot = arr.reduce((s,x)=>s+x[1],0);
+  if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวม <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b> (สีน้ำเงินเข้ม = สั่งเยอะ · เทา = ไม่ติดอันดับขายดีของจังหวัดนั้น)';
+  if(list) list.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;">' +
+    arr.slice(0,18).map(([p,v],i)=>'<div onclick="renderProv(\''+p+'\')" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#0f0f0f;border-radius:8px;cursor:pointer;">'
+      +'<span style="width:20px;color:var(--sub);font-size:11px;">'+(i+1)+'</span>'
+      +'<span style="flex:1;font-size:12.5px;font-weight:600;">'+p+'</span>'
+      +'<span style="font-size:12px;color:#4da3ff;font-weight:800;">'+fmtN(v)+'</span></div>').join('') + '</div>' +
+    (arr.length>18? '<div class="note" style="margin-top:6px;">+ อีก '+(arr.length-18)+' จังหวัด</div>':'');
+};
+
+window.copyBC=function(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅ ก็อปแล้ว — ไปวางใน LINE OA ได้เลย'; setTimeout(function(){btn.textContent=o;},1800); }); };
 /* ══════════ 📊 ภูมิภาค + วงจรซื้อซ้ำ (dash_open/analytics) ══════════ */
 const REGION_ORDER=['เหนือ','อีสาน','กลาง','ตะวันออก','ตะวันตก','ใต้'];
 function anRender(A){
@@ -1101,7 +1158,10 @@ function anRender(A){
   if(rc&&A.REGION){
     rc.innerHTML=REGION_ORDER.filter(r=>A.REGION[r]).map(r=>{
       const rows=A.REGION[r].slice(0,5).map((x,i)=>`<div style="display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;border-bottom:1px solid #1f1f1f;"><span>${i+1}. ${x.n}</span><b style="color:var(--lime);">${fmtN(x.u)} ชิ้น</b></div>`).join('');
-      return `<div class="kpi" style="text-align:left;align-items:flex-start;"><b style="font-size:15px;">${({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]||''} ภาค${r}</b><div style="width:100%;margin-top:6px;">${rows}</div></div>`;
+      const top3=A.REGION[r].slice(0,3).map(x=>x.n);
+      const bc=`📣 ลูกค้าภาค${r} สินค้าขายดีที่คนแถวคุณสั่งมากที่สุด\n1. ${top3[0]||'-'}\n2. ${top3[1]||'-'}\n3. ${top3[2]||'-'}\n\nสั่งเลยที่แชทนี้ พร้อมส่งทันที 🛵💨`;
+      return `<div class="kpi" style="text-align:left;align-items:flex-start;"><b style="font-size:15px;">${({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]||''} ภาค${r}</b><div style="width:100%;margin-top:6px;">${rows}</div>
+        <button class="search" style="cursor:pointer;margin-top:8px;width:100%;font-size:12px;" onclick="copyBC(this,${JSON.stringify(bc).replace(/"/g,'&quot;')})">📣 ก็อปข้อความบรอดแคสต์ภาคนี้</button></div>`;
     }).join('');
   }
   const rb=document.getElementById('repBody');
