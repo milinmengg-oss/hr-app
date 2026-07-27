@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-h4-checkfix";
+const BUILD = "2026-07-27-i1-adminpanel";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1079,6 +1079,48 @@ export default {
           return J({ queue: items });
         }
         // 👥 รายชื่อแชทที่จีทูคุยอยู่ (2 วันล่าสุด) + สถานะว่าแอดมินคุมอยู่ไหม
+        // 💬 ดูบทสนทนาย้อนหลังของลูกค้า 1 คน (แอดมินจะได้ไม่ต้องไปเปิดหาใน LINE)
+        if (act === "conv") {
+          const uid = url0.searchParams.get("uid") || "";
+          if (!uid) return J({ error: "ไม่มี uid" });
+          let hist = [];
+          try { hist = JSON.parse((await env.CONV.get("conv3:" + shop + ":" + uid)) || "[]"); } catch (e) {}
+          let name = "";
+          try { const c = await env.CONV.get("chat:" + shop + ":" + uid); if (c) name = JSON.parse(c).name || ""; } catch (e) {}
+          const msgs = hist.map(h => ({
+            who: h.role === "user" ? "ลูกค้า" : "จีทู",
+            text: typeof h.content === "string" ? h.content : "[รูปภาพ]"
+          }));
+          return J({ uid, name, จำนวนข้อความ: msgs.length, บทสนทนา: msgs });
+        }
+        // 📣 ประกาศ/โปรวันนี้ — แอดมินพิมพ์เอง จีทูเอาไปใช้ตอบทันที (ไม่ต้องแก้โค้ด)
+        if (act === "notice") {
+          if (request.method === "POST") {
+            const txt = (await request.text() || "").slice(0, 1200).trim();
+            if (txt) await env.CONV.put("notice:" + shop, txt);
+            else await env.CONV.delete("notice:" + shop);
+            return J({ ok: 1, ประกาศ: txt });
+          }
+          return J({ ประกาศ: (await env.CONV.get("notice:" + shop)) || "" });
+        }
+        // ❤️ สุขภาพระบบ รวมไฟเขียว-แดงหน้าเดียว
+        if (act === "health") {
+          const now = Date.now();
+          let sm = {}, ts = {};
+          try { sm = JSON.parse((await env.CONV.get("stockmap")) || "{}"); } catch (e) {}
+          try { ts = JSON.parse((await env.CONV.get("stockts")) || "{}"); } catch (e) {}
+          let newest = 0; for (const k in ts) if (ts[k] > newest) newest = ts[k];
+          const base = parseInt((await env.CONV.get("basesync_t")) || "0", 10);
+          const off = await env.CONV.get("botoff:" + shop);
+          return J({
+            build: BUILD,
+            จีทู: off ? "🔴 ปิดอยู่" : "🟢 เปิดอยู่",
+            สต็อกในระบบ: Object.keys(sm).length + " รายการ",
+            สต็อกอัปเดตล่าสุด: newest ? Math.round((now - newest) / 60000) + " นาทีที่แล้ว" : "ไม่ทราบ",
+            ซิงก์ไฟล์ฐานล่าสุด: base ? Math.round((now - base) / 3600000) + " ชม.ที่แล้ว" : "ยังไม่เคย",
+            ประกาศที่ตั้งไว้: (await env.CONV.get("notice:" + shop)) || "— ไม่มี —"
+          });
+        }
         if (act === "chats") {
           const list = await env.CONV.list({ prefix: "chat:" + shop + ":" });
           const items = [];
@@ -1498,7 +1540,16 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (cv) { const c = JSON.parse(cv); if (c && c.addr) custNote = "\n\n# ลูกค้าคนนี้เป็นลูกค้าเก่า เคยสั่งซื้อสำเร็จแล้ว\n- ชื่อ: " + (c.name || "-") + " เบอร์: " + (c.tel || "-") + "\n- ที่อยู่ที่เคยส่ง: " + c.addr + "\n→ ตอนขอที่อยู่ ให้ถามว่า \"ส่งที่เดิมไหมคะ\" ก่อน (ลูกค้าพิมพ์ 'ที่เดิม' ระบบจัดการให้เอง) ⛔ ห้ามเอาที่อยู่ไปพูดถึงโดยไม่จำเป็น"; }
       }
     } catch (e) {}
-    const sysFull = sysPrompt + NO_GUESS_RULE + outNote + custNote;
+    // 📣 ประกาศ/โปรวันนี้ ที่แอดมินตั้งไว้ในหลังบ้าน
+    let noticeNote = "";
+    try {
+      if (env.CONV) {
+        const nt = await env.CONV.get("notice:" + shopId);
+        if (nt) noticeNote = "\n\n# 📣 ประกาศจากแอดมิน (ข้อมูลล่าสุด เชื่อข้อมูลนี้ก่อนข้อมูลอื่น)\n" + nt +
+          "\n→ ถ้าเกี่ยวกับที่ลูกค้าถาม ให้ใช้ข้อมูลนี้ตอบได้เลย ⛔ แต่ห้ามเอาไปพูดพร่ำเพรื่อถ้าไม่เกี่ยวกับคำถาม";
+      }
+    } catch (e) {}
+    const sysFull = sysPrompt + NO_GUESS_RULE + noticeNote + outNote + custNote;
 
     let reply, userForHistory;
     let smForQR = null, bufForQR = 1;   // สต็อกสำหรับสร้างปุ่ม Quick Reply

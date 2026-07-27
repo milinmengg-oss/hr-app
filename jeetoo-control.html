@@ -7,215 +7,245 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Kanit',sans-serif;background:#0d0d0d;color:#f2f2f2;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-.box{width:100%;max-width:420px;background:#171717;border:1px solid #2b2b2b;border-radius:22px;padding:28px;text-align:center;}
-h1{font-size:20px;display:flex;align-items:center;justify-content:center;gap:9px;}
+body{font-family:'Kanit',sans-serif;background:#0d0d0d;color:#f2f2f2;min-height:100vh;padding:16px 12px 40px;}
+.box{width:100%;max-width:460px;margin:0 auto;}
+.card{background:#171717;border:1px solid #2b2b2b;border-radius:22px;padding:22px;}
+h1{font-size:19px;display:flex;align-items:center;justify-content:center;gap:9px;}
 .dot{width:12px;height:12px;border-radius:50%;background:#666;}
 .dot.on{background:#00e676;box-shadow:0 0 12px #00e676;}
 .dot.off{background:#ff5d5d;box-shadow:0 0 12px #ff5d5d;}
-.status{font-size:14px;color:#9a9a9a;margin:8px 0 22px;}
+.status{font-size:13.5px;color:#9a9a9a;margin:8px 0 0;text-align:center;}
 .status b{color:#f2f2f2;}
-.bigbtn{width:100%;border:none;border-radius:18px;padding:22px;font-family:inherit;font-size:20px;font-weight:800;cursor:pointer;transition:transform .1s;}
+.bigbtn{width:100%;border:none;border-radius:18px;padding:20px;font-family:inherit;font-size:19px;font-weight:800;cursor:pointer;transition:transform .1s;margin-top:16px;}
 .bigbtn:active{transform:scale(.97);}
 .bigbtn.turnoff{background:#ff5d5d;color:#fff;}
 .bigbtn.turnon{background:#bdfb00;color:#111;}
-.sub{margin-top:12px;width:100%;background:#222;border:1.5px solid #333;color:#f2f2f2;border-radius:14px;padding:14px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;}
+.sub{margin-top:10px;width:100%;background:#222;border:1.5px solid #333;color:#f2f2f2;border-radius:14px;padding:13px;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;}
 .sub:active{transform:scale(.98);}
-.muted{font-size:12.5px;color:#9a9a9a;margin-top:14px;line-height:1.7;}
-input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;text-align:center;}
-#msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;}
-.hidden{display:none;}
-#queuebox{margin-top:18px;text-align:left;}
-.qhead{font-size:14px;font-weight:800;color:#f2f2f2;margin-bottom:8px;text-align:center;}
-#qcount{color:#ff5d5d;}
-.qempty{font-size:13px;color:#7a7a7a;text-align:center;padding:10px 0;}
+.sub.danger{background:#2a1414;border-color:#5a2626;color:#ff9a9a;}
+.muted{font-size:12.5px;color:#9a9a9a;margin-top:12px;line-height:1.7;}
+input,textarea{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;}
+#key{text-align:center;}
+textarea{resize:vertical;min-height:96px;line-height:1.6;}
+#msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;text-align:center;}
+.hidden{display:none!important;}
+
+/* แท็บ */
+.tabs{display:flex;gap:6px;margin:14px 0 12px;background:#141414;border:1px solid #262626;border-radius:16px;padding:5px;}
+.tab{flex:1;background:transparent;border:none;color:#8a8a8a;font-family:inherit;font-size:13px;font-weight:700;padding:10px 4px;border-radius:12px;cursor:pointer;}
+.tab.on{background:#242424;color:#f2f2f2;}
+.tab b{display:block;font-size:11px;color:#ff5d5d;font-weight:800;}
+
+.qhead{font-size:14px;font-weight:800;color:#f2f2f2;margin:16px 0 8px;}
+#qcount{color:#ff5d5d;} #ocount{color:#bdfb00;}
+.qempty{font-size:13px;color:#7a7a7a;text-align:center;padding:14px 0;}
 .qcard{background:#1f1f1f;border:1px solid #333;border-left:3px solid #ff5d5d;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
 .qtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
 .qtop b{font-size:15px;color:#fff;}
 .qtime{font-size:11px;color:#8a8a8a;white-space:nowrap;}
 .qreason{font-size:12.5px;color:#ffb86b;margin-top:3px;font-weight:600;}
 .qmsg{font-size:13px;color:#cfcfcf;margin-top:5px;line-height:1.5;}
-.qdone{width:100%;margin-top:10px;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
-.qdone:active{transform:scale(.98);}
-#orderbox{margin-top:18px;text-align:left;}
-#ocount{color:#bdfb00;}
+.qdone{flex:1;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .ocard{background:#1a1f17;border:1px solid #333;border-left:3px solid #bdfb00;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
 .ostatus{font-size:11px;color:#bdfb00;background:#2a3315;padding:2px 8px;border-radius:20px;white-space:nowrap;}
 .oblock{font-size:12.5px;color:#e2e2e2;margin-top:8px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#141414;border-radius:8px;padding:9px 10px;max-height:220px;overflow:auto;}
 .orow{display:flex;gap:8px;margin-top:10px;}
 .ocopy{flex:1;background:#222;border:1.5px solid #3a3a3a;color:#f2f2f2;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .odone{flex:1;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
-.ocopy:active,.odone:active{transform:scale(.98);}
 .ochat{flex:1;background:#0f2a3d;border:1.5px solid #1f6feb;color:#9fd0ff;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
-.ochat:active{transform:scale(.98);}
+.opause{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
+.ocopy:active,.odone:active,.ochat:active,.opause:active,.qdone:active{transform:scale(.98);}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px;}
 .chip{background:#1b1b1b;border:1px solid #3a3a3a;color:#cfcfcf;border-radius:999px;padding:5px 11px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;}
-.chip:active{transform:scale(.96);}
 .chip.ok{background:#1c3b1c;border-color:#2e7d32;color:#9be29b;}
-.bell{text-align:center;color:#ffd479;font-size:13px;font-weight:700;margin:6px 0 0;min-height:18px;}
-.opause{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;border-radius:10px;padding:9px 12px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
-.opause:active{transform:scale(.98);}
-.sechead{font-size:11px;letter-spacing:1.5px;color:#7a7a7a;text-align:left;margin:22px 0 8px;font-weight:600;}
-#chatwrap{margin-top:8px;border-top:1px solid #2b2b2b;padding-top:16px;text-align:left;}
-.cbar{width:100%;background:#141414;border:1px solid #2b2b2b;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;color:#cfcfcf;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;}
-.cbar:active{transform:scale(.99);}
-.cbar span{color:#8a8a8a;font-size:12px;font-weight:600;}
-#chatlist{margin-top:8px;background:#1a1a1a;border-radius:12px;padding:6px 12px;}
-.crow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #262626;}
+.bell{text-align:center;color:#ffd479;font-size:13px;font-weight:700;margin:8px 0 0;min-height:18px;}
+
+/* แชท */
+.crow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 0;border-bottom:1px solid #262626;}
 .crow:last-child{border-bottom:none;}
-.cname{font-size:13px;color:#e8eaed;min-width:0;}
+.cname{font-size:13.5px;color:#e8eaed;min-width:0;flex:1;cursor:pointer;}
 .cname i{font-style:normal;font-size:11.5px;color:#8a8a8a;}
-.cname.off{color:#8a8a8a;}
-.cname.off i{color:#e0b64f;}
-.cbtn{border-radius:10px;padding:5px 11px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
+.cname.off{color:#8a8a8a;} .cname.off i{color:#e0b64f;}
+.cbtn{border-radius:10px;padding:6px 11px;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;}
 .cbtn.stop{background:#2a2113;border:1.5px solid #553f24;color:#e0b64f;}
 .cbtn.go{background:#13301f;border:1.5px solid #245537;color:#4fe094;}
+.cbtn.see{background:#1b1b1b;border:1.5px solid #3a3a3a;color:#cfcfcf;}
 .cbtn:active{transform:scale(.96);}
-#stockwrap{margin-top:18px;border-top:1px solid #2b2b2b;padding-top:16px;text-align:left;}
-#stockpanel{margin-top:8px;background:#1a1a1a;border-radius:12px;padding:14px;}
+
+/* กล่องบทสนทนา */
+#convbox{position:fixed;inset:0;background:rgba(0,0,0,.86);z-index:50;padding:18px 12px;overflow:auto;}
+#convinner{max-width:460px;margin:0 auto;background:#151515;border:1px solid #2b2b2b;border-radius:20px;padding:18px;}
+.bub{max-width:86%;padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.6;margin:7px 0;white-space:pre-wrap;word-break:break-word;}
+.bub.u{background:#1f3a1f;color:#dff5df;margin-left:auto;border-bottom-right-radius:4px;}
+.bub.j{background:#1f1f1f;color:#e8eaed;border:1px solid #2e2e2e;border-bottom-left-radius:4px;}
+.bwho{font-size:10.5px;color:#7a7a7a;margin:10px 0 -2px;}
+
+.sechead{font-size:11px;letter-spacing:1.5px;color:#7a7a7a;margin:20px 0 6px;font-weight:600;}
+.hgrid{background:#141414;border:1px solid #262626;border-radius:14px;padding:12px 14px;font-size:13px;line-height:2;}
+.hgrid span{color:#8a8a8a;}
 .stnote{font-size:12px;color:#8a8a8a;line-height:1.6;margin-bottom:10px;}
 #stockfile{width:100%;background:#222;border:1.5px solid #333;border-radius:10px;padding:10px;color:#cfcfcf;font-family:inherit;font-size:12.5px;}
 #stpre{margin-top:10px;color:#bdfb00;}
+.cbar{width:100%;background:#141414;border:1px solid #2b2b2b;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;color:#cfcfcf;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;margin-top:10px;}
 </style>
 </head>
 <body>
 <div class="box">
-  <h1><span class="dot" id="dot"></span> จีทู — ร้าน V20</h1>
-  <div class="status" id="status">กำลังเช็คสถานะ…</div>
-  <div class="bell" id="bell"></div>
+  <div class="card">
+    <h1><span class="dot" id="dot"></span> จีทู — ร้าน V20</h1>
+    <div class="status" id="status">กำลังเช็คสถานะ…</div>
+    <div class="bell" id="bell"></div>
 
-  <div id="keybox">
-    <input type="password" id="key" placeholder="ใส่รหัส (XSELLY_KEY) ครั้งแรกครั้งเดียว">
-    <button class="sub" onclick="saveKey()">บันทึกรหัส</button>
-  </div>
-
-  <div id="panel" class="hidden">
-    <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
-
-    <div class="sechead">งานที่ต้องทำ</div>
-
-    <div id="orderbox">
-      <div class="qhead">📦 ออเดอร์รอลง XSelly <span id="ocount"></span></div>
-      <div id="orders"></div>
+    <div id="keybox">
+      <input type="password" id="key" placeholder="ใส่รหัส (XSELLY_KEY) ครั้งแรกครั้งเดียว">
+      <button class="sub" onclick="saveKey()">บันทึกรหัส</button>
     </div>
 
-    <div id="queuebox">
-      <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
-      <div id="queue"></div>
-    </div>
+    <div id="panel" class="hidden">
+      <div class="tabs">
+        <button class="tab on" id="t1" onclick="go(1)">📦 งานวันนี้<b id="tb1"></b></button>
+        <button class="tab" id="t2" onclick="go(2)">💬 แชท</button>
+        <button class="tab" id="t3" onclick="go(3)">⚙️ ตั้งค่า</button>
+      </div>
 
-    <div id="stockwrap">
-      <button class="cbar" onclick="toggleStock()">
-        <span style="color:#cfcfcf;font-size:13.5px;">📦 อัปเดตสต็อกจากไฟล์ XSelly</span>
-        <span id="sinfo">แตะเพื่อเปิด ▾</span>
-      </button>
-      <div id="stockpanel" class="hidden">
-        <div class="stnote">export ไฟล์ "สินค้าคงคลัง" จาก XSelly (ติ๊ก SKU + คำอธิบายสินค้า + หมวดหมู่ + รวม column ชื่อสินค้า) แล้วเลือกไฟล์ที่นี่</div>
+      <!-- ═══ แท็บ 1: งานวันนี้ ═══ -->
+      <div id="p1">
+        <div class="qhead">📦 ออเดอร์รอลง XSelly <span id="ocount"></span></div>
+        <div id="orders"></div>
+        <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
+        <div id="queue"></div>
+      </div>
+
+      <!-- ═══ แท็บ 2: แชท ═══ -->
+      <div id="p2" class="hidden">
+        <input id="csearch" placeholder="🔍 ค้นหาชื่อลูกค้า" oninput="renderChats()">
+        <button class="cbar" onclick="toggleOnlyOpen()">
+          <span id="foltxt">แสดงทุกแชท</span><span id="folcnt" style="color:#8a8a8a;font-size:12px;"></span>
+        </button>
+        <div id="chatlist"></div>
+        <div class="muted">💡 แตะที่ชื่อลูกค้าเพื่อดูบทสนทนาที่จีทูคุยไป — ไม่ต้องไปเปิดหาใน LINE</div>
+      </div>
+
+      <!-- ═══ แท็บ 3: ตั้งค่า ═══ -->
+      <div id="p3" class="hidden">
+        <div class="sechead">📣 ประกาศ / โปรวันนี้</div>
+        <div class="stnote">พิมพ์อะไรที่นี่ จีทูจะรู้ทันทีและเอาไปตอบลูกค้าได้เลย เช่น "MARBO องุ่นของเข้าแล้ว" หรือ "วันนี้ซื้อ 5 แท่งขึ้นไปแถมพวงกุญแจ" — ลบข้อความให้ว่างแล้วบันทึก = ยกเลิกประกาศ</div>
+        <textarea id="notice" placeholder="ยังไม่มีประกาศ…"></textarea>
+        <button class="sub" onclick="saveNotice()">💾 บันทึกให้จีทูรู้</button>
+
+        <div class="sechead">❤️ สุขภาพระบบ</div>
+        <div class="hgrid" id="health">กำลังโหลด…</div>
+        <button class="sub" onclick="loadHealth()">🔄 เช็คใหม่</button>
+
+        <div class="sechead">📦 อัปเดตสต็อกจากไฟล์ XSelly</div>
+        <div class="stnote">export "สินค้าคงคลัง" จาก XSelly (ติ๊ก SKU + คำอธิบายสินค้า) แล้วเลือกไฟล์</div>
         <input type="file" id="stockfile" accept=".xlsx,.xls" onchange="pickStock()">
         <div id="stpre" class="stnote"></div>
         <button class="sub" id="stbtn" style="display:none" onclick="uploadStock()">⬆️ อัปเดตสต็อกเข้าระบบจีทู</button>
+
+        <div class="sechead">🚨 ฉุกเฉิน</div>
+        <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
+        <button class="sub danger" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
       </div>
-    </div>
 
-    <div id="chatwrap">
-      <button class="cbar" onclick="toggleChats()">
-        <span style="color:#cfcfcf;font-size:13.5px;">🙋 คุมแชทรายคน</span>
-        <span id="cinfo">แตะเพื่อดู ▾</span>
-      </button>
-      <div id="chatlist" class="hidden"></div>
+      <div class="muted">💡 พอลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน จีทูจะเงียบแชทนั้นแล้วขึ้นในแท็บ "งานวันนี้" ให้เอง · ตอบใน LINE OA แล้วกด "✅ เสร็จ" จีทูจะกลับมาดูแลต่อ</div>
     </div>
-
-    <button class="sub" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
-    <div class="muted">💡 พอลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน จีทูจะเงียบแชทนั้นแล้วขึ้นในรายการข้างบนให้เอง · แอดมินเข้าไปตอบใน LINE OA แล้วกด "✅ เสร็จ" เพื่อให้จีทูกลับมาดูแลต่อ</div>
+    <div id="msg"></div>
   </div>
-  <div id="msg"></div>
+</div>
+
+<div id="convbox" class="hidden" onclick="if(event.target.id==='convbox')closeConv()">
+  <div id="convinner">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <b id="convname" style="font-size:15px;">บทสนทนา</b>
+      <button class="cbtn see" onclick="closeConv()">✕ ปิด</button>
+    </div>
+    <div id="convbody" style="margin-top:12px;">กำลังโหลด…</div>
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 const W='https://abc-line-ai.milin-mengg.workers.dev';
 let KEY=localStorage.getItem('g2key')||'';
-let ON=true;
+let ON=true, TAB=1, CHATS=[], ONLYOPEN=false;
 const $=id=>document.getElementById(id);
-
+function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
 function saveKey(){ KEY=$('key').value.trim(); if(!KEY){$('msg').textContent='ใส่รหัสก่อนค่ะ';return;} localStorage.setItem('g2key',KEY); init(); }
+const q=p=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+encodeURIComponent(KEY)+'&shop=v20';
+
+function go(n){
+  TAB=n;
+  [1,2,3].forEach(function(i){ $('t'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); });
+  if(n===2) loadChats();
+  if(n===3){ loadHealth(); loadNotice(); }
+}
 
 async function api(act){
-  const r=await fetch(W+'/ctl/'+act+'?key='+encodeURIComponent(KEY)+'&shop=v20',{method:act==='status'?'GET':'POST'});
+  const r=await fetch(q('/ctl/'+act),{method:act==='status'?'GET':'POST'});
   if(r.status===403){ localStorage.removeItem('g2key'); KEY=''; init(); throw new Error('รหัสไม่ถูกต้อง'); }
   return r.json();
 }
-
 function render(on,muted){
   ON=on;
   $('dot').className='dot '+(on?'on':'off');
-  $('status').innerHTML=on?'สถานะ: <b style="color:#00e676;">🟢 จีทูกำลังตอบลูกค้า</b>'+(muted?'<br>มี <b>'+muted+'</b> แชทที่แอดมินดูแลอยู่ (จีทูเว้นให้)':'')
-                          :'สถานะ: <b style="color:#ff5d5d;">🔴 จีทูปิดอยู่ — แอดมินคุมแชทเองทั้งหมด</b>';
+  $('status').innerHTML=on?'<b style="color:#00e676;">🟢 จีทูกำลังตอบลูกค้า</b>'+(muted?'<br>มี <b>'+muted+'</b> แชทที่แอดมินดูแลอยู่':'')
+                          :'<b style="color:#ff5d5d;">🔴 จีทูปิดอยู่ — แอดมินคุมเองทั้งหมด</b>';
   const t=$('toggle');
-  t.textContent=on?'⏸ ปิดจีทู (แอดมินคุมเอง)':'▶️ เปิดจีทูกลับมาตอบ';
+  t.textContent=on?'⏸ ปิดจีทูทั้งร้าน':'▶️ เปิดจีทูกลับมาตอบ';
   t.className='bigbtn '+(on?'turnoff':'turnon');
 }
 
-function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
-
-/* 🔔 แจ้งเตือนของใหม่: เสียงติ๊ง + ตัวเลขบนแท็บ */
+/* 🔔 แจ้งเตือน */
 var _seenO=null,_seenQ=null,_firstLoad=true,_actx=null;
-function ding(){
-  try{
-    _actx=_actx||new (window.AudioContext||window.webkitAudioContext)();
-    if(_actx.state==='suspended') _actx.resume();
-    [880,1320].forEach(function(f,i){
-      const o=_actx.createOscillator(),g=_actx.createGain(),t0=_actx.currentTime+i*0.16;
-      o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t0);
-      g.gain.exponentialRampToValueAtTime(0.25,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.30);
-      o.connect(g); g.connect(_actx.destination); o.start(t0); o.stop(t0+0.32);
-    });
-  }catch(e){}
-}
-function setBadge(o,q){
-  const n=(o||0)+(q||0);
-  document.title = (n? '('+n+') ':'') + 'จีทู — แผงควบคุม';
-  const b=$('bell'); if(b) b.textContent = n? '🔔 มีของใหม่ '+n+' รายการ' : '';
+function ding(){ try{
+  _actx=_actx||new (window.AudioContext||window.webkitAudioContext)();
+  if(_actx.state==='suspended') _actx.resume();
+  [880,1320].forEach(function(f,i){
+    const o=_actx.createOscillator(),g=_actx.createGain(),t0=_actx.currentTime+i*0.16;
+    o.type='sine'; o.frequency.value=f; g.gain.setValueAtTime(0.0001,t0);
+    g.gain.exponentialRampToValueAtTime(0.25,t0+0.02); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.30);
+    o.connect(g); g.connect(_actx.destination); o.start(t0); o.stop(t0+0.32);
+  });
+}catch(e){} }
+function setBadge(o,qn){
+  const n=(o||0)+(qn||0);
+  document.title=(n?'('+n+') ':'')+'จีทู — แผงควบคุม';
+  $('bell').textContent = n? '🔔 มีของใหม่ '+n+' รายการ' : '';
+  $('tb1').textContent = n? n+' ใหม่' : '';
 }
 function alertNew(oc,qc){
-  if(_firstLoad){ _seenO=oc; _seenQ=qc; _firstLoad=false; setBadge(oc,qc); return; }
+  if(_firstLoad){ _seenO=oc;_seenQ=qc;_firstLoad=false; setBadge(oc,qc); return; }
   if((_seenO!==null&&oc>_seenO)||(_seenQ!==null&&qc>_seenQ)) ding();
-  _seenO=oc; _seenQ=qc; setBadge(oc,qc);
+  _seenO=oc;_seenQ=qc; setBadge(oc,qc);
 }
 
+/* ═══ แท็บ 1 ═══ */
 async function loadQueue(){
   try{
-    const r=await fetch(W+'/ctl/queue?key='+encodeURIComponent(KEY)+'&shop=v20');
-    const d=await r.json(); const q=d.queue||[];
-    $('qcount').textContent = q.length? '('+q.length+')' : '';
-    if(!q.length){ $('queue').innerHTML='<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>'; return 0; }
-    $('queue').innerHTML = q.map(function(it){
-      const nm = it.name ? it.name : 'ลูกค้า (ไม่ทราบชื่อ)';
-      return '<div class="qcard"><div class="qtop"><b>'+esc(nm)+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
-        + '<div class="qreason">'+esc(it.reason)+'</div>'
-        + (it.msg? '<div class="qmsg">“'+esc(it.msg)+'”</div>':'')
-        + '<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
-        + '<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ ดูแลเสร็จแล้ว</button></div></div>';
-    }).join('');
-    return q.length;
+    const d=await (await fetch(q('/ctl/queue'))).json(); const list=d.queue||[];
+    $('qcount').textContent = list.length? '('+list.length+')':'';
+    $('queue').innerHTML = list.length? list.map(function(it){
+      return '<div class="qcard"><div class="qtop"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
+        +'<div class="qreason">'+esc(it.reason)+'</div>'
+        +(it.msg?'<div class="qmsg">“'+esc(it.msg)+'”</div>':'')
+        +'<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
+        +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
+        +'<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ เสร็จ</button></div></div>';
+    }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
+    return list.length;
   }catch(e){ return 0; }
 }
-function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
-async function markDone(uid){
-  try{ await fetch(W+'/ctl/done?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadQueue(); refresh(); }catch(e){}
-}
+async function markDone(uid){ try{ await fetch(q('/ctl/done&uid='+encodeURIComponent(uid)),{method:'POST'}); loadQueue(); refresh(); }catch(e){} }
 
 async function loadOrders(){
   try{
-    const r=await fetch(W+'/ctl/orders?key='+encodeURIComponent(KEY)+'&shop=v20');
-    const d=await r.json(); const o=d.orders||[];
-    $('ocount').textContent = o.length? '('+o.length+')' : '';
-    if(!o.length){ $('orders').innerHTML='<div class="qempty">ยังไม่มีออเดอร์รอลง</div>'; return 0; }
-    $('orders').innerHTML = o.map(function(it){
-      const nm = it.name ? it.name : 'ลูกค้า';
-      const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,'');
-      const b=it.block||'';
-      const pick=function(re){ const m=b.match(re); return m? m[1].trim() : ''; };
+    const d=await (await fetch(q('/ctl/orders'))).json(); const o=d.orders||[];
+    $('ocount').textContent = o.length? '('+o.length+')':'';
+    $('orders').innerHTML = o.length? o.map(function(it){
+      const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,''); const b=it.block||'';
+      const pick=function(re){ const m=b.match(re); return m? m[1].trim():''; };
       const cName=pick(/ชื่อผู้รับ:[ \t]*(.+)/), cTel=pick(/เบอร์:[ \t]*(.+)/), cAddr=pick(/ที่อยู่:[ \t]*(.+)/);
       const items=(b.split('\n').filter(function(l){return /^-\s/.test(l.trim());}).join('\n'))||'';
       let chips='';
@@ -223,25 +253,89 @@ async function loadOrders(){
       if(cTel) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cTel).replace(/"/g,'&quot;')+')">📞 เบอร์</button>';
       if(cAddr) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cAddr).replace(/"/g,'&quot;')+')">📍 ที่อยู่</button>';
       if(items) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(items).replace(/"/g,'&quot;')+')">🛒 รายการ</button>';
-      return '<div class="ocard"><div class="qtop"><b>'+esc(nm)+'</b><span class="ostatus">'+esc(it.status)+'</span></div>'
-        + '<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'
-        + (chips? '<div class="chips">'+chips+'</div>':'')
-        + '<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอกทั้งหมด</button>'
-        + '<button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
-        + '<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
-        + '<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลง XSelly แล้ว</button></div></div>';
-    }).join('');
+      return '<div class="ocard"><div class="qtop"><b>'+esc(it.name||'ลูกค้า')+'</b><span class="ostatus">'+esc(it.status)+'</span></div>'
+        +'<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'
+        +(chips?'<div class="chips">'+chips+'</div>':'')
+        +'<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอก</button>'
+        +'<button class="ochat" onclick="openChat()">💬 แชท</button>'
+        +'<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
+        +'<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลงแล้ว</button></div></div>';
+    }).join('') : '<div class="qempty">ยังไม่มีออเดอร์รอลง</div>';
     return o.length;
   }catch(e){ return 0; }
 }
-function copyOrder(id,btn){ const t=document.getElementById(id).innerText; navigator.clipboard.writeText(t).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอกทั้งหมด';},1500); }).catch(function(){}); }
-function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(function(){btn.textContent=o; btn.classList.remove('ok');},1200); }).catch(function(){}); }
+function copyOrder(id,btn){ navigator.clipboard.writeText($(id).innerText).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอก';},1500); }).catch(function(){}); }
+function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(function(){btn.textContent=o;btn.classList.remove('ok');},1200); }).catch(function(){}); }
 function openChat(){ window.open('https://chat.line.biz/','_blank'); }
-async function orderDone(uid){ try{ await fetch(W+'/ctl/orderdone?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'}); loadOrders(); }catch(e){} }
+async function orderDone(uid){ try{ await fetch(q('/ctl/orderdone&uid='+encodeURIComponent(uid)),{method:'POST'}); loadOrders(); }catch(e){} }
 
-/* 📦 อัปเดตสต็อกจากไฟล์ XSelly — อ่านไฟล์ในเครื่อง แปลงเป็นตารางสต็อก แล้วส่งเข้าระบบจีทู */
-let _stockOpen=false, _stockData=null, _skuData=null;
-function toggleStock(){ _stockOpen=!_stockOpen; $('stockpanel').classList.toggle('hidden',!_stockOpen); $('sinfo').textContent=_stockOpen?'เปิดอยู่ ▴':'แตะเพื่อเปิด ▾'; }
+/* ═══ แท็บ 2: แชท + บทสนทนา ═══ */
+function toggleOnlyOpen(){ ONLYOPEN=!ONLYOPEN; $('foltxt').textContent=ONLYOPEN?'แสดงเฉพาะที่แอดมินคุมอยู่':'แสดงทุกแชท'; renderChats(); }
+async function loadChats(){
+  try{ const d=await (await fetch(q('/ctl/chats'))).json(); CHATS=d.chats||[]; renderChats(); }catch(e){}
+}
+function renderChats(){
+  const kw=($('csearch').value||'').trim().toLowerCase();
+  let list=CHATS.filter(function(c){
+    if(ONLYOPEN && !c.muted) return false;
+    if(kw && String(c.name||'').toLowerCase().indexOf(kw)===-1) return false;
+    return true;
+  });
+  $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
+  $('chatlist').innerHTML = list.length? list.map(function(it){
+    const nm=(it.name||'ลูกค้า (ไม่ทราบชื่อ)').replace(/'/g,'');
+    return '<div class="crow"><div class="cname'+(it.muted?' off':'')+'" onclick="showConv(\''+it.uid+'\',\''+esc(nm)+'\')">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')
+      +' <i>· '+(it.muted? esc(it.reason||'แอดมินคุมอยู่') : timeAgo(it.t))+' · แตะดูบทสนทนา</i></div>'
+      +(it.muted? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ ให้จีทูต่อ</button>'
+                : '<button class="cbtn stop" onclick="mute1(\''+it.uid+'\')">⏸ ปิดจีทู</button>')
+      +'</div>';
+  }).join('') : '<div class="qempty">ไม่พบแชทที่ตรงเงื่อนไข</div>';
+}
+async function showConv(uid,name){
+  $('convbox').classList.remove('hidden');
+  $('convname').textContent='💬 '+(name||'ลูกค้า');
+  $('convbody').innerHTML='กำลังโหลด…';
+  try{
+    const d=await (await fetch(q('/ctl/conv&uid='+encodeURIComponent(uid)))).json();
+    const m=d['บทสนทนา']||[];
+    if(!m.length){ $('convbody').innerHTML='<div class="qempty">ยังไม่มีบทสนทนาเก็บไว้ (ระบบเก็บย้อนหลังไม่เกิน 1 ชม.)</div>'; return; }
+    $('convbody').innerHTML=m.map(function(x){
+      return '<div class="bwho" style="text-align:'+(x.who==='ลูกค้า'?'right':'left')+'">'+x.who+'</div>'
+        +'<div class="bub '+(x.who==='ลูกค้า'?'u':'j')+'">'+esc(x.text)+'</div>';
+    }).join('');
+  }catch(e){ $('convbody').innerHTML='<div class="qempty">โหลดไม่ได้</div>'; }
+}
+function closeConv(){ $('convbox').classList.add('hidden'); }
+async function mute1(uid,btn){
+  if(btn) btn.textContent='⏸…';
+  try{ await fetch(q('/ctl/mute1&uid='+encodeURIComponent(uid)),{method:'POST'});
+    $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
+}
+async function unmute1(uid){
+  try{ await fetch(q('/ctl/done&uid='+encodeURIComponent(uid)),{method:'POST'});
+    $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
+}
+
+/* ═══ แท็บ 3: ประกาศ + สุขภาพ + สต็อก ═══ */
+async function loadNotice(){
+  try{ const d=await (await fetch(q('/ctl/notice'))).json(); $('notice').value=d['ประกาศ']||''; }catch(e){}
+}
+async function saveNotice(){
+  $('msg').textContent='กำลังบันทึก…';
+  try{ await fetch(q('/ctl/notice'),{method:'POST',body:$('notice').value});
+    $('msg').textContent=$('notice').value.trim()?'✅ จีทูรับรู้ประกาศแล้ว':'✅ ยกเลิกประกาศแล้ว'; loadHealth(); }
+  catch(e){ $('msg').textContent='⛔ บันทึกไม่สำเร็จ'; }
+}
+async function loadHealth(){
+  $('health').textContent='กำลังโหลด…';
+  try{
+    const d=await (await fetch(q('/ctl/health'))).json();
+    $('health').innerHTML=Object.keys(d).map(function(k){
+      return '<div><span>'+esc(k)+':</span> <b>'+esc(String(d[k]))+'</b></div>';
+    }).join('');
+  }catch(e){ $('health').textContent='เช็คไม่ได้'; }
+}
+let _stockData=null,_skuData=null;
 function pickStock(){
   const f=$('stockfile').files[0]; if(!f) return;
   $('stpre').textContent='กำลังอ่านไฟล์…'; $('stbtn').style.display='none';
@@ -257,13 +351,12 @@ function pickStock(){
       const cSku=H.indexOf('SKU'), cQty=H.indexOf('พร้อมขาย'), cName=H.indexOf('คำอธิบายสินค้า');
       if(cSku<0||cQty<0) throw new Error('ไฟล์ไม่มีคอลัมน์ SKU หรือ พร้อมขาย');
       if(cName<0) throw new Error('ไฟล์ไม่มีคอลัมน์ "คำอธิบายสินค้า" — ตอน export ต้องติ๊กช่องนี้ด้วย');
-      const stock={}, sku={};
-      let n=0, have=0;
+      const stock={},sku={}; let n=0,have=0;
       for(let i=hdr+1;i<rows.length;i++){
-        const r=rows[i]; const s=String(r[cSku]||'').trim(); const nm=String(r[cName]||'').trim();
+        const r=rows[i], s=String(r[cSku]||'').trim(), nm=String(r[cName]||'').trim();
         if(!s||!nm) continue;
-        const q=parseInt(String(r[cQty]||'0').replace(/[^0-9-]/g,''),10)||0;
-        stock[nm]=q; sku[s]=nm; n++; if(q>1) have++;
+        const qq=parseInt(String(r[cQty]||'0').replace(/[^0-9-]/g,''),10)||0;
+        stock[nm]=qq; sku[s]=nm; n++; if(qq>1) have++;
       }
       if(!n) throw new Error('อ่านข้อมูลไม่ได้สักแถว');
       _stockData=stock; _skuData=sku;
@@ -277,69 +370,44 @@ async function uploadStock(){
   if(!_stockData) return;
   const b=$('stbtn'); b.textContent='กำลังอัปเดต…'; b.disabled=true;
   try{
-    const p=W+'/seed/stockmap?key='+encodeURIComponent(KEY);
-    const r1=await fetch(p,{method:'POST',body:JSON.stringify(_stockData)});
-    const t1=await r1.text();
-    if(!r1.ok) throw new Error(t1);
+    const r1=await fetch(W+'/seed/stockmap?key='+encodeURIComponent(KEY),{method:'POST',body:JSON.stringify(_stockData)});
+    if(!r1.ok) throw new Error(await r1.text());
     await fetch(W+'/seed/skumap?key='+encodeURIComponent(KEY),{method:'POST',body:JSON.stringify(_skuData)});
-    $('stpre').innerHTML='🎉 อัปเดตสต็อกเข้าระบบจีทูแล้ว ('+Object.keys(_stockData).length+' รายการ)';
-    $('msg').textContent='✅ สต็อกอัปเดตแล้ว จีทูจะใช้ตัวเลขใหม่ทันที';
-  }catch(err){ $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ อัปเดตไม่สำเร็จ: '+esc(String(err.message||err))+'</span>'; }
+    $('stpre').innerHTML='🎉 อัปเดตแล้ว ('+Object.keys(_stockData).length+' รายการ)';
+    $('msg').textContent='✅ สต็อกอัปเดตแล้ว จีทูใช้ตัวเลขใหม่ทันที'; loadHealth();
+  }catch(err){ $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ '+esc(String(err.message||err))+'</span>'; }
   b.textContent='⬆️ อัปเดตสต็อกเข้าระบบจีทู'; b.disabled=false;
 }
 
-/* 🙋 คุมแชทรายคน — ซ่อนไว้ใต้ปุ่ม ไม่กวนงานประจำวัน */
-let _chatsOpen=false;
-function toggleChats(){ _chatsOpen=!_chatsOpen; if(_chatsOpen){ $('chatlist').classList.remove('hidden'); loadChats(); } else { $('chatlist').classList.add('hidden'); $('cinfo').textContent='แตะเพื่อดู ▾'; } }
-async function loadChats(){
-  if(!_chatsOpen) return;
-  try{
-    const r=await fetch(W+'/ctl/chats?key='+encodeURIComponent(KEY)+'&shop=v20');
-    const d=await r.json(); const c=d.chats||[];
-    $('cinfo').textContent = c.length? c.length+' แชท ▴' : 'ไม่มีแชท ▴';
-    if(!c.length){ $('chatlist').innerHTML='<div class="qempty">ยังไม่มีแชทใน 2 วันนี้</div>'; return; }
-    $('chatlist').innerHTML = c.map(function(it){
-      const nm = it.name || 'ลูกค้า (ไม่ทราบชื่อ)';
-      return '<div class="crow"><div class="cname'+(it.muted?' off':'')+'">'+esc(nm)
-        + ' <i>· '+(it.muted? esc(it.reason||'แอดมินคุมอยู่') : timeAgo(it.t))+'</i></div>'
-        + (it.muted
-            ? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ ให้จีทูต่อ</button>'
-            : '<button class="cbtn stop" onclick="mute1(\''+it.uid+'\')">⏸ ปิดจีทู</button>')
-        + '</div>';
-    }).join('');
-  }catch(e){}
+/* ═══ ทั่วไป ═══ */
+async function refresh(){
+  try{ const s=await api('status'); render(s.on,s.muted);
+    const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0);
+  }catch(e){ $('msg').textContent=e.message; }
 }
-async function mute1(uid,btn){
-  if(btn){ btn.textContent='⏸…'; }
-  try{ await fetch(W+'/ctl/mute1?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'});
-    $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว — แอดมินคุมเอง'; loadChats(); loadQueue(); refresh(); }catch(e){}
-}
-async function unmute1(uid){
-  try{ await fetch(W+'/ctl/done?key='+encodeURIComponent(KEY)+'&shop=v20&uid='+encodeURIComponent(uid),{method:'POST'});
-    $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
-}
-
-async function refresh(){ try{ const s=await api('status'); render(s.on,s.muted); const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); loadChats(); }catch(e){ $('msg').textContent=e.message; } }
-
 async function toggle(){
+  if(ON && !confirm('ปิดจีทูทั้งร้าน? ลูกค้าทุกคนจะไม่ได้รับคำตอบอัตโนมัติจนกว่าจะเปิดใหม่')) return;
   $('msg').textContent='กำลังสั่งงาน…';
-  try{ const s=await api(ON?'off':'on'); render(s.on, 0); $('msg').textContent=s.on?'✅ เปิดจีทูแล้ว':'✅ ปิดจีทูแล้ว'; setTimeout(refresh,800); }
+  try{ const s=await api(ON?'off':'on'); render(s.on,0); $('msg').textContent=s.on?'✅ เปิดจีทูแล้ว':'✅ ปิดจีทูแล้ว'; setTimeout(refresh,800); }
   catch(e){ $('msg').textContent=e.message; }
 }
-
 async function unmute(){
+  if(!confirm('ปลดล็อกทุกแชท? จีทูจะกลับมาตอบลูกค้าทุกคนทันที รวมคนที่แอดมินกำลังดูแลอยู่')) return;
   $('msg').textContent='กำลังปลดล็อก…';
   try{ const s=await api('unmute'); $('msg').textContent='✅ ปลดล็อกแล้ว '+s.cleared+' แชท'; refresh(); }
   catch(e){ $('msg').textContent=e.message; }
 }
-
 let _poll=null;
 function init(){
-  if(KEY){ $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh(); if(_poll)clearInterval(_poll);
-    _poll=setInterval(async function(){ const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); },20000);
+  if(KEY){
+    $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh();
+    if(_poll) clearInterval(_poll);
+    _poll=setInterval(async function(){ const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); if(TAB===2) loadChats(); },20000);
     document.addEventListener('click',function once(){ try{ _actx=_actx||new (window.AudioContext||window.webkitAudioContext)(); if(_actx.state==='suspended')_actx.resume(); }catch(e){} document.removeEventListener('click',once); });
+  } else {
+    $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden');
+    $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)';
   }
-  else{ $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden'); $('status').textContent='ใส่รหัสเพื่อใช้งาน (จำไว้ให้ ใส่ครั้งเดียว)'; }
 }
 init();
 </script>
