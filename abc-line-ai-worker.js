@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-g2-qrfix";
+const BUILD = "2026-07-27-g3-nosilence";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1576,7 +1576,15 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       _qrStock = smForHint; _qrBuf = bufForHint;
       const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint) + brandHint(text, smForHint, bufForHint);
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]);
+      // ⏱ เส้นตาย 32 วิ: ถ้า AI ช้ากว่านี้ ให้ตอบข้อความคั่นแทนการเงียบใส่ลูกค้า
+      reply = await Promise.race([
+        askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]),
+        new Promise(res => setTimeout(() => res("__TIMEOUT__"), 32000))
+      ]);
+      if (reply === "__TIMEOUT__") {
+        console.log("AI_DEADLINE_HIT text=" + String(text).slice(0, 40));
+        reply = "ขอเช็คข้อมูลให้สักครู่นะคะ 🙏🏻 เดี๋ยวแอดมินตอบกลับทันทีค่ะ 💕";
+      }
       userForHistory = { role: "user", content: text };
     }
 
@@ -1609,6 +1617,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
     // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → โค้ดคิดเงินเอง + ส่งการ์ด Flex "ยืนยันรายการ"
     let orderStored = false;
+    // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
+    const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(text || "").trim());
+    if (saidNo) {
+      try { if (env.CONV) { await env.CONV.delete("ord:" + shopId + ":" + userId); await env.CONV.delete("card:" + shopId + ":" + userId); } } catch (e) {}
+      await lineReply(TOKEN, replyToken, "รับทราบค่ะ ยกเลิกรายการให้เรียบร้อยแล้วนะคะ 🙏🏻\nถ้าสนใจสินค้าตัวไหนอีก ทักมาได้ตลอดเลยค่ะ 💕", userId);
+      return;
+    }
     if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
       let items = parseItems(reply);
       // 💰 ลูกค้าขอ "ราคาส่ง" แต่บล็อกเป็น MARBO ของแท้ → เรทส่งมีเฉพาะโคลน ต้องถามก่อน ห้ามออกการ์ดราคาแท้
@@ -1701,7 +1716,27 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         let expFee = null;
         try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; } } } catch (e) {}
         const calc = computeOrder(items, expFee);
+        // 🔁 กันการ์ดเด้งซ้ำ: ถ้าเป็นรายการเดิมเป๊ะที่เพิ่งส่งไปภายใน 30 นาที และลูกค้าไม่ได้ขอใหม่
+        // (เคสจริง: ลูกค้าถาม "มีกลิ่นไรบ้าง" / "ขายอยู่มั้ย" แล้วจีทูเด้งการ์ดเดิมซ้ำ)
+        const sig = calc.rows.map(r => r.label).join("|") + "#" + calc.total;
+        let dup = false;
+        try {
+          if (env.CONV) {
+            const prev = await env.CONV.get("card:" + shopId + ":" + userId);
+            if (prev) {
+              const pj = JSON.parse(prev);
+              const wantAgain = /ยืนยัน|สั่งเลย|เอาเลย|ตกลง|ขอการ์ด|สรุปยอด|เท่าไหร่|ราคารวม/.test(String(text || ""));
+              if (pj.sig === sig && (Date.now() - pj.t) < 1800000 && !wantAgain) dup = true;
+            }
+          }
+        } catch (e) {}
+        if (dup) {
+          console.log("CARD_DUP_BLOCK sig=" + sig.slice(0, 60));
+          await lineReply(TOKEN, replyToken, "รายการเดิมยังอยู่ในระบบนะคะ 🙏🏻 กดปุ่ม \"ยืนยันรายการ\" ในการ์ดด้านบนได้เลยค่ะ\nหรือถ้าอยากเปลี่ยนรุ่น/กลิ่น/จำนวน แจ้งมาได้เลยนะคะ 💕", userId);
+          return;
+        }
         await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(calc), userId);
+        try { if (env.CONV) await env.CONV.put("card:" + shopId + ":" + userId, JSON.stringify({ sig, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
         // เก็บออเดอร์ด้วยยอดที่โค้ดคิด (ให้ SlipOK เทียบยอดถูก)
         try {
           if (env.CONV) {
