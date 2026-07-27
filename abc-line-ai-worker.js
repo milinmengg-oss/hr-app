@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-e3-multilang";
+const BUILD = "2026-07-27-e4-wholesale";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1478,6 +1478,21 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     let orderStored = false;
     if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
       let items = parseItems(reply);
+      // 💰 ลูกค้าขอ "ราคาส่ง" แต่บล็อกเป็น MARBO ของแท้ → เรทส่งมีเฉพาะโคลน ต้องถามก่อน ห้ามออกการ์ดราคาแท้
+      try {
+        const wantWholesale = /ราคาส่ง|เรทส่ง|ขายส่ง|ราคาขายส่ง|เรทขายส่ง|ยกลัง|ราคายกโหล/.test(
+          ((ev.message && ev.message.text) || "") + " " + history.slice(-3).map(h => typeof h.content === "string" ? h.content : "").join(" ")
+        );
+        const hasRealMarbo = items.some(it => /MARBO\s*9K/i.test(it.model) && !/โคลน|clone|เทียบ/i.test(it.model));
+        if (wantWholesale && hasRealMarbo) {
+          await lineReply(TOKEN, replyToken,
+            "ขอเช็คก่อนนะคะ 🙏🏻 เรทขายส่งของ MARBO 9K มีเฉพาะ **รุ่นโคลน (เทียบแท้)** ค่ะ\n\n" +
+            "• MARBO 9K แท้ = 350 บาท/แท่ง (ไม่มีเรทขายส่ง)\n" +
+            "• MARBO 9K โคลน = 290 บาท/แท่ง · สั่ง 20 แท่งขึ้นไปได้เรทขายส่ง 250 บาท/แท่ง (ส่งฟรี)\n\n" +
+            "คุณลูกค้ารับแบบไหนดีคะ 💕", userId);
+          return;
+        }
+      } catch (e) {}
       // 🧯 กันจีทู "ลอกรายการจากตัวอย่าง/ออเดอร์เก่า": รุ่นในบล็อกต้องเคยโผล่ในบทสนทนานี้จริง
       try {
         // ดูเฉพาะบริบท "สดๆ" (2 เทิร์นล่าสุด + ข้อความนี้ + คำพูดของจีทูในรอบนี้ที่ไม่ใช่บรรทัดรายการ)
