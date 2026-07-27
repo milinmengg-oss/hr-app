@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-f3-brandstock";
+const BUILD = "2026-07-27-g1-quickreply";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1397,6 +1397,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     const sysFull = sysPrompt + outNote + custNote;
 
     let reply, userForHistory;
+    let smForQR = null, bufForQR = 1;   // สต็อกสำหรับสร้างปุ่ม Quick Reply
 
     if (mtype === "image") {
       // ── ลูกค้าส่งรูป (มักเป็นเมนูที่วงกลมสินค้า) → ให้ AI อ่านรูป ──
@@ -1556,6 +1557,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           bufForHint = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
         }
       } catch (e) {}
+      smForQR = smForHint; bufForQR = bufForHint;   // เก็บไว้ให้ปุ่ม Quick Reply ใช้ตอนส่งข้อความ
       const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint) + brandHint(text, smForHint, bufForHint);
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]);
@@ -1695,10 +1697,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           }
         } catch (e) {}
       } else {
-        await lineReply(TOKEN, replyToken, reply, userId);
+        await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, text, smForQR, bufForQR));
       }
     } else {
-      await lineReply(TOKEN, replyToken, reply, userId);
+      await lineReply(TOKEN, replyToken, reply, userId, buildQuickReply(reply, text, smForQR, bufForQR));
     }
 
     // 📦 ถ้าจีทูสรุปออเดอร์ครบ (มีบล็อก "📦 สรุปออเดอร์" + ช่องสินค้ามีค่าจริง) → เก็บเข้าคิวออเดอร์
@@ -1895,16 +1897,64 @@ async function lineLoading(token, userId) {
   } catch (e) {}
 }
 
-async function lineReply(token, replyToken, text, userId) {
+// ===== ⚡ Quick Reply — ปุ่มกดใต้ข้อความ (สูงสุด 13 ปุ่ม, ป้ายไม่เกิน 20 ตัวอักษร) =====
+// ทำไมสำคัญ: ลูกค้าจากแอดไม่รู้จะพิมพ์อะไร + พอกดปุ่มเลือกกลิ่น ชื่อกลิ่นจะตรงเป๊ะเสมอ
+// → จีทูไม่ต้องเดาว่าลูกค้าหมายถึงกลิ่นไหน และพิมพ์ผิดก็ไม่หลุด
+function qrItems(labels) {
+  const seen = {}, items = [];
+  for (let l of labels) {
+    l = String(l || "").trim();
+    if (!l || l.length > 20 || seen[l]) continue;
+    seen[l] = 1;
+    items.push({ type: "action", action: { type: "message", label: l, text: l } });
+    if (items.length >= 13) break;
+  }
+  return items.length ? { items } : null;
+}
+// เดาว่าควรโชว์ปุ่มชุดไหน จาก "สิ่งที่จีทูเพิ่งถาม" + "สิ่งที่ลูกค้าพิมพ์"
+function buildQuickReply(reply, userText, sm, buf) {
+  try {
+    const r = String(reply || ""), u = String(userText || "");
+    if (/ทวนคำสั่งซื้อ|เลขบัญชี|ยืนยันรายการ/.test(r)) return null;   // ตอนออกการ์ด ไม่ต้องมีปุ่ม
+    // 1) จีทูถามจำนวน
+    if (/กี่ชิ้น|กี่แท่ง|กี่หัว|กี่อัน|กี่กล่อง|จำนวนเท่าไหร่|เอากี่/.test(r))
+      return qrItems(["1", "2", "3", "4", "5", "10", "20"]);
+    // 2) จีทูถามวิธีจัดส่ง
+    if (/จัดส่งแบบไหน|รับแบบไหน|ส่งแบบไหน|เลือกการจัดส่ง/.test(r))
+      return qrItems(["ส่งพัสดุธรรมดา", "ส่งด่วน กทม.", "ค่าส่งเท่าไหร่"]);
+    // 3) จีทูถามกลิ่น → ยิงปุ่มกลิ่นที่ "มีของจริง" ของรุ่นที่กำลังคุยกันอยู่
+    if (/กลิ่นไหน|กลิ่นอะไร|สนใจกลิ่น|เลือกกลิ่น|สีไหน|สีอะไร/.test(r) && sm) {
+      const B = (typeof buf === "number") ? buf : 1;
+      let model = null;
+      for (const k of FLAVOR_KEYS) { if (normTH(r + " " + u).indexOf(normTH(k)) !== -1) { model = k; break; } }
+      if (!model) for (const [re, key] of TH_MODEL) if (re.test(r + " " + u)) { model = key; break; }
+      if (model && FLAVORS[model] && FLAVORS[model].f.length) {
+        const have = FLAVORS[model].f.filter(f => {
+          let q = null; try { q = findStockForItem(sm, model, f); } catch (e) {}
+          return !(q !== null && q <= B);
+        });
+        if (have.length) return qrItems(have);
+      }
+    }
+    // 4) ค่าเริ่มต้น: เมนูหลัก (เฉพาะตอนคุยกว้างๆ ยังไม่เข้าออเดอร์)
+    if (/สนใจ|ยินดี|สอบถาม|ช่วยเหลือ|แนะนำ|สวัสดี|ค่ะ|คะ/.test(r) && r.length < 900)
+      return qrItems(["มีอะไรพร้อมส่งบ้าง", "สินค้าขายดี", "โปรโมชั่น", "ค่าส่งเท่าไหร่", "คุยกับแอดมิน"]);
+  } catch (e) {}
+  return null;
+}
+
+async function lineReply(token, replyToken, text, userId, quick) {
   // ล้าง markdown ที่ LINE แสดงดิบ (**, ##) + จำกัด ~5000 ตัวอักษร/ข้อความ
   const msg = text.replace(/\*\*/g, "").replace(/(^|\n)#{1,6}\s+/g, "$1").slice(0, 4900);
+  const one = { type: "text", text: msg };
+  if (quick && quick.items && quick.items.length) one.quickReply = quick;
   const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ replyToken, messages: [{ type: "text", text: msg }] }),
+    body: JSON.stringify({ replyToken, messages: [one] }),
   });
   if (!r.ok) {
     console.log("LINE_REPLY_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
@@ -1913,7 +1963,7 @@ async function lineReply(token, replyToken, text, userId) {
       const p = await fetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ to: userId, messages: [{ type: "text", text: msg }] }),
+        body: JSON.stringify({ to: userId, messages: [one] }),
       });
       if (!p.ok) console.log("LINE_PUSH_FAIL status=" + p.status);
     }
