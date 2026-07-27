@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-j2-noqr";
+const BUILD = "2026-07-28-j3-mdlink";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2239,7 +2239,15 @@ function buildQuickReply(reply, userText, sm, buf) {
 
 async function lineReply(token, replyToken, text, userId, quick) {
   // ล้าง markdown ที่ LINE แสดงดิบ (**, ##) + จำกัด ~5000 ตัวอักษร/ข้อความ
-  const msg = text.replace(/\*\*/g, "").replace(/(^|\n)#{1,6}\s+/g, "$1").slice(0, 4900);
+  // ล้าง Markdown ที่ LINE แสดงดิบ: **ตัวหนา** · ## หัวข้อ · [ข้อความ](ลิงก์) ที่ทำให้ลิงก์ซ้อนกัน
+  const msg = text
+    .replace(/\[([^\]\n]{0,120})\]\((https?:\/\/[^\s)]+)\)/g, (m, t, u) => {
+      const tt = String(t).trim();
+      return (!tt || tt === u || tt.replace(/\/+$/, "") === u.replace(/\/+$/, "")) ? u : (tt + " " + u);
+    })
+    .replace(/\*\*/g, "").replace(/__/g, "")
+    .replace(/(^|\n)#{1,6}\s+/g, "$1")
+    .slice(0, 4900);
   const one = { type: "text", text: msg };
   let q = quick;
   if (!q) { try { q = buildQuickReply(msg, "", _qrStock, _qrBuf); } catch (e) {} }
