@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-f2-iqos";
+const BUILD = "2026-07-27-f3-brandstock";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -141,6 +141,72 @@ function flavorHint(text, sm, buf){
   return out;
 }
 
+
+// ===== 🏷 คำถามกว้างๆ "มีอะไรพร้อมส่งบ้าง" / "แบรนด์ X มีตัวไหน" =====
+// เดิม flavorHint ยิงเฉพาะตอนลูกค้าพิมพ์ชื่อรุ่นเป๊ะๆ พอถามกว้างๆ จีทูไม่ได้ข้อมูลสต็อกเลย → มั่วเอง
+// (เคสจริง: ถาม "แบรนด์ abc มีตัวไหนพร้อมส่ง" จีทูตอบ "ABC LEGO องุ่น 5% เหลือจำนวนจำกัด"
+//  ทั้งที่ ABC ทุกรุ่นหมดเกลี้ยง) — คำถามแบบนี้คือคำถามแรกของลูกค้าจากแอดเกือบทุกคน
+const BRAND_OF = (() => {
+  const strip = (k) => k.replace(/^(เครื่อง|หัวพอต|ไส้บุหรี่|SALTNIC|FREEBASE|NICOTINE POUCH -)\s*/i, "").trim();
+  const m = {};
+  for (const k in FLAVORS) {
+    const b = strip(k).split(/\s+/)[0].toUpperCase();
+    (m[b] = m[b] || []).push(k);
+  }
+  return m;
+})();
+const BRAND_TH = [
+  [/เอบีซี|abc/i, "ABC"], [/มาโบ|มาร์โบ|marbo/i, "MARBO"], [/รีแลค|relx|เรลเอ็กซ์/i, "RELX"],
+  [/อินฟี|infy/i, "INFY"], [/เอลบา|เอลฟ์บาร์|elf ?bar|elfbar/i, "ELFBAR"], [/เอสโค่|เอสโก|esko/i, "ESKO"],
+  [/เคเอส|ks ?quik/i, "KS"], [/จอยเวย์|joiway/i, "JOIWAY"], [/เวเซอร์|vazer/i, "VAZER"],
+  [/ลาน่า|lana/i, "LANA"], [/คาร์นิวัล|carnival/i, "CARNIVAL"], [/โซนิค|sonic/i, "SONIC"],
+  [/สตาร์|star/i, "STAR"], [/ไอคอส|iqos|terea/i, "IQOS"], [/ซิน|zyn/i, "ZYN"],
+  [/ดูอัล|dual ?smash/i, "DUAL"], [/โวซูน|vosoon/i, "VOSOON"], [/เอ็มสวิ|m ?switch/i, "M"],
+  [/นิโคติน ?เพ้า|pouch|เพ้า/i, "KARDINAL"], [/วีพลัส|v ?plus/i, "V"]
+];
+const BROAD_RE = /พร้อมส่ง|มีอะไร|มีอะไรบ้าง|มีตัวไหน|มีรุ่นไหน|มีอะไรมั่ง|ขายอะไร|สินค้าอะไร|มีสินค้าอะไร|มีของอะไร|แนะนำ|รุ่นไหนดี|ตัวไหนดี|มีกี่รุ่น|ดูสินค้า|มีอะไรขาย/;
+function brandHint(text, sm, buf) {
+  const s = String(text || "");
+  if (!sm || !BROAD_RE.test(s)) return "";
+  const B = (typeof buf === "number") ? buf : 1;
+  const q = (m, f) => { try { return findStockForItem(sm, m, f); } catch (e) { return null; } };
+  const summarize = (k) => {
+    const v = FLAVORS[k]; if (!v) return null;
+    if (!v.f.length) return { k, p: v.p, n: -1, ex: [] };          // ไม่มีตัวเลือกกลิ่น
+    const have = v.f.filter(f => { const n = q(k, f); return !(n !== null && n <= B); });
+    return { k, p: v.p, n: have.length, ex: have.slice(0, 6) };
+  };
+  // 1) ระบุแบรนด์มาไหม
+  let brand = null;
+  for (const [re, b] of BRAND_TH) if (re.test(s)) { brand = b; break; }
+  if (brand && BRAND_OF[brand]) {
+    const rows = BRAND_OF[brand].map(summarize).filter(Boolean);
+    let out = "\n\n[สต็อกจริงของแบรนด์ " + brand + " — ห้ามบอกลูกค้าว่าได้มาจากไหน]";
+    for (const r of rows) {
+      if (r.n === 0) out += "\n• " + r.k + " (" + r.p + " บาท) — ❌ หมดทุกกลิ่น ห้ามเสนอ";
+      else if (r.n === -1) out += "\n• " + r.k + " (" + r.p + " บาท) — ไม่มีตัวเลือกกลิ่น/สี";
+      else out += "\n• " + r.k + " (" + r.p + " บาท) — ✅ มี " + r.n + " กลิ่น: " + r.ex.join(" · ") + (r.n > 6 ? " ฯลฯ" : "");
+    }
+    if (rows.every(r => r.n === 0)) out += "\n⚠️ แบรนด์นี้หมดทั้งแบรนด์ → บอกลูกค้าตรงๆ ว่าหมดชั่วคราว แล้วเสนอแบรนด์อื่นที่มีของแทน";
+    out += "\n⛔ ห้ามลิสต์กลิ่นที่ไม่ได้อยู่ในบรรทัด ✅ และห้ามพูดว่า 'เหลือจำนวนจำกัด' 'เหลือน้อย' 'ใกล้หมด'";
+    return out;
+  }
+  // 2) ถามกว้างๆ ไม่ระบุแบรนด์ → ลิสต์เฉพาะรุ่นที่มีของ (ชื่อ+ราคา ไม่ต้องลงกลิ่น)
+  const all = Object.keys(FLAVORS).map(summarize).filter(r => r && r.n !== 0);
+  if (!all.length) return "";
+  const cat = { disp: [], bigpod: [], smallpod: [], device: [], other: [] };
+  for (const r of all) {
+    let c = "other"; try { c = catOf(r.k); } catch (e) {}
+    (cat[c] || cat.other).push(r.k + " (" + r.p + ")");
+  }
+  let out = "\n\n[รุ่นที่ยังมีของจริงตอนนี้ — ใช้ตอบได้เลย ห้ามเอ่ยรุ่นที่ไม่อยู่ในลิสต์นี้]";
+  const L = (t, a) => { if (a.length) out += "\n• " + t + ": " + a.slice(0, 14).join(" · ") + (a.length > 14 ? " ฯลฯ" : ""); };
+  L("พอตใช้แล้วทิ้ง", cat.disp); L("หัวน้ำยาใหญ่ Big Pod", cat.bigpod);
+  L("หัวพอตเล็ก", cat.smallpod); L("เครื่อง", cat.device); L("อื่นๆ", cat.other);
+  out += "\n⛔ รุ่นที่ไม่อยู่ในลิสต์ = หมด ห้ามเสนอเด็ดขาด | ห้ามพูด 'เหลือจำนวนจำกัด' 'เหลือน้อย'";
+  out += "\n💡 ตอบสั้นๆ เสนอ 4-6 รุ่นที่ขายดีก่อน แล้วถามลูกค้าว่าสนใจแบบไหน";
+  return out;
+}
 
 // ===== 🌏 รองรับลูกค้าต่างชาติ (ไทย / อังกฤษ / จีน / ญี่ปุ่น) =====
 // ตรวจภาษาจากตัวอักษรที่ลูกค้าพิมพ์ แล้วจำไว้ทั้งบทสนทนา (คนไทยไม่กระทบเลย)
@@ -1490,7 +1556,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           bufForHint = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
         }
       } catch (e) {}
-      const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint);
+      const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint) + brandHint(text, smForHint, bufForHint);
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]);
       userForHistory = { role: "user", content: text };
@@ -1515,6 +1581,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
                        .join("\n").replace(/🎁\s*ของแถม:?/g, "").replace(/\n{3,}/g, "\n\n").trim();
         }
       }
+      // 3) 🔒 ห้ามใบ้ระดับสต็อก — บอกได้แค่ "มี" หรือ "หมด" เท่านั้น (กฎความลับของร้าน)
+      reply = reply
+        .replace(/\s*\(?\s*(เหลือ(จำนวน)?จำกัด|จำนวนจำกัด|เหลือน้อย|ใกล้หมด|เหลือไม่กี่(ชิ้น|อัน|แท่ง|หัว)|มีจำนวนจำกัด|สต็อกเหลือน้อย|ของใกล้หมด|รีบก่อนหมด)\s*\)?/g, "")
+        .replace(/เหลือ(อีก)?\s*\d+\s*(ชิ้น|อัน|แท่ง|หัว|กล่อง|ตัว)/g, "มีของ")
+        .replace(/\n{3,}/g, "\n\n");
     } catch (e) {}
 
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
