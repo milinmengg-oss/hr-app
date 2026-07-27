@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-e1-nofakegift";
+const BUILD = "2026-07-27-e2-blockfake";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -1390,6 +1390,27 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote }, ...history.slice(-10), { role: "user", content: text + hint }]);
       userForHistory = { role: "user", content: text };
     }
+
+    // 🛡 กันจีทูแจกของแถม/เลขบัญชีเอง (ระบบเป็นคนออกการ์ดของแถม + การ์ดชำระเงินเท่านั้น)
+    try {
+      // 1) ห้ามแจ้งเลขบัญชีเองก่อนลูกค้ากดยืนยัน — ตัดบรรทัดที่มีเลขบัญชีของร้านออก
+      if (payInfo) {
+        const acct = (payInfo.match(/\d[\d\- ]{7,}\d/g) || []).map(x => x.replace(/[^0-9]/g, ""));
+        if (acct.length && acct.some(a => reply.replace(/[^0-9]/g, "").indexOf(a) !== -1)) {
+          reply = reply.split("\n").filter(l => !acct.some(a => l.replace(/[^0-9]/g, "").indexOf(a) !== -1) && !/ธนาคาร|เลขบัญชี|ชื่อบัญชี|กสิกร|ไทยพาณิชย์|กรุงเทพ|กรุงไทย/.test(l)).join("\n").trim();
+          reply += (reply ? "\n\n" : "") + "กดปุ่ม \"ยืนยันรายการ\" ในการ์ดด้านบนได้เลยค่ะ เดี๋ยวระบบส่งข้อมูลการชำระเงินให้ทันทีนะคะ 💕";
+        }
+      }
+      // 2) ห้ามพูดถึงเครื่องเปล่าแถม ถ้าออเดอร์ไม่ได้เข้าโปร Big Pod จริง (กันกุโปร "ซื้อ 20 แท่งแถม 4 เครื่อง")
+      if (/แถม/.test(reply) && /เครื่องเปล่า|เครื่องฟรี|เครื่อง\s*\d+\s*เครื่อง/.test(reply)) {
+        const bigWords = /BOOST POD|POD CLEAR|LEGO|TANK|SWAP|SWITCH|VAZER|KS QUIK PRO|DUAL SMASH|KIT|Big ?Pod|บิ๊กพอต|หัวน้ำยา/i;
+        if (!bigWords.test(reply)) {
+          reply = reply.split("\n")
+                       .filter(l => !((/แถม/.test(l) && /เครื่อง/.test(l)) || /เครื่องเปล่า|เครื่องฟรี/.test(l)))
+                       .join("\n").replace(/🎁\s*ของแถม:?/g, "").replace(/\n{3,}/g, "\n\n").trim();
+        }
+      }
+    } catch (e) {}
 
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
     // 📦 ถ้าเป็นบล็อกทวนคำสั่งซื้อ → โค้ดคิดเงินเอง + ส่งการ์ด Flex "ยืนยันรายการ"
