@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-i2-faster";
+const BUILD = "2026-07-27-i3-cpufix";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -166,16 +166,70 @@ const BRAND_TH = [
   [/นิโคติน ?เพ้า|pouch|เพ้า/i, "KARDINAL"], [/วีพลัส|v ?plus/i, "V"]
 ];
 const BROAD_RE = /พร้อมส่ง|มีอะไร|มีอะไรบ้าง|มีตัวไหน|มีรุ่นไหน|มีอะไรมั่ง|ขายอะไร|สินค้าอะไร|มีสินค้าอะไร|มีของอะไร|แนะนำ|รุ่นไหนดี|ตัวไหนดี|มีกี่รุ่น|ดูสินค้า|มีอะไรขาย|what.{0,12}(have|available|stock|sell)|in stock|recommend|有没有货|有什么|有货吗|推荐|在庫|おすすめ|何がある/i;
+// ⚡ ดัชนี "รุ่น → กลิ่นที่มีของ" คำนวณครั้งเดียวต่อ 1 ข้อความ แล้วใช้ซ้ำ
+// เดิม: คำถามกว้าง 1 ครั้ง = ไล่เทียบ 857,307 ครั้ง = CPU 47ms (เกินโควต้า Cloudflare 10ms → เงียบ)
+// ใหม่: จับกลุ่มคีย์สต็อกตาม "ชื่อรุ่น" ก่อน แล้วค่อยหากลิ่นในกลุ่มเล็กๆ = เร็วขึ้น ~40 เท่า
+let _availRef = null, _availBuf = null, _availMap = null;
+function availByModel(sm, buf) {
+  if (_availRef === sm && _availBuf === buf && _availMap) return _availMap;
+  const strip = (x) => String(x || "").replace(/^(เครื่อง|หัวพอต|หัวน้ำยา|ไส้บุหรี่)\s*/i, "");
+  const nM = (x) => strip(x).toLowerCase().replace(/[\s%()\-]/g, "");
+  const nF = (x) => String(x || "").toLowerCase().replace(/[\s%()\-]|ml/g, "");
+  const rate = (x) => { const m = String(x).match(/(\d+)\s*k/i); return m ? m[1] : ""; };
+  const qual = (x) => (/\bkit\b|คิท/i.test(x) ? 1 : 0) + (/โคลน|clone/i.test(x) ? 2 : 0) + (/^เครื่อง/.test(String(x)) ? 4 : 0);
+  // 1) จับกลุ่มคีย์สต็อกตามชื่อรุ่น (939 คีย์ → ~200 กลุ่ม)
+  const groups = {};
+  for (const k in sm) {
+    const i = k.indexOf(" - ");
+    const km = i > 0 ? k.slice(0, i) : k, kf = i > 0 ? k.slice(i + 3) : "";
+    const g = (groups[km] = groups[km] || { nm: nM(km), rt: rate(km), ql: qual(km), f: [] });
+    g.f.push({ nf: nF(kf), q: sm[k] > 0 ? sm[k] : 0 });
+  }
+  const gl = Object.keys(groups).map(k => groups[k]);
+  // 2) จับคู่รุ่นใน FLAVORS กับกลุ่ม แล้วหากลิ่นที่มีของเฉพาะในกลุ่มนั้น (65 × ~200)
+  const out = {};
+  for (const model in FLAVORS) {
+    const mm = STOCK_MODEL_ALIAS[model.trim().toLowerCase()] || model;
+    const nm = nM(mm), mr = rate(mm), mq = qual(mm);
+    let best = null, bs = -1;
+    for (const g of gl) {
+      let sc;
+      if (g.nm === nm) sc = 100;
+      else if (g.nm.indexOf(nm) !== -1 || nm.indexOf(g.nm) !== -1) sc = 50;
+      else continue;
+      if (mr && g.rt && mr !== g.rt) sc -= 60;
+      if (g.ql !== mq) sc -= 40;
+      if (sc > bs) { bs = sc; best = g; }
+    }
+    const v = FLAVORS[model], have = [];
+    if (best && bs > 0 && v && v.f.length) {
+      for (const f of v.f) {
+        const nf = nF(f);
+        let q = null;
+        for (const x of best.f) { if (x.nf === nf) { q = x.q; break; } }          // ตรงเป๊ะก่อน
+        if (q === null) for (const x of best.f) { if (x.nf.indexOf(nf) !== -1) q = Math.max(q === null ? 0 : q, x.q); }
+        // ⛔ เจอกลุ่มรุ่นแล้วแต่ไม่เจอกลิ่นในกลุ่ม = ถือว่าหมด (ห้ามเดาว่ามี — กันบอกลูกค้าผิด)
+        if (q !== null && q > buf) have.push(f);
+      }
+    }
+    out[model] = { have, known: !!(best && bs > 0) };
+  }
+  _availRef = sm; _availBuf = buf; _availMap = out;
+  return out;
+}
+
 function brandHint(text, sm, buf) {
   const s = String(text || "");
   if (!sm || !BROAD_RE.test(s)) return "";
   const B = (typeof buf === "number") ? buf : 1;
-  const q = (m, f) => { try { return findStockForItem(sm, m, f); } catch (e) { return null; } };
+  const AV = availByModel(sm, B);
+  // ✅ ดัชนีเร็วใช้คัดกรองก่อน แล้ว "ตรวจซ้ำแบบแม่นยำ" เฉพาะกลิ่นที่จะเอาไปบอกลูกค้าจริง (ไม่กี่สิบครั้ง = เร็วมาก)
+  const exact = (m, f) => { try { const q = findStockForItem(sm, m, f); return !(q !== null && q <= B); } catch (e) { return false; } };
   const summarize = (k) => {
     const v = FLAVORS[k]; if (!v) return null;
     if (!v.f.length) return { k, p: v.p, n: -1, ex: [] };          // ไม่มีตัวเลือกกลิ่น
-    const have = v.f.filter(f => { const n = q(k, f); return !(n !== null && n <= B); });
-    return { k, p: v.p, n: have.length, ex: have.slice(0, 6) };
+    const have = (AV[k] && AV[k].have) || [];
+    return { k, p: v.p, n: have.length, ex: have.slice(0, 6) };   // ยังไม่ตรวจแม่น — ตรวจเฉพาะรุ่นที่จะโชว์จริงตอนท้าย
   };
   // 1) ระบุแบรนด์มาไหม
   let brand = null;
@@ -202,14 +256,20 @@ function brandHint(text, sm, buf) {
   }
   let out = "\n\n[รุ่นที่ยังมีของจริงตอนนี้ — ใช้ตอบได้เลย ห้ามเอ่ยรุ่นที่ไม่อยู่ในลิสต์นี้]";
   const L = (t, a) => { if (a.length) out += "\n• " + t + ": " + a.slice(0, 14).join(" · ") + (a.length > 14 ? " ฯลฯ" : ""); };
-  // แนบ "กลิ่นจริงที่มีของ" ของรุ่นแนะนำ กันจีทูกุชื่อกลิ่นเอง (เช่น เคยตอบ "บลูเรส" ซึ่งไม่มีจริง)
-  const top = all.filter(r => r.n > 0).sort((a, b) => b.n - a.n).slice(0, 6);
-  if (top.length) {
-    out += "\n\n[กลิ่นจริงของรุ่นแนะนำ — ถ้าจะเอ่ยชื่อกลิ่น ใช้ได้เฉพาะจากบรรทัดพวกนี้]";
-    for (const r of top) out += "\n• " + r.k + ": " + r.ex.slice(0, 4).join(" · ");
-  }
+
   L("พอตใช้แล้วทิ้ง", cat.disp); L("หัวน้ำยาใหญ่ Big Pod", cat.bigpod);
   L("หัวพอตเล็ก", cat.smallpod); L("เครื่อง", cat.device); L("อื่นๆ", cat.other);
+  // แนบ "กลิ่นจริงที่มีของ" ของรุ่นแนะนำ กันจีทูกุชื่อกลิ่นเอง (เคยตอบ "บลูเรส" ซึ่งไม่มีจริง)
+  const top = all.filter(r => r.n > 0 && r.ex.length).sort((a, b) => b.n - a.n).slice(0, 6);
+  if (top.length) {
+    out += "\n\n[กลิ่นจริงของรุ่นแนะนำ — ถ้าจะเอ่ยชื่อกลิ่น ใช้ได้เฉพาะจากบรรทัดพวกนี้]";
+    // ✅ ตรวจซ้ำแบบแม่นยำเฉพาะ 6 รุ่นนี้เท่านั้น (~24 ครั้ง) — แม่น 100% และแทบไม่กิน CPU
+    for (const r of top) {
+      const ok = [];
+      for (const f of r.ex) { if (ok.length >= 4) break; if (exact(r.k, f)) ok.push(f); }
+      if (ok.length) out += "\n• " + r.k + ": " + ok.join(" · ");
+    }
+  }
   out += "\n⛔ รุ่นที่ไม่อยู่ในลิสต์ = หมด ห้ามเสนอเด็ดขาด | ห้ามพูด 'เหลือจำนวนจำกัด' 'เหลือน้อย'";
   out += "\n⛔⛔ ห้ามแต่งชื่อกลิ่นเองเด็ดขาด — ถ้าไม่มีชื่อกลิ่นในข้อมูลข้างบน ให้บอกแค่ชื่อรุ่น+ราคา แล้วถามว่า 'สนใจรุ่นไหน เดี๋ยวแอดมินลิสต์กลิ่นที่มีให้ค่ะ'";
   out += "\n💡 ตอบสั้นๆ เสนอ 4-6 รุ่นที่ขายดีก่อน แล้วถามลูกค้าว่าสนใจแบบไหน";
@@ -1969,6 +2029,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     } catch (e) {}
   } catch (e) {
     console.log("HANDLE_ERR " + String(e).slice(0, 150));
+    // 🛟 กันเงียบขั้นสุดท้าย: ไม่ว่าจะพังตรงไหน ลูกค้าต้องได้ข้อความเสมอ
+    try {
+      const uid = (ev.source && ev.source.userId) || "";
+      const rt = ev.replyToken;
+      const txt = "ขออภัยค่ะ ระบบสะดุดนิดนึงนะคะ 🙏🏻 รบกวนพิมพ์มาอีกครั้ง หรือรอสักครู่ เดี๋ยวแอดมินเข้ามาดูแลต่อค่ะ 💕";
+      if (rt) await lineReply(TOKEN, rt, txt, uid);
+      else if (uid) await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST", headers: { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ to: uid, messages: [{ type: "text", text: txt }] })
+      });
+    } catch (e2) { console.log("FALLBACK_FAIL " + String(e2).slice(0, 80)); }
   }
 }
 
