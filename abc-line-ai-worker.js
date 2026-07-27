@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-h1-simulate";
+const BUILD = "2026-07-27-h2-noghost";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -916,7 +916,7 @@ export default {
         if (/เหลือน้อย|จำนวนจำกัด|ใกล้หมด|รีบก่อนหมด/.test(reply)) bad.push("🔢 ใบ้ระดับสต็อก (ห้าม)");
         if (/ส่วนลด|ลดให้|ลดราคา|ลดพิเศษ|discount/.test(reply) && !/ไม่มีส่วนลด|ไม่สามารถลด/.test(reply)) bad.push("💸 เสนอส่วนลดเอง (ห้าม)");
         if (/แถม/.test(reply) && /เครื่องเปล่า|เครื่องฟรี/.test(reply) && !/LEGO|TANK|SWAP|SWITCH|BOOST|POD CLEAR|VAZER|KS QUIK PRO|KIT|Big ?Pod|หัวน้ำยา/i.test(reply)) bad.push("🎁 แถมเครื่องเปล่าให้พอตใช้แล้วทิ้ง (ไม่มีโปรนี้)");
-        if (/ปลายทาง|COD/i.test(reply) && !/ไม่มี(บริการ)?(เก็บ)?ปลายทาง|ไม่รับปลายทาง/.test(reply)) bad.push("💵 พูดถึงเก็บปลายทาง (ร้านไม่มี)");
+        if (/ปลายทาง|COD/i.test(reply) && !/ไม่มี[^\n]{0,20}ปลายทาง|ไม่รับ[^\n]{0,20}ปลายทาง|ไม่สามารถ[^\n]{0,20}ปลายทาง/.test(reply)) bad.push("💵 พูดถึงเก็บปลายทาง (ร้านไม่มี)");
         const pushed = soldOutModels.filter(mm => reply.indexOf(mm) !== -1 && !/หมด|รอของ|ของเข้า/.test(reply));
         if (pushed.length) bad.push("📦 เสนอรุ่นที่หมดเกลี้ยง: " + pushed.slice(0, 3).join(", "));
         // การ์ด?
@@ -928,6 +928,9 @@ export default {
             card = { รายการ: c.rows.map(r => r.label + " = " + r.line), ยอดสินค้า: c.goods, ค่าส่ง: c.ship, รวม: c.total };
             const wrong = items.filter(it => { let q = null; try { q = findStockForItem(sm, it.model, it.flavor); } catch (e) {} return q !== null && q <= buf; });
             if (wrong.length) bad.push("❌ ออกการ์ดสินค้าที่หมด: " + wrong.map(x => x.model + " " + x.flavor).join(", "));
+            const nrm2 = (x) => String(x || "").toLowerCase().replace(/[\s%()\-\.]/g, "");
+            const ghost2 = items.filter(it => it.flavor && nrm2(it.flavor).length >= 2 && nrm2(t).indexOf(nrm2(it.flavor)) === -1);
+            if (ghost2.length) bad.push("👻 กุกลิ่นเองแล้วออกการ์ด (ลูกค้าไม่ได้บอก): " + ghost2.map(x => x.model + " " + x.flavor).join(", "));
           } else bad.push("🧾 มีบล็อกทวนคำสั่งซื้อ แต่อ่านรายการไม่ออก");
         }
         const qr = buildQuickReply(reply, t, sm, buf);
@@ -1775,6 +1778,37 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       } else if (outOfStock) {
         await lineReply(TOKEN, replyToken, L("outStock", LANG, outOfStock.model, outOfStock.flavor) || ("ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕"), userId);
       } else if (items.length) {
+        // 🛑 กันจีทู "กุกลิ่น/จำนวน" ขึ้นมาเอง แล้วเด้งการ์ดใส่ลูกค้า
+        // เคสจริง: ลูกค้าถาม "มาโบ มีกลิ่นไรบ้าง" / "ราคาส่งยกลัง" → จีทูเด้งการ์ด "องุ่น x1" ทั้งที่ไม่เคยสั่ง
+        // กติกา: ทุกกลิ่นในการ์ด ต้องเคยปรากฏในข้อความที่ "ลูกค้าพิมพ์เอง" (ย้อนหลัง 8 ข้อความ) เท่านั้น
+        try {
+          const custSaid = [String(text || "")].concat(
+            history.slice(-8).filter(h => h.role === "user").map(h => typeof h.content === "string" ? h.content : "")
+          ).join(" ");
+          const nrm = (x) => String(x || "").toLowerCase().replace(/[\s%()\-\.]/g, "");
+          const cn = nrm(custSaid);
+          const fromImage = /\[ลูกค้าส่งรูป/.test(String((userForHistory && userForHistory.content) || ""));
+          const okConfirm = /ยืนยัน|ตกลง|เอาเลย|สั่งเลย|จัดมา|รับเลย/.test(String(text || ""));
+          if (!fromImage && !okConfirm) {
+            const ghost = items.filter(it => it.flavor && nrm(it.flavor).length >= 2 && cn.indexOf(nrm(it.flavor)) === -1);
+            if (ghost.length) {
+              console.log("GHOST_ITEM_BLOCK " + ghost.map(g => g.model + "/" + g.flavor).join(","));
+              const mdl = ghost[0].model;
+              let list = "";
+              try {
+                const v = FLAVORS[mdl];
+                if (v && v.f.length) {
+                  const have = v.f.filter(f => { let q = null; try { q = findStockForItem(smForQR || {}, mdl, f); } catch (e) {} return !(q !== null && q <= bufForQR); });
+                  if (have.length) list = "\n\nกลิ่นที่มีตอนนี้ค่ะ 💕\n" + have.slice(0, 15).map(f => "• " + f).join("\n");
+                }
+              } catch (e) {}
+              await lineReply(TOKEN, replyToken,
+                "ขออนุญาตเช็คอีกครั้งนะคะ 🙏🏻 คุณลูกค้ารับ " + mdl + " กลิ่นไหน จำนวนกี่ชิ้นดีคะ" + list,
+                userId, buildQuickReply("รับ " + mdl + " กลิ่นไหนดีคะ", text, smForQR, bufForQR));
+              return;
+            }
+          }
+        } catch (e) {}
         // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
         let expFee = null;
         try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; } } } catch (e) {}
