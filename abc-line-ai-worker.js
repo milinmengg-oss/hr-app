@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-27-g1-quickreply";
+const BUILD = "2026-07-27-g2-qrfix";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -364,6 +364,7 @@ const STOCK_MODEL_ALIAS = {
   "terea indo": "TEREA IN",
   "terea malay": "TEREA MY"
 };
+let _qrStock = null, _qrBuf = 1;   // สต็อกล่าสุด (ให้ lineReply สร้างปุ่ม Quick Reply ได้ทุกเส้นทาง)
 let _stkIdx = null, _stkRef = null;
 function findStockForItem(sm, model, flavor) {
   if (!flavor) return null;
@@ -864,6 +865,20 @@ export default {
       return new Response("จีทูรู้จัก " + Object.keys(FLAVORS).length + " รุ่น / " + sku + " กลิ่น-สี\n\n" + lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
     }
     // 🔄 สั่งซิงก์สต็อกจากไฟล์ฐานเดี๋ยวนี้: /syncstock  (ทำวันละครั้งอัตโนมัติอยู่แล้ว)
+    // 🔎 เทสปุ่ม Quick Reply ว่าจะขึ้นปุ่มอะไร: /qrtest?t=ข้อความที่จีทูตอบ
+    if (url0.pathname === "/qrtest") {
+      let sm = null, bf = 1;
+      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) {}
+      const t = url0.searchParams.get("t") || "";
+      const q = buildQuickReply(t, url0.searchParams.get("u") || "", sm, bf);
+      return new Response(JSON.stringify({
+        build: BUILD,
+        ข้อความที่ทดสอบ: t,
+        จำนวนปุ่ม: q ? q.items.length : 0,
+        ปุ่ม: q ? q.items.map(x => x.action.label) : [],
+        มีสต็อกในระบบ: sm ? Object.keys(sm).length : 0
+      }, null, 1), { headers: { "content-type": "application/json; charset=utf-8" } });
+    }
     if (url0.pathname === "/syncstock") {
       const out = await syncStockBaseline(env, true);
       return new Response(JSON.stringify(out, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
@@ -1558,6 +1573,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
       } catch (e) {}
       smForQR = smForHint; bufForQR = bufForHint;   // เก็บไว้ให้ปุ่ม Quick Reply ใช้ตอนส่งข้อความ
+      _qrStock = smForHint; _qrBuf = bufForHint;
       const hint = aliasHint(text) + flavorHint(text, smForHint, bufForHint) + brandHint(text, smForHint, bufForHint);
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
       reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-10), { role: "user", content: text + hint }]);
@@ -1916,14 +1932,15 @@ function buildQuickReply(reply, userText, sm, buf) {
   try {
     const r = String(reply || ""), u = String(userText || "");
     if (/ทวนคำสั่งซื้อ|เลขบัญชี|ยืนยันรายการ/.test(r)) return null;   // ตอนออกการ์ด ไม่ต้องมีปุ่ม
-    // 1) จีทูถามจำนวน
-    if (/กี่ชิ้น|กี่แท่ง|กี่หัว|กี่อัน|กี่กล่อง|จำนวนเท่าไหร่|เอากี่/.test(r))
+    const askFlavor = /กลิ่นไหน|กลิ่นอะไร|สนใจกลิ่น|เลือกกลิ่น|สีไหน|สีอะไร|รสไหน/.test(r);
+    // 1) จีทูถามจำนวน (ถ้าถามกลิ่นมาด้วย ให้ปุ่มกลิ่นสำคัญกว่า ข้ามไปข้อ 3)
+    if (!askFlavor && /กี่ชิ้น|กี่แท่ง|กี่หัว|กี่อัน|กี่กล่อง|จำนวนเท่าไหร่|เอากี่|กี่ตัว/.test(r))
       return qrItems(["1", "2", "3", "4", "5", "10", "20"]);
     // 2) จีทูถามวิธีจัดส่ง
     if (/จัดส่งแบบไหน|รับแบบไหน|ส่งแบบไหน|เลือกการจัดส่ง/.test(r))
       return qrItems(["ส่งพัสดุธรรมดา", "ส่งด่วน กทม.", "ค่าส่งเท่าไหร่"]);
     // 3) จีทูถามกลิ่น → ยิงปุ่มกลิ่นที่ "มีของจริง" ของรุ่นที่กำลังคุยกันอยู่
-    if (/กลิ่นไหน|กลิ่นอะไร|สนใจกลิ่น|เลือกกลิ่น|สีไหน|สีอะไร/.test(r) && sm) {
+    if (askFlavor && sm) {
       const B = (typeof buf === "number") ? buf : 1;
       let model = null;
       for (const k of FLAVOR_KEYS) { if (normTH(r + " " + u).indexOf(normTH(k)) !== -1) { model = k; break; } }
@@ -1947,7 +1964,10 @@ async function lineReply(token, replyToken, text, userId, quick) {
   // ล้าง markdown ที่ LINE แสดงดิบ (**, ##) + จำกัด ~5000 ตัวอักษร/ข้อความ
   const msg = text.replace(/\*\*/g, "").replace(/(^|\n)#{1,6}\s+/g, "$1").slice(0, 4900);
   const one = { type: "text", text: msg };
-  if (quick && quick.items && quick.items.length) one.quickReply = quick;
+  let q = quick;
+  if (!q) { try { q = buildQuickReply(msg, "", _qrStock, _qrBuf); } catch (e) {} }
+  if (q && q.items && q.items.length) one.quickReply = q;
+  console.log("QR " + (one.quickReply ? one.quickReply.items.length + " ปุ่ม: " + one.quickReply.items.map(x => x.action.label).join(",") : "ไม่มีปุ่ม") + " | msg=" + msg.slice(0, 40));
   const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
