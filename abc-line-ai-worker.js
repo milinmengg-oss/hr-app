@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-j6-context";
+const BUILD = "2026-07-28-j7-fuzzy";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1962,7 +1962,21 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           const fromImage = /\[ลูกค้าส่งรูป/.test(String((userForHistory && userForHistory.content) || ""));
           const okConfirm = /ยืนยัน|ตกลง|เอาเลย|สั่งเลย|จัดมา|รับเลย/.test(String(msgText || ""));
           if (!fromImage && !okConfirm) {
-            const ghost = items.filter(it => it.flavor && nrm(it.flavor).length >= 2 && cn.indexOf(nrm(it.flavor)) === -1);
+            // 🔎 เทียบแบบยืดหยุ่น — ลูกค้าพิมพ์ย่อ/พิมพ์ตก เป็นเรื่องปกติมาก
+            // "พีชสตอ" ต้องแมตช์ "พีชสตรอว์เบอร์รี่" · "เบอรี่ชมพู" ต้องแมตช์ "เบอร์รี่ชมพู"
+            // บล็อกเฉพาะกลิ่นที่ "ไม่มีเค้าโครงร่วมกันเลย" กับสิ่งที่พูดคุยกันมา
+            const near = (flavor) => {
+              const f = nrm(flavor);
+              if (!f || f.length < 2) return true;
+              if (cn.indexOf(f) !== -1) return true;                       // ตรงเป๊ะ
+              for (let L = Math.min(f.length, 8); L >= 3; L--) {           // มีท่อนยาว ≥3 ตัวตรงกัน
+                for (let i = 0; i + L <= f.length; i++) {
+                  if (cn.indexOf(f.slice(i, i + L)) !== -1) return true;
+                }
+              }
+              return false;
+            };
+            const ghost = items.filter(it => it.flavor && nrm(it.flavor).length >= 2 && !near(it.flavor));
             if (ghost.length) {
               console.log("GHOST_ITEM_BLOCK " + ghost.map(g => g.model + "/" + g.flavor).join(","));
               // 🔁 ถ้าถามซ้ำคนเดิมเกิน 1 ครั้ง = วนอยู่ → ส่งต่อแอดมิน อย่าถามวนใส่ลูกค้า
