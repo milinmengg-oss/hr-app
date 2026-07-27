@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-26-d3-chatctl";
+const BUILD = "2026-07-27-d4-stocksync";
 
 const MODELS = [
   "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า (เทส V3.2 แล้วตอบมึน เลยกลับมาใช้ตัวนี้)
@@ -643,6 +643,7 @@ export default {
   // ⏰ Cron: ตามลูกค้าค้างจ่าย — เตือนออเดอร์ "รอโอน" ที่เกินเวลา (ต้องตั้ง Cron Trigger ใน Cloudflare)
   async scheduled(event, env, ctx) {
     ctx.waitUntil(followUpUnpaid(env));
+    ctx.waitUntil(syncStockBaseline(env, false));
   },
   async fetch(request, env, ctx) {
     const url0 = new URL(request.url);
@@ -656,6 +657,11 @@ export default {
       let sku = 0;
       for (const k in FLAVORS) { const v = FLAVORS[k]; sku += v.f.length; lines.push(k + " = " + v.p + " บาท | " + (v.f.length ? v.f.length + " กลิ่น/สี: " + v.f.join(" · ") : "(ไม่มีตัวเลือก)")); }
       return new Response("จีทูรู้จัก " + Object.keys(FLAVORS).length + " รุ่น / " + sku + " กลิ่น-สี\n\n" + lines.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+    }
+    // 🔄 สั่งซิงก์สต็อกจากไฟล์ฐานเดี๋ยวนี้: /syncstock  (ทำวันละครั้งอัตโนมัติอยู่แล้ว)
+    if (url0.pathname === "/syncstock") {
+      const out = await syncStockBaseline(env, true);
+      return new Response(JSON.stringify(out, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     // ⏱ สถานะความสดของสต็อก + ตั้งค่ากันขายของที่ข้อมูลเก่า: /stockage?key=...  (&set=24 = เปิดใช้ที่ 24 ชม. | &set=0 = ปิด)
     if (url0.pathname === "/stockage") {
@@ -1505,6 +1511,41 @@ async function askAI(apiKey, messages, models) {
 
 // ⏰ ตามลูกค้าค้างจ่าย: วนออเดอร์ "รอโอน" ที่เกินเวลา → ส่งข้อความเตือน (push)
 // เตือนครั้งที่ 1 หลัง 1 ชม. | ครั้งที่ 2 หลัง 6 ชม. | ชำระแล้ว/แอดมินดูแล = ข้าม
+// 🔄 ซิงก์สต็อกจากไฟล์ฐาน (export จาก XSelly) ที่เก็บไว้บน GitHub
+// ใช้เป็น "ตัวตั้งต้นความจริง" สำหรับกลิ่นที่ webhook ไม่เคยยิงมา (ของหมดตั้งแต่ก่อนเชื่อมระบบ/ตัดสต็อกด้วยมือ)
+// ⛔ ไม่ทับตัวเลขที่ webhook เพิ่งอัปเดต — ของสดกว่าเสมอ
+const STOCK_BASE_URL = "https://raw.githubusercontent.com/milinmengg-oss/hr-app/main/abc-stock-baseline.json";
+const SKUMAP_URL = "https://raw.githubusercontent.com/milinmengg-oss/hr-app/main/abc-skumap.json";
+async function syncStockBaseline(env, force) {
+  if (!env.CONV) return { skip: "no KV" };
+  const now = Date.now(), DAY = 86400000;
+  if (!force) {
+    const last = parseInt((await env.CONV.get("basesync_t")) || "0", 10);
+    if (now - last < DAY) return { skip: "ซิงก์ไปแล้วภายใน 24 ชม." }; // วันละครั้งพอ
+  }
+  const r = await fetch(STOCK_BASE_URL, { cf: { cacheTtl: 60 } });
+  if (!r.ok) return { error: "โหลดไฟล์ฐานไม่ได้ " + r.status };
+  const base = await r.json();
+  const stock = JSON.parse((await env.CONV.get("stockmap")) || "{}");
+  const ts = JSON.parse((await env.CONV.get("stockts")) || "{}");
+  let updated = 0, kept = 0, added = 0;
+  for (const nm in base) {
+    if (ts[nm]) { kept++; continue; }              // webhook เคยอัปเดตแล้ว = สดกว่า ไม่แตะ
+    if (!(nm in stock)) added++;
+    else if (stock[nm] !== base[nm]) updated++;
+    stock[nm] = base[nm];
+  }
+  await env.CONV.put("stockmap", JSON.stringify(stock));
+  await env.CONV.put("basesync_t", String(now));
+  // อัปเดตตาราง SKU→ชื่อ ด้วย (ให้ webhook ของสินค้าใหม่แมพชื่อถูก)
+  try {
+    const s = await fetch(SKUMAP_URL, { cf: { cacheTtl: 60 } });
+    if (s.ok) await env.CONV.put("skumap", await s.text());
+  } catch (e) {}
+  console.log("BASESYNC updated=" + updated + " added=" + added + " kept=" + kept);
+  return { อัปเดตให้ตรงไฟล์: updated, เพิ่มใหม่: added, คงค่าจาก_webhook: kept, รวมทั้งหมด: Object.keys(stock).length };
+}
+
 async function followUpUnpaid(env) {
   if (!env.CONV) return 0;
   const now = Date.now(), H = 3600000;
