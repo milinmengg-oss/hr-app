@@ -237,7 +237,7 @@ async function loadQueue(){
     return list.length;
   }catch(e){ return 0; }
 }
-async function markDone(uid){ try{ await fetch(q('/ctl/done&uid='+encodeURIComponent(uid)),{method:'POST'}); loadQueue(); refresh(); }catch(e){} }
+async function markDone(uid){ try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); loadQueue(); refresh(); }catch(e){} }
 
 async function loadOrders(){
   try{
@@ -267,7 +267,7 @@ async function loadOrders(){
 function copyOrder(id,btn){ navigator.clipboard.writeText($(id).innerText).then(function(){ btn.textContent='✅ คัดลอกแล้ว'; setTimeout(function(){btn.textContent='📋 คัดลอก';},1500); }).catch(function(){}); }
 function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(function(){btn.textContent=o;btn.classList.remove('ok');},1200); }).catch(function(){}); }
 function openChat(){ window.open('https://chat.line.biz/','_blank'); }
-async function orderDone(uid){ try{ await fetch(q('/ctl/orderdone&uid='+encodeURIComponent(uid)),{method:'POST'}); loadOrders(); }catch(e){} }
+async function orderDone(uid){ try{ await fetch(q('/ctl/orderdone?uid='+encodeURIComponent(uid)),{method:'POST'}); loadOrders(); }catch(e){} }
 
 /* ═══ แท็บ 2: แชท + บทสนทนา ═══ */
 function toggleOnlyOpen(){ ONLYOPEN=!ONLYOPEN; $('foltxt').textContent=ONLYOPEN?'แสดงเฉพาะที่แอดมินคุมอยู่':'แสดงทุกแชท'; renderChats(); }
@@ -298,8 +298,8 @@ async function showConv(uid,name){
   try{
     // ดึงทั้ง log ถาวร 30 วัน (หลัก) และความจำสด 1 ชม. (สำรอง)
     const rs=await Promise.all([
-      fetch(q('/ctl/log&uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};}),
-      fetch(q('/ctl/conv&uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};})
+      fetch(q('/ctl/log?uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};}),
+      fetch(q('/ctl/conv?uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};})
     ]);
     const lg=rs[0].log||[], m=rs[1]['บทสนทนา']||[];
     if(lg.length){
@@ -322,11 +322,11 @@ async function showConv(uid,name){
 function closeConv(){ $('convbox').classList.add('hidden'); }
 async function mute1(uid,btn){
   if(btn) btn.textContent='⏸…';
-  try{ await fetch(q('/ctl/mute1&uid='+encodeURIComponent(uid)),{method:'POST'});
+  try{ await fetch(q('/ctl/mute1?uid='+encodeURIComponent(uid)),{method:'POST'});
     $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
 }
 async function unmute1(uid){
-  try{ await fetch(q('/ctl/done&uid='+encodeURIComponent(uid)),{method:'POST'});
+  try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'});
     $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
 }
 
