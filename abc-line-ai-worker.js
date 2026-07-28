@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k7-shipbtn";
+const BUILD = "2026-07-28-k8-cardcheck";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -426,6 +426,34 @@ function computeOrder(items, expressFee) {
   return { rows, goods, ship, total: goods + ship, freeShip, express: false, gift: hasGift };
 }
 
+// 🔍 เช็คแบบเบา (k8): กลิ่นในการ์ดต้องมีอยู่จริงในรายการกลิ่นของรุ่นนั้น
+// เคสจริง 28/7: ลูกค้าพิมพ์ "เอาวอเท็ก" → การ์ด "RELX BOOST POD วอเท็ก x2" ออกทั้งที่ไม่มีกลิ่นนี้
+// (findStockForItem คืน null เมื่อหากลิ่นไม่เจอ = ข้ามเช็คสต็อก → กลิ่นมโนเลยหลุด)
+// กติกา: เทียบกับ FLAVORS ของรุ่น — ตรง/ย่อ/3 ตัวอักษรแรก ("พีชสตอ"→พีชสตรอว์เบอร์รี่) = ผ่าน
+// หาไม่เจอจริงๆ = ไม่ส่งการ์ด ให้ถามยืนยันกลิ่นแทน | error หรือรุ่นไม่มีรายการกลิ่น = ผ่านเสมอ (ห้ามบล็อกลูกค้า)
+function flavorKnown(model, flavor) {
+  try {
+    if (!flavor) return true;
+    if (/แถม|ฟรี|free/i.test(flavor)) return true;
+    const f = normTH(flavor);
+    if (f.length < 2) return true;
+    const p = findPrice(model);
+    const key = p ? p.key : String(model || "");
+    let list = null;
+    if (FLAVORS[key]) list = FLAVORS[key].f;
+    else {
+      const nm = normTH(key);
+      for (const k in FLAVORS) { const nk = normTH(k); if (nk.indexOf(nm) !== -1 || nm.indexOf(nk) !== -1) { list = FLAVORS[k].f; break; } }
+    }
+    if (!list || !list.length) return true;
+    for (const fl of list) {
+      const n = normTH(fl);
+      if (n.indexOf(f) !== -1 || f.indexOf(n) !== -1) return true;
+      if (f.length >= 3 && n.indexOf(f.slice(0, 3)) !== -1) return true;
+    }
+    return false;
+  } catch (e) { return true; }
+}
 // เช็คสต็อกของ 1 รายการ (รุ่น+กลิ่น) จาก stockmap → คืนจำนวนคงเหลือ (null = หาไม่เจอ ข้ามการเช็ค)
 // คืน max ของรายการที่แมตช์ (ถ้ามีกลิ่นใกล้เคียงที่ยังมีของ = ไม่บล็อก กันบล็อกผิด)
 // 🎯 แบบให้คะแนน (v2) — เลือก "คีย์ที่ตรงที่สุด" ไม่ใช่ "คีย์ที่ของเยอะสุด"
@@ -1928,6 +1956,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const outOfStock = (okItems.length === 0 && outList.length) ? outList[0] : null;
       const outNote2 = outList.length ? ("ขออภัยค่ะ 🙏🏻 " + outList.map(x => x.model + " กลิ่น" + x.flavor).join(", ") + " หมดชั่วคราวค่ะ (ตัดออกจากรายการให้แล้วนะคะ)\n\n") : "";
       if (okItems.length) items = okItems;
+      // 🔍 k8: กลิ่นไม่มีจริงในรุ่น ("วอเท็ก") → ไม่ออกการ์ด ถามยืนยันกลิ่นแทน
+      const badFlavor = notReady ? null : items.find(it => !flavorKnown(it.model, it.flavor));
+      if (badFlavor) {
+        await lineReply(TOKEN, replyToken, "ขอยืนยันกลิ่นนิดนึงนะคะ 🙏🏻 \"" + badFlavor.flavor + "\" ของ " + badFlavor.model + " หมายถึงกลิ่นไหนคะ\nรบกวนพิมพ์ชื่อกลิ่นเต็มๆ อีกครั้ง เดี๋ยวสรุปออเดอร์ให้ถูกต้องเลยค่ะ 💕", userId);
+        return;
+      }
       if (notReady) {
         // ถามให้ตรงรุ่น: เครื่อง = ถามสี/จำนวน | อื่นๆ = ถามกลิ่น/จำนวน
         const m0 = (items[0] && items[0].model) || "";
