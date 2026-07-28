@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k8-cardcheck";
+const BUILD = "2026-07-28-k9-strength";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -453,6 +453,34 @@ function flavorKnown(model, flavor) {
     }
     return false;
   } catch (e) { return true; }
+}
+// 🔎 k9: เคสจริง 28/7 — BOOST POD "องุ่น" มี 2 SKU (3% หมด / 5% มีของ) ตัวเช็คเลือกคีย์ที่ตรงสุดซึ่งหมด
+// เลยแจ้ง "หมดชั่วคราว" ทั้งที่อีกความแรงยังมีของ → ก่อนตัดว่าหมด เช็ค SKU ความแรงอื่นของรุ่น+กลิ่นเดียวกัน
+// เข้มเรื่องรุ่น: โคลน/KIT/หัวน้ำยา และเลข K ต้องตรง (กัน "แท้หมด→เอาโคลนมาแทน")
+// เข้มเรื่องกลิ่น: ตรงเป๊ะ หรือต่างแค่ตัวเลขความแรงต่อท้าย ("องุ่น"↔"องุ่น 3%") — "องุ่นเย็น" ไม่นับ
+// ถ้าลูกค้าระบุความแรงเอง ("องุ่น 3%") จะไม่หยิบความแรงอื่นแทน (เช็คทิศเดียว)
+function stockOtherStrength(sm, model, flavor) {
+  try {
+    { const a = STOCK_MODEL_ALIAS[String(model || "").trim().toLowerCase()]; if (a) model = a; }
+    const nF = (s) => (s || "").toLowerCase().replace(/[\s%()\-]|ml/g, "");
+    const nM = (s) => (s || "").toLowerCase().replace(/[\s%()\-]/g, "");
+    const rate = (s) => { const m = String(s).match(/(\d+)\s*k/i); return m ? m[1] : ""; };
+    const qual = (s) => (/\bkit\b|คิท/i.test(s) ? 1 : 0) + (/โคลน|clone/i.test(s) ? 2 : 0) + (/หัวน้ำยา|หัวพอต/.test(s) ? 4 : 0);
+    const nf = nF(flavor); if (nf.length < 2) return 0;
+    const nm = nM(model), mq = qual(model), mr = rate(model);
+    let best = 0;
+    for (const k in sm) {
+      const i = k.indexOf(" - "); if (i <= 0) continue;
+      const km = k.slice(0, i), ckf = nF(k.slice(i + 3));
+      if (!(ckf === nf || (ckf.indexOf(nf) === 0 && /^\d{1,2}$/.test(ckf.slice(nf.length))))) continue;
+      const knm = nM(km);
+      if (knm.indexOf(nm) === -1 && nm.indexOf(knm) === -1) continue;
+      if (qual(km) !== mq) continue;
+      const kr = rate(km); if (kr && mr && kr !== mr) continue;
+      if (sm[k] > best) best = sm[k];
+    }
+    return best;
+  } catch (e) { return 0; }
 }
 // เช็คสต็อกของ 1 รายการ (รุ่น+กลิ่น) จาก stockmap → คืนจำนวนคงเหลือ (null = หาไม่เจอ ข้ามการเช็ค)
 // คืน max ของรายการที่แมตช์ (ถ้ามีกลิ่นใกล้เคียงที่ยังมีของ = ไม่บล็อก กันบล็อกผิด)
@@ -1938,7 +1966,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           for (const it of items) {
             if (/แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม
             const q = findStockForItem(smChk, it.model, it.flavor);
-            if (q !== null && q <= buf) { outList.push(it); continue; }   // เหลือ ≤ กันชน = ถือว่าหมด
+            if (q !== null && q <= buf) {
+              // 🔎 k9: SKU ที่ตรงสุดหมด แต่ความแรงอื่นของรุ่น+กลิ่นเดียวกันยังมีของ → ไม่ตัดว่าหมด
+              if (stockOtherStrength(smChk, it.model, it.flavor) > buf) { okItems.push(it); continue; }
+              outList.push(it); continue;   // เหลือ ≤ กันชน = ถือว่าหมด
+            }
             if (maxAgeH && tsMap) { // ข้อมูลว่ามีของ แต่ไม่ได้อัปเดตมานาน → ให้แอดมินเช็คก่อน
               let t = 0;
               for (const nm in tsMap) if (normTH(nm).indexOf(normTH(it.model)) !== -1 && normTH(nm).indexOf(normTH(it.flavor)) !== -1) { t = Math.max(t, tsMap[nm]); }
