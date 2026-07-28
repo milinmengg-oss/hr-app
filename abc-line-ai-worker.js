@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k13-qrbtn";
+const BUILD = "2026-07-28-k14-noprice";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2055,6 +2055,14 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         let expFee = null;
         try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; } } } catch (e) {}
         const calc = computeOrder(items, expFee);
+        // 🛑 k14: การ์ดต้องมีราคาครบทุกรายการ — เคสจริง 28/7: ลูกค้าพิมพ์ "เอาครับ" → AI หยิบ
+        // "ไอคอส JP FUSION MENTHOL" จากบริบทเก่า ชื่อไม่ตรงตารางราคา → การ์ดยอดสินค้า 0 บาทหลุดออกไป
+        // แถวไหนหาราคาไม่เจอ (unknown) หรือยอดสินค้ารวม ≤ 0 = ไม่ออกการ์ด ถามทวนรุ่น/กลิ่น/จำนวนแทน
+        if (calc.rows.some(r => r.unknown && !r.free) || calc.goods <= 0) {
+          console.log("CARD_NOPRICE_BLOCK " + calc.rows.map(r => r.label).join("|").slice(0, 80));
+          await lineReply(TOKEN, replyToken, "ขออนุญาตทวนรายการอีกครั้งนะคะ 🙏🏻 รบกวนแจ้ง รุ่นสินค้า + กลิ่น/สี + จำนวน ที่ต้องการอีกทีค่ะ เดี๋ยวสรุปยอดที่ถูกต้องให้ทันทีเลยนะคะ 💕", userId);
+          return;
+        }
         // 🔁 กันการ์ดเด้งซ้ำ: ถ้าเป็นรายการเดิมเป๊ะที่เพิ่งส่งไปภายใน 30 นาที และลูกค้าไม่ได้ขอใหม่
         // (เคสจริง: ลูกค้าถาม "มีกลิ่นไรบ้าง" / "ขายอยู่มั้ย" แล้วจีทูเด้งการ์ดเดิมซ้ำ)
         const sig = calc.rows.map(r => r.label).join("|") + "#" + calc.total;
