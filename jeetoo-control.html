@@ -123,7 +123,7 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
           <span id="foltxt">แสดงทุกแชท</span><span id="folcnt" style="color:#8a8a8a;font-size:12px;"></span>
         </button>
         <div id="chatlist"></div>
-        <div class="muted">💡 แตะที่ชื่อลูกค้าเพื่อดูบทสนทนาที่จีทูคุยไป — ไม่ต้องไปเปิดหาใน LINE</div>
+        <div class="muted">💡 แตะที่ชื่อลูกค้าเพื่อดูบทสนทนาย้อนหลังได้ถึง 30 วัน — ไม่ต้องไปเปิดหาใน LINE</div>
       </div>
 
       <!-- ═══ แท็บ 3: ตั้งค่า ═══ -->
@@ -296,9 +296,23 @@ async function showConv(uid,name){
   $('convname').textContent='💬 '+(name||'ลูกค้า');
   $('convbody').innerHTML='กำลังโหลด…';
   try{
-    const d=await (await fetch(q('/ctl/conv&uid='+encodeURIComponent(uid)))).json();
-    const m=d['บทสนทนา']||[];
-    if(!m.length){ $('convbody').innerHTML='<div class="qempty">ยังไม่มีบทสนทนาเก็บไว้ (ระบบเก็บย้อนหลังไม่เกิน 1 ชม.)</div>'; return; }
+    // ดึงทั้ง log ถาวร 30 วัน (หลัก) และความจำสด 1 ชม. (สำรอง)
+    const rs=await Promise.all([
+      fetch(q('/ctl/log&uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};}),
+      fetch(q('/ctl/conv&uid='+encodeURIComponent(uid))).then(function(r){return r.json();}).catch(function(){return {};})
+    ]);
+    const lg=rs[0].log||[], m=rs[1]['บทสนทนา']||[];
+    if(lg.length){
+      const fmt=function(t){ const d=new Date(t); return d.getDate()+'/'+(d.getMonth()+1)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+      $('convbody').innerHTML='<div class="qempty" style="padding:4px 0 8px;">🗒 ประวัติย้อนหลัง '+lg.length+' ข้อความ (เก็บ 30 วัน)</div>'
+        +lg.map(function(x){
+          return '<div class="bwho" style="text-align:right">ลูกค้า · '+fmt(x.t)+'</div><div class="bub u">'+esc(x.u)+'</div>'
+            +'<div class="bwho">จีทู</div><div class="bub j">'+esc(x.b)+'</div>';
+        }).join('');
+      const cb=document.getElementById('convinner'); if(cb) cb.parentElement.scrollTop=cb.scrollHeight;
+      return;
+    }
+    if(!m.length){ $('convbody').innerHTML='<div class="qempty">ยังไม่มีบทสนทนาเก็บไว้ (log 30 วันเพิ่งเริ่มเก็บจากบิลด์ k10 — แชทใหม่จากนี้จะเห็นครบ)</div>'; return; }
     $('convbody').innerHTML=m.map(function(x){
       return '<div class="bwho" style="text-align:'+(x.who==='ลูกค้า'?'right':'left')+'">'+x.who+'</div>'
         +'<div class="bub '+(x.who==='ลูกค้า'?'u':'j')+'">'+esc(x.text)+'</div>';
