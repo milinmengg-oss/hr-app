@@ -1127,14 +1127,17 @@ function buildProdIndex(){
     (g.sku||[]).forEach(([name,qty])=>{ (idx[name]=idx[name]||{})[p]=(idx[name][p]||0)+qty; });
   }
   window.__prodIdx = idx;
+  // 📊 ยอดขายจริงเต็มจำนวน (จากข้อมูลขายทั้งหมด) — ข้อมูลรายจังหวัดเก็บแค่ท็อป 5 ของแต่ละจังหวัด
+  // ถ้าใช้ยอดรายจังหวัดมาบวกกัน จะได้ตัวเลขต่ำกว่าจริงมาก (เช่น MARBO โคลนติดท็อป 5 แค่บางจังหวัด)
+  const real = {};
+  try { (SALES.products||[]).forEach(x=>{ if(x && x.line) real[x.line] = (real[x.line]||0) + (x.q||0); }); } catch(e){}
+  window.__prodReal = real;
+  const totOf = (n) => (real[n] != null ? real[n] : Object.values(idx[n]).reduce((s,v)=>s+v,0));
   const sel = document.getElementById('prodPick');
   if(!sel) return;
-  const names = Object.keys(idx).sort((a,b)=>{
-    const sa=Object.values(idx[a]).reduce((s,v)=>s+v,0), sb=Object.values(idx[b]).reduce((s,v)=>s+v,0);
-    return sb-sa;
-  });
+  const names = Object.keys(idx).sort((a,b)=>totOf(b)-totOf(a));
   sel.innerHTML = '<option value="">— ยอดขายรวมทุกสินค้า —</option>' +
-    names.map(n=>{ const tot=Object.values(idx[n]).reduce((s,v)=>s+v,0); return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+' ('+fmtN(tot)+' ชิ้น)</option>'; }).join('');
+    names.map(n=>'<option value="'+n.replace(/"/g,'&quot;')+'">'+n+' ('+fmtN(totOf(n))+' ชิ้น)</option>').join('');
 }
 window.__selRegion = null;
 window.pickRegion = function(r){
@@ -1162,13 +1165,16 @@ window.pickProduct = function(name){
     const v = m[EN2TH[f.properties.name]] || 0;
     return v ? d3.interpolateRgb('#0d1a2e','#4da3ff')(Math.max(.15, Math.sqrt(v/mx))) : '#141414';
   });
-  const tot = arrAll.reduce((s,x)=>s+x[1],0);
+  const totMap = arrAll.reduce((s,x)=>s+x[1],0);                       // ยอดที่กระจายบนแผนที่ได้
+  const tot = (window.__prodReal && window.__prodReal[name] != null) ? window.__prodReal[name] : totMap;  // ยอดขายจริงเต็ม
+  const cover = tot > 0 ? Math.round(totMap * 100 / tot) : 100;         // แผนที่ครอบคลุมกี่ %
   const byRegion = {};
   arrAll.forEach(([p,v])=>{ const r=P2R[p]; if(r) byRegion[r]=(byRegion[r]||0)+v; });
   const regArr = Object.entries(byRegion).sort((a,b)=>b[1]-a[1]);
   const topReg = regArr[0]? regArr[0][0] : '-';
   const bcProd = '📣 '+name+' — สินค้าขายดีของภาค'+topReg+'!\nคนแถวคุณสั่งกันเยอะที่สุดในประเทศ 🔥\nสั่งเลยที่แชทนี้ พร้อมส่งทันที 🛵💨';
-  if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวม <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b>'
+  if(info) info.innerHTML = '<b style="color:#4da3ff;">'+name+'</b> — ขายรวมทั้งหมด <b>'+fmtN(tot)+' ชิ้น</b> · จังหวัดที่สั่งมากที่สุดคือ <b>'+(arr[0]?arr[0][0]:'-')+'</b>'
+    + (cover < 95 ? '<div style="color:#e0b64f;font-size:11.5px;margin-top:4px;">⚠️ แผนที่ด้านล่างแสดงได้ '+fmtN(totMap)+' ชิ้น ('+cover+'% ของยอดรวม) เพราะข้อมูลรายจังหวัดเก็บเฉพาะสินค้าขายดี 5 อันดับแรกของแต่ละจังหวัด</div>' : '')
     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">'
     + regArr.map(([r,v],i)=>'<span class="pill" onclick="pickRegion(\''+r+'\')" style="cursor:pointer;'+((window.__selRegion===r)?'background:#12304d;color:#4da3ff;border:1px solid #1f5fa5;':(i===0&&!window.__selRegion?'border:1px solid #1f5fa5;':''))+'font-size:12px;">'+({'เหนือ':'⛰️','อีสาน':'🌾','กลาง':'🏙️','ตะวันออก':'🌊','ตะวันตก':'🌄','ใต้':'🏝️'})[r]+' '+r+' '+fmtN(v)+'</span>').join('')
     + (window.__selRegion? '<span class="pill" onclick="pickRegion(null)" style="cursor:pointer;background:#2a1a13;color:#e0b64f;font-size:12px;">✕ ล้างตัวกรองภาค</span>':'')
