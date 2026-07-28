@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k9-strength";
+const BUILD = "2026-07-28-k10-chatlog";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -581,7 +581,9 @@ const NO_GUESS_RULE = "\n\n# ⛔ ห้ามเดา\n" +
 "- MARBO 9K แท้ 350 / โคลน 290 = คนละสินค้า ห้ามรวมเป็นช่วงราคา | เรื่องกฎหมาย ห้ามให้ความเห็น ส่งต่อแอดมิน\n" +
 "- ⛔ ห้ามขอเบอร์โทรลูกค้าเด็ดขาด (นโยบายร้าน) ที่อยู่จัดส่งไม่ต้องมีเบอร์\n" +
 "- ⛔ โปรส่งฟรีมีเฉพาะ: สูบทิ้ง ≥4 แท่ง | Big Pod/KIT ≥4 ชิ้น | หัวพอตเล็ก ≥10 หัว | MARBO โคลน ≥20 แท่ง\n" +
-"  ⛔⛔ IQOS/TEREA · น้ำยาขวด (SALTNIC/FREEBASE) · นิโคตินเพ้า **ไม่มีโปรส่งฟรี** ห้ามแต่งโปรให้เด็ดขาด (เช่นห้ามพูดว่า \'ซื้อ 2 คอต ส่งฟรี\')";
+"  ⛔⛔ IQOS/TEREA · น้ำยาขวด (SALTNIC/FREEBASE) · นิโคตินเพ้า **ไม่มีโปรส่งฟรี** ห้ามแต่งโปรให้เด็ดขาด (เช่นห้ามพูดว่า \'ซื้อ 2 คอต ส่งฟรี\')\n" +
+"- 🏷 เวลาแนะนำ/ลิสต์กลิ่น: ใช้ **ชื่อกลิ่นภาษาไทยตรงตามรายการร้านเท่านั้น** ห้ามแปลเป็นอังกฤษ ห้ามตั้งชื่อกลิ่นเอง (เช่น ห้ามพูด \'Mango Tango\' / \'Watermelon Ice\' — ร้านใช้ชื่อ แตงโม, บลูเบอร์รี่มิ้นต์)\n" +
+"- ⛔ RELX BOOST POD **ไม่มีชุด KIT** — มีแต่ หัว 350 บาท กับ เครื่อง RELX CREATOR 20K 250 บาท แยกกัน ห้ามเสนอชุด KIT/ราคา 499 ของ BOOST POD";
 const SHIP_MSG = "รูปแบบการจัดส่งของร้าน ABC 🚚\n\n📦 ขนส่งเอกชน (พัสดุปกติ)\n• ค่าส่ง 40 บาท ทั่วประเทศ\n• ได้รับภายใน 2-3 วัน\n• 🎁 เข้าโปร (เช่น สูบทิ้ง 4 แท่ง) ส่งฟรี!\n\n🛵 ส่งด่วน\n• เฉพาะ กทม. และปริมณฑล\n• ค่าส่งตามระยะทาง (แชร์โลเคชั่นให้แอดมินเช็คราคาค่ะ)\n• ได้รับภายใน 1-3 ชม.\n\nสนใจสั่งสินค้าหรือรับแบบไหน แจ้งแอดมินได้เลยนะคะ 💕";
 // 📍 ค่าส่งด่วนตามระยะทาง (สูตรเดียวกับมินิแอพ) — ร้านอยู่ BTS สุรศักดิ์
 const SHOP_LOC = { lat: 13.7196, lng: 100.5215 };
@@ -1233,6 +1235,16 @@ export default {
           }));
           return J({ uid, name, จำนวนข้อความ: msgs.length, บทสนทนา: msgs });
         }
+        // 🗒 k10: log แชทถาวร 30 วัน — ?uid=... อ่านรายคน | ไม่ใส่ uid = ลิสต์ uid ทั้งหมด
+        if (act === "log") {
+          const uid = url0.searchParams.get("uid") || "";
+          if (uid) {
+            let arr = []; try { arr = JSON.parse((await env.CONV.get("log:" + shop + ":" + uid)) || "[]"); } catch (e) {}
+            return J({ uid, จำนวน: arr.length, log: arr });
+          }
+          const list = await env.CONV.list({ prefix: "log:" + shop + ":" });
+          return J({ คน: list.keys.map(k => k.name.split(":").pop()) });
+        }
         // 📣 ประกาศ/โปรวันนี้ — แอดมินพิมพ์เอง จีทูเอาไปใช้ตอบทันที (ไม่ต้องแก้โค้ด)
         if (act === "notice") {
           if (request.method === "POST") {
@@ -1445,6 +1457,19 @@ export default {
   }
 };
 
+// 🗒 k10: log แชทถาวร 30 วัน (แยกจาก conv3 ที่หมดอายุใน 1 ชม.) — ไว้ขุดวิเคราะห์ศัพท์ลูกค้า/จุดตอบพลาดทีหลัง
+// best-effort ล้วนๆ: พังก็ข้าม ไม่กระทบการตอบ | เก็บ user+bot อย่างละไม่เกิน 300/400 ตัวอักษร สูงสุด 150 คู่/คน
+async function appendChatLog(env, shopId, userId, userMsg, botMsg) {
+  try {
+    if (!env.CONV) return;
+    const k = "log:" + shopId + ":" + userId;
+    let arr = [];
+    try { arr = JSON.parse((await env.CONV.get(k)) || "[]"); } catch (e) {}
+    arr.push({ t: Date.now(), u: String(userMsg || "").slice(0, 300), b: String(botMsg || "").slice(0, 400) });
+    if (arr.length > 150) arr = arr.slice(-150);
+    await env.CONV.put(k, JSON.stringify(arr), { expirationTtl: 2592000 });
+  } catch (e) {}
+}
 async function handleEvent(ev, env, TOKEN, shopId) {
   try {
     // ── เพิ่มเพื่อน (follow) → ส่งการ์ดต้อนรับ + ปุ่มเมนู ──
@@ -2079,6 +2104,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (env.CONV) {
         const next = [...history, userForHistory, { role: "assistant", content: reply }].slice(-20);
         await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+        // 🗒 k10: log ถาวร 30 วัน สำหรับขุดวิเคราะห์
+        await appendChatLog(env, shopId, userId, (typeof userForHistory.content === "string" ? userForHistory.content : "[รูปภาพ]"), reply);
       }
     } catch (e) { console.log("HIST_SKIP " + String(e).slice(0, 80)); }
     // 👥 จดรายชื่อแชทที่คุยอยู่ (ให้แอดมินเลือกปิดจีทูรายคนได้ในหลังบ้าน) — เก็บ 2 วัน
