@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k12-policy";
+const BUILD = "2026-07-28-k13-qrbtn";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1557,7 +1557,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               const pl = pay.split("\n").map(s => s.trim()).filter(Boolean);
               const bankName = (pl.find(l => /ธนาคาร|bank|kbank|กสิกร|กรุง|ไทยพาณิชย์|scb|ktb|bbl|ออมสิน|ทหารไทย|ttb|uob|ยูโอบี/i.test(l)) || pl[0] || "").replace(/เลข.*/, "").trim();
               const owner = (pl.find(l => /ชื่อ|นาย|นาง|น\.ส|หจก|บจก|บริษัท|ร้าน/.test(l) && l.indexOf(acctNo) === -1) || pl[pl.length - 1] || "").replace(/ชื่อบัญชี|ชื่อ\s*:?/, "").trim();
-              await lineFlex(TOKEN, replyToken, "สรุปรายการสั่งซื้อ + เลขบัญชี", payFlex(total, [bankName, acctNo, owner], acctNo), userId);
+              // k13: แนบปุ่มส่งสลิปใต้การ์ดเลขบัญชี — กดแล้วเปิดอัลบั้ม/กล้องทันที
+              await lineFlex(TOKEN, replyToken, "สรุปรายการสั่งซื้อ + เลขบัญชี", payFlex(total, [bankName, acctNo, owner], acctNo), userId, {
+                items: [
+                  { type: "action", action: { type: "cameraRoll", label: "🧾 ส่งสลิปจากอัลบั้ม" } },
+                  { type: "action", action: { type: "camera", label: "📷 ถ่ายสลิป" } },
+                ],
+              });
               return;
             }
           }
@@ -1646,7 +1652,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       // 🛵 ลูกค้าพูดถึงส่งด่วน/คิดค่าส่ง (โค้ดตอบเอง ไม่ผ่าน AI — กัน AI กุข้อมูล/ส่งต่อแอดมินผิดๆ)
       // "แกร็บ / ไรเดอร์ / ส่งด่วน / เมสเซนเจอร์" = บริการเดียวกันของร้าน — ต้องรับเรื่อง ห้ามปฏิเสธว่าไม่มีบริการ
       if (/แกร?[็ๆ]?[บป]|grab|ไรเดอร์|rider|มอเตอร์ไซค์|วินมอไซ|เมสเซนเจอร์|messenger|ลาลามูฟ|lalamove/i.test(t)
-          || /^(ส่งด่วน|เอาส่งด่วน|ด่วน|คิดค่าส่ง|เช็คค่าส่ง|คิดค่าส่งด่วน|เช็คค่าส่งด่วน|ค่าส่งด่วน)[\s!.?]*$/.test(t)) {
+          || /^(ส่งด่วน(\s*กทม\.?)?|เอาส่งด่วน|ด่วน|คิดค่าส่ง|เช็คค่าส่ง|คิดค่าส่งด่วน|เช็คค่าส่งด่วน|ค่าส่งด่วน)[\s!.?]*$/.test(t)) {   // k13: รองรับปุ่ม "ส่งด่วน กทม."
         let exp = null;
         try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) exp = JSON.parse(ex); } } catch (e) {}
         if (exp && typeof exp.fee === "number") {
@@ -2328,6 +2334,12 @@ function buildQuickReply(reply, userText, sm, buf) {
     // เหลือเฉพาะ "วิธีจัดส่ง" ที่เป็นตัวเลือกตายตัว 2-3 อย่าง กดแล้วจบเร็วจริง
     if (/จัดส่งแบบไหน|รับแบบไหน|ส่งแบบไหน|เลือกการจัดส่ง/.test(r))
       return qrItems(["ส่งพัสดุธรรมดา", "ส่งด่วน กทม.", "ค่าส่งเท่าไหร่"]);
+    // 📍 k13: จีทูขอโลเคชั่น → แนบปุ่มแชร์โลเคชั่น กดปุ๊บหน้าปักหมุดเด้งเลย (ลูกค้าไม่ต้องหาเมนูเอง)
+    if (/แชร์โลเคชั่น|ปักหมุด|แชร์ตำแหน่ง|ส่งโลเคชั่น/.test(r))
+      return { items: [
+        { type: "action", action: { type: "location", label: "📍 แชร์โลเคชั่น" } },
+        { type: "action", action: { type: "message", label: "ส่งพัสดุธรรมดาแทน", text: "ส่งพัสดุธรรมดา" } },
+      ] };
   } catch (e) {}
   return null;
 }
@@ -2477,8 +2489,9 @@ function payFlex(total, bankLines, acctNo) {
     ] }
   };
 }
-async function lineFlex(token, replyToken, altText, contents, userId) {
+async function lineFlex(token, replyToken, altText, contents, userId, quick) {
   const msg = { type: "flex", altText: altText.slice(0, 400), contents };
+  if (quick && quick.items && quick.items.length) msg.quickReply = quick; // k13: ปุ่มลัดใต้การ์ด (เช่น ส่งสลิปจากอัลบั้ม)
   const r = await fetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
