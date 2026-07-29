@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-29-k17-puff";
+const BUILD = "2026-07-29-k18-puffcount";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1962,6 +1962,37 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       _qrStock = smForHint; _qrBuf = bufForHint;
       // k17: ลูกค้าเรียกจำนวนพัฟว่า "คำ" — "มาโบ 9000 คำ" = MARBO 9K · "อินฟี่ 20000 คำ" = INFY 20K
       const textH = puffToK(text);
+      // 💨 k18: "สูบได้กี่คำ / อยู่ได้นานมั้ย" → ตอบตายตัวจากเลข K ท้ายชื่อรุ่น (ห้ามให้ AI เดา)
+      // เคสจริง 29/7: จีทูตอบ "MARBO 9K สูบได้ 500-600 คำ" ทั้งที่ 9K = 9,000 คำ
+      if (/กี่คำ|กี่พัฟ|กี่\s*puff|สูบได้กี่|สูบได้นาน|อยู่ได้นาน|ใช้ได้นาน|อยู่ได้กี่วัน|ใช้ได้กี่วัน/i.test(text)) {
+        let mdl = null;
+        const cand = [textH, textH.replace(/\s+/g, "")];
+        // 1) ยี่ห้อ + จำนวนคำ ("อินฟี่ 20000 คำ" → INFY 20K) — ต้องมาก่อน เพราะ "อินฟี่" เฉยๆ ชี้ไปหัวพอต INFY PLUS
+        const kNum = (textH.match(/(\d{1,2})\s*K\b/i) || [])[1];
+        if (kNum) {
+          let bk = null;
+          for (const [re, b] of BRAND_TH) if (re.test(textH)) { bk = b; break; }
+          if (bk) {
+            const re = new RegExp("(^|[^0-9])" + kNum + "\\s*K\\b", "i");
+            let best = null;
+            for (const k in FLAVORS) if (k.toUpperCase().indexOf(bk) !== -1 && re.test(k) && (!best || k.length < best.length)) best = k;
+            if (best) mdl = best;
+          }
+        }
+        if (!mdl) for (const [re, key] of TH_MODEL) { if (cand.some(c => re.test(c))) { mdl = key; break; } }
+        if (!mdl) for (const k of FLAVOR_KEYS) if (normTH(textH).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+        if (!mdl && history.length) {   // ถามต่อจากรุ่นที่เพิ่งคุยกัน
+          const last = String(history[history.length - 1].content || "");
+          for (const k of FLAVOR_KEYS) if (normTH(last).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+        }
+        const km = mdl && String(mdl).match(/(\d{1,2})\s*K\b/i);
+        if (km) {
+          const puff = parseInt(km[1], 10) * 1000;
+          await lineReply(TOKEN, replyToken,
+            mdl + " สูบได้ประมาณ " + puff.toLocaleString("en-US") + " คำค่ะ 💨\n(เลข " + km[1] + "K ท้ายชื่อรุ่น = จำนวนคำที่สูบได้)\n\nจะอยู่ได้กี่วันขึ้นอยู่กับการสูบของแต่ละคนนะคะ 🙏🏻\nสนใจกลิ่นไหนดีคะ 💕", userId);
+          return;
+        }
+      }
       const hint = aliasHint(textH) + flavorHint(textH, smForHint, bufForHint) + brandHint(textH, smForHint, bufForHint);
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
       // ⏱ เส้นตาย 32 วิ: ถ้า AI ช้ากว่านี้ ให้ตอบข้อความคั่นแทนการเงียบใส่ลูกค้า
