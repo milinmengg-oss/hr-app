@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-28-k15-payguard";
+const BUILD = "2026-07-29-k16-flavorguard";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -124,8 +124,11 @@ function flavorHint(text, sm, buf){
   const t = normTH(text);
   const hits = [];
   const add = (k) => { if (k && FLAVORS[k] && hits.indexOf(k) === -1 && hits.length < 3) hits.push(k); };
-  for (const [re, key] of TH_MODEL) if (re.test(String(text||""))) add(key);   // คำไทย/สะกดแบบลูกค้า
+  // k16: เทียบทั้งข้อความดิบและแบบตัดเว้นวรรค — ลูกค้าพิมพ์ "บูส พอต" (มีเว้นวรรค) ต้องจับได้เหมือน "บูสพอต"
+  const raw = String(text || ""), nosp = raw.replace(/\s+/g, "");
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp)) add(key);   // คำไทย/สะกดแบบลูกค้า
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
+  _hintModels = hits.slice();   // k16: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
   if (!hits.length) return "";
   const B = (typeof buf === "number") ? buf : 1;
   const qtyOf = (model, flavor) => {
@@ -462,6 +465,46 @@ function flavorKnown(model, flavor) {
     }
     return false;
   } catch (e) { return true; }
+}
+// 🛑 k16: ตัวกรองบังคับ "ห้ามกลิ่นที่ไม่มีจริงหลุดออกไปหาลูกค้า"
+// เคสจริง 29/7: ลูกค้าถาม "บูส พอต องุ่นมีมั้ย" → จีทูเสนอ องุ่นแดง/องุ่นแอปเปิ้ล/องุ่นมิ้นต์ (ไม่มีสักตัวใน BOOST POD)
+// พอโดนทักว่าไม่มี ยังยืนยันว่ามีอีก + มโนเพิ่ม (มิ้นต์บริสุทธิ์ แอปเปิ้ลมิ้นต์) → กฎใน prompt เอาไม่อยู่
+// วิธี: สแกนบรรทัดที่เป็น "รายการกลิ่น" (ขึ้นต้นด้วย - • ✅ อีโมจิ) แล้วเทียบกับกลิ่นจริง
+//   - ถ้ารู้ว่ากำลังพูดถึงรุ่นไหน (จาก flavorHint) → ต้องเป็นกลิ่นของรุ่นนั้นเท่านั้น (เข้มสุด)
+//   - ถ้าไม่รู้รุ่น → อย่างน้อยต้องเป็นกลิ่นที่มีอยู่จริงในร้าน
+// ปลอดภัย: ข้ามบรรทัดที่มีตัวเลข/ราคา/เงื่อนไข และบรรทัดยาว (คำบรรยาย) — ตัดเฉพาะที่ดูเป็นชื่อกลิ่นล้วนๆ
+const FLAVOR_ALL = (() => { const s = new Set(); for (const k in FLAVORS) for (const f of FLAVORS[k].f) s.add(normTH(f)); return s; })();
+const MODEL_WORDS = (() => { const s = new Set(); for (const k in FLAVORS) s.add(normTH(k)); for (const b in BRAND_OF) s.add(normTH(b)); return s; })();
+let _hintModels = [];   // รุ่นที่ระบบตรวจพบว่ากำลังคุยถึงรอบนี้ (ตั้งค่าใน flavorHint)
+function stripFakeFlavors(reply) {
+  try {
+    let allow = null;   // null = เทียบกับกลิ่นทั้งร้าน | Set = เทียบเฉพาะรุ่นที่กำลังคุย
+    if (_hintModels.length) {
+      allow = new Set();
+      for (const k of _hintModels) if (FLAVORS[k]) for (const f of FLAVORS[k].f) allow.add(normTH(f));
+      if (!allow.size) allow = null;
+    }
+    const skipWord = /บาท|ค่าส่ง|ส่งฟรี|ชิ้น|แท่ง|หัว|กล่อง|เครื่อง|ลัง|คอต|ตลับ|โปร|ครบ|วัน|ชม|นาที|คลิป|วิดีโอ|ที่อยู่|ชื่อผู้รับ|เบอร์|บัญชี|โอน|เคลม|สั่ง|แถม|ลิงก์|http|kit|%/i;
+    let dropped = 0;
+    const out = reply.split("\n").filter(line => {
+      const m = line.match(/^\s*(?:[-•●*▪✅❌☑️👉]|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]️?)\s*(.+?)\s*$/u);
+      if (!m) return true;
+      let t = m[1].replace(/^[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️\s]+/u, "");   // อีโมจิซ้อนหน้า
+      t = t.replace(/\s*[\(（][^)）]*[\)）]\s*/g, "").split(/\s+[-–—]\s+/)[0].trim();     // ตัดวงเล็บ/คำบรรยายหลังขีด
+      if (!t || t.length > 20) return true;              // ยาว = คำบรรยาย ไม่ใช่ชื่อกลิ่น → ปล่อย
+      if (/\d/.test(t) || skipWord.test(t)) return true; // มีตัวเลข/คำเงื่อนไข → ไม่ใช่ชื่อกลิ่น → ปล่อย
+      const n = normTH(t);
+      if (!n || n.length < 3) return true;
+      for (const w of MODEL_WORDS) if (w.indexOf(n) !== -1 || n.indexOf(w) !== -1) return true;  // ชื่อรุ่น/แบรนด์ → ปล่อย
+      const ok = allow ? allow.has(n) : FLAVOR_ALL.has(n);
+      if (ok) return true;
+      dropped++;
+      console.log("FAKE_FLAVOR_DROP " + t);
+      return false;
+    }).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    if (!dropped) return reply;
+    return out + "\n\nถ้าอยากได้กลิ่นไหนเป็นพิเศษ พิมพ์ชื่อกลิ่นมาได้เลยนะคะ เดี๋ยวเช็คให้ทันทีค่ะ 💕";
+  } catch (e) { return reply; }
 }
 // 🔎 k9: เคสจริง 28/7 — BOOST POD "องุ่น" มี 2 SKU (3% หมด / 5% มีของ) ตัวเช็คเลือกคีย์ที่ตรงสุดซึ่งหมด
 // เลยแจ้ง "หมดชั่วคราว" ทั้งที่อีกความแรงยังมีของ → ก่อนตัดว่าหมด เช็ค SKU ความแรงอื่นของรุ่น+กลิ่นเดียวกัน
@@ -1948,6 +1991,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       // 2.5) 💸 ห้ามราคาเป็นช่วง — MARBO แท้/โคลน คนละตัว (เคสจริง: จีทูเขียน "MARBO 9K (290-350 บาท)")
       reply = reply.replace(/MARBO\s*9K([^\n]{0,14}?)\(?\s*\d{2,4}\s*[-–—]\s*\d{2,4}\s*บาท\s*\)?/gi,
         "MARBO 9K (แท้ 350 บาท / โคลนเทียบแท้ 290 บาท)");
+      // 2.7) 🛑 k16: ตัดกลิ่นที่ไม่มีจริงออกก่อนส่งถึงลูกค้า
+      reply = stripFakeFlavors(reply);
       // 3) 🔒 ห้ามใบ้ระดับสต็อก — บอกได้แค่ "มี" หรือ "หมด" เท่านั้น (กฎความลับของร้าน)
       reply = reply
         .replace(/\s*\(?\s*(เหลือ(จำนวน)?จำกัด|จำนวนจำกัด|เหลือน้อย|ใกล้หมด|เหลือไม่กี่(ชิ้น|อัน|แท่ง|หัว)|มีจำนวนจำกัด|สต็อกเหลือน้อย|ของใกล้หมด|รีบก่อนหมด)\s*\)?/g, "")
