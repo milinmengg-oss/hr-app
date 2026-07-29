@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-29-k18-puffcount";
+const BUILD = "2026-07-29-k19-imgmem";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1910,7 +1910,16 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         await lineReply(TOKEN, replyToken, customerMsg, userId);
         return;
       }
-      userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้]" };
+      // 🖼 k19: จำ "รุ่นที่เห็นในรูป" ไว้ในประวัติด้วย — ไม่งั้นพอลูกค้าตอบต่อ ("เอา 2 ตัวเลย")
+      // จีทูจะไม่รู้ว่ารูปนั้นมีอะไร แล้วหยิบรุ่นมั่วมาตอบ (เคสจริง 29/7: รูป JOIWAY+VOSOON → ตอบ ESKO BAR SWITCH)
+      let seen = [];
+      try {
+        const rn = normTH(reply);
+        for (const k of FLAVOR_KEYS) { if (seen.length >= 6) break; if (rn.indexOf(normTH(k)) !== -1) seen.push(k); }
+      } catch (e) {}
+      userForHistory = { role: "user", content: "[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้"
+        + (seen.length ? " — รุ่นที่อยู่ในรูป: " + seen.join(", ") + " ⛔ ถ้าลูกค้าพูดถึง 'ในรูป/ตัวนี้/2 ตัว' ให้ใช้ได้เฉพาะรุ่นในลิสต์นี้เท่านั้น ห้ามหยิบรุ่นอื่น" : "")
+        + "]" };
     } else {
       // ── ข้อความปกติ ──
       const text = ev.message.text.trim();
