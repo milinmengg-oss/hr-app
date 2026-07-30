@@ -114,7 +114,7 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 <div id="pages"></div>
 <div class="bar"><div class="in">
   <button class="b2" id="backbtn" style="display:none" onclick="go('home')">‹ หน้าหลัก</button>
-  <a class="b1" href="#" onclick="history.back();return false">💬 กลับแชทไลน์เพื่อสั่งซื้อ</a>
+  <a class="b1" href="#" onclick="if(history.length>1)history.back();setTimeout(()=>{try{window.close()}catch(e){}},350);return false">💬 กลับแชทไลน์เพื่อสั่งซื้อ</a>
 </div></div>
 <div id="sheetbg" onclick="closeSheet()"></div>
 <div id="sheet">
@@ -253,12 +253,13 @@ function closeSheet(){ document.getElementById("sheet").classList.remove("on"); 
 async function orderGo(){
   try{ await navigator.clipboard.writeText(SHEETMSG); }
   catch(e){ const t=document.createElement("textarea"); t.value=SHEETMSG; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
-  document.getElementById("sh_ok").textContent="✅ คัดลอกแล้ว — วางในช่องแชทแล้วกดส่งได้เลยค่ะ";
+  document.getElementById("sh_ok").textContent="✅ คัดลอกแล้ว — กำลังพากลับแชท…";
   setTimeout(()=>{
-    if(SHOPLINK[SHOP]){ location.href=SHOPLINK[SHOP]; }
-    else if(history.length>1){ history.back(); }
-    else { document.getElementById("sh_ok").textContent="✅ คัดลอกแล้ว — สลับกลับไปแอป LINE แล้ววางข้อความในแชทร้านได้เลยค่ะ"; }
-  },900);
+    if(SHOPLINK[SHOP]){ location.href=SHOPLINK[SHOP]; return; }
+    if(history.length>1) history.back();
+    setTimeout(()=>{ try{window.close()}catch(e){} },350);
+    setTimeout(()=>{ document.getElementById("sh_ok").textContent="✅ คัดลอกข้อความแล้วค่ะ — กดปุ่ม ✕ มุมบน เพื่อกลับแชท แล้ววางข้อความส่งได้เลย"; },800);
+  },700);
 }
 </script>
 </body>
