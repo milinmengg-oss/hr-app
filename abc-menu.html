@@ -100,7 +100,7 @@ CATS.forEach((c,i)=>{
     const im=IMG[m.id]?'<div class="mainimg"><img loading="lazy" src="'+IMG[m.id]+'" onerror="this.parentElement.innerHTML=\'<span class=noimg>ABC</span>\'"></div>':'<div class="mainimg"><span class="noimg">ABC</span></div>';
     h+='<div class="model" data-id="'+m.id+'"><div class="mhead"><b>'+m.n+'</b>'+(D.puff?'<span class="puff">'+D.puff+'</span>':'')+'<span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt" style="display:none"></span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div>';
     h+='<div class="dbox"><div class="dcol">';
-    if(TAGIMG[m.n]) h+='<img class="tagimg" loading="lazy" src="'+TAGIMG[m.n]+'" onerror="this.style.display=\\'none\\'">'; else if(D.tag) h+='<div class="tag"><small>จุดเด่น</small><b>'+D.tag+'</b></div>';
+    if(TAGIMG[m.n]) h+='<img class="tagimg" loading="lazy" src="'+TAGIMG[m.n]+'" onerror="this.style.display=\'none\'">'; else if(D.tag) h+='<div class="tag"><small>จุดเด่น</small><b>'+D.tag+'</b></div>';
     if(D.use) h+='<div class="use"><small>ใช้งานกับเครื่อง</small><b>'+D.use+'</b></div>';
     h+='</div>'+im+'</div>';
     if(m.f.length) h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'"><span class="fe">'+(FEM[f]||"🍃")+'</span><span class="t">'+f+"</span></span>").join("")+'</div>';
