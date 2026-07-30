@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-30-k25b-sku3";
+const BUILD = "2026-07-30-k26-flavorlist";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2113,6 +2113,49 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           await lineReply(TOKEN, replyToken,
             mdl + " สูบได้ประมาณ " + puff.toLocaleString("en-US") + " คำค่ะ 💨\n(เลข " + km[1] + "K ท้ายชื่อรุ่น = จำนวนคำที่สูบได้)\n\nจะอยู่ได้กี่วันขึ้นอยู่กับการสูบของแต่ละคนนะคะ 🙏🏻\nสนใจกลิ่นไหนดีคะ 💕", userId);
           return;
+        }
+      }
+      // 🌸 k26: "มีกลิ่นอะไรบ้าง" → ลิสต์กลิ่นที่มีของจริงจากสต็อกสด (ห้ามให้ AI แต่งประโยคเอง — เคสจริง 30/7: ตอบ "พร้อมส่ง" กับ "(หมดชั่วคราว)" ในข้อความเดียวจนลูกค้างง)
+      if (/มีกลิ่น(อะไร|ไหน|ใด)|กลิ่น(อะไร|ไหน)บ้าง|กลิ่นอะไรมั่ง|เหลือกลิ่น(อะไร|ไหน)|เหลืออะไรบ้าง|มีอะไรเหลือ|มีสีอะไรบ้าง|สีอะไรบ้าง|ครบทุกกลิ่น(มั้ย|ไหม)?|กลิ่นครบ(มั้ย|ไหม)|กลิ่น(อะไร|ไหน)หมด|หมดกลิ่น(อะไร|ไหน)|หมดอะไรบ้าง/i.test(text)) {
+        let mdl = null;
+        const cand = [textH, textH.replace(/\s+/g, "")];
+        for (const [re, key] of TH_MODEL) { if (cand.some(c => re.test(c))) { mdl = key; break; } }
+        if (!mdl) for (const k of FLAVOR_KEYS) if (normTH(textH).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+        if (!mdl && history.length) {   // ถามต่อจากรุ่นที่เพิ่งคุยกัน (ดูย้อน 4 ข้อความ)
+          for (let hi = history.length - 1; hi >= Math.max(0, history.length - 4) && !mdl; hi--) {
+            const last = String(history[hi].content || "");
+            for (const k of FLAVOR_KEYS) if (normTH(last).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+          }
+        }
+        if (!mdl) { await lineReply(TOKEN, replyToken, MENU_MSG, userId); return; }
+        if (mdl) {
+          // ถ้าบทสนทนาพูดถึงตัวโคลน/เทียบแท้ และรุ่นนี้มีเวอร์ชั่นโคลน → ใช้ตัวโคลน
+          const recentTxt = textH + " " + history.slice(-4).map(h => String(h.content || "")).join(" ");
+          if (/โคลน|เทียบแท้/.test(recentTxt) && FLAVORS[mdl + " (โคลน)"] && !/แท้(?!.*โคลน)/.test(textH)) mdl = mdl + " (โคลน)";
+          const fl = FLAVORS[mdl] && FLAVORS[mdl].f ? [...new Set(FLAVORS[mdl].f)] : [];
+          if (fl.length) {
+            const have = [], out = [];
+            for (const f of fl) {
+              const q = findStockForItem(smForHint, mdl, f);
+              if (q === null) { have.push(f); continue; }   // ไม่รู้จัก SKU → ไม่กล้าบอกหมด
+              if (q > bufForHint || stockOtherStrength(smForHint, mdl, f) > bufForHint) have.push(f); else out.push(f);
+            }
+            let msg;
+            if (!have.length) {
+              msg = "ขออภัยค่ะ ตอนนี้ " + mdl + " หมดชั่วคราวทุกกลิ่นเลยค่ะ 🙏🏻\nสนใจรุ่นใกล้เคียงไหมคะ เดี๋ยวอัญญาแนะนำให้ค่ะ 💕";
+            } else if (have.length > 15) {
+              msg = mdl + " ตอนนี้มีพร้อมส่ง " + have.length + " กลิ่นค่ะ 💕 เช่น\n" + have.slice(0, 12).map(f => "- " + f).join("\n") + "\n\nดูครบทุกกลิ่นแบบอัปเดตสดได้ที่เมนูนี้เลยค่ะ ✨\nhttps://cutt.ly/abc-menu\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ 💕";
+            } else {
+              msg = mdl + " กลิ่นที่มีพร้อมส่งตอนนี้ค่ะ 💕\n" + have.map(f => "- " + f).join("\n") + (out.length ? "\n\n(นอกจากนี้หมดชั่วคราวค่ะ 🙏🏻)" : "") + "\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ ✨";
+            }
+            await lineReply(TOKEN, replyToken, msg, userId);
+            if (env.CONV) {
+              const next = [...history, { role: "user", content: text }, { role: "assistant", content: msg }].slice(-20);
+              await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+              await appendChatLog(env, shopId, userId, text, msg);
+            }
+            return;
+          }
         }
       }
       const hint = aliasHint(textH) + flavorHint(textH, smForHint, bufForHint) + brandHint(textH, smForHint, bufForHint);
