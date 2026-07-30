@@ -100,6 +100,7 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 #sheet .cls{background:#26272e;color:#ccc;font-weight:400;font-size:13.5px;padding:10px}
 #sheet .copied{font-size:12.5px;color:#4ade80;text-align:center;margin-bottom:8px;min-height:16px}
 </style>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
 <body>
 <div class="page on" id="home">
@@ -114,7 +115,7 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 <div id="pages"></div>
 <div class="bar"><div class="in">
   <button class="b2" id="backbtn" style="display:none" onclick="go('home')">‹ หน้าหลัก</button>
-  <a class="b1" href="#" onclick="if(history.length>1)history.back();setTimeout(()=>{try{window.close()}catch(e){}},350);return false">💬 กลับแชทไลน์เพื่อสั่งซื้อ</a>
+  <a class="b1" href="#" onclick="if(typeof liff!=='undefined'&&liffOK&&liff.isInClient()){liff.closeWindow();return false}if(history.length>1)history.back();setTimeout(()=>{try{window.close()}catch(e){}},350);return false">💬 กลับแชทไลน์เพื่อสั่งซื้อ</a>
 </div></div>
 <div id="sheetbg" onclick="closeSheet()"></div>
 <div id="sheet">
@@ -136,6 +137,10 @@ const W="https://abc-line-ai.milin-mengg.workers.dev";
 // ร้านไหนส่งลิ้งเมนูให้ลูกค้า ให้เติม ?s=รหัสร้าน ท้ายลิ้ง เช่น ...abc-menu.html?s=v18
 // แล้วใส่ลิ้งไลน์ของร้านนั้นในตารางนี้ (ยังไม่ใส่ = ใช้วิธีย้อนกลับแชทเดิมอัตโนมัติ)
 const SHOPLINK={};
+// LIFF: เปิดผ่านลิ้ง liff.line.me แล้วปุ่มสั่งซื้อจะ "ปิดหน้าเมนูกลับแชทเดิม" ได้จริง
+const LIFFID=""; // ← ใส่ LIFF ID ตรงนี้ เช่น "1234567890-AbCdEfGh"
+let liffOK=false;
+if(LIFFID && window.liff){ liff.init({liffId:LIFFID}).then(()=>{liffOK=true;}).catch(()=>{}); }
 const SHOP=(new URLSearchParams(location.search).get("s")||localStorage.mshop||"").toLowerCase();
 if(new URLSearchParams(location.search).get("s")) localStorage.mshop=SHOP;
 const norm=s=>s.trim().replace(/\s+/g," ").toLowerCase();
@@ -255,6 +260,7 @@ async function orderGo(){
   catch(e){ const t=document.createElement("textarea"); t.value=SHEETMSG; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
   document.getElementById("sh_ok").textContent="✅ คัดลอกแล้ว — กำลังพากลับแชท…";
   setTimeout(()=>{
+    if(liffOK && liff.isInClient()){ try{ liff.closeWindow(); return; }catch(e){} }
     if(SHOPLINK[SHOP]){ location.href=SHOPLINK[SHOP]; return; }
     if(history.length>1) history.back();
     setTimeout(()=>{ try{window.close()}catch(e){} },350);
