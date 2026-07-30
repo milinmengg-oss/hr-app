@@ -41,6 +41,16 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 .tagimg{width:100%;border-radius:11px;display:block;border:1px solid #2e313a}
 .tag small{display:block;color:#9a9fa9;font-size:10px}
 .tag b{font-size:13.5px;font-weight:900}
+.spec{background:#15161b;border:1px solid #26272e;border-radius:11px;padding:9px 11px;display:flex;gap:14px}
+.spec .it{flex:1;text-align:center}
+.spec b{display:block;font-size:14px;font-weight:900}
+.spec small{font-size:9.5px;color:#9a9fa9}
+.promo{background:linear-gradient(110deg,#20240f,#2b3311);border:1px solid #4a5a1e;border-radius:11px;padding:9px 11px;font-size:11px;line-height:1.4;color:#d9f0a3}
+.promo small{display:block;font-size:9.5px;color:#9aa86e}
+.promo b{font-size:12.5px;font-weight:900;color:#dcff8a}
+.dbox{align-items:stretch}
+.dcol{justify-content:flex-start}
+.mainimg{min-height:0;max-height:300px}
 .use{background:#eafbe0;color:#14401f;border-radius:11px;padding:8px 11px;font-size:11px;line-height:1.4}
 .use small{display:block;font-size:9.5px;color:#3f7a4e}
 .use b{font-size:12.5px;font-weight:900}
@@ -102,6 +112,12 @@ CATS.forEach((c,i)=>{
     h+='<div class="dbox"><div class="dcol">';
     if(TAGIMG[m.n]) h+='<img class="tagimg" loading="lazy" src="'+TAGIMG[m.n]+'" onerror="this.style.display=\'none\'">'; else if(D.tag) h+='<div class="tag"><small>จุดเด่น</small><b>'+D.tag+'</b></div>';
     if(D.use) h+='<div class="use"><small>ใช้งานกับเครื่อง</small><b>'+D.use+'</b></div>';
+    var sp='';
+    if(D.puff) sp+='<div class="it"><b>'+D.puff.replace(' คำ','')+'</b><small>คำ (puffs)</small></div>';
+    if(m.f.length) sp+='<div class="it"><b>'+m.f.length+'</b><small>กลิ่น/สี</small></div>';
+    if(sp) h+='<div class="spec">'+sp+'</div>';
+    var PR={'หัวน้ำยา':'ครบ 10 หัว ส่งฟรี','BIG POD':'ครบ 4 ชิ้น ส่งฟรี','พอตใช้แล้วทิ้ง':'ครบ 4 แท่ง ส่งฟรี','BIG POD KIT':'ครบ 4 ชิ้น ส่งฟรี','เครื่องพอต':'สั่งคู่หัวน้ำยา คุ้มกว่า','เครื่อง BIG POD':'สั่งคู่หัว Big Pod คุ้มกว่า','SALTNIC':'สั่งคู่หัวเติม สอบถามโปรในแชท','FREEBASE':'สั่งคู่หัวเติม สอบถามโปรในแชท','IQOS':'สอบถามโปรในแชทได้เลย','เครื่อง IQOS':'สอบถามโปรในแชทได้เลย','NIC POUCH':'สอบถามโปรในแชทได้เลย'};
+    if(PR[c]) h+='<div class="promo"><small>🎁 โปรโมชั่น</small><b>'+PR[c]+'</b></div>';
     h+='</div>'+im+'</div>';
     if(m.f.length) h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'"><span class="fe">'+(FEM[f]||"🍃")+'</span><span class="t">'+f+"</span></span>").join("")+'</div>';
     else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี</div>';
