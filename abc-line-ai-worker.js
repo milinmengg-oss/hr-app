@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-30-k24-restock";
+const BUILD = "2026-07-30-k25-menuadmin";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1294,6 +1294,19 @@ export default {
 
     // ── XSelly webhook: สต็อกเปลี่ยน → จำไว้ใน KV ──
     // ตั้ง webhook URL ใน XSelly เป็น  https://<worker>/xselly?key=<XSELLY_KEY>
+    // ── 🍽️ เมนูออนไลน์: ข้อมูลรุ่น+กลิ่น+ราคา (สดจากระบบ) + ค่าปรับแต่งจากหลังบ้าน ──
+    if (url0.pathname === "/menudata") {
+      const MC = { "Access-Control-Allow-Origin": "*" };
+      let cfg = {}; try { cfg = JSON.parse((await env.CONV.get("menucfg")) || "{}"); } catch (e) {}
+      return new Response(JSON.stringify({ build: BUILD, flavors: FLAVORS, cfg }), { headers: { ...MC, "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60" } });
+    }
+    // 🖼️ เสิร์ฟรูปที่แอดมินอัพผ่านหลังบ้านเมนู
+    if (url0.pathname.startsWith("/menuimg/")) {
+      const nm = decodeURIComponent(url0.pathname.slice(9)).replace(/[^\w\-\.ก-๙ ]/g, "");
+      const buf = await env.CONV.get("mimg:" + nm, "arrayBuffer");
+      if (!buf) return new Response("not found", { status: 404 });
+      return new Response(buf, { headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" } });
+    }
     // ── แผงควบคุมจีทู (ใช้กับหน้า jeetoo-control.html) ──
     if (url0.pathname.startsWith("/ctl/")) {
       const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "*" };
@@ -1303,6 +1316,29 @@ export default {
       const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
       const J = (o) => new Response(JSON.stringify(o), { headers: { ...CORS, "Content-Type": "application/json; charset=utf-8" } });
       try {
+        // 🍽️ หลังบ้านเมนูออนไลน์: อ่าน/บันทึกค่าปรับแต่ง (ราคา จุดเด่น โปร จำนวนคำ รูป)
+        if (act === "menucfg") {
+          if (request.method === "POST") {
+            const body = await request.text();
+            if (body.length > 200000) return J({ error: "ใหญ่เกินไป" });
+            try { JSON.parse(body); } catch (e) { return J({ error: "JSON ไม่ถูกต้อง" }); }
+            await env.CONV.put("menucfg", body);
+            return J({ ok: 1, saved: body.length });
+          }
+          let cfg = {}; try { cfg = JSON.parse((await env.CONV.get("menucfg")) || "{}"); } catch (e) {}
+          return J(cfg);
+        }
+        // 🍽️ อัพรูปเมนู (สินค้า/แบนเนอร์) — body = ไฟล์ jpeg
+        if (act === "menuimgup" && request.method === "POST") {
+          const nm = (url0.searchParams.get("name") || "").replace(/[^\w\-\.ก-๙ ]/g, "");
+          if (!nm) return J({ error: "ไม่มีชื่อไฟล์" });
+          const buf = await request.arrayBuffer();
+          if (buf.byteLength < 100) return J({ error: "ไฟล์ว่าง" });
+          if (buf.byteLength > 1800000) return J({ error: "รูปใหญ่เกิน 1.8MB — ระบบย่อรูปน่าจะทำงานผิด ลองใหม่" });
+          await env.CONV.put("mimg:" + nm, buf);
+          return J({ ok: 1, name: nm, kb: Math.round(buf.byteLength / 1024) });
+        }
+
         if (act === "status") {
           const off = await env.CONV.get("botoff:" + shop);
           const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });

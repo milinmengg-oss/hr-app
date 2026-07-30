@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>หลังบ้านเมนูออนไลน์ ABC</title>
+<style>
+:root{--bg:#0e0f12;--card:#17181d;--line:#2b2d35;--tx:#f2f2f4;--dim:#9a9ba3;--lime:#c8f542;--red:#ff6b6b;--ok:#4ade80}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:'Kanit',system-ui,sans-serif;padding:14px;max-width:760px;margin:0 auto}
+h1{font-size:20px;margin:6px 0 2px}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:14px}
+.keybox{display:flex;gap:8px;margin-bottom:14px}
+input,textarea{background:#101116;border:1px solid var(--line);border-radius:9px;color:var(--tx);padding:9px 11px;font-family:inherit;font-size:14px;width:100%}
+input:focus,textarea:focus{outline:none;border-color:var(--lime)}
+button{background:var(--lime);color:#111;border:0;border-radius:9px;padding:9px 16px;font-family:inherit;font-weight:600;font-size:14px;cursor:pointer}
+button.gray{background:#26272e;color:var(--tx)}
+.cat{margin:20px 0 8px;font-size:16px;font-weight:700;color:var(--lime)}
+.model{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:12px;margin-bottom:10px}
+.mname{font-weight:700;font-size:15px;margin-bottom:2px}
+.mmeta{color:var(--dim);font-size:12px;margin-bottom:8px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.grid .full{grid-column:1/-1}
+label{font-size:11.5px;color:var(--dim);display:block;margin-bottom:3px}
+.imgs{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+.imgslot{flex:1;min-width:140px;background:#101116;border:1px dashed var(--line);border-radius:10px;padding:8px;text-align:center}
+.imgslot img{max-width:100%;max-height:80px;border-radius:7px;display:block;margin:0 auto 6px}
+.imgslot small{color:var(--dim);font-size:11px;display:block;margin-bottom:6px}
+.imgslot input[type=file]{display:none}
+.upbtn{background:#26272e;color:var(--tx);font-size:12.5px;padding:6px 12px;border-radius:7px;display:inline-block;cursor:pointer}
+.st{font-size:12px;margin-top:4px;min-height:16px}
+.ok{color:var(--ok)}.err{color:var(--red)}
+#savebar{position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;margin-top:14px}
+#savemsg{font-size:13px}
+#loadmsg{color:var(--dim);padding:30px;text-align:center}
+.hint{background:#1a1c14;border:1px solid #3a3d22;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#d8e8a8;margin-bottom:14px;line-height:1.5}
+</style>
+</head>
+<body>
+<h1>🍽️ หลังบ้านเมนูออนไลน์</h1>
+<div class="sub">แก้ราคา · จุดเด่น · โปรโมชั่น · จำนวนคำ · อัพรูปสินค้า/แบนเนอร์ — บันทึกแล้วขึ้นเมนูจริงทันที</div>
+<div class="hint">💡 ช่องไหน<b>เว้นว่าง</b> = ใช้ค่าเดิมของเมนู · <b>กลิ่นและสต็อก</b>อัปเดตอัตโนมัติจากระบบ ไม่ต้องแก้ที่นี่ · แก้เสร็จอย่าลืมกด <b>บันทึกทั้งหมด</b> ล่างสุด</div>
+<div class="keybox">
+  <input id="key" type="password" placeholder="รหัสหลังบ้าน (เหมือนแผงจีทู)">
+  <button onclick="start()">เข้าสู่ระบบ</button>
+</div>
+<div id="loadmsg" style="display:none">กำลังโหลด…</div>
+<div id="list"></div>
+<div id="savebar" style="display:none">
+  <button onclick="saveAll()">💾 บันทึกทั้งหมด</button>
+  <button class="gray" onclick="location.href='https://milinmengg-oss.github.io/hr-app/abc-menu.html?adm='+Date.now()">👀 เปิดดูเมนูจริง</button>
+  <span id="savemsg"></span>
+</div>
+<script>
+const W="https://abc-line-ai.milin-mengg.workers.dev";
+let CFG={models:{}}, FLAV={};
+const $=id=>document.getElementById(id);
+const K=()=>localStorage.g2key||"";
+if(localStorage.g2key){ $("key").value=localStorage.g2key; }
+const slug=n=>n.replace(/[^\w\-ก-๙]/g,"_");
+async function start(){
+  localStorage.g2key=$("key").value.trim();
+  $("loadmsg").style.display="block"; $("list").innerHTML="";
+  try{
+    const md=await (await fetch(W+"/menudata?t="+Date.now())).json();
+    FLAV=md.flavors||{};
+    const r=await fetch(W+"/ctl/menucfg?key="+encodeURIComponent(K()));
+    if(r.status===403){ $("loadmsg").textContent="⛔ รหัสไม่ถูกต้อง"; return; }
+    CFG=await r.json(); if(!CFG.models) CFG.models={};
+    render();
+  }catch(e){ $("loadmsg").textContent="โหลดไม่สำเร็จ ลองใหม่อีกครั้ง"; return; }
+  $("loadmsg").style.display="none"; $("savebar").style.display="flex";
+}
+function render(){
+  const names=Object.keys(FLAV);
+  let h="";
+  names.forEach(n=>{
+    const f=FLAV[n], o=CFG.models[n]||{}, s=slug(n);
+    h+='<div class="model" data-n="'+n+'">'
+      +'<div class="mname">'+n+'</div>'
+      +'<div class="mmeta">ราคาในระบบ '+f.p.toLocaleString()+'.- · '+f.f.length+' กลิ่น/สี (อัปเดตอัตโนมัติ)</div>'
+      +'<div class="grid">'
+      +'<div><label>ราคาพิเศษ (แทนราคาในระบบ)</label><input data-f="p" type="number" value="'+(o.p||"")+'" placeholder="'+f.p+'"></div>'
+      +'<div><label>จำนวนคำ เช่น 20,000 คำ</label><input data-f="puff" value="'+(o.puff||"")+'" placeholder="ค่าเดิม"></div>'
+      +'<div class="full"><label>จุดเด่น (ถ้ากรอก จะแทนที่แบนเนอร์รูป)</label><input data-f="tag" value="'+(o.tag||"")+'" placeholder="ค่าเดิม/แบนเนอร์รูป"></div>'
+      +'<div><label>ใช้งานกับเครื่อง</label><input data-f="use" value="'+(o.use||"")+'" placeholder="ค่าเดิม"></div>'
+      +'<div><label>โปรโมชั่น</label><input data-f="promo" value="'+(o.promo||"")+'" placeholder="โปรตามหมวด"></div>'
+      +'</div>'
+      +'<div class="imgs">'
+      +imgSlot(n,"img","รูปสินค้า",o.img)
+      +imgSlot(n,"tagimg","แบนเนอร์ (แนวนอน)",o.tagimg)
+      +'</div></div>';
+  });
+  $("list").innerHTML=h;
+}
+function imgSlot(n,field,label,cur){
+  const id=slug(n)+"_"+field;
+  const img=cur?'<img src="'+W+'/menuimg/'+encodeURIComponent(cur)+'?t='+Date.now()+'">':"";
+  return '<div class="imgslot" id="slot_'+id+'">'+img+'<small>'+label+(cur?' (อัพไว้แล้ว)':'')+'</small>'
+    +'<label class="upbtn">📷 เลือกรูป<input type="file" accept="image/*" onchange="up(this,\''+n.replace(/'/g,"\\'")+'\',\''+field+'\')"></label>'
+    +'<div class="st" id="st_'+id+'"></div></div>';
+}
+function up(inp,n,field){
+  const file=inp.files[0]; if(!file) return;
+  const id=slug(n)+"_"+field, st=$("st_"+id);
+  st.textContent="กำลังย่อรูป…"; st.className="st";
+  const img=new Image();
+  img.onload=async()=>{
+    const max=field==="tagimg"?900:800;
+    let w=img.width,hh=img.height;
+    if(w>max){ hh=Math.round(hh*max/w); w=max; }
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=hh;
+    cv.getContext("2d").drawImage(img,0,0,w,hh);
+    cv.toBlob(async b=>{
+      if(!b){ st.textContent="ย่อรูปไม่สำเร็จ"; st.className="st err"; return; }
+      st.textContent="กำลังอัพโหลด ("+Math.round(b.size/1024)+"KB)…";
+      const name=slug(n)+"-"+field+".jpg";
+      try{
+        const r=await fetch(W+"/ctl/menuimgup?key="+encodeURIComponent(K())+"&name="+encodeURIComponent(name),{method:"POST",body:b});
+        const j=await r.json();
+        if(j.ok){
+          if(!CFG.models[n]) CFG.models[n]={};
+          CFG.models[n][field]=name;
+          st.textContent="✅ อัพแล้ว — อย่าลืมกดบันทึกทั้งหมด"; st.className="st ok";
+          const slot=$("slot_"+id); const old=slot.querySelector("img"); if(old) old.remove();
+          slot.insertAdjacentHTML("afterbegin",'<img src="'+URL.createObjectURL(b)+'">');
+        } else { st.textContent="❌ "+(j.error||"อัพไม่สำเร็จ"); st.className="st err"; }
+      }catch(e){ st.textContent="❌ อัพไม่สำเร็จ ลองใหม่"; st.className="st err"; }
+    },"image/jpeg",0.85);
+  };
+  img.src=URL.createObjectURL(file);
+}
+async function saveAll(){
+  document.querySelectorAll(".model").forEach(md=>{
+    const n=md.dataset.n;
+    md.querySelectorAll("input[data-f]").forEach(inp=>{
+      const f=inp.dataset.f, v=inp.value.trim();
+      if(v){ if(!CFG.models[n]) CFG.models[n]={}; CFG.models[n][f]=(f==="p")?parseInt(v,10):v; }
+      else if(CFG.models[n]){ delete CFG.models[n][f]; }
+    });
+    if(CFG.models[n]&&!Object.keys(CFG.models[n]).length) delete CFG.models[n];
+  });
+  $("savemsg").textContent="กำลังบันทึก…"; $("savemsg").className="";
+  try{
+    const r=await fetch(W+"/ctl/menucfg?key="+encodeURIComponent(K()),{method:"POST",body:JSON.stringify(CFG)});
+    const j=await r.json();
+    if(j.ok){ $("savemsg").textContent="✅ บันทึกแล้ว ขึ้นเมนูจริงภายใน ~1 นาที"; $("savemsg").className="ok"; }
+    else { $("savemsg").textContent="❌ "+(j.error||"บันทึกไม่สำเร็จ"); $("savemsg").className="err"; }
+  }catch(e){ $("savemsg").textContent="❌ บันทึกไม่สำเร็จ ลองใหม่"; $("savemsg").className="err"; }
+}
+</script>
+</body>
+</html>

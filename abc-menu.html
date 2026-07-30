@@ -101,6 +101,8 @@ const FEM={"โคล่า":"🥤","ชาเขียวมะลิ":"🍵","
 const W="https://abc-line-ai.milin-mengg.workers.dev";
 const norm=s=>s.trim().replace(/\s+/g," ").toLowerCase();
 const cl=document.getElementById("catlist"),pg=document.getElementById("pages");
+function build(){
+cl.innerHTML="";pg.innerHTML='<div class="page on" id="home_dummy"></div>';pg.innerHTML="";
 CATS.forEach((c,i)=>{
   const id="p"+i;
   cl.insertAdjacentHTML("beforeend",'<button class="catbtn" onclick="go(\''+id+'\')"><span class="ic">'+ICON[c]+'</span>'+c+'<span class="arr">›</span></button>');
@@ -117,7 +119,7 @@ CATS.forEach((c,i)=>{
     if(m.f.length) sp+='<div class="it"><b>'+m.f.length+'</b><small>กลิ่น/สี</small></div>';
     if(sp) h+='<div class="spec">'+sp+'</div>';
     var PR={'หัวน้ำยา':'ครบ 10 หัว ส่งฟรี','BIG POD':'ครบ 4 ชิ้น ส่งฟรี','พอตใช้แล้วทิ้ง':'ครบ 4 แท่ง ส่งฟรี','BIG POD KIT':'ครบ 4 ชิ้น ส่งฟรี','เครื่องพอต':'สั่งคู่หัวน้ำยา คุ้มกว่า','เครื่อง BIG POD':'สั่งคู่หัว Big Pod คุ้มกว่า','SALTNIC':'สั่งคู่หัวเติม สอบถามโปรในแชท','FREEBASE':'สั่งคู่หัวเติม สอบถามโปรในแชท','IQOS':'สอบถามโปรในแชทได้เลย','เครื่อง IQOS':'สอบถามโปรในแชทได้เลย','NIC POUCH':'สอบถามโปรในแชทได้เลย'};
-    if(PR[c]) h+='<div class="promo"><small>🎁 โปรโมชั่น</small><b>'+PR[c]+'</b></div>';
+    var prm=m.promo||PR[c]; if(prm) h+='<div class="promo"><small>🎁 โปรโมชั่น</small><b>'+prm+'</b></div>';
     h+='</div>'+im+'</div>';
     if(m.f.length) h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'"><span class="fe">'+(FEM[f]||"🍃")+'</span><span class="t">'+f+"</span></span>").join("")+'</div>';
     else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี</div>';
@@ -126,7 +128,9 @@ CATS.forEach((c,i)=>{
   h+='<div class="legend"><span class="lg"><span class="sw" style="background:#f5f5f6"></span>มีของ</span><span class="lg"><span class="sw" style="background:#26262c;border:1px solid #3a3a42"></span>หมดชั่วคราว</span></div></div></div>';
   pg.insertAdjacentHTML("beforeend",h);
 });
+}
 function go(id){ document.querySelectorAll(".page").forEach(p=>p.classList.remove("on")); document.getElementById(id).classList.add("on"); document.getElementById("backbtn").style.display=(id==="home")?"none":"block"; scrollTo(0,0); }
+function loadStock(){
 fetch(W+"/flavors").then(r=>r.json()).then(st=>{
   document.querySelectorAll(".model").forEach(md=>{
     const id=md.dataset.id; let have=0,tot=0;
@@ -135,6 +139,30 @@ fetch(W+"/flavors").then(r=>r.json()).then(st=>{
   });
   document.getElementById("livetxt").textContent="สต็อกสด · อัปเดต "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+" น.";
 }).catch(()=>{ document.querySelectorAll(".chip").forEach(ch=>ch.classList.add("in")); document.getElementById("livetxt").textContent="แสดงรายการสินค้า"; });
+}
+// ── โหลดข้อมูลสดจากระบบจีทู (กลิ่น/ราคา) + ค่าปรับแต่งจากหลังบ้านเมนู แล้วค่อยวาดหน้า ──
+(async function init(){
+  try{
+    const md=await (await fetch(W+"/menudata",{signal:AbortSignal.timeout(6000)})).json();
+    const F=md.flavors||{}, cfg=(md.cfg&&md.cfg.models)||{};
+    for(const c of CATS) for(const m of G[c]){
+      if(F[m.n]){
+        if(Array.isArray(F[m.n].f)&&F[m.n].f.length) m.f=[...new Set(F[m.n].f)];
+        if(F[m.n].p) m.p=F[m.n].p;
+      }
+      const o=cfg[m.n]||{};
+      if(o.p) m.p=o.p;
+      const D=DESC[m.n]||(DESC[m.n]={});
+      if(o.tag){ D.tag=o.tag; delete TAGIMG[m.n]; }
+      if(o.use) D.use=o.use;
+      if(o.puff) D.puff=o.puff;
+      if(o.promo) m.promo=o.promo;
+      if(o.tagimg) TAGIMG[m.n]=W+"/menuimg/"+encodeURIComponent(o.tagimg);
+      if(o.img) IMG[m.id]=W+"/menuimg/"+encodeURIComponent(o.img);
+    }
+  }catch(e){}
+  build(); loadStock();
+})();
 </script>
 </body>
 </html>
