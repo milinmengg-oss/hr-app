@@ -99,6 +99,67 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 #sheet .go{background:#c6f45f;color:#111;margin-bottom:8px}
 #sheet .cls{background:#26272e;color:#ccc;font-weight:400;font-size:13.5px;padding:10px}
 #sheet .copied{font-size:12.5px;color:#4ade80;text-align:center;margin-bottom:8px;min-height:16px}
+
+/* ── ธีม (เลือกจากหลังบ้าน) ── */
+/* ขาวสะอาด */
+body.t-light{background:#f2f2f4;color:#111}
+body.t-light .cpage{background:#f2f2f4}
+body.t-light .banner{background:linear-gradient(100deg,#ffffff 45%,#eceef2);border-bottom:1px solid #dcdee4}
+body.t-light .banner h2{color:#111}
+body.t-light .back{background:#111;color:#fff}
+body.t-light .mhead b,body.t-light .puff{color:#111}
+body.t-light .tag{background:#fff;border-color:#ddd;color:#222}
+body.t-light .tag small{color:#888}
+body.t-light .tagimg{border-color:#ddd}
+body.t-light .spec{background:#fff;border-color:#ddd;color:#111}
+body.t-light .spec small{color:#888}
+body.t-light .promo{background:#f4f9df;border-color:#cadd8e;color:#4a5a1e}
+body.t-light .promo small{color:#7d8f4a}
+body.t-light .promo b{color:#3d5510}
+body.t-light .mainimg{border:1px solid #e2e2e6}
+body.t-light .chip{background:#e8e8ec;border-color:#dcdce2;color:#9a9aa2}
+body.t-light .chip.in{background:#141519;border-color:#141519;color:#fff}
+body.t-light .oos{color:#c0392b;background:#fdecec;border-color:#f2b8b1}
+body.t-light .havecnt{color:#1d7c3d;background:#e8f7ec;border-color:#b9e2c4}
+body.t-light .note,body.t-light .legend{color:#77777f}
+body.t-light .bar{background:#ffffffee;border-top:1px solid #ddd}
+body.t-light .b2{background:#ececef;color:#111;border-color:#dcdce2}
+body.t-light #sheet{background:#fff;border-color:#ddd}
+body.t-light #sheet h3{color:#111}
+body.t-light #sheet .fl{color:#3d7a12}
+body.t-light #sheet .stx{color:#777}
+body.t-light #sheet .msgprev{background:#f4f4f6;border-color:#ccc;color:#333}
+body.t-light #sheet .cls{background:#ececef;color:#555}
+/* ดำ-ทอง */
+body.t-gold .price,body.t-gold .b1,body.t-gold .arr{background:#e8c766;color:#1c1503}
+body.t-gold .banner .abc{color:#e8c766}
+body.t-gold .logo{background:linear-gradient(115deg,#f3dd9a,#c9a13d 40%,#111 70%);-webkit-background-clip:text}
+body.t-gold #q:focus{box-shadow:0 0 0 3px #e8c766}
+body.t-gold .promo{background:linear-gradient(110deg,#241d0a,#332a0e);border-color:#6e5a22;color:#f0dfa3}
+body.t-gold .promo small{color:#b3a068}
+body.t-gold .promo b{color:#ffe391}
+body.t-gold .use{background:#f8f0d8;color:#4a3a09}
+body.t-gold .use small{color:#8a7534}
+body.t-gold #sheet .go{background:#e8c766;color:#1c1503}
+body.t-gold #q{border-color:#c9a13d}
+body.t-gold .instr{border-color:#c9a13d;color:#6b5716}
+/* เขียว ABC */
+body.t-green{background:#081009}
+body.t-green .cpage{background:#081009}
+body.t-green .banner{background:linear-gradient(100deg,#0e1f14 45%,#1c3a26);border-bottom:1px solid #1f3d2a}
+body.t-green .price,body.t-green .b1,body.t-green .arr{background:#37c86f;color:#06220f}
+body.t-green .banner .abc{color:#5fe694}
+body.t-green #q:focus{box-shadow:0 0 0 3px #37c86f}
+body.t-green .tag{background:linear-gradient(110deg,#101d14,#16281c);border-color:#24402e}
+body.t-green .spec{background:#0e1a12;border-color:#1f3527}
+body.t-green .promo{background:linear-gradient(110deg,#0e2413,#123317);border-color:#2a5c36;color:#a9f0bd}
+body.t-green .promo small{color:#6ea87e}
+body.t-green .promo b{color:#8affb4}
+body.t-green .chip{background:#12241a;border-color:#1f3d2a;color:#8fb69c}
+body.t-green .bar{background:#081009f5;border-top:1px solid #1a2f20}
+body.t-green .b2{background:#12241a;color:#d7f2e0;border-color:#1f3d2a}
+body.t-green #sheet{background:#0e1f14;border-color:#1f3d2a}
+body.t-green #sheet .go{background:#37c86f;color:#06220f}
 </style>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 </head>
@@ -190,6 +251,7 @@ fetch(W+"/flavors").then(r=>r.json()).then(st=>{
   try{
     const md=await (await fetch(W+"/menudata",{signal:AbortSignal.timeout(6000)})).json();
     const F=md.flavors||{}, cfg=(md.cfg&&md.cfg.models)||{};
+    if(md.cfg&&md.cfg.theme) document.body.classList.add("t-"+md.cfg.theme);
     for(const c of CATS) for(const m of G[c]){
       if(F[m.n]){
         if(Array.isArray(F[m.n].f)&&F[m.n].f.length) m.f=[...new Set(F[m.n].f)];
