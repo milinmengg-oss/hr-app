@@ -54,6 +54,7 @@ label{font-size:11.5px;color:var(--dim);display:block;margin-bottom:3px}
   <input id="key" type="password" placeholder="รหัสหลังบ้าน (เหมือนแผงจีทู)">
   <button onclick="start()">เข้าสู่ระบบ</button>
 </div>
+<input id="fq" style="display:none;margin-bottom:12px" placeholder="🔍 กรองหารุ่น/แบรนด์ เช่น marbo, infy, iqos" oninput="filterList()">
 <div id="loadmsg" style="display:none">กำลังโหลด…</div>
 <div id="list"></div>
 <div id="savebar" style="display:none">
@@ -80,6 +81,7 @@ async function start(){
     render();
   }catch(e){ $("loadmsg").textContent="โหลดไม่สำเร็จ ลองใหม่อีกครั้ง"; return; }
   $("loadmsg").style.display="none"; $("savebar").style.display="flex"; $("themebar").style.display="block";
+  $("fq").style.display="block";
   const tv=CFG.theme||""; document.querySelectorAll('input[name=theme]').forEach(r=>{ r.checked=(r.value===tv); });
 }
 function render(){
@@ -141,6 +143,12 @@ function up(inp,n,field){
     },"image/jpeg",0.85);
   };
   img.src=URL.createObjectURL(file);
+}
+function filterList(){
+  const q=$("fq").value.trim().toLowerCase();
+  document.querySelectorAll(".model").forEach(md=>{
+    md.style.display=(!q||md.dataset.n.toLowerCase().includes(q))?"":"none";
+  });
 }
 async function saveAll(){
   document.querySelectorAll(".model").forEach(md=>{
