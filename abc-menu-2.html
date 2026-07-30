@@ -3,65 +3,97 @@
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>ABC Menu</title>
-<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800;900&display=swap" rel="stylesheet">
+<title>ABC — เมนูสินค้า</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Kanit',sans-serif;background:#e9e9ea;color:#111}
-.page{display:none;min-height:100vh;max-width:520px;margin:0 auto;background:#fff}
-.page.on{display:block}
-/* ══ หน้าปก ══ */
-#home{background:linear-gradient(160deg,#fdfdfd,#ececec);text-align:center;padding:36px 20px 40px}
-.logo{font-size:64px;font-weight:900;letter-spacing:1px;background:linear-gradient(115deg,#8ef05e,#37c86f 26%,#111 55%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
-#home h1{font-size:30px;font-weight:900;margin-top:4px}
-.instr{display:inline-block;border:1.5px solid #111;border-radius:8px;padding:5px 16px;font-size:12.5px;margin-top:12px}
-.live{display:inline-flex;align-items:center;gap:7px;margin-top:12px;background:#eef7ee;border:1px solid #bfe3c6;border-radius:99px;padding:5px 14px;font-size:12px;color:#1d7c3d}
-.live .dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e;animation:pl 1.6s infinite}
+body{font-family:'Kanit',sans-serif;background:#0b0b0d;color:#f2f2f2}
+.wrap{max-width:520px;margin:0 auto;padding:0 12px 96px}
+.hero{text-align:center;padding:26px 0 6px}
+.logo{font-size:40px;font-weight:800;letter-spacing:2px;background:linear-gradient(120deg,#8ef05e,#3ddc84 30%,#f2f2f2 60%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero h1{font-size:19px;font-weight:800}
+.live{display:inline-flex;align-items:center;gap:7px;margin-top:8px;background:#121812;border:1px solid #234c2e;border-radius:99px;padding:5px 13px;font-size:11.5px;color:#8fe6a8}
+.live .dot{width:7px;height:7px;border-radius:50%;background:#3ddc84;box-shadow:0 0 8px #3ddc84;animation:pl 1.6s infinite}
 @keyframes pl{50%{opacity:.35}}
-.catlist{display:flex;flex-direction:column;gap:10px;margin-top:22px}
-.catbtn{display:flex;align-items:center;gap:12px;background:#0f1114;color:#fff;border-radius:12px;padding:13px 18px;font-size:16.5px;font-weight:800;cursor:pointer;border:none;font-family:inherit;text-align:left}
-.catbtn .ic{font-size:18px}
-.catbtn .arr{margin-left:auto;background:#fff;color:#111;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
-.homefoot{font-size:10.5px;color:#8a8a8a;margin-top:26px;line-height:1.8}
-/* ══ หน้าหมวด ══ */
-.banner{position:sticky;top:0;z-index:10;background:linear-gradient(100deg,#101216 55%,#2a2f38);color:#fff;display:flex;align-items:center;padding:16px 16px;gap:10px}
-.banner h2{font-size:26px;font-weight:900}
-.back{margin-left:auto;background:#fff;color:#111;border:none;border-radius:9px;padding:8px 13px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap}
-.body{padding:14px 14px 90px}
-.model{margin-top:18px}
-.mh{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.mh b{font-size:18px;font-weight:900;letter-spacing:.3px}
-.price{background:#c6f45f;color:#111;font-weight:900;font-size:14px;border-radius:7px;padding:2px 10px}
-.oos{font-size:11px;color:#c02626;background:#fde8e8;border:1px solid #f5bcbc;border-radius:99px;padding:2px 10px}
-.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px}
-.chip{font-size:12px;text-align:center;padding:8px 6px;border-radius:10px;background:#f4f4f5;border:1px solid #e2e2e5;color:#111;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chip.out{background:#232327;border-color:#232327;color:#77777e;opacity:.75;text-decoration:line-through;font-weight:400}
-.note{font-size:12px;color:#8a8a8a;margin-top:8px}
-.legend{display:flex;gap:14px;justify-content:center;font-size:11.5px;color:#666;margin-top:16px}
-.lg{display:flex;align-items:center;gap:6px}
-.sw{width:14px;height:14px;border-radius:5px}
+/* ค้นหา + ตัวกรอง (ติดหัวจอ) */
+.sticky{position:sticky;top:0;z-index:15;background:#0b0b0dfa;backdrop-filter:blur(8px);padding:10px 0 8px;margin-top:8px}
+.srow{display:flex;gap:8px}
+.search{flex:1;background:#15151a;border:1.5px solid #2c2c33;border-radius:13px;padding:11px 15px;color:#fff;font-family:inherit;font-size:14.5px;outline:none}
+.search::placeholder{color:#6a6a72}
+.onlyin{border:1.5px solid #2c2c33;background:#15151a;color:#9a9aa2;border-radius:13px;padding:0 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.onlyin.on{background:#1b2b16;border-color:#3f7a2e;color:#a8f07e}
+.cats{display:flex;gap:6px;overflow-x:auto;margin-top:8px;padding-bottom:2px;scrollbar-width:none}
+.cats::-webkit-scrollbar{display:none}
+.cats a{white-space:nowrap;background:#15151a;border:1px solid #2c2c33;color:#cfcfd6;border-radius:99px;padding:7px 13px;font-size:12.5px;font-weight:600;text-decoration:none}
+/* การ์ดรุ่น */
+.sec{margin-top:22px;scroll-margin-top:118px}
+.sechead{font-size:18px;font-weight:800;padding:6px 2px}
+.md{background:#111114;border:1px solid #232328;border-radius:16px;padding:14px 14px 12px;margin-top:10px}
+.mh{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.mh b{font-size:16px}
+.price{background:#c6f45f;color:#111;font-weight:800;font-size:13px;border-radius:8px;padding:2px 9px}
+.havecnt{font-size:11px;color:#7fd99a;margin-left:auto}
+.oos-model{font-size:11px;color:#ff8f8f;background:#2a1414;border:1px solid #512626;border-radius:99px;padding:2px 10px;margin-left:auto}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{font-size:12.5px;padding:6px 12px;border-radius:99px;background:#1d1d22;border:1px solid #33333a;color:#e8e8ec;cursor:pointer;user-select:none}
+.chip:active{transform:scale(.95)}
+.chip.out{opacity:.26;text-decoration:line-through;pointer-events:none}
+.note{font-size:11.5px;color:#6f6f77;margin-top:9px}
+.hint{font-size:11.5px;color:#7a7a82;text-align:center;margin-top:14px}
+/* ป๊อปอัพสั่ง */
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:40;display:none;align-items:flex-end;justify-content:center}
+#sheet.on{display:flex}
+.shin{width:100%;max-width:520px;background:#16161a;border-radius:22px 22px 0 0;padding:22px 18px calc(20px + env(safe-area-inset-bottom))}
+.shin h3{font-size:16px;font-weight:800}
+.ordtxt{background:#0e0e11;border:1px dashed #3a3a42;border-radius:12px;padding:13px;margin-top:12px;font-size:15px;color:#c6f45f;font-weight:600;text-align:center}
+.shbtns{display:flex;gap:9px;margin-top:14px}
+.shbtns button,.shbtns a{flex:1;border:none;border-radius:13px;padding:13px;font-family:inherit;font-size:14.5px;font-weight:800;cursor:pointer;text-align:center;text-decoration:none}
+.cpy{background:#c6f45f;color:#111}
+.cls{background:#232329;color:#fff}
+.shnote{font-size:11.5px;color:#8a8a92;margin-top:11px;text-align:center;line-height:1.6}
 /* แถบล่าง */
-.bar{position:fixed;left:0;right:0;bottom:0;background:#fffffff5;border-top:1px solid #e2e2e5;z-index:20}
-.bar .in{max-width:520px;margin:0 auto;display:flex;gap:9px;padding:9px 12px calc(9px + env(safe-area-inset-bottom))}
-.bar a,.bar button{flex:1;text-align:center;border-radius:12px;padding:12px;font-weight:800;font-size:14px;text-decoration:none;border:none;font-family:inherit;cursor:pointer}
-.b1{background:#111;color:#fff}
-.b2{background:#eee;color:#111;border:1px solid #ddd}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#0e0e11f2;border-top:1px solid #232328;backdrop-filter:blur(8px);z-index:20}
+.bar .in{max-width:520px;margin:0 auto;display:flex;gap:9px;padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+.bar a{flex:1;text-align:center;border-radius:13px;padding:12px;font-weight:800;font-size:14.5px;text-decoration:none}
+.b1{background:#c6f45f;color:#111}
+.b2{background:#1d1d22;color:#fff;border:1px solid #33333a}
+.foot{margin-top:30px;text-align:center;font-size:11px;color:#55555c;line-height:1.8}
+.noresult{display:none;text-align:center;color:#8a8a92;font-size:13.5px;padding:30px 0}
 </style>
 </head>
 <body>
-<!-- ปก -->
-<div class="page on" id="home">
-  <div class="logo">ABC</div>
-  <h1>≣ เมนูสินค้า</h1>
-  <div><span class="instr">คลิกที่ "หมวดด้านล่าง" เพื่อเข้าชมสินค้าคุณภาพมากมาย</span></div>
-  <div><span class="live"><span class="dot"></span><span id="livetxt">กำลังเช็คสต็อกสด…</span></span></div>
-  <div class="catlist" id="catlist"></div>
-  <div class="homefoot">สต็อกอัปเดตอัตโนมัติจากระบบคลังของร้าน · กลิ่นสีเข้มคือหมดชั่วคราว<br>ติดต่อสอบถาม/สั่งซื้อได้โดยตรงผ่านแชท LINE มีบริการจัดส่งด่วน และโปรโมชั่นมากมาย</div>
+<div class="wrap">
+  <div class="hero">
+    <div class="logo">ABC</div>
+    <h1>≣ เมนูสินค้า</h1>
+    <div class="live"><span class="dot"></span><span id="livetxt">กำลังเช็คสต็อกสด…</span></div>
+  </div>
+  <div class="sticky">
+    <div class="srow">
+      <input class="search" id="q" placeholder="🔍 ค้นหารุ่นหรือกลิ่น เช่น มาโบ, องุ่น" oninput="applyFilter()">
+      <button class="onlyin" id="oin" onclick="toggleIn()">เฉพาะมีของ</button>
+    </div>
+    <div class="cats" id="cats"></div>
+  </div>
+  <div id="secs"></div>
+  <div class="noresult" id="nores">ไม่พบสินค้าที่ค้นหา ลองพิมพ์สั้นลงนะคะ</div>
+  <div class="hint">💡 แตะที่กลิ่นเพื่อคัดลอกข้อความสั่งซื้อ แล้วไปวางในแชทได้เลย</div>
+  <div class="foot">สต็อกอัปเดตอัตโนมัติจากระบบคลังของร้าน<br>กลิ่นที่จางคือหมดชั่วคราวค่ะ 💚</div>
 </div>
-<div id="pages"></div>
+<div id="sheet" onclick="if(event.target.id==='sheet')closeSheet()">
+  <div class="shin">
+    <h3>สั่งตัวนี้ 🛒</h3>
+    <div class="ordtxt" id="ordtxt"></div>
+    <div class="shbtns">
+      <button class="cls" onclick="closeSheet()">ปิด</button>
+      <button class="cpy" id="cpybtn" onclick="copyOrd()">📋 คัดลอกข้อความสั่ง</button>
+    </div>
+    <div class="shnote">คัดลอกแล้วกลับไปที่แชทไลน์ วางข้อความส่งได้เลยค่ะ<br>น้องอัญญาจะสรุปยอดให้ทันที 💕</div>
+  </div>
+</div>
 <div class="bar"><div class="in">
-  <button class="b2" id="backbtn" style="display:none" onclick="go('home')">‹ หน้าหลัก</button>
-  <a class="b1" href="#" onclick="history.back();return false">💬 กลับแชทไลน์เพื่อสั่งซื้อ</a>
+  <a class="b2" href="https://milinmengg-oss.github.io/hr-app/abc-miniapp-2.html">🛍 สั่งผ่านมินิแอพ</a>
+  <a class="b1" href="#" onclick="history.back();return false">💬 กลับแชทไลน์</a>
 </div></div>
 <script>
 const CATS=["หัวน้ำยา","BIG POD","พอตใช้แล้วทิ้ง","SALTNIC","FREEBASE","เครื่องพอต","เครื่อง BIG POD","BIG POD KIT","IQOS","เครื่อง IQOS","NIC POUCH"];
@@ -69,29 +101,63 @@ const ICON={"หัวน้ำยา":"💧","BIG POD":"🔷","พอตใช�
 const G={"หัวน้ำยา":[{"n":"หัวพอต RELX INFINITY","p":140,"f":["โคล่า","ชาเขียวมะลิ","ชาดอกชบาเย็น","ชาดำเย็น","ชาไทย","ชาพีช","ชามะนาวเย็น","ชาหลงจินเย็น","ชาอู่หลงเย็น","แตงโม","ถั่วเขียว","นํ้าส้มโซดา","น้ำเขียวโซดา","น้ำผึ้งส้มโอ","เผือก","ฝรั่ง","มะนาวเย็น","มะม่วง","เมล่อน","รูทเบียร์","ลิ้นจี่","ไวท์คอฟฟี่","สตรอว์เบอร์รี่","สไปรท์","เสาวรส","องุ่น","องุ่นเขียว","องุ่นแอปเปิ้ล","แอปเปิ้ลเขียว","แตงโม","เปปเปอร์มิ้นต์","มิกซ์เบอร์รี่","มิ้นต์เอ็กซ์ตร้า","มิ้นต์ฟรีซ","ยาสูบคลาสสิค","ยาสูบร้อน","เลม่อนมิ้นต์","สเปียร์มิ้นต์","องุ่น","แอปเปิ้ลเขียว","ซิตรัส","ยาสูบมิ้นต์","ราสเบอร์รี่มิ้นต์","ไอซ์สปาร์คกิ้ง","สตรอว์เบอร์รี่","สับปะรด"],"id":12},{"n":"หัวพอต MARBO ZERO","p":140,"f":["เกรปฟรุต","โคล่า","ชาผลไม้","ชาอู่หลง","ซิก้าร์","แตงโม","น้ำแร่","บลูเบอร์รี่","พีช","พีชสตรอว์เบอร์รี่","มะม่วง","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","เลม่อน","ส้มยูสุ","สับปะรด","องุ่น","องุ่นว่านหางจระเข้","แอปเปิ้ลเขียว","โคล่า","แตงโม","เบอร์รี่ชมพู","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","มิ้นต์","สตรอว์เบอร์รี่กล้วย","องุ่น","องุ่นว่านหางจระเข้","แอปเปิ้ลเขียว","มิ้นต์ฟรีซ"],"id":11},{"n":"หัวพอต INFY PLUS","p":140,"f":["โคล่า","ชามะลิ","แตงโมลิ้นจี่","แตงโมสตรอว์เบอร์รี่","น้ำส้มโซดา","บลูเบอร์รี่","พีช","มะม่วงพีช","มิ้นต์","เยลลี่องุ่น","ลิ้นจี่","ลิ้นจี่ราสเบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่องุ่น","สไปร์ท","หมากฝรั่งองุ่น","องุ่นกัมมี่","องุ่นเคียวโฮ","องุ่นแอปเปิ้ล","แอปเปิ้ลแดง","ไอศกรีมสตรอว์เบอร์รี่","หมากฝรั่งเปรี้ยว","แอปเปิ้ลอโล","เชอร์รี่สตรอว์เบอร์รี่","หมากฝรั่งสับปะรด","ซีซอล์ทเลม่อน","ผลไม้รวม","แตงโมราสเบอร์รี่"],"id":10},{"n":"หัวพอต RELX ULTRA","p":120,"f":["ดับเบิ้ลมิ้นต์","แตงโม","บลูเบอร์รี่","เบอร์รี่ชมพู","มะม่วงเขียว","องุ่นอโล","ดับเบิ้ลมิ้นต์","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","ลิ้นจี่","สับปะรด","องุ่นอโล","แอปเปิ้ลอโล","โคล่า","เบอร์รี่ชมพู"],"id":14},{"n":"หัวพอต RELX LARGE","p":140,"f":["ลิ้นจี่","องุ่น","องุ่นแอปเปิ้ล","แอปเปิ้ลเขียว","โคล่า","ชาหลงจิน","บลูเบอร์รี่","พีช","พีชสตรอว์เบอร์รี่"],"id":13}],"BIG POD":[{"n":"RELX BOOST POD","p":350,"f":["กล้วย","บลูเบอร์รี่","โคล่า","ดับเบิ้ลมิ้นต์","องุ่น","ชามะลิ","ลูกอมเลม่อนมิ้นต์","น้ำแร่","รวมมิตรมิกซ์เบอร์รี่","สับปะรด","ฝรั่ง","ลูกอม","แตงโม","สตรอว์เบอร์รี่แตงโม","เบอร์รี่ชมพู","มะเฟือง","คูลมิ้นต์","ลิ้นจี่","สเปียร์มิ้นต์","หมากฝรั่งแตงโม","แอปเปิ้ลว่านหางจระเข้","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","ดับเบิ้ลมิ้นต์","องุ่น","แตงโม","ยาสูบคลาสสิค","โคล่า","รวมมิตรมิกซ์เบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย"],"id":7},{"n":"ELFBAR SWAP 25K","p":379,"f":["ฝรั่งมะม่วงส้ม","พีชสตรอว์เบอร์รี่","มะม่วง","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ชีสเค้ก","สตรอว์เบอร์รี่องุ่นแอปเปิ้ล","หมากฝรั่งแตงโม","องุ่น","ไอติมซอเลโร่","ไอติมสตรอว์เบอร์รี่","แอปเปิ้ลลิ้นจี่","โคล่าเย็น","มะนาวเย็น","ชามะลิ","ชาหลงจิน","ชาองุ่นกวนอิน","ดับเบิ้ลมิ้นต์","น้ำแร่","องุ่นเย็น"],"id":3},{"n":"ESKO BAR SWITCH 20K","p":350,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล","แยมบลูเบอร์รี่","เมนทอล","ช็อคโกแลตมิ้นต์","มะพร้าว","มะม่วง"],"id":4},{"n":"RELX POD CLEAR 18K","p":390,"f":["กาแฟโกปิโก้","ดับเบิ้ลมิ้นต์","แตงโม","น้ำส้มโซดา","น้ำแร่","สเปียร์มิ้นต์","สับปะรด","องุ่นอโล","องุ่น","แอปเปิ้ลเขียว","รวมมิตรเบอร์รี่","ไอติมสตรอว์เบอร์รี่","โคล่า","สตรอว์เบอร์รี่โซดา","มะม่วงเสาวรส","เมล่อน","ดับเบิ้ลมิ้นต์","แตงโม","องุ่น"],"id":8},{"n":"M SWITCH","p":350,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"],"id":6},{"n":"KS QUIK PRO 15K","p":350,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"],"id":5},{"n":"VAZER RELOAD 15K","p":330,"f":["โคล่า","แตงโม","บลูเบอร์รี่","เบอร์รี่รวม","พีช","มิ้นต์เย็น","รูทเบียร์","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","เลม่อนโซดา","สับปะรด","องุ่นเย็น","องุ่นลิ้นจี่","องุ่นโอซาก้า","แอปเปิ้ลฟูจิ"],"id":9},{"n":"ABC LEGO 20K","p":299,"f":["ดับเบิ้ลมิ้นต์ 3%","น้ำแร่ 3%","มิกซ์เบอร์รี่ 3%","องุ่น 3%","โคล่า 3%","ชามะลิ 3%","สับปะรด 3%","แตงโม 3%","ดับเบิ้ลมิ้นต์ 5%","มิกซ์เบอร์รี่ 5%","องุ่น 5%","แตงโม 5%"],"id":1},{"n":"ABC TANK 22K","p":320,"f":["ดับเบิ้ลมิ้นต์ 3%","บลูเบอร์รี่เย็น 3%","พีชสตรอว์เบอร์รี่ 3%","มิกซ์เบอร์รี่ 3%","แตงโม 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","โคล่า 3%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%","โคล่า 5%"],"id":2}],"พอตใช้แล้วทิ้ง":[{"n":"INFY 12K","p":350,"f":["โคล่า","แตงโมลิ้นจี่","น้ำแร่","บลูเบอร์รี่","พีช","มิกซ์เบอร์รี่","มิกซ์สตรอว์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นซากุระ","องุ่นโยโย่","องุ่นแอปเปิ้ล","ไอศกรีมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","สไปร์ท","ส้มโซดา","หมากฝรั่งแตงโม","เลม่อนชมพู","ราสเบอร์รี่มัลเบอร์รี่","กัมมี่แบร์","ชาอู่หลงพีช","องุ่นหน้าร้อน","บานาน่าท๊อฟฟี่","ลิ้นจี่ราสเบอร์รี่"],"id":20},{"n":"RELX SMASH GO 12K","p":320,"f":["แอปเปิ้ล 3%","เสาวรส 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","พีชสตรอว์เบอร์รี่ 3%","มะม่วง 3%","แตงโม 3%","เบอร์รี่รวม 3%","ดับเบิ้ลมิ้นต์ 3%","โคล่า 3%","ชาอู่หลง 3%","บลูเบอร์รี่เย็น 3%","เบอร์รี่ชมพู 3%","ฝรั่ง 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่เย็น 3%","สับปะรดเย็น 3%","องุ่นอโล 3%","หมากฝรั่งแตงโม 3%","แตงโม 5%","ดับเบิ้ลมิ้นต์ 5%","องุ่น 5%","โคล่า 5%","คูลมิ้นต์ 5%","เบอร์รี่รวม 5%","ยาสูบคลาสสิค 5%","สเปียร์มิ้นต์ 5%"],"id":32},{"n":"INFY BAR PRO 20K","p":399,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","โคล่า","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","เบอร์รี่ชมพู","ลิ้นจี่เย็น","แตงโม","แตงโมสตรอว์เบอร์รี่","แตงโมลิ้นจี่","หมากฝรั่งแตงโม","สตรอว์เบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แตงโมมิ้นต์","ยาคูลท์","เรดบลู","มัทฉะลาเต้","ฝรั่งเสาวรส","ราสเบอร์รี่แตงโม","ไอติมสตรอว์เบอร์รี่"],"id":23},{"n":"MARBO 9K","p":350,"f":["โคล่า","ดับเบิ้ลมิ้นต์","แตงโม","บลูไอซ์","เบอร์รี่ชมพู","พีช","พีชสตรอว์เบอร์รี่","แฟนต้าส้ม","มิกซ์เบอร์รี่","เยลลี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แอปเปิ้ลเขียว","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"],"id":29},{"n":"MARBO 9K (โคลน)","p":290,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","พีช","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","เยลลี่","แตงโม","แฟนต้าส้ม","แอปเปิ้ลเขียว","โคล่า","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"],"id":29},{"n":"INFY 20K","p":399,"f":["บลูเบอร์รี่","แตงโมลิ้นจี่","ลิ้นจี่","มิกซ์เบอร์รี่","มิ้นต์","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นแอปเปิ้ล","องุ่นเคียวโฮ","องุ่นโยโย่","องุ่นลิ้นจี่","องุ่นอโล","พีช","แอปเปิ้ลอโล","สปาร์คกิ้งเลม่อน","น้ำแร่","โคล่า","สตรอว์เบอร์รี่กล้วย","เมนทอลฟรีซ","หมากฝรั่งองุ่น","หมากฝรั่งแตงโม","ชานมชาจี","ชาเขียวมัทฉะ"],"id":21},{"n":"ESKO BAR 20K","p":399,"f":["โคล่า","แตงโม","แตงโมสตรอว์เบอร์รี่","บลูเบอร์รี่ไอซ์","บับเบิ้ลกัม","เบอร์รี่องุ่น","ฝรั่ง","มิกซ์เบอร์รี่","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ลว่านหางจระเข้","ลิ้นจี่เย็น","ดับเบิ้ลมิ้นต์","กล้วยเย็น","มะม่วง","น้ำแร่","เรดเลม่อนโซดา","มิ้นต์เอ็กซ์ตร้า 5%"],"id":19},{"n":"RELX SPARTA 20K","p":399,"f":["โคล่า","ชาอู่หลง","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูเบอร์รี่","พีชสตรอเบอร์รี่","เยลลี่","รวมมิตรเบอร์รี่","ราสเบอร์รี่มิ้นติ์","ลูกกวาด","สตรอเบอร์รี่","สัปปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ล","เบอร์รี่ชมพู","โพล่าร์มิ้นต์","หมากฝรั่งแตงโม","ลิ้นจี่","องุ่นอโล"],"id":33},{"n":"CARNIVAL 20K","p":399,"f":["กัมมี่","โคล่า","ดับเบิ้ลมิ้นต์","แตงโมไอซ์","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","ส้มโซดา","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","สับปะรด","ยาคูลท์","แยมสตรอว์เบอร์รี่","แยมบลูเบอร์รี่","ลิ้นจี่ไอซ์","ไอติมเผือก","ไอติมสตรอว์เบอร์รี่","เมล่อน","เรดบลู"],"id":16},{"n":"INFY BAR 15K","p":299,"f":["โคล่าเลม่อน","ซีซอล์ทเลม่อน","แตงโม","แตงโมลิ้นจี่","พีชสตรอว์เบอร์รี่","บลูเบอร์รี่","แฟนต้าองุ่น","มะม่วงโยเกิร์ต","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมเปรี้ยว","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นลิ้นจี่","มะนาว","สับปะรดมะนาว","โคล่า","องุ่นแอปเปิ้ล"],"id":22},{"n":"KS Quik 6K","p":280,"f":["โคล่าเลม่อน","ชานมอู่หลง","แตงโม","น้ำแร่","บลูเบอร์รี่","ฝรั่ง","มะนาว","มะม่วง","มิกซ์เบอร์รี่","เมนทอล","เมล่อน","ยาสูบครีม","ยาสูบคลาสสิค","ลิ้นจี่","สตรอว์เบอร์รี่","สับปะรด","องุ่น","ไอศกรีมสตรอว์เบอร์รี่"],"id":26},{"n":"RELX DIVA 30K","p":490,"f":["โคล่า","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","น้ำส้มโซดา","มะม่วงเสาวรส","มิกซ์เบอร์รี่","เมล่อน","สเปียร์มิ้นต์","องุ่น","องุ่นอโล","ไอติมสตรอว์เบอร์รี่","กาแฟโกปิโก้","โคล่า","ดับเบิ้ลมิ้นต์","แตงโม","องุ่น"],"id":31},{"n":"ELFBAR 15K","p":350,"f":["องุ่นว่านหางจระเข้","บลูเบอร์รี่เย็น","องุ่นเย็น","องุ่นเยลลี่","มะม่วงเขียว","ฝรั่งเย็น","โคล่าเลม่อน","ชามะนาว","แฟนต้าลิ้นจี่","พีชเย็น","องุ่นซากุระ","สตรอว์เบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","เบอร์รี่","เมล่อนแตงโม","แตงโม"],"id":18},{"n":"JOIWAY 12K","p":320,"f":["โคล่าเลม่อน","โคล่า","ลิ้นจี่","แตงโม","แอปเปิ้ลเขียว","แฟนต้าเขียว","เมล่อนฮอกไกโด","มิ้นต์","ส้มโซดา","บลูเบอร์รี่","องุ่น","เสาวรส","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","ชามะนาว","คุกกี้"],"id":24},{"n":"JOIWAY TWINS 20K","p":399,"f":["โคล่า / แอปเปิ้ลเขียว","โคล่า / สตรอว์เบอร์รี่","ลิ้นจี่ / คุกกี้","ลูกอมเรนโบว์ / มิ้นต์","ลูกอมเรนโบว์ / สตรอว์เบอร์รี่","มิ้นต์ / สตรอว์เบอร์รี่","องุ่น / บลูเบอร์รี่","องุ่น / แตงโม","องุ่น / ลิ้นจี่","แอปเปิ้ลเขียว / คุกกี้","แอปเปิ้ลเขียว / สตรอว์เบอร์รี่","บลูเบอร์รี่ / แตงโม","บลูเบอร์รี่ / ลิ้นจี่","แตงโม / ลูกอมเรนโบว์","แตงโม / ลิ้นจี่","แตงโม / สตรอว์เบอร์รี่"],"id":25},{"n":"V PLUS 16K","p":370,"f":["กัมมี่แบร์","โคล่า","แตงโม","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","หมากฝรั่งแตงโม","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ล","แอปเปิ้ลชิชา"],"id":36},{"n":"LANA IRIS 24K","p":410,"f":["ชากวนอิน 3%","แตงโม 3%","น้ำแร่ 3%","ฝรั่ง 3%","มิกซ์เบอร์รี่ 3%","มิ้นต์ 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่ 3%","สับปะรด 3%","ส้มองุ่น 3%","องุ่น 3%","โคล่า 3%","เลม่อนโคล่า 3%","ชากวนอิน 5%","มิ้นต์ 5%"],"id":27},{"n":"ABC 8K","p":250,"f":["กล้วย","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูไอซ์","มิกซ์เบอร์รี่","ลิ้นจี่","โคล่า","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นอโล"],"id":15},{"n":"DUAL SMASH 20K","p":320,"f":["แตงโม","มิ้นต์","โคล่า","นมกล้วย","น้ำแร่","องุ่น","องุ่นอโล","สตรอว์เบอร์รี่","แอปเปิ้ล","ชาหลงจิน","ฮันนี่เลม่อน","ยาคูลท์"],"id":17},{"n":"MARBO 10K","p":399,"f":["บลูไอซ์","เบอร์รี่ชมพู","เบอร์รี่รวม","แตงโม","แตงโมมิ้นต์","โคล่า","มัทฉะลาเต้","เมนทอล","เลม่อนมิ้นต์","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ"],"id":28},{"n":"STAR 2,500","p":150,"f":["กล้วย","โคล่า","แตงโม","น้ำแร่","บลูเบอร์รี่","พีช","มะม่วง","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","สตรอว์เบอร์รี่","องุ่น"],"id":35},{"n":"SONIC 8K","p":250,"f":["กัมมี่แบร์","โคล่า","แตงโม","น้ำแร่","มิกซ์เบอร์รี่","มิ้นต์","ยาคูลท์","สตรอว์เบอร์รี่","องุ่น","แอปเปิ้ลเขียว"],"id":34},{"n":"VOSOON 23K","p":399,"f":["ชาหลงจิน","แตงโม","บลูเบอร์รี่เย็น","ฝรั่งเสาวรส","พีชสตรอว์เบอร์รี่","มิ้นต์ฟรีซ","ลิ้นจี่เย็น","องุ่นเย็น","แอปเปิ้ลอโล","โคล่า"],"id":37}],"SALTNIC":[{"n":"SALTNIC MARBO 30ML","p":270,"f":["เขียว","ชมพู","ดำ","ทอง","น้ำเงิน","ม่วง","เงิน","แดง","ม่วง"],"id":59},{"n":"SALTNIC ESKOLIQ 30ML","p":250,"f":["โคล่า","มิกซ์เบอร์รี่"],"id":4}],"FREEBASE":[{"n":"FREEBASE MARBO 30ML","p":170,"f":["ทอง","ชมพู","ฟ้า","ม่วง"],"id":61},{"n":"FREEBASE ESKOLIQ 30ML","p":150,"f":["โคล่า","มิกซ์เบอร์รี่","ไอซ์บลาสต์"],"id":60},{"n":"FREEBASE PHATJUICE 30ML","p":170,"f":[],"id":62}],"เครื่องพอต":[{"n":"เครื่อง M ZERO PRO","p":890,"f":["สีเขียว","สีชมพู","สีแดง","สีเงิน","สีดำ","สีเหลืองดำ","สีฟ้าม่วง","สีดำชมพู"],"id":47},{"n":"เครื่อง RELX INFINITY 2+","p":990,"f":["สีเขียว","สีเงิน","สีดำ","สีเทา","สีบรอนซ์ทอง","สีโรสโกลด์","สีขาว"],"id":50},{"n":"เครื่อง ELFBAR JOINONE","p":349,"f":["สีเขียว","สีดำ","สีแดง","สีน้ำเงิน","สีม่วง","สีส้ม"],"id":43},{"n":"เครื่อง M ZERO NANO","p":690,"f":["สีดำ","สีขาว","สีชมพู","สีฟ้า"],"id":46},{"n":"เครื่อง RELX ESSENTIAL 2","p":490,"f":["สีเทา","สีดำ","สีเงิน","สีฟ้าม่วง"],"id":49}],"เครื่อง BIG POD":[{"n":"เครื่อง RELX CREATOR 20K","p":250,"f":["สีดำ","สีเทา-เหลือง"],"id":48},{"n":"เครื่อง DUAL SMASH","p":200,"f":[],"id":42},{"n":"เครื่อง M SWITCH 15K","p":250,"f":[],"id":44},{"n":"เครื่อง M SWITCH 15K (โคลน)","p":200,"f":[],"id":44},{"n":"เครื่อง VAZER RELOAD","p":220,"f":[],"id":51}],"BIG POD KIT":[{"n":"M SWITCH 15K (KIT)","p":499,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"],"id":6},{"n":"KS QUIK PRO 15K (KIT)","p":499,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"],"id":5},{"n":"ESKO BAR SWITCH 20K (KIT)","p":499,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล"],"id":4},{"n":"VAZER RELOAD 15K (KIT)","p":450,"f":["โคล่า","มิ้นต์เย็น","ลูกอมสตรอว์เบอร์รี่","องุ่นเย็น","แตงโม"],"id":9}],"IQOS":[{"n":"ไส้บุหรี่ IQOS JP","p":2150,"f":["BALANCED REGULAR","BLACK MENTHOL","BLACK PURPLE MENTHOL","BLACK RUBY MENTHOL","FUSION MENTHOL","MENTHOL","MINT","OASIS PEARL","TROPICAL MENTHOL","PURPLE MENTHOL","REGULAR","RICH REGULAR","SMOOTH REGULAR","SUN PEARL","YELLOW MENTHOL","WARM REGULAR","BLACK FUCHSIA MENTHOL","BRIGHT MENTHOL","BLACK YELLOW MENTHOL","BLACK SUNSHINE MENTHOL","RUBY REGULAR","RIVIERA PEARL","CLEAR REGULAR","SHINE PEARL","VELVET PEARL","STARLING PEARL","STELLAR PEARL"],"id":53},{"n":"ไส้บุหรี่ IQOS INDO","p":1500,"f":["GREEN","BRIGHT WAVE","BLUE","BLACK GREEN","PURPLE WAVE","BRONZE","SIENNA","DIMENSION APRICITY","DIMENSION YUGEN","GOLDEN EDITION","RIVIERA PEARL","BERRINE EDITION","AUBURN EDITION","MULINT EDITION","SUN PEARL","BLACK RUBY","BLACK PURPLE","OASIS PEARL","BERMIN PEARL","PERINT PEARL"],"id":52},{"n":"ไส้บุหรี่ IQOS MALAY","p":1700,"f":["ZING WAVE","TURQUOISE","RUSSET","BLUE","BLACK GREEN","PURPLE WAVE","SIENNA","OASIS PEARL","SUN PEARL","AMBER"],"id":54}],"เครื่อง IQOS":[{"n":"เครื่อง IQOS ILUMA I STANDARD","p":4200,"f":["สีดำ","สีฟ้า","สีเขียว","สีม่วงอ่อน","สีส้ม","สีม่วง"],"id":57},{"n":"เครื่อง IQOS ILUMA I ONE","p":3200,"f":["สีฟ้า","สีส้ม","สีม่วง","สีดำ","สีเขียว"],"id":55},{"n":"เครื่อง IQOS ILUMA I PRIME","p":5200,"f":["สีดำ","สีฟ้า","สีเลือดหมู","สีเขียว","สีม่วง"],"id":56}],"NIC POUCH":[{"n":"NICOTINE POUCH - KARDINAL POUCH","p":199,"f":["MANGO (3MG)","PEPPERMINT (3MG)","COLA (3MG)","BLUEBERRY CITRUS (3MG)","ICE MINT (3MG)","PEPPERMINT (6MG)","COLA (6MG)","BLUEBERRY CITRUS (6MG)","ICE MINT (6MG)","MANGO (6MG)"],"id":63},{"n":"NICOTINE POUCH - ZAR POUCH","p":199,"f":["FRESH MINT (3MG)","LEMON CRUSH (3MG)","COLA (3MG)","CITRUS (3MG)","WATERMELON (3MG)","FRESH MINT (6MG)","LEMON CRUSH (6MG)","COLA (6MG)","CITRUS (6MG)","WATERMELON (6MG)"],"id":64},{"n":"NICOTINE POUCH - ZYN POUCH","p":179,"f":["SPEARMINT (1.5MG)","PEACH (1.5MG)","COFFEE (1.5MG)","COOL MINT (3MG)","SPEARMINT (3MG)","PEACH (3MG)","COFFEE (3MG)","COOL MINT (6MG)"],"id":65}]};
 const W="https://abc-line-ai.milin-mengg.workers.dev";
 const norm=s=>s.trim().replace(/\s+/g," ").toLowerCase();
-const cl=document.getElementById("catlist"),pg=document.getElementById("pages");
+const catsEl=document.getElementById("cats"),secEl=document.getElementById("secs");
+let ONLYIN=false;
 CATS.forEach((c,i)=>{
-  const id="p"+i;
-  cl.insertAdjacentHTML("beforeend",'<button class="catbtn" onclick="go(\''+id+'\')"><span class="ic">'+ICON[c]+'</span>'+c+'<span class="arr">›</span></button>');
-  let h='<div class="page" id="'+id+'"><div class="banner"><h2>'+c+'</h2><button class="back" onclick="go(\'home\')">‹‹ กลับสู่หน้าหลัก</button></div><div class="body">';
+  const id="c"+i;
+  catsEl.insertAdjacentHTML("beforeend",'<a href="#'+id+'">'+ICON[c]+" "+c+"</a>");
+  let h='<div class="sec" id="'+id+'"><div class="sechead">'+ICON[c]+" "+c+'</div>';
   G[c].forEach(m=>{
-    h+='<div class="model" data-id="'+m.id+'"><div class="mh"><b>'+m.n+'</b><span class="price">'+m.p.toLocaleString()+'.-</span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div>';
-    if(m.f.length) h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'">'+f+"</span>").join("")+"</div>";
-    else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี</div>';
+    h+='<div class="md" data-id="'+m.id+'" data-name="'+m.n.toLowerCase()+'"><div class="mh"><b>'+m.n+'</b><span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt"></span><span class="oos-model" style="display:none">หมดทุกกลิ่น</span></div>';
+    if(m.f.length){ h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" onclick="pick(\''+m.n.replace(/'/g,"")+'\',\''+f.replace(/'/g,"")+'\')">'+f+"</span>").join("")+"</div>"; }
+    else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี — แตะเพื่อสั่ง <span class="chip" onclick="pick(\''+m.n.replace(/'/g,"")+'\',\'\')">🛒 สั่งตัวนี้</span></div>';
     h+="</div>";
   });
-  h+='<div class="legend"><span class="lg"><span class="sw" style="background:#f4f4f5;border:1px solid #ddd"></span>มีของ</span><span class="lg"><span class="sw" style="background:#232327"></span>หมดชั่วคราว</span></div></div></div>';
-  pg.insertAdjacentHTML("beforeend",h);
+  h+="</div>"; secEl.insertAdjacentHTML("beforeend",h);
 });
-function go(id){ document.querySelectorAll(".page").forEach(p=>p.classList.remove("on")); document.getElementById(id).classList.add("on"); document.getElementById("backbtn").style.display=(id==="home")?"none":"block"; scrollTo(0,0); }
+// สต็อกสด
 fetch(W+"/flavors").then(r=>r.json()).then(st=>{
-  document.querySelectorAll(".model").forEach(md=>{
+  document.querySelectorAll(".md").forEach(md=>{
     const id=md.dataset.id; let have=0,tot=0;
-    md.querySelectorAll(".chip").forEach(ch=>{ tot++; if(st[id+"|"+ch.dataset.f]===false) ch.classList.add("out"); else have++; });
-    if(tot&&!have) md.querySelector(".oos").style.display="inline-block";
+    md.querySelectorAll(".chip[data-f]").forEach(ch=>{
+      tot++;
+      if(st[id+"|"+ch.dataset.f]===false) ch.classList.add("out"); else have++;
+    });
+    md.dataset.have=have;
+    const hc=md.querySelector(".havecnt");
+    if(tot){ if(have){ hc.textContent="มีของ "+have+" กลิ่น"; } else { hc.style.display="none"; md.querySelector(".oos-model").style.display="inline-block"; } }
+    else md.dataset.have=1;
   });
   document.getElementById("livetxt").textContent="สต็อกสด · อัปเดต "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+" น.";
-}).catch(()=>{ document.getElementById("livetxt").textContent="แสดงรายการสินค้า"; });
+  applyFilter();
+}).catch(()=>{ document.getElementById("livetxt").textContent="แสดงรายการสินค้า (เช็คสต็อกสดไม่สำเร็จ)"; });
+// ค้นหา + กรอง
+function applyFilter(){
+  const q=norm(document.getElementById("q").value||"");
+  let shown=0;
+  document.querySelectorAll(".md").forEach(md=>{
+    let ok=true;
+    if(ONLYIN && md.dataset.have==="0") ok=false;
+    if(ok&&q){
+      const inName=md.dataset.name.indexOf(q)!==-1;
+      let inFlav=false;
+      md.querySelectorAll(".chip[data-f]").forEach(ch=>{ if(ch.dataset.f.indexOf(q)!==-1) inFlav=true; });
+      ok=inName||inFlav;
+    }
+    md.style.display=ok?"":"none"; if(ok) shown++;
+  });
+  document.querySelectorAll(".sec").forEach(s=>{
+    const any=[...s.querySelectorAll(".md")].some(m=>m.style.display!=="none");
+    s.style.display=any?"":"none";
+  });
+  document.getElementById("nores").style.display=shown?"none":"block";
+}
+function toggleIn(){ ONLYIN=!ONLYIN; document.getElementById("oin").classList.toggle("on",ONLYIN); applyFilter(); }
+// แตะกลิ่น → ก๊อปข้อความสั่ง
+let ORD="";
+function pick(model,flavor){ ORD="สนใจ "+model+(flavor?" กลิ่น"+flavor:"")+" ค่ะ/ครับ"; document.getElementById("ordtxt").textContent=ORD; document.getElementById("cpybtn").textContent="📋 คัดลอกข้อความสั่ง"; document.getElementById("sheet").classList.add("on"); }
+function closeSheet(){ document.getElementById("sheet").classList.remove("on"); }
+function copyOrd(){ navigator.clipboard.writeText(ORD).then(()=>{ document.getElementById("cpybtn").textContent="✅ คัดลอกแล้ว!"; setTimeout(closeSheet,900); }).catch(()=>{ prompt("คัดลอกข้อความนี้:",ORD); }); }
 </script>
 </body>
 </html>
