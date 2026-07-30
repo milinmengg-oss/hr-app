@@ -185,7 +185,7 @@ body.t-green #sheet .go{background:#37c86f;color:#06220f}
   <h3 id="sh_m"></h3><div class="fl" id="sh_f"></div><div class="stx" id="sh_st"></div>
   <div class="msgprev" id="sh_msg"></div>
   <div class="copied" id="sh_ok"></div>
-  <button class="go" onclick="orderGo()">📋 คัดลอกข้อความ & กลับไปสั่งในแชท</button>
+  <button class="go" onclick="orderGo()">📋 คัดลอกข้อความสั่งซื้อ</button>
   <button class="cls" onclick="closeSheet()">ปิด</button>
 </div>
 <script>
@@ -323,14 +323,7 @@ function closeSheet(){ document.getElementById("sheet").classList.remove("on"); 
 async function orderGo(){
   try{ await navigator.clipboard.writeText(SHEETMSG); }
   catch(e){ const t=document.createElement("textarea"); t.value=SHEETMSG; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
-  document.getElementById("sh_ok").textContent="✅ คัดลอกแล้ว — กำลังพากลับแชท…";
-  setTimeout(()=>{
-    if(liffOK && liff.isInClient()){ try{ liff.closeWindow(); return; }catch(e){} }
-    if(SHOPLINK[SHOP]){ location.href=SHOPLINK[SHOP]; return; }
-    if(history.length>1) history.back();
-    setTimeout(()=>{ try{window.close()}catch(e){} },350);
-    setTimeout(()=>{ document.getElementById("sh_ok").textContent="✅ คัดลอกข้อความแล้วค่ะ — กดปุ่ม ✕ มุมบน เพื่อกลับแชท แล้ววางข้อความส่งได้เลย"; },800);
-  },700);
+  document.getElementById("sh_ok").textContent="✅ คัดลอกแล้วค่ะ — กลับไปที่แชทไลน์ แล้ววางข้อความส่งได้เลย";
 }
 </script>
 </body>
