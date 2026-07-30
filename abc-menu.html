@@ -7,10 +7,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{font-family:'Kanit',sans-serif;background:#e9e9ea;color:#111}
-.page{display:none;min-height:100vh;max-width:520px;margin:0 auto;background:#fff}
+body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
+.page{display:none;min-height:100vh;max-width:520px;margin:0 auto}
 .page.on{display:block}
-#home{background:linear-gradient(160deg,#fdfdfd,#ececec);text-align:center;padding:36px 20px 40px}
+/* ══ ปก (ขาวแบบ Canva หน้า 1) ══ */
+#home{background:linear-gradient(160deg,#fdfdfd,#ececec);text-align:center;padding:36px 20px 46px;color:#111}
 .logo{font-size:64px;font-weight:900;letter-spacing:1px;background:linear-gradient(115deg,#8ef05e,#37c86f 26%,#111 55%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1}
 #home h1{font-size:30px;font-weight:900;margin-top:4px}
 .instr{display:inline-block;border:1.5px solid #111;border-radius:8px;padding:5px 16px;font-size:12.5px;margin-top:12px}
@@ -22,31 +23,36 @@ body{font-family:'Kanit',sans-serif;background:#e9e9ea;color:#111}
 .catbtn .ic{font-size:18px}
 .catbtn .arr{margin-left:auto;background:#fff;color:#111;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900}
 .homefoot{font-size:10.5px;color:#8a8a8a;margin-top:26px;line-height:1.8}
-.banner{position:sticky;top:0;z-index:10;background:linear-gradient(100deg,#101216 55%,#2a2f38);color:#fff;display:flex;align-items:center;padding:16px 16px;gap:10px}
-.banner h2{font-size:26px;font-weight:900}
+/* ══ หน้าหมวด (เข้มแบบ Canva) ══ */
+.cpage{background:#0a0a0c}
+.banner{position:sticky;top:0;z-index:10;background:linear-gradient(100deg,#15171c 45%,#2e333d);display:flex;align-items:center;padding:15px 16px;gap:10px;border-bottom:1px solid #23252b}
+.banner h2{font-size:26px;font-weight:900;color:#fff}
+.banner .abc{font-weight:900;font-size:14px;color:#8ef05e;margin-left:2px}
 .back{margin-left:auto;background:#fff;color:#111;border:none;border-radius:9px;padding:8px 13px;font-family:inherit;font-size:12.5px;font-weight:800;cursor:pointer;white-space:nowrap}
-.body{padding:14px 14px 90px}
-.model{margin-top:20px;border:1px solid #ececef;border-radius:16px;padding:12px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.05)}
-.mh{display:flex;align-items:center;gap:11px}
-.pimg{width:64px;height:64px;border-radius:12px;object-fit:cover;background:#f2f2f4;flex-shrink:0}
-.mtitle{flex:1;min-width:0}
-.mtitle b{font-size:16.5px;font-weight:900;letter-spacing:.2px;display:block;line-height:1.25}
-.mrow{display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap}
-.price{background:#c6f45f;color:#111;font-weight:900;font-size:13.5px;border-radius:7px;padding:1px 10px}
-.oos{font-size:10.5px;color:#c02626;background:#fde8e8;border:1px solid #f5bcbc;border-radius:99px;padding:1px 9px}
-.havecnt{font-size:10.5px;color:#1d7c3d;background:#eef7ee;border:1px solid #cfe8d5;border-radius:99px;padding:1px 9px}
-.chips{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:11px}
-.chip{font-size:12px;text-align:center;padding:8px 6px;border-radius:10px;background:#f4f4f5;border:1px solid #e2e2e5;color:#111;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.chip.out{background:#232327;border-color:#232327;color:#77777e;opacity:.75;text-decoration:line-through;font-weight:400}
-.note{font-size:12px;color:#8a8a8a;margin-top:8px}
-.legend{display:flex;gap:14px;justify-content:center;font-size:11.5px;color:#666;margin-top:16px}
+.body{padding:14px 12px 92px}
+.model{margin-top:20px}
+.mhead{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:0 2px}
+.mhead b{font-size:19px;font-weight:900;letter-spacing:.4px;font-style:italic}
+.price{background:#c6f45f;color:#111;font-weight:900;font-size:14px;border-radius:99px;padding:2px 12px}
+.oos{font-size:10.5px;color:#ff9d9d;background:#331414;border:1px solid #5d2727;border-radius:99px;padding:2px 10px}
+.havecnt{font-size:10.5px;color:#9fe6b4;background:#122612;border:1px solid #2b5c38;border-radius:99px;padding:2px 10px}
+.mbox{display:flex;gap:9px;margin-top:9px;background:#101014;border:1px solid #202026;border-radius:14px;padding:10px}
+.chips{flex:1;display:grid;grid-template-columns:repeat(2,1fr);gap:6px;align-content:start}
+.chip{font-size:11.5px;text-align:center;padding:7px 5px;border-radius:99px;background:#26262c;border:1px solid #35353d;color:#c9c9d1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chip.in{background:#f5f5f6;border-color:#fff;color:#111;font-weight:700}
+.imgcard{width:42%;flex-shrink:0;background:#fff;border-radius:12px;display:flex;align-items:center;justify-content:center;padding:8px;min-height:170px}
+.imgcard img{width:100%;max-height:230px;object-fit:contain}
+.noimg{color:#bbb;font-size:11px}
+.note{font-size:12px;color:#7c7c85;margin-top:6px;padding:0 2px}
+.legend{display:flex;gap:16px;justify-content:center;font-size:11.5px;color:#8b8b93;margin-top:18px}
 .lg{display:flex;align-items:center;gap:6px}
-.sw{width:14px;height:14px;border-radius:5px}
-.bar{position:fixed;left:0;right:0;bottom:0;background:#fffffff5;border-top:1px solid #e2e2e5;z-index:20}
+.sw{width:15px;height:15px;border-radius:6px}
+/* แถบล่าง */
+.bar{position:fixed;left:0;right:0;bottom:0;background:#0d0d10f5;border-top:1px solid #232329;z-index:20;backdrop-filter:blur(8px)}
 .bar .in{max-width:520px;margin:0 auto;display:flex;gap:9px;padding:9px 12px calc(9px + env(safe-area-inset-bottom))}
 .bar a,.bar button{flex:1;text-align:center;border-radius:12px;padding:12px;font-weight:800;font-size:14px;text-decoration:none;border:none;font-family:inherit;cursor:pointer}
-.b1{background:#111;color:#fff}
-.b2{background:#eee;color:#111;border:1px solid #ddd}
+.b1{background:#c6f45f;color:#111}
+.b2{background:#232329;color:#fff;border:1px solid #33333b}
 </style>
 </head>
 <body>
@@ -74,26 +80,26 @@ const cl=document.getElementById("catlist"),pg=document.getElementById("pages");
 CATS.forEach((c,i)=>{
   const id="p"+i;
   cl.insertAdjacentHTML("beforeend",'<button class="catbtn" onclick="go(\''+id+'\')"><span class="ic">'+ICON[c]+'</span>'+c+'<span class="arr">›</span></button>');
-  let h='<div class="page" id="'+id+'"><div class="banner"><h2>'+c+'</h2><button class="back" onclick="go(\'home\')">‹‹ กลับสู่หน้าหลัก</button></div><div class="body">';
+  let h='<div class="page cpage" id="'+id+'"><div class="banner"><h2>'+c+'</h2><span class="abc">ABC</span><button class="back" onclick="go(\'home\')">‹‹ กลับสู่หน้าหลัก</button></div><div class="body">';
   G[c].forEach(m=>{
-    const im=IMG[m.id]?'<img class="pimg" loading="lazy" src="'+IMG[m.id]+'" onerror="this.style.display=\'none\'">':"";
-    h+='<div class="model" data-id="'+m.id+'"><div class="mh">'+im+'<div class="mtitle"><b>'+m.n+'</b><div class="mrow"><span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt" style="display:none"></span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div></div></div>';
-    if(m.f.length) h+='<div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'">'+f+"</span>").join("")+"</div>";
-    else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี</div>';
+    const im=IMG[m.id]?'<div class="imgcard"><img loading="lazy" src="'+IMG[m.id]+'" onerror="this.parentElement.innerHTML=\'<span class=noimg>ABC</span>\'"></div>':"";
+    h+='<div class="model" data-id="'+m.id+'"><div class="mhead"><b>'+m.n+'</b><span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt" style="display:none"></span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div>';
+    if(m.f.length) h+='<div class="mbox"><div class="chips">'+m.f.map(f=>'<span class="chip" data-f="'+norm(f)+'" title="'+f+'">'+f+"</span>").join("")+'</div>'+im+'</div>';
+    else h+='<div class="mbox">'+ (im||'') +'<div class="note" style="align-self:center">ไม่มีตัวเลือกกลิ่น/สี</div></div>';
     h+="</div>";
   });
-  h+='<div class="legend"><span class="lg"><span class="sw" style="background:#f4f4f5;border:1px solid #ddd"></span>มีของ</span><span class="lg"><span class="sw" style="background:#232327"></span>หมดชั่วคราว</span></div></div></div>';
+  h+='<div class="legend"><span class="lg"><span class="sw" style="background:#f5f5f6"></span>มีของ</span><span class="lg"><span class="sw" style="background:#26262c;border:1px solid #3a3a42"></span>หมดชั่วคราว</span></div></div></div>';
   pg.insertAdjacentHTML("beforeend",h);
 });
 function go(id){ document.querySelectorAll(".page").forEach(p=>p.classList.remove("on")); document.getElementById(id).classList.add("on"); document.getElementById("backbtn").style.display=(id==="home")?"none":"block"; scrollTo(0,0); }
 fetch(W+"/flavors").then(r=>r.json()).then(st=>{
   document.querySelectorAll(".model").forEach(md=>{
     const id=md.dataset.id; let have=0,tot=0;
-    md.querySelectorAll(".chip").forEach(ch=>{ tot++; if(st[id+"|"+ch.dataset.f]===false) ch.classList.add("out"); else have++; });
+    md.querySelectorAll(".chip").forEach(ch=>{ tot++; if(st[id+"|"+ch.dataset.f]===false){} else { ch.classList.add("in"); have++; } });
     if(tot){ if(have){ const hc=md.querySelector(".havecnt"); hc.textContent="มีของ "+have+" กลิ่น"; hc.style.display="inline-block"; } else md.querySelector(".oos").style.display="inline-block"; }
   });
   document.getElementById("livetxt").textContent="สต็อกสด · อัปเดต "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+" น.";
-}).catch(()=>{ document.getElementById("livetxt").textContent="แสดงรายการสินค้า"; });
+}).catch(()=>{ document.querySelectorAll(".chip").forEach(ch=>ch.classList.add("in")); document.getElementById("livetxt").textContent="แสดงรายการสินค้า"; });
 </script>
 </body>
 </html>
