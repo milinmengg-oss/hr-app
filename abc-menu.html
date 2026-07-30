@@ -63,6 +63,8 @@ body{font-family:'Kanit',sans-serif;background:#0a0a0c;color:#fff}
 .chip{display:flex;align-items:center;gap:7px;font-size:11.5px;padding:7px 11px;border-radius:99px;background:#26262c;border:1px solid #35353d;color:#c9c9d1}
 .chip .fe{font-size:13px;filter:grayscale(1);opacity:.5}
 .chip span.t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chips.one{grid-template-columns:1fr}
+.chip{min-width:0;overflow:hidden}
 .chip .rt{margin-left:auto;font-size:9.5px;letter-spacing:.5px;white-space:nowrap;flex-shrink:0}
 .chip:not(.in) .rt{filter:grayscale(1);opacity:.45}
 .chip.in{background:#f5f5f6;border-color:#fff;color:#111;font-weight:700}
@@ -230,7 +232,7 @@ CATS.forEach((c,i)=>{
     var PR={'หัวน้ำยา':'ครบ 10 หัว ส่งฟรี','BIG POD':'ครบ 4 ชิ้น ส่งฟรี','พอตใช้แล้วทิ้ง':'ครบ 4 แท่ง ส่งฟรี','BIG POD KIT':'ครบ 4 ชิ้น ส่งฟรี','เครื่องพอต':'สั่งคู่หัวน้ำยา คุ้มกว่า','เครื่อง BIG POD':'สั่งคู่หัว Big Pod คุ้มกว่า','SALTNIC':'สั่งคู่หัวเติม สอบถามโปรในแชท','FREEBASE':'สั่งคู่หัวเติม สอบถามโปรในแชท','IQOS':'สอบถามโปรในแชทได้เลย','เครื่อง IQOS':'สอบถามโปรในแชทได้เลย','NIC POUCH':'สอบถามโปรในแชทได้เลย'};
     var prm=m.promo||PR[c]; if(prm) h+='<div class="promo"><small>🎁 โปรโมชั่น</small><b>'+prm+'</b></div>';
     h+='</div>'+im+'</div>';
-    if(m.f.length) h+='<div class="chips">'+m.f.map(f=>{const rt=IQR[m.n]&&IQR[m.n][f];return '<span class="chip" data-f="'+norm(f)+'" title="'+f+'">'+(rt?'':'<span class="fe">'+(FEM[f]||"🍃")+'</span>')+'<span class="t">'+f+'</span>'+(rt?'<span class="rt">'+rt+'</span>':'')+'</span>';}).join("")+'</div>';
+    if(m.f.length) h+='<div class="chips'+(IQR[m.n]?' one':'')+'">'+m.f.map(f=>{const rt=IQR[m.n]&&IQR[m.n][f];return '<span class="chip" data-f="'+norm(f)+'" title="'+f+'">'+(rt?'':'<span class="fe">'+(FEM[f]||"🍃")+'</span>')+'<span class="t">'+f+'</span>'+(rt?'<span class="rt">'+rt+'</span>':'')+'</span>';}).join("")+'</div>';
     else h+='<div class="note">ไม่มีตัวเลือกกลิ่น/สี</div>';
     h+="</div>";
   });
