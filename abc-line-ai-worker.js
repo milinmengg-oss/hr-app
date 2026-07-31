@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k41-testsuite";
+const BUILD = "2026-07-31-k42-memory24h";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -565,6 +565,34 @@ const FLAVOR_ALL = (() => { const s = new Set(); for (const k in FLAVORS) for (c
 const MODEL_LIST = Object.keys(FLAVORS).join(" · ");
 const MODEL_WORDS = (() => { const s = new Set(); for (const k in FLAVORS) s.add(normTH(k)); for (const b in BRAND_OF) s.add(normTH(b)); return s; })();
 let _hintModels = [];   // รุ่นที่ระบบตรวจพบว่ากำลังคุยถึงรอบนี้ (ตั้งค่าใน flavorHint)
+// ═══ k42: ความจำของจีทู ═══════════════════════════════════════════
+// เดิมประวัติแชทหมดอายุใน 1 ชม. → ลูกค้าคุยเช้า กลับมาบ่าย จีทูจำไม่ได้เลย ต้องถามซ้ำ
+// ยืดเป็น 24 ชม. แต่ต้องกัน "จำผิด" ด้วย: ข้อมูลสต็อก/ราคาเมื่อวานเอามายืนยันวันนี้ไม่ได้
+const HIST_TTL = 86400;                  // เก็บประวัติ 24 ชม.
+const HIST_FRESH_MS = 2 * 3600 * 1000;   // เกิน 2 ชม. = ถือว่าเป็นข้อมูลเก่า ต้องเตือน AI
+// แปลงประวัติให้พร้อมส่งเข้า AI (ตัดฟิลด์เวลาออก เพราะ OpenRouter ไม่รับฟิลด์แปลกปลอม)
+function histForAI(hist, n) {
+  const arr = (hist || []).slice(-n);
+  const out = arr.map(h => ({ role: h.role, content: h.content }));
+  try {
+    const last = arr.length ? arr[arr.length - 1] : null;
+    if (last && last.t && Date.now() - last.t > HIST_FRESH_MS) {
+      const hrs = Math.max(1, Math.round((Date.now() - last.t) / 3600000));
+      out.unshift({
+        role: "system",
+        content: "⚠️ บทสนทนาด้านล่างนี้เกิดขึ้นเมื่อประมาณ " + hrs + " ชม.ที่แล้ว — สต็อก ราคา และสถานะออเดอร์อาจเปลี่ยนไปแล้ว\n"
+          + "ห้ามยืนยันว่ากลิ่นไหน 'ยังมีของ' หรือยืนยันยอดเงิน/ออเดอร์ จากบทสนทนาเก่านี้เด็ดขาด\n"
+          + "ให้ใช้เฉพาะข้อมูลสต็อกล่าสุดที่ระบบแนบมาในข้อความล่าสุดเท่านั้น ถ้าลูกค้าอ้างถึงของเก่า ให้เช็คใหม่ก่อนตอบเสมอ"
+      });
+    }
+  } catch (e) { }
+  return out;
+}
+// ติดเวลาให้ทุกข้อความก่อนบันทึก (ของเก่าที่ไม่มีเวลา = ถือว่าสดไว้ก่อน ไม่ทำให้พัง)
+function stampHist(list) {
+  const now = Date.now();
+  return (list || []).map(h => (h && h.t) ? h : Object.assign({}, h, { t: now }));
+}
 function stripFakeFlavors(reply) {
   try {
     let allow = null;   // null = เทียบกับกลิ่นทั้งร้าน | Set = เทียบเฉพาะรุ่นที่กำลังคุย
@@ -2092,7 +2120,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           { type: "image_url", image_url: { url: dataUri } }
         ]
       };
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...history.slice(-8), visionMsg], VISION_MODELS);
+      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...histForAI(history, 8), visionMsg], VISION_MODELS);
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตรวจกับ SlipOK แล้วเทียบยอดกับออเดอร์
         // ✅ สลิปผ่าน  → จีทูขอที่อยู่จัดส่งต่อ (ไม่มิ้วต์) แล้วค่อยสรุปออเดอร์
@@ -2162,8 +2190,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           // ชำระผ่าน → จีทูขอที่อยู่ต่อ (ไม่มิ้วต์) + จดประวัติว่าชำระแล้ว เพื่อให้จีทูรู้ว่าต้องขอที่อยู่แล้วสรุปออเดอร์
           try {
             if (env.CONV) {
-              const next = [...history, { role: "user", content: "[ลูกค้าส่งสลิปโอนเงิน — ตรวจสอบแล้วชำระเงินถูกต้อง]" }, { role: "assistant", content: "ยืนยันการชำระเงินเรียบร้อยค่ะ กำลังขอที่อยู่จัดส่งจากลูกค้า" }].slice(-20);
-              await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+              const next = stampHist([...history, { role: "user", content: "[ลูกค้าส่งสลิปโอนเงิน — ตรวจสอบแล้วชำระเงินถูกต้อง]" }, { role: "assistant", content: "ยืนยันการชำระเงินเรียบร้อยค่ะ กำลังขอที่อยู่จัดส่งจากลูกค้า" }].slice(-20));
+              await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
             }
           } catch (e) {}
           await lineReply(TOKEN, replyToken, customerMsg, userId);
@@ -2350,8 +2378,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             }
             await lineReply(TOKEN, replyToken, msg, userId);
             if (env.CONV) {
-              const next = [...history, { role: "user", content: text }, { role: "assistant", content: msg }].slice(-20);
-              await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+              const next = stampHist([...history, { role: "user", content: text }, { role: "assistant", content: msg }].slice(-20));
+              await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
               await appendChatLog(env, shopId, userId, text, msg);
             }
             return;
@@ -2365,7 +2393,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         askAI(env.OPENROUTER_KEY, [
           { role: "system", content: sysFull },                        // k33: ก้อนคงที่ — ต้องเหมือนเดิมทุกครั้งเพื่อให้ผู้ให้บริการแคชได้ (ลดค่าใช้จ่าย)
           { role: "system", content: (stockNote || "") + (langRule || "") },  // ก้อนที่เปลี่ยนตามสถานการณ์
-          ...history.slice(-6), { role: "user", content: text + hint }]),
+          ...histForAI(history, 6), { role: "user", content: text + hint }]),
         new Promise(res => setTimeout(() => res("__TIMEOUT__"), 26000))
       ]);
       if (reply === "__TIMEOUT__") {
@@ -2702,8 +2730,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // บันทึกประวัติ (best-effort — ถ้าโควต้าเขียน KV เต็ม ก็ข้ามไป ไม่กระทบการตอบ)
     try {
       if (env.CONV) {
-        const next = [...history, userForHistory, { role: "assistant", content: reply }].slice(-20);
-        await env.CONV.put(key, JSON.stringify(next), { expirationTtl: 3600 });
+        const next = stampHist([...history, userForHistory, { role: "assistant", content: reply }].slice(-20));
+        await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
         // 🗒 k10: log ถาวร 30 วัน สำหรับขุดวิเคราะห์
         await appendChatLog(env, shopId, userId, (typeof userForHistory.content === "string" ? userForHistory.content : "[รูปภาพ]"), reply);
       }
