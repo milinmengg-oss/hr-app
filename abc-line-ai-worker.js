@@ -21,18 +21,19 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k33-cheapmodel";
+const BUILD = "2026-07-31-k34-deepseek-main";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
-  "google/gemini-2.0-flash-001",         // k33: หลัก — เร็ว (~0.8 วิ) + ถูกกว่า 2.5 Flash ~6 เท่า ไม่มีโหมดคิดในใจ
-  "deepseek/deepseek-chat",              // สำรอง 1: V3 เชื่อฟังกฎแม่น (~2.3 วิ)
-  "qwen/qwen-2.5-72b-instruct",          // สำรอง 2
+  "deepseek/deepseek-chat",              // k34 หลัก: DeepSeek V3 — เชื่อฟังกฎร้านแม่นสุดในภาษาไทย (~2.3 วิ) = ตอบถูก ไม่เพี้ยน
+  "google/gemini-2.0-flash-001",         // สำรอง 1: เร็วสุด ถูกสุด (ใช้เมื่อ DeepSeek ล่ม/ช้าเกิน)
+  "qwen/qwen-2.5-72b-instruct",          // สำรอง 2: กันตายท้ายสุด
 ];
 
 // ===== โมเดลอ่านรูป (vision) — ใช้ตอนลูกค้าส่งรูปเมนูที่วงกลม =====
 const VISION_MODELS = [
-  "google/gemini-2.5-flash",          // อ่านรูปเมนูวงแดง/ตัวหนังสือไทยแม่นสุด
+  "google/gemini-2.0-flash-001",      // k34: อ่านรูปได้ดี + ถูกกว่า 2.5 มาก
+  "google/gemini-2.5-flash",          // สำรอง: แม่นสุดกับตัวหนังสือไทย (แพงกว่า)
   "google/gemini-flash-1.5",
   "qwen/qwen-2.5-vl-72b-instruct",
   "google/gemini-2.0-flash-exp:free",
@@ -2602,7 +2603,7 @@ async function askAI(apiKey, messages, models) {
   let idx = 0;
   for (const model of list) {
     // ตัวแรกให้เวลาคิดนาน (prompt ความรู้สินค้ายาว ใช้เวลา) ตัวสำรองให้สั้นลง กัน reply token หมดอายุ
-    const limitMs = idx === 0 ? 18000 : 7000;
+    const limitMs = idx === 0 ? 14000 : 8000;   // k34: ตัวหลักรอ 14 วิ ถ้าช้ากว่านั้นสลับตัวเร็วให้ทันที
     idx++;
     try {
       const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
