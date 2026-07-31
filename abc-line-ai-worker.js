@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k39-lockdown";
+const BUILD = "2026-07-31-k40-emptylist";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2452,6 +2452,43 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         "MARBO 9K (แท้ 350 บาท / โคลนเทียบแท้ 290 บาท)");
       // 2.7) 🛑 k16: ตัดกลิ่นที่ไม่มีจริงออกก่อนส่งถึงลูกค้า
       reply = stripFakeFlavors(reply);
+      // 2.8) 🕳 k40: กัน "ลิสต์กลิ่นว่างเปล่า"
+      // เคสจริง 31/7: ลูกค้าถาม "ชอบแนวเย็นๆหวานๆ" → จีทูมโนชื่อกลิ่นที่ MARBO 9K ไม่มี
+      //   ตัวกรอง 2.7 ตัดทิ้งหมด เหลือแค่ "ในรุ่น MARBO 9K แนะนำค่ะ 💕" แล้วว่างเปล่า = ลูกค้างง
+      // แก้: ถ้าเกริ่นว่าจะแนะนำ/มีกลิ่น แต่ไม่เหลือรายการเลย → เติมกลิ่นที่ "มีของจริง" ของรุ่นนั้นให้แทน
+      try {
+        const _intro = /แนะนำ|มีกลิ่น|กลิ่นที่มี|เลือกได้|ดังนี้|ตัวเลือก/.test(reply);
+        const _bullets = (reply.match(/^\s*[-•●*▪✅👉]/gm) || []).length;
+        // ⚠️ อ่านสต็อกจาก KV ตรงนี้เอง — ตัวแปร smForHint อยู่คนละบล็อก เรียกตรงๆ จะ ReferenceError
+        let _sm = null, _buf = 1;
+        if (_intro && _bullets === 0 && _hintModels.length) {
+          try { if (env.CONV) { _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); _buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) { }
+        }
+        if (_intro && _bullets === 0 && _hintModels.length && _sm) {
+          const _mdl = _hintModels[0];
+          const _fl = (FLAVORS[_mdl] && FLAVORS[_mdl].f) || [];
+          const _have = _fl.filter(f => { let q = null; try { q = findStockForItem(_sm, _mdl, f); } catch (e) { } return q === null || q > _buf; });
+          if (_have.length) {
+            const _show = _have.slice(0, 12);
+            reply = reply.replace(/(แนะนำค่ะ[^\n]*|ดังนี้ค่ะ[^\n]*|มีกลิ่น[^\n]*)\n/, "$1\n\n" + _show.map(f => "• " + f).join("\n") + "\n") ;
+            if ((reply.match(/^\s*•/gm) || []).length === 0) {
+              reply = _show.map(f => "• " + f).join("\n") + "\n\n" + reply;
+            }
+            if (_have.length > _show.length) reply += "\n(ดูครบทุกกลิ่นได้ที่เมนูค่ะ https://cutt.ly/abc-menu)";
+            console.log("EMPTY_LIST_FIXED " + _mdl + " +" + _show.length);
+          } else {
+            reply = "ต้องขออภัยด้วยนะคะ 🙏🏻 ตอนนี้ " + _mdl + " กลิ่นแนวที่คุณลูกค้าชอบยังไม่มีของค่ะ\n\nรบกวนบอกแนวกลิ่นหรือรุ่นอื่นที่สนใจมาได้เลยค่ะ เดี๋ยวอัญญาเช็คให้ทันที หรือดูรุ่นที่มีของทั้งหมดได้ที่เมนูนี้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
+            console.log("EMPTY_LIST_FIXED soldout " + _mdl);
+          }
+        }
+        // 2.9) k40: ลิสต์ชื่อกลิ่นลอยๆ โดยไม่บอกรุ่น → ลูกค้าเข้าใจว่ามีทุกรุ่น แล้วเลือกกลิ่นที่รุ่นนั้นไม่มี
+        // เคสจริง 31/7: ถาม "สูบทิ้งอันไหนหวานๆ" → ตอบ องุ่น/สตรอเบอร์รี่/มะม่วง/แตงโม โดยไม่ระบุรุ่นเลย
+        if (!_hintModels.length && _bullets >= 3 && /กลิ่น|หวาน|เย็น|แนะนำ/.test(reply)
+          && !/รุ่น|MARBO|INFY|ELFBAR|ESKO|KS |RELX|VAZER|ABC |SONIC|SMASH/i.test(reply)) {
+          reply += "\n\n⚠️ กลิ่นที่มีจริงขึ้นกับแต่ละรุ่นนะคะ บอกรุ่นที่สนใจมาได้เลยค่ะ เดี๋ยวอัญญาเช็คให้ว่ารุ่นนั้นมีกลิ่นไหนพร้อมส่งบ้าง 💕";
+          console.log("BARE_FLAVOR_LIST warned");
+        }
+      } catch (e) { }
       // 3) 🔒 ห้ามใบ้ระดับสต็อก — บอกได้แค่ "มี" หรือ "หมด" เท่านั้น (กฎความลับของร้าน)
       reply = reply
         .replace(/\s*\(?\s*(เหลือ(จำนวน)?จำกัด|จำนวนจำกัด|เหลือน้อย|ใกล้หมด|เหลือไม่กี่(ชิ้น|อัน|แท่ง|หัว)|มีจำนวนจำกัด|สต็อกเหลือน้อย|ของใกล้หมด|รีบก่อนหมด)\s*\)?/g, "")
