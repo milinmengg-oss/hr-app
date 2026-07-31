@@ -48,6 +48,20 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
 .qdone{flex:1;background:#1c3b1c;border:1.5px solid #2e7d32;color:#9be29b;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
 .ocard{background:#1a1f17;border:1px solid #333;border-left:3px solid #bdfb00;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
 .ostatus{font-size:11px;color:#bdfb00;background:#2a3315;padding:2px 8px;border-radius:20px;white-space:nowrap;}
+/* 🚨 ออเดอร์ที่ "ห้ามลง" — สลิปมีปัญหา/ยอดไม่ตรง/สลิปซ้ำ ต้องสะดุดตาจนเผลอกดไม่ได้ */
+.ocard.bad{background:#2a1414;border:1px solid #7a2020;border-left:5px solid #ff4d4d;box-shadow:0 0 0 1px rgba(255,77,77,.25);}
+.ocard.bad .ostatus{color:#fff;background:#c62828;font-weight:700;}
+.ocard.bad .oblock{background:#1e0f0f;border-color:#5a1c1c;}
+.owarn{display:flex;align-items:center;gap:8px;background:#c62828;color:#fff;font-weight:700;font-size:13px;
+  border-radius:9px;padding:9px 11px;margin:0 0 10px;line-height:1.45;}
+.owarn .blink{animation:pulse 1.1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+/* ปุ่ม "ลงแล้ว" ของเคสมีปัญหา → เทา กดไม่เข้า จนกว่าจะกดยืนยันความเสี่ยง */
+.ocard.bad .odone{background:#3a2020;border-color:#7a3030;color:#a58a8a;}
+.oack{width:100%;background:#3a1f1f;border:1.5px dashed #c62828;color:#ffb4b4;border-radius:10px;
+  padding:9px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;margin-bottom:8px;}
+.ocard.bad.ok .odone{background:#1c3b1c;border-color:#2e7d32;color:#9be29b;}
+.ocard.bad.ok .oack{display:none;}
 .oblock{font-size:12.5px;color:#e2e2e2;margin-top:8px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#141414;border-radius:8px;padding:9px 10px;max-height:220px;overflow:auto;}
 .orow{display:flex;gap:8px;margin-top:10px;}
 .ocopy{flex:1;background:#222;border:1.5px solid #3a3a3a;color:#f2f2f2;border-radius:10px;padding:9px;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;}
@@ -248,6 +262,20 @@ async function loadQueue(){
 }
 async function markDone(uid){ try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); loadQueue(); refresh(); }catch(e){} }
 
+// 🔓 ปลดล็อกปุ่ม "ลงแล้ว" ของออเดอร์ที่สลิปมีปัญหา — ต้องกดยืนยันก่อน กันเผลอ
+function ackBad(id){
+  const el=document.getElementById(id); if(!el) return;
+  if(!confirm('ยืนยันว่าเช็คแล้วว่าเงินเข้าบัญชีจริง?\n\nถ้ายังไม่แน่ใจ กดยกเลิกแล้วเช็คก่อนนะคะ')) return;
+  el.classList.add('ok');
+}
+function orderDone2(uid,el){
+  const card=el&&el.closest?el.closest('.ocard'):null;
+  if(card&&card.classList.contains('bad')&&!card.classList.contains('ok')){
+    alert('⛔ ออเดอร์นี้สลิปมีปัญหา\n\nต้องกดปุ่ม "ฉันเช็คยอดเงินเข้าแล้ว" ก่อนถึงจะลงออเดอร์ได้ค่ะ');
+    return;
+  }
+  orderDone(uid);
+}
 async function loadOrders(){
   try{
     const d=await (await fetch(q('/ctl/orders'))).json(); const o=d.orders||[];
@@ -262,13 +290,21 @@ async function loadOrders(){
       if(cTel) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cTel).replace(/"/g,'&quot;')+')">📞 เบอร์</button>';
       if(cAddr) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(cAddr).replace(/"/g,'&quot;')+')">📍 ที่อยู่</button>';
       if(items) chips+='<button class="chip" onclick="copyTxt(this,'+JSON.stringify(items).replace(/"/g,'&quot;')+')">🛒 รายการ</button>';
-      return '<div class="ocard"><div class="qtop"><b>'+esc(it.name||'ลูกค้า')+'</b><span class="ostatus">'+esc(it.status)+'</span></div>'
+      // 🚨 เคสที่ "ห้ามลงออเดอร์" — ต้องแดงทั้งใบ + ล็อกปุ่มไว้ก่อน กันแอดมินเผลอกด
+      const st = String(it.status||'');
+      const bad = /สลิปมีปัญหา|ยอดไม่ตรง|สลิปซ้ำ|code 1\d{3}|ตรวจไม่ผ่าน|เช็คด่วน|⛔/.test(st);
+      const why = bad ? (/code 1014/.test(st) ? 'สลิปนี้เคยถูกใช้มาแล้ว (สลิปซ้ำ)'
+                        : /ยอดไม่ตรง/.test(st) ? 'ยอดเงินในสลิปไม่ตรงกับยอดออเดอร์'
+                        : 'ระบบตรวจสลิปไม่ผ่าน') : '';
+      return '<div class="ocard'+(bad?' bad':'')+'" id="c_'+bid+'"><div class="qtop"><b>'+esc(it.name||'ลูกค้า')+'</b><span class="ostatus">'+esc(st)+'</span></div>'
+        +(bad?'<div class="owarn"><span class="blink">🚨</span><span>ห้ามลงออเดอร์นี้จนกว่าจะเช็คเงินเข้าจริง<br>'+esc(why)+'</span></div>':'')
         +'<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'
         +(chips?'<div class="chips">'+chips+'</div>':'')
+        +(bad?'<button class="oack" onclick="ackBad(\'c_'+bid+'\')">🔓 ฉันเช็คยอดเงินเข้าแล้ว — ปลดล็อกปุ่มลงออเดอร์</button>':'')
         +'<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอก</button>'
         +'<button class="ochat" onclick="openChat()">💬 แชท</button>'
         +'<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
-        +'<button class="odone" onclick="orderDone(\''+it.uid+'\')">✅ ลงแล้ว</button></div></div>';
+        +'<button class="odone" onclick="orderDone2(\''+it.uid+'\',this)">✅ ลงแล้ว</button></div></div>';
     }).join('') : '<div class="qempty">ยังไม่มีออเดอร์รอลง</div>';
     return o.length;
   }catch(e){ return 0; }
