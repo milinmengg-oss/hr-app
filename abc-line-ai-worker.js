@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k56-natural";
+const BUILD = "2026-08-01-k57-soldout";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -226,6 +226,8 @@ function carryModel(text, hist) {
 // 🧱 k56: ส่ง "ข้อเท็จจริงหัวเลโก้ 3 ยี่ห้อ + สต็อกจริง" ให้ AI แทนการตอบตายตัว
 // เจ้าของร้านอยากให้คุยเป็นธรรมชาติ แต่ห้ามเดายี่ห้อ → โค้ดให้ข้อมูล AI เรียบเรียงคำพูด
 const LEGO3 = [["RELX BOOST POD", 350], ["RELX POD CLEAR 18K", 390], ["ABC LEGO 20K", 299]];
+// k57: รุ่นที่หมดทั้งรุ่นในรอบนี้ — คำนวณตอนสร้าง prompt แล้วให้ตัวกรองขาออกตรวจซ้ำอีกชั้น
+let SOLD_OUT_MODELS = [];
 function legoHint(text, sm, buf) {
   const s = String(text || "");
   if (!/เลโก้|lego|หัวเติม|หัวแบบเติม|เติมน้ำยาเอง|หัวรีฟิล|refill/i.test(s)) return "";
@@ -386,7 +388,11 @@ function availByModel(sm, buf) {
 
 function brandHint(text, sm, buf) {
   const s = String(text || "");
-  if (!sm || !BROAD_RE.test(s)) return "";
+  // k57: เดิมต้องเข้า BROAD_RE เท่านั้น → "แบรนด์ abc ตอนนี้มีของมั้ย" ไม่เข้า = AI ไม่ได้สต็อกเลย ตอบมั่วว่ามี
+  //   เพิ่ม: ถ้าเอ่ยชื่อแบรนด์มา + ถามว่ามีของไหม ก็ต้องแนบสต็อกให้เหมือนกัน
+  const _askStock = /มีของ|มีมั้ย|มีไห?ม|ยังมี|เหลือ|พร้อมส่ง|ของหมด|หมดยัง|สต็อก/i.test(s);
+  const _namedBrand = BRAND_TH.some(([re]) => re.test(s));
+  if (!sm || !(BROAD_RE.test(s) || (_namedBrand && _askStock))) return "";
   const B = (typeof buf === "number") ? buf : 1;
   const AV = availByModel(sm, B);
   // ✅ ดัชนีเร็วใช้คัดกรองก่อน แล้ว "ตรวจซ้ำแบบแม่นยำ" เฉพาะกลิ่นที่จะเอาไปบอกลูกค้าจริง (ไม่กี่สิบครั้ง = เร็วมาก)
@@ -2260,14 +2266,25 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       : "");
 
 
-    // ⛔ รายชื่อรุ่นที่หมดสต็อกทั้งรุ่น (ทุกกลิ่นเหลือ 0) → ห้ามจีทูเอาไปแนะนำ
+    // ⛔ รายชื่อรุ่นที่หมดสต็อกทั้งรุ่น → ห้ามจีทูเอาไปแนะนำ
+    SOLD_OUT_MODELS = [];
     let outNote = "";
     try {
       if (env.CONV) {
         const smAll = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+        // 🐛 k57: เดิมนับ "หมด" ที่ยอดรวม === 0 แต่ที่อื่นทั้งระบบใช้ "เหลือ ≤ กันชน (1) = ถือว่าหมด"
+        //   ผลคือ รุ่นที่เหลือกลิ่นละ 1 ชิ้น ยอดรวมไม่เป็น 0 → ไม่ถูกใส่ในลิสต์ห้ามเสนอ
+        //   เคสจริง 1/8: ถาม "แบรนด์ abc มีของมั้ย" → จีทูตอบ "มีค่ะ ABC LEGO 20K / ABC TANK 22K"
+        //   ทั้งที่ ABC หมดทั้งแบรนด์ = เสนอของที่ส่งให้ลูกค้าไม่ได้
+        const _buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10) || 0;
         const tot = {};
-        for (const nm in smAll) { const pre = nm.split(" - ")[0]; tot[pre] = (tot[pre] || 0) + (smAll[nm] > 0 ? smAll[nm] : 0); }
+        for (const nm in smAll) {
+          const pre = nm.split(" - ")[0];
+          const q = smAll[nm];
+          tot[pre] = (tot[pre] || 0) + ((typeof q === "number" && q > _buf) ? 1 : 0);   // นับ "กลิ่นที่ขายได้จริง"
+        }
         const outs = Object.keys(tot).filter(p => tot[p] === 0);
+        SOLD_OUT_MODELS = outs;   // k57: เก็บไว้ให้ตัวกรองขาออกใช้ตรวจซ้ำ
         if (outs.length) outNote = "\n\n# ⛔⛔ รุ่นที่หมดสต็อกตอนนี้ (ทุกกลิ่นเหลือ 0) — ทั้ง 'ห้ามแนะนำ' และ 'ห้ามรับออเดอร์'\nรุ่นในลิสต์นี้: (1) ห้ามเอาไปแนะนำ/เสนอ (2) ถ้าลูกค้าสั่งรุ่นนี้ ⛔ ห้ามออกบล็อกทวนคำสั่งซื้อ/สรุปยอดเด็ดขาด ให้ตอบว่า 'ขออภัยค่ะ รุ่นนี้ของหมด/รอของเข้าอยู่นะคะ 🙏🏻 เดี๋ยวแอดมินแจ้งอีกครั้งค่ะ' แล้วเสนอรุ่นที่มีของแทน:\n" + outs.join(", ");
       }
     } catch (e) {}
@@ -2692,6 +2709,22 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (reply.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length < 8)
           reply = "บอกกลิ่นที่สนใจมาได้เลยค่ะ 💕 เดี๋ยวอัญญาเช็คให้ว่ามีของไหมนะคะ";
         console.log("LEAK_BLOCKED scarcity");
+      }
+      // 🛑 k57: ตาข่ายสุดท้าย — ห้ามเสนอรุ่นที่ "หมดทั้งรุ่น" ว่ายังมีของ
+      // เคสจริง 1/8: "แบรนด์ abc มีของมั้ย" → "มีค่ะ ABC LEGO 20K / ABC TANK 22K" ทั้งที่หมดทั้งแบรนด์
+      // = ลูกค้าสั่งแล้วส่งไม่ได้ เสียเครดิตร้าน
+      if (SOLD_OUT_MODELS.length && /มีค่ะ|มีนะคะ|มีพร้อมส่ง|พร้อมส่ง|มีอยู่|ยังมี|ทางร้านมี/.test(reply)) {
+        const named = SOLD_OUT_MODELS.filter(m => m.length >= 4 && reply.indexOf(m) !== -1);
+        if (named.length) {
+          const gone = named.join(" · ");
+          // ตัดบรรทัดที่เอ่ยรุ่นที่หมดออก แล้วบอกตรงๆ ว่าหมด
+          reply = reply.split("\n").filter(l => !named.some(m => l.indexOf(m) !== -1)).join("\n")
+            .replace(/\n{3,}/g, "\n\n").trim();
+          reply = "ขออภัยด้วยนะคะ 🙏🏻 ตอนนี้ " + gone + " หมดชั่วคราวค่ะ\n\n"
+            + (reply.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length >= 8 ? reply + "\n\n" : "")
+            + "บอกแนวกลิ่นหรืองบที่ต้องการมาได้เลยค่ะ เดี๋ยวอัญญาหารุ่นที่มีของจริงให้แทนนะคะ 💕";
+          console.log("SOLDOUT_OFFER_BLOCKED " + gone);
+        }
       }
       // 🕳 k41: ถ้ากรองแล้ว "ไม่เหลืออะไรเลย" ห้ามส่งข้อความว่างให้ลูกค้า
       // เคสจริงที่ชุดทดสอบจับได้: AI ตอบ "สต็อกจริงของแบรนด์นี้คือ 88 ชิ้นค่ะ" → ตัดทั้งบรรทัด → ลูกค้าได้ข้อความเปล่า
