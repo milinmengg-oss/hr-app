@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k51-legoflavor";
+const BUILD = "2026-07-31-k52-bakeoff";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1436,6 +1436,52 @@ export default {
       return new Response(JSON.stringify({ build: BUILD, สรุป: good ? ("ใช้ได้ " + good + "/" + out.length + " โมเดล") : "⛔ พังทุกโมเดล — ดู error ด้านล่าง (มักเป็นเครดิต OpenRouter หมด หรือ API key ผิด)", ผล: out }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     // ทดสอบ cron ด้วยมือ: /cron?key=<XSELLY_KEY> (รันรอบเตือนเดี๋ยวนั้น)
+    // 🏆 k52: เครื่องเทียบโมเดล — ยิงคำถามลูกค้าจริงเข้าโมเดลผู้ท้าชิง แล้วให้คะแนนอัตโนมัติ
+    //   /bakeoff?key=...&m=qwen/qwen3.7-flash,google/gemini-2.5-flash-lite
+    //   ⛔ ไม่แตะระบบที่ลูกค้าใช้อยู่ — เป็นหน้าทดสอบล้วนๆ
+    if (url0.pathname === "/bakeoff") {
+      if (!OKEY()) return DENY();
+      const models = (url0.searchParams.get("m") || "google/gemini-2.5-flash-lite,qwen/qwen3.7-flash,deepseek/deepseek-chat")
+        .split(",").map(x => x.trim()).filter(Boolean).slice(0, 5);
+      // คำถามจริงจาก log ลูกค้า — แต่ละข้อคือกับดักที่เคยทำให้ตอบพลาดมาแล้ว
+      const QS = [
+        { q: "รอบสุดท้ายกี่โมง", no: [/แน่นอน/], why: "ห้ามรับปากว่าได้รับแน่นอน" },
+        { q: "ของเข้าวันไหน", no: [/\d+\s*วันทำการ|สัปดาห์หน้า|อีก\s*\d+\s*วัน/], why: "ห้ามระบุวันของเข้า" },
+        { q: "ส่งด้วยขนส่งอะไร", no: [/kerry|flash|j&t|ไปรษณีย์|ems|เคอรี่|แฟลช/i], why: "ห้ามบอกชื่อขนส่ง" },
+        { q: "ขอลดหน่อยได้ไหม", no: [/ลดให้|ส่วนลดพิเศษ|ราคาพิเศษให้/], why: "ห้ามลดราคาเอง" },
+        { q: "มาโบ 9k ราคาเท่าไหร่", no: [/\d{3}\s*[-–]\s*\d{3}/], yes: [/350|290/], why: "ห้ามบอกราคาเป็นช่วง" },
+        { q: "MARBO 9K มีกลิ่นอะไรบ้าง", no: [/ลิ้นจี่ซากุระ|มะพร้าวหิมะ|โยเกิร์ตเย็น/], why: "ห้ามมโนกลิ่น" },
+        { q: "บลูไอซ์เหลือกี่ชิ้น", no: [/\d+\s*(ชิ้น|แท่ง|หัว)|เหลือน้อย|จำนวนจำกัด/], why: "ห้ามบอกจำนวนสต็อก" },
+        { q: "เก็บเงินปลายทางได้ไหม", no: [/(?<!ไม่)(?<!ไม่ )รับเก็บปลายทาง|ได้ค่ะ.{0,20}ปลายทาง/], why: "ร้านไม่มีเก็บปลายทาง" },
+        { q: "หัวพอต MARBO ZERO องุ่น มีไหม", yes: [/3%|5%|ความแรง/], why: "ต้องถามความแรงก่อน" },
+        { q: "แนะนำพอตสูบทิ้งหน่อย", yes: [/[ก-๙]/], no: [/[\u4e00-\u9fff]/], why: "ต้องตอบภาษาไทย" },
+      ];
+      const results = [];
+      for (const model of models) {
+        let score = 100, fails = [], ms = 0, err = "";
+        for (const c of QS) {
+          const t0 = Date.now();
+          let rep = "";
+          try {
+            rep = await Promise.race([
+              askAI(env.OPENROUTER_KEY, [{ role: "system", content: SYSTEM_PROMPT + NO_GUESS_RULE }, { role: "user", content: c.q }], [model]),
+              new Promise(r => setTimeout(() => r("__TIMEOUT__"), 25000))
+            ]);
+          } catch (e) { rep = "__ERR__ " + String(e).slice(0, 60); }
+          ms += Date.now() - t0;
+          if (!rep || rep.length < 8 || /^__/.test(rep)) { score -= 10; fails.push(c.q + " → ตอบไม่ได้/ช้าเกิน"); continue; }
+          let bad = false;
+          for (const re of (c.no || [])) if (re.test(rep)) bad = true;
+          for (const re of (c.yes || [])) if (!re.test(rep)) bad = true;
+          if (bad) { score -= 10; fails.push(c.q + " → " + c.why + "  ▸ \"" + rep.replace(/\n/g, " ").slice(0, 90) + "\""); }
+        }
+        results.push({ model, คะแนน: Math.max(0, score) + "/100", เวลาเฉลี่ย: Math.round(ms / QS.length) + " ms", ข้อที่พลาด: fails });
+      }
+      results.sort((a, b) => parseInt(b["คะแนน"]) - parseInt(a["คะแนน"]));
+      return new Response(JSON.stringify({ build: BUILD, จำนวนข้อสอบ: QS.length, ผล: results }, null, 1),
+        { headers: { "Content-Type": "application/json; charset=utf-8" } });
+    }
+
     if (url0.pathname === "/cron") {
       if (!env.XSELLY_KEY || url0.searchParams.get("key") !== env.XSELLY_KEY) return new Response("forbidden", { status: 403 });
       const n = await followUpUnpaid(env);
