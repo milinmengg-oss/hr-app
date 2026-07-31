@@ -52,6 +52,7 @@ label{font-size:11.5px;color:var(--dim);display:block;margin-bottom:3px}
 </div>
 <div class="keybox">
   <input id="key" type="password" placeholder="รหัสหลังบ้าน (เหมือนแผงจีทู)">
+  <button class="gray" type="button" onclick="const k=document.getElementById('key');k.type=k.type==='password'?'text':'password';this.textContent=k.type==='password'?'👁':'🙈'" title="ดู/ซ่อนรหัส">👁</button>
   <button onclick="start()">เข้าสู่ระบบ</button>
 </div>
 <input id="fq" style="display:none;margin-bottom:12px" placeholder="🔍 กรองหารุ่น/แบรนด์ เช่น marbo, infy, iqos" oninput="filterList()">
