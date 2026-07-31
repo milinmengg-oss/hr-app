@@ -143,6 +143,10 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
         <div id="stpre" class="stnote"></div>
         <button class="sub" id="stbtn" style="display:none" onclick="uploadStock()">⬆️ อัปเดตสต็อกเข้าระบบจีทู</button>
 
+        <div class="sechead">🧪 เทียบโมเดล AI (หาตัวถูก+เก่ง)</div>
+        <div class="stnote">ยิงคำถามดัก 10 ข้อเข้าทุกโมเดล แล้วให้คะแนน /100 · ใช้เวลา 1-2 นาที · ค่าทดสอบไม่ถึง 5 บาท</div>
+        <button class="sub" onclick="bakeoff()">▶️ เริ่มเทียบโมเดล</button>
+
         <div class="sechead">🚨 ฉุกเฉิน</div>
         <button class="bigbtn" id="toggle" onclick="toggle()">…</button>
         <button class="sub danger" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
@@ -174,6 +178,11 @@ function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&am
 function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
 function saveKey(){ KEY=$('key').value.trim(); if(!KEY){$('msg').textContent='ใส่รหัสก่อนค่ะ';return;} localStorage.setItem('g2key',KEY); init(); }
 const q=p=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+encodeURIComponent(KEY)+'&shop=v20';
+function bakeoff(){
+  if(!KEY){ $('msg').textContent='ยังไม่ได้ใส่รหัสค่ะ'; return; }
+  var m='google/gemini-2.5-flash-lite,qwen/qwen3.7-flash,deepseek/deepseek-chat';
+  window.open(W+'/bakeoff?key='+encodeURIComponent(KEY)+'&m='+encodeURIComponent(m),'_blank');
+}
 
 function go(n){
   TAB=n;
