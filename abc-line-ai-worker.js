@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k30-modelmatch";
+const BUILD = "2026-07-31-k32-th-en";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -354,15 +354,16 @@ function brandHint(text, sm, buf) {
 
 // ===== 🌏 รองรับลูกค้าต่างชาติ (ไทย / อังกฤษ / จีน / ญี่ปุ่น) =====
 // ตรวจภาษาจากตัวอักษรที่ลูกค้าพิมพ์ แล้วจำไว้ทั้งบทสนทนา (คนไทยไม่กระทบเลย)
+// k32: ร้านใช้ 2 ภาษาเท่านั้น — ไทยตอบไทย / ภาษาอื่นทั้งหมดตอบอังกฤษ
 function detectLang(t) {
   const s = String(t || "");
-  if (/[\u0E00-\u0E7F]/.test(s)) return "th";                     // ไทย
-  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(s)) return "ja";       // ฮิระงะนะ/คาตากานะ = ญี่ปุ่น
-  if (/[\u4E00-\u9FFF]/.test(s)) return "zh";                     // ตัวจีน
-  if (/[A-Za-z]{3,}/.test(s)) return "en";                          // อังกฤษ
-  return "";                                                        // อ่านไม่ออก (ตัวเลข/อิโมจิ) = ไม่เปลี่ยนภาษา
+  if (/[\u0E00-\u0E7F]/.test(s)) return "th";                     // ไทย → ตอบไทย
+  if (/[A-Za-z]{2,}/.test(s)) return "en";                          // อังกฤษ → ตอบอังกฤษ
+  // จีน/ญี่ปุ่น/เกาหลี/รัสเซีย/อาหรับ ฯลฯ → ตอบอังกฤษ (เบสหลักของร้าน)
+  if (/[^\u0E00-\u0E7F\s\d\p{P}\p{S}]/u.test(s)) return "en";
+  return "";                                                        // ตัวเลข/อิโมจิล้วน = ไม่เปลี่ยนภาษา
 }
-const LANG_NAME = { th: "ภาษาไทย", en: "English", zh: "中文（简体）", ja: "日本語" };
+const LANG_NAME = { th: "ภาษาไทย", en: "English" };
 const T = {
   askItem: {
     en: "Which model, flavor and how many would you like? 💕",
@@ -2201,6 +2202,50 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           return;
         }
       }
+      // 🔁 k31: ลูกค้าขอ "เปลี่ยนเป็น <กลิ่น>" / "มี <กลิ่น> ไหม" โดยไม่บอกรุ่น
+      // เคสจริง 31/7: ออเดอร์ MARBO 9K อยู่ ลูกค้าขอเปลี่ยนเป็นบลูไอซ์ (มีของจริง) แต่จีทูตอบว่า "หมดสต็อก"
+      // เพราะข้อความไม่มีชื่อรุ่น → ไม่มีข้อมูลสต็อกส่งให้ AI → AI เดาเอง ⛔ ต้องตอบจากสต็อกจริงเท่านั้น
+      if (/เปลี่ยน|สลับ|แทน|ขอเป็น|เอาเป็น|มี.{0,12}(ไหม|มั้ย|ป่าว)/.test(text) && !modelFromText(textH)) {
+        const nt = normTH(textH);
+        let fl = null;
+        for (const f of FLAVOR_ALL) { if (f.length >= 3 && nt.indexOf(f) !== -1 && (!fl || f.length > fl.length)) fl = f; }
+        if (fl) {
+          // หา "รุ่น" จากออเดอร์ที่ค้างอยู่ก่อน แล้วค่อยดูจากที่ลูกค้าเคยพิมพ์
+          let mdl = null;
+          try {
+            const ordRaw = env.CONV && await env.CONV.get("ord:" + shopId + ":" + userId);
+            if (ordRaw) mdl = modelFromText(JSON.parse(ordRaw).block || "");
+          } catch (e) {}
+          if (!mdl) for (let hi = history.length - 1; hi >= Math.max(0, history.length - 8) && !mdl; hi--) {
+            if (history[hi].role === "user") mdl = modelFromText(String(history[hi].content || ""));
+          }
+          if (mdl && FLAVORS[mdl]) {
+            const real = (FLAVORS[mdl].f || []).find(x => normTH(x) === fl) || (FLAVORS[mdl].f || []).find(x => normTH(x).indexOf(fl) !== -1);
+            if (real) {
+              const q = findStockForItem(smForHint, mdl, real);
+              const have = (q === null) || q > bufForHint || stockOtherStrength(smForHint, mdl, real) > bufForHint;
+              const isSwap = /เปลี่ยน|สลับ|แทน|ขอเป็น|เอาเป็น/.test(text);
+              let msg;
+              if (have) {
+                msg = "กลิ่น" + real + " ของ " + mdl + " มีพร้อมส่งค่ะ 💕";
+                if (isSwap) { msg += "\n\nรบกวนรอแอดมินยืนยันการแก้ไขรายการสักครู่นะคะ 🙏🏻"; await muteNow("ขอเปลี่ยนกลิ่น/รายการ", text); }
+                else msg += "\n\nสนใจรับกี่ชิ้นดีคะ 😊";
+              } else {
+                const alt = (FLAVORS[mdl].f || []).filter(x => {
+                  const qq = findStockForItem(smForHint, mdl, x);
+                  return (qq === null) || qq > bufForHint || stockOtherStrength(smForHint, mdl, x) > bufForHint;
+                }).slice(0, 8);
+                msg = "ขออภัยค่ะ กลิ่น" + real + " ของ " + mdl + " หมดชั่วคราวนะคะ 🙏🏻" +
+                      (alt.length ? "\n\nกลิ่นที่มีพร้อมส่งตอนนี้ค่ะ\n" + alt.map(x => "- " + x).join("\n") : "") +
+                      "\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ ✨";
+              }
+              await lineReply(TOKEN, replyToken, msg, userId);
+              return;
+            }
+          }
+        }
+      }
+
       // 🌸 k26: "มีกลิ่นอะไรบ้าง" → ลิสต์กลิ่นที่มีของจริงจากสต็อกสด (ห้ามให้ AI แต่งประโยคเอง — เคสจริง 30/7: ตอบ "พร้อมส่ง" กับ "(หมดชั่วคราว)" ในข้อความเดียวจนลูกค้างง)
       if (/มีกลิ่น(อะไร|ไหน|ใด)|กลิ่น(อะไร|ไหน)บ้าง|กลิ่นอะไรมั่ง|เหลือกลิ่น(อะไร|ไหน)|เหลืออะไรบ้าง|มีอะไรเหลือ|มีสีอะไรบ้าง|สีอะไรบ้าง|ครบทุกกลิ่น(มั้ย|ไหม)?|กลิ่นครบ(มั้ย|ไหม)|กลิ่น(อะไร|ไหน)หมด|หมดกลิ่น(อะไร|ไหน)|หมดอะไรบ้าง/i.test(text)) {
         let mdl = modelFromText(textH);                      // k30: จับชื่อรุ่นจากข้อความก่อนเสมอ
