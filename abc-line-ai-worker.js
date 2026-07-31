@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k38-models-3of3";
+const BUILD = "2026-07-31-k39-lockdown";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1170,12 +1170,19 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url0 = new URL(request.url);
+    // 🔐 k39: ประตูล็อกกลาง — ทุกหน้าที่โชว์ "ข้อมูลภายในบริษัท ABC" ต้องมี ?key= เท่านั้น
+    // (URL ของ worker เป็นสาธารณะอยู่แล้ว เพราะเมนูออนไลน์เรียกใช้ ใครเดาชื่อ path ถูกก็เปิดได้)
+    const OKEY = () => !!env.XSELLY_KEY && url0.searchParams.get("key") === env.XSELLY_KEY;
+    const DENY = () => new Response(JSON.stringify({ error: "หน้านี้เป็นข้อมูลภายในร้าน ต้องใส่ ?key= ถึงจะเปิดได้ค่ะ" }, null, 1),
+      { status: 403, headers: { "Content-Type": "application/json; charset=utf-8" } });
     // 🔎 เช็คว่า Cloudflare รันโค้ดเวอร์ชันไหนอยู่ (เปิด /version ในเบราว์เซอร์)
+    //    ไม่ใส่ key = เห็นแค่เลข build | ใส่ key = เห็นชื่อโมเดลด้วย (ชื่อโมเดล = ข้อมูลภายใน)
     if (url0.pathname === "/version") {
-      return new Response(JSON.stringify({ build: BUILD, model: MODELS[0] }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+      return new Response(JSON.stringify(OKEY() ? { build: BUILD, model: MODELS[0] } : { build: BUILD }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     // 📚 ดูฐานกลิ่นทั้งหมดที่จีทูรู้: /catalog
     if (url0.pathname === "/catalog") {
+      if (!OKEY()) return DENY(); // k39: ฐานสินค้า+กลิ่นทั้งหมด = ข้อมูลภายใน
       const lines = [];
       let sku = 0;
       for (const k in FLAVORS) { const v = FLAVORS[k]; sku += v.f.length; lines.push(k + " = " + v.p + " บาท | " + (v.f.length ? v.f.length + " กลิ่น/สี: " + v.f.join(" · ") : "(ไม่มีตัวเลือก)")); }
@@ -1184,6 +1191,7 @@ export default {
     // 🔄 สั่งซิงก์สต็อกจากไฟล์ฐานเดี๋ยวนี้: /syncstock  (ทำวันละครั้งอัตโนมัติอยู่แล้ว)
     // 🔎 เทสปุ่ม Quick Reply ว่าจะขึ้นปุ่มอะไร: /qrtest?t=ข้อความที่จีทูตอบ
     if (url0.pathname === "/qrtest") {
+      if (!OKEY()) return DENY(); // k39
       let sm = null, bf = 1;
       try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) {}
       const t = url0.searchParams.get("t") || "";
@@ -1201,6 +1209,7 @@ export default {
     //    /simulate?t=ถาม1||ถาม2||ถาม3 → หลายคำถาม (สูงสุด 6 ต่อครั้ง กันหมดเวลา)
     //    ระบบจะตรวจให้อัตโนมัติว่าคำตอบผิดกฎร้านตรงไหนบ้าง
     if (url0.pathname === "/simulate") {
+      if (!OKEY()) return DENY(); // k39 ⛔ สำคัญสุด: เปิดทิ้งไว้ = ใครก็ยิงคำถามเข้า AI ได้ฟรี (เผาเครดิต + ล้วงกฎร้านออกไปได้)
       const qs = (url0.searchParams.get("t") || "").split("||").map(x => x.trim()).filter(Boolean).slice(0, 6);
       if (!qs.length) return new Response("ใส่ ?t=คำถามลูกค้า (คั่นหลายคำถามด้วย ||)", { status: 400 });
       let sm = {}, buf = 1;
@@ -1274,11 +1283,13 @@ export default {
     }
     // 🐞 ดูสาเหตุที่จีทูพังล่าสุด: /lasterr
     if (url0.pathname === "/lasterr") {
+      if (!OKEY()) return DENY(); // k39: error ภายในอาจมีข้อความลูกค้าติดมา
       const v = (env.CONV && await env.CONV.get("lasterr")) || "";
       return new Response(v || JSON.stringify({ ผล: "ยังไม่มี error ค้างอยู่ ✅", build: BUILD }, null, 1),
         { headers: { "content-type": "application/json; charset=utf-8" } });
     }
     if (url0.pathname === "/syncstock") {
+      if (!OKEY()) return DENY(); // k39
       const out = await syncStockBaseline(env, true);
       return new Response(JSON.stringify(out, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
@@ -1318,6 +1329,7 @@ export default {
     // 🩺 ตรวจสุขภาพ AI: /aitest — ยิงจริงทุกโมเดล แล้วบอกว่าตัวไหนผ่าน/ตัวไหนพัง เพราะอะไร (เช่น เครดิตหมด)
     // 💰 k33: ดูเครดิต OpenRouter คงเหลือ + โทเคนที่ใช้ล่าสุด
     if (url0.pathname === "/credit") {
+      if (!OKEY()) return DENY(); // k39: ยอดใช้จ่ายบริษัท = ความลับ
       const J = (o) => new Response(JSON.stringify(o, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
       if (!env.OPENROUTER_KEY) return J({ error: "ไม่พบ OPENROUTER_KEY" });
       try {
@@ -1337,6 +1349,7 @@ export default {
       } catch (e) { return J({ error: String(e).slice(0, 200) }); }
     }
     if (url0.pathname === "/aitest") {
+      if (!OKEY()) return DENY(); // k39: เผยชื่อโมเดล + ยิงทีเสียเครดิต 3 ครั้ง
       const out = [];
       if (!env.OPENROUTER_KEY) return new Response(JSON.stringify({ error: "ไม่พบ OPENROUTER_KEY ใน Cloudflare" }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
       // ?full=1 → ทดสอบด้วย prompt จริงทั้งก้อน (วัดเวลาจริงที่ลูกค้าเจอ)
