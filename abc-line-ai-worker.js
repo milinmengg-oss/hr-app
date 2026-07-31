@@ -21,12 +21,12 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k32-th-en";
+const BUILD = "2026-07-31-k33-cheapmodel";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
-  "google/gemini-2.5-flash",             // หลัก: เร็วสุด (~0.8 วิ) — k28: สลับขึ้นมาเพราะลูกค้ารอนาน
-  "deepseek/deepseek-chat",              // สำรอง 1: V3 เชื่อฟังกฎแม่น แต่ช้ากว่า (~2.3 วิ)
+  "google/gemini-2.0-flash-001",         // k33: หลัก — เร็ว (~0.8 วิ) + ถูกกว่า 2.5 Flash ~6 เท่า ไม่มีโหมดคิดในใจ
+  "deepseek/deepseek-chat",              // สำรอง 1: V3 เชื่อฟังกฎแม่น (~2.3 วิ)
   "qwen/qwen-2.5-72b-instruct",          // สำรอง 2
 ];
 
@@ -1310,6 +1310,26 @@ export default {
       }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     // 🩺 ตรวจสุขภาพ AI: /aitest — ยิงจริงทุกโมเดล แล้วบอกว่าตัวไหนผ่าน/ตัวไหนพัง เพราะอะไร (เช่น เครดิตหมด)
+    // 💰 k33: ดูเครดิต OpenRouter คงเหลือ + โทเคนที่ใช้ล่าสุด
+    if (url0.pathname === "/credit") {
+      const J = (o) => new Response(JSON.stringify(o, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
+      if (!env.OPENROUTER_KEY) return J({ error: "ไม่พบ OPENROUTER_KEY" });
+      try {
+        const r = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: "Bearer " + env.OPENROUTER_KEY } });
+        const d = await r.json();
+        const k = (d && d.data) || {};
+        const used = Number(k.usage || 0), lim = k.limit == null ? null : Number(k.limit);
+        return J({
+          build: BUILD,
+          โมเดลหลัก: MODELS[0],
+          ใช้ไปแล้ว_USD: Math.round(used * 10000) / 10000,
+          วงเงิน_USD: lim,
+          คงเหลือ_USD: lim == null ? "ไม่จำกัด (ดูยอดในหน้า openrouter.ai)" : Math.round((lim - used) * 10000) / 10000,
+          ครั้งล่าสุด: _lastUsage || "ยังไม่มีข้อมูลรอบนี้",
+          หมายเหตุ: "ตัวเลขนี้ดึงสดจาก OpenRouter — ถ้าคงเหลือใกล้ 0 ให้เติมเครดิต",
+        });
+      } catch (e) { return J({ error: String(e).slice(0, 200) }); }
+    }
     if (url0.pathname === "/aitest") {
       const out = [];
       if (!env.OPENROUTER_KEY) return new Response(JSON.stringify({ error: "ไม่พบ OPENROUTER_KEY ใน Cloudflare" }, null, 2), { headers: { "Content-Type": "application/json; charset=utf-8" } });
@@ -2296,7 +2316,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       const langRule = LANG === "th" ? "" : ("\n\n# 🌏 ภาษาที่ต้องใช้ตอบ\nลูกค้าคนนี้ใช้ " + (LANG_NAME[LANG] || LANG) + " → **ตอบเป็นภาษานั้นทั้งหมด** ทุกข้อความ ห้ามตอบภาษาไทย\nชื่อรุ่นสินค้าคงเป็นภาษาอังกฤษตามเดิม ราคาบอกเป็นบาท (THB)\nยังคงใช้กฎทุกข้อเหมือนเดิม (ห้ามคิดเลขเอง ห้ามลดราคา ห้ามบอกจำนวนสต็อก)\n⛔ บล็อก \"ทวนคำสั่งซื้อ\" ให้พิมพ์หัวข้อเป็นภาษาไทยเหมือนเดิมเสมอ (ระบบใช้จับ) ส่วนข้อความอื่นเป็นภาษาลูกค้า");
       // ⏱ เส้นตาย 32 วิ: ถ้า AI ช้ากว่านี้ ให้ตอบข้อความคั่นแทนการเงียบใส่ลูกค้า
       reply = await Promise.race([
-        askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull + stockNote + langRule }, ...history.slice(-6), { role: "user", content: text + hint }]),
+        askAI(env.OPENROUTER_KEY, [
+          { role: "system", content: sysFull },                        // k33: ก้อนคงที่ — ต้องเหมือนเดิมทุกครั้งเพื่อให้ผู้ให้บริการแคชได้ (ลดค่าใช้จ่าย)
+          { role: "system", content: (stockNote || "") + (langRule || "") },  // ก้อนที่เปลี่ยนตามสถานการณ์
+          ...history.slice(-6), { role: "user", content: text + hint }]),
         new Promise(res => setTimeout(() => res("__TIMEOUT__"), 26000))
       ]);
       if (reply === "__TIMEOUT__") {
@@ -2573,6 +2596,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
   }
 }
 
+let _lastUsage = null;   // k33: จดโทเคน/ค่าใช้จ่ายครั้งล่าสุด (ดูที่ /credit)
 async function askAI(apiKey, messages, models) {
   const list = models || MODELS;
   let idx = 0;
@@ -2587,12 +2611,15 @@ async function askAI(apiKey, messages, models) {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 500 }),
+        body: JSON.stringify({ model, messages, temperature: 0.2, max_tokens: 420, reasoning: { enabled: false, max_tokens: 0 }, usage: { include: true } }),
         signal: AbortSignal.timeout(limitMs), // ตัวแรก 25 วิ / ตัวสำรอง 12 วิ (ถ้า reply token หมดอายุ ระบบส่งแบบ push แทนอยู่แล้ว)
       });
       const data = await r.json();
       const txt = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-      if (txt) return txt.trim();
+      if (txt) {
+        try { if (data.usage) { _lastUsage = { model, in: data.usage.prompt_tokens || 0, out: data.usage.completion_tokens || 0, cost: data.usage.cost || 0, t: Date.now() }; } } catch (e) {}
+        return txt.trim();
+      }
       // ล้มเหลว: บันทึกสาเหตุจริงไว้ดูใน Cloudflare Logs แล้วลองโมเดลถัดไป
       console.log("AI_FAIL model=" + model + " status=" + r.status + " err=" + JSON.stringify((data && data.error) || data).slice(0, 400));
     } catch (e) {
