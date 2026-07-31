@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k58-location";
+const BUILD = "2026-08-01-k59-orderfix";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -564,6 +564,23 @@ function aliasHint(text) {
 function findPrice(modelText) {
   const t = (modelText || "").toUpperCase();
   for (const k of PRICE_KEYS) if (t.indexOf(k.toUpperCase()) !== -1) return { key: k, price: PRICE[k] };
+  // 💰 k59: ชื่อรุ่นที่ AI พิมพ์อาจ "ตกคำนำหน้า" → หาราคาไม่เจอ → การ์ดโดนบล็อก → ลูกค้าติดลูป
+  // เคสจริง 1/8: ลูกค้าสั่ง "หัวรีแล็กซ์อินฟินิตี้ มิ้นฟรีซ 50 หัว" (ยอด ~17,500 บาท)
+  //   AI เขียนรุ่นว่า "RELX INFINITY" แต่ในตารางราคาชื่อ "หัวพอต RELX INFINITY"
+  //   → หาไม่เจอ → ตอบ "ขออนุญาตทวนรายการอีกครั้ง" วนซ้ำ ลูกค้าพิมพ์ใหม่ก็เจอเหมือนเดิม
+  try {
+    const norm = s => String(s || "").toUpperCase().replace(/หัวพอต|หัวน้ำยา|เครื่อง|ไส้บุหรี่|\s|-|\(|\)/g, "");
+    const nt = norm(modelText);
+    if (nt.length >= 5) {
+      const hits = PRICE_KEYS.filter(k => { const nk = norm(k); return nk === nt || nk.indexOf(nt) !== -1 || nt.indexOf(nk) !== -1; });
+      const exact = hits.filter(k => norm(k) === nt);
+      if (exact.length === 1) return { key: exact[0], price: PRICE[exact[0]] };
+      if (hits.length === 1) return { key: hits[0], price: PRICE[hits[0]] };   // ตรงตัวเดียว = มั่นใจพอ
+      // เจอหลายตัว = กำกวม ปล่อยให้ถามทวน (ปลอดภัยกว่าเดาผิดรุ่น)
+    }
+    const k2 = _MODEL_IN(modelText);   // เผื่อลูกค้า/AI เขียนเป็นภาษาไทย ("รีแลกซ์ อินฟินิตี้")
+    if (k2 && PRICE[k2] != null) return { key: k2, price: PRICE[k2] };
+  } catch (e) {}
   return null;
 }
 // หัวน้ำยาใหญ่ Big Pod (โปร 4 ชิ้นส่งฟรี) | หัวน้ำยาเล็ก (โปร 10 หัวส่งฟรี)
@@ -601,7 +618,11 @@ function computeOrder(items, expressFee) {
   for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
   let goods = 0, disp = 0, small = 0, big = 0; const rows = [];
   for (const it of items) {
-    const isFree = /แถม|ฟรี|free/i.test(it.flavor || "") || /แถม|\(ฟรี\)/.test(it.model || "");
+    // 🐛 k59: เดิมเช็คแค่ /ฟรี/ → กลิ่น "มิ้นต์ฟรีซ" (freeze) มีคำว่า "ฟรี" อยู่ข้างใน
+    //   → ระบบคิดว่าเป็นของแถม ตั้งราคา 0 → ยอดรวม 0 → การ์ดโดนบล็อก → ลูกค้าติดลูป
+    //   เคสจริง 1/8: ออเดอร์ RELX INFINITY มิ้นต์ฟรีซ 50 หัว (~17,500 บาท) หลุดมือ
+    const FREE_RE = /แถม|ของแถม|\bfree\b|(?:^|[\s(])ฟรี(?![ซสzs])/i;
+    const isFree = FREE_RE.test(it.flavor || "") || /แถม|\(ฟรี\)/.test(it.model || "");
     const p = findPrice(it.model);
     let unit = p ? p.price : 0;
     const key = p ? p.key : it.model;
@@ -2596,7 +2617,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             mdl = modelFromText(String(history[hi].content || ""));
           }
         }
-        if (!mdl) { await lineReply(TOKEN, replyToken, MENU_MSG, userId); return; }
+        // 🚫 k59: ลูกค้าขอให้ "แนะนำ" แต่ไม่ระบุรุ่น → ห้ามโยนลิงก์เมนูกลับไป
+        // เคสจริง 1/8: ลูกค้าพิมพ์ "ก็ผมไม่รู้ว่ากลิ่นไหนบ้าง แนะนำไม่ได้หรอ" → ได้ลิงก์เมนูซ้ำอีกรอบ
+        //   = ลูกค้าบอกตรงๆ ว่าไม่รู้ ขอให้ช่วยเลือก แต่ระบบปัดกลับไปให้เปิดเมนูเอง → ลูกค้าหลุด
+        // ปล่อยให้ AI ตอบ (มีข้อมูลสต็อกจริงแนบไปให้แล้ว) แทนการตอบตายตัว
+        const _wantRec = /แนะนำ|ไม่รู้|เลือกไม่ถูก|ตัวไหนดี|รุ่นไหนดี|กลิ่นไหนดี|อะไรดี|ขายดี|ยอดฮิต|นิยม|มือใหม่|ช่วยเลือก/.test(textH);
+        if (!mdl && !_wantRec) { await lineReply(TOKEN, replyToken, MENU_MSG, userId); return; }
         if (mdl) {
           // ถ้าบทสนทนาพูดถึงตัวโคลน/เทียบแท้ และรุ่นนี้มีเวอร์ชั่นโคลน → ใช้ตัวโคลน
           const recentTxt = textH + " " + history.slice(-4).map(h => String(h.content || "")).join(" ");
