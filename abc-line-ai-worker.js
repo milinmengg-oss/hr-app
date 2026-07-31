@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-30-k26-flavorlist";
+const BUILD = "2026-07-31-k27-staleorder";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1681,10 +1681,38 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       }
       // ✅ ลูกค้ากด/พิมพ์ "ยืนยัน" หลังการ์ดทวนออเดอร์ → ส่งการ์ดสรุปยอด+เลขบัญชี+ปุ่มคัดลอก
       // k15: ลูกค้าถามเลขบัญชี/โอนเข้าไหน แล้วมีออเดอร์ค้างอยู่ → ส่งการ์ดจริงจากระบบเลย (AI ไม่รู้ข้อมูลโอนแล้ว)
-      if ((/^ยืนยัน(รายการ)?[\s!.]*$/.test(t) || /ขอเลขบัญชี|เลขบัญชี|โอนเข้า(บัญชี)?ไหน|บัญชีอะไร|โอนไปไหน|โอนบัญชีไหน/.test(t)) && env.CONV) {
+      if ((/^ยืนยัน(รายการ)?(เดิม)?[\s!.]*$/.test(t) || /ขอเลขบัญชี|เลขบัญชี|โอนเข้า(บัญชี)?ไหน|บัญชีอะไร|โอนไปไหน|โอนบัญชีไหน/.test(t)) && env.CONV) {
         try {
           const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
           if (ok) {
+            // 🕐 k27: กันยืนยันออเดอร์ค้างเก่า — เคสจริง 31/7: ลูกค้าสั่ง MARBO 13:32,
+            // 14:47 ถามรุ่นใหม่ (ของหมด) แล้วพิมพ์ "ยืนยัน" ระบบส่งเลขบัญชีของออเดอร์เก่าให้ทันที
+            // ถ้าการ์ดออกไปเกิน 20 นาที (หรือมีการคุยรุ่นอื่นคั่น) ต้องทวนก่อน ห้ามส่งเลขบัญชีเอง
+            let _stale = false;
+            if (/เดิม/.test(t)) _stale = false; else {
+            try {
+              const _o = JSON.parse(ok);
+              const _mins = _o.t ? (Date.now() - _o.t) / 60000 : 999;
+              if (_mins > 20) _stale = true;
+              // คุยรุ่น/กลิ่นอื่นคั่นหลังออกการ์ด → ถือว่าลูกค้าอาจหมายถึงของใหม่
+              if (!_stale) {
+                let _hs = [];
+                try { _hs = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]"); } catch (e2) {}
+                const after = _hs.slice(-6).map(h => String(h.content || "")).join(" ");
+                const inCard = String(_o.block || "");
+                if (after) for (const k of FLAVOR_KEYS) {
+                  if (normTH(after).indexOf(normTH(k)) !== -1 && normTH(inCard).indexOf(normTH(k)) === -1) { _stale = true; break; }
+                }
+              }
+            } catch (e) {}
+            }
+            if (_stale) {
+              const _b2 = (JSON.parse(ok).block || "").split("\n").filter(l => /x\d|รวมยอด|ยอดรวม/.test(l)).slice(0, 6).join("\n");
+              await lineReply(TOKEN, replyToken,
+                "ขอทวนรายการอีกครั้งนะคะ 🙏🏻 จะได้ไม่โอนผิดค่ะ\n\nรายการที่ค้างอยู่ในระบบคือ\n" + (_b2 || "(รายการก่อนหน้า)") +
+                "\n\n• ถ้าต้องการรายการนี้ พิมพ์ \"ยืนยันรายการเดิม\" ได้เลยค่ะ\n• ถ้าต้องการสั่งใหม่ พิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยนะคะ 💕", userId);
+              return;
+            }
             const b = JSON.parse(ok).block || "";
             const total = (b.match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/) || ["", ""])[1];
             const pay = env["PAY_" + shopId.toUpperCase()] || "";
