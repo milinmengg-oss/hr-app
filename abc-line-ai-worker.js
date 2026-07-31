@@ -21,17 +21,19 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k53-showreplies";
+const BUILD = "2026-07-31-k54-qwen";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
-  // k50: สลับตัวหลักเป็น Gemini 2.5 Flash Lite ตามที่เจ้าของร้านตัดสินใจ
-  //   เหตุผล: ถูกกว่า DeepSeek 2.6 เท่า (3.8 vs 9.8 สตางค์/ข้อความ) + เร็วกว่า ~2 เท่า
-  //   ที่ 1 ล้านข้อความ/เดือน ต่างกันราว 60,000 บาท/เดือน
-  //   ⛔ ถ้าคุณภาพตก สลับกลับ DeepSeek ได้ทันทีแค่สลับ 2 บรรทัดนี้
-  "google/gemini-2.5-flash-lite",        // หลัก: $0.10/$0.40 · ~0.6 วิ
-  "deepseek/deepseek-chat",              // สำรอง 1: DeepSeek V3 — แม่นสุดในภาษาไทย (ตัวหลักเดิม)
-  "qwen/qwen3.7-plus",                   // สำรอง 2: กันตายท้ายสุด
+  // k54: สลับตัวหลักเป็น Qwen 3.7 Flash — ตัดสินจากผล /bakeoff (รัน 3 รอบ ผลตรงกัน)
+  //   คะแนน 100/100 (Gemini Lite 90 · DeepSeek 90) · เร็ว 0.9-1.1 วิ (อีก 2 ตัว ~6 วิ)
+  //   ราคา 1.1 สต./ข้อความ (Gemini Lite 3.8 · DeepSeek 9.8)
+  //   ที่ 1 ล้านข้อความ/เดือน: ~11,000 บาท (Gemini ~38,000 · DeepSeek ~98,000)
+  //   ชนะชัดใน 3 เรื่องที่เคยตอบผิดจริง: รอบส่งสุดท้าย / ราคาแท้-โคลน / ถามความแรงก่อนขาย
+  //   ⛔ ถ้าคุณภาพตก สลับกลับได้ทันทีแค่สลับลำดับบรรทัดพวกนี้
+  "qwen/qwen3.7-flash",                  // หลัก: $0.03/$0.13 · ~1 วิ
+  "google/gemini-2.5-flash-lite",        // สำรอง 1: $0.10/$0.40 (ตัวหลักเดิม)
+  "deepseek/deepseek-chat",              // สำรอง 2: DeepSeek V3 — กันตายท้ายสุด
 ];
 
 // ===== โมเดลอ่านรูป (vision) — ใช้ตอนลูกค้าส่งสลิปโอนเงิน / รูปเมนูที่วงกลม =====
@@ -893,6 +895,12 @@ const SYSTEM_PROMPT = `คุณคือ "น้องอัญญา" แอ�
 https://cutt.ly/menu4"
 แต่ถ้าลูกค้าถามเจาะจงรุ่น/ราคา (เช่น "MARBO 9K เท่าไหร่") ให้ตอบราคาจากรายการสินค้าได้เลย ไม่ต้องส่งลิงก์
 
+⛔⛔ k54 — "ขอให้แนะนำ" ไม่ใช่ "ขอดูเมนู" อย่าสับสน:
+ถ้าลูกค้าใช้คำว่า แนะนำ / รุ่นไหนดี / ตัวไหนดี / เอาอะไรดี / มือใหม่ควรเริ่มรุ่นไหน / recommend
+⛔ ห้ามตอบด้วยข้อความ "เมนูสินค้า + ลิงก์" เฉยๆ เด็ดขาด — ลูกค้าขอให้ช่วยเลือก ไม่ได้ขอลิงก์ การโยนลิงก์ = ปัดลูกค้าทิ้ง เสียการขาย
+✅ ต้องทำแทน: (1) เสนอ 3-5 รุ่นที่มีของจริงพร้อมราคา (ใช้เฉพาะรุ่นจากข้อมูลสต็อกที่แนบมา) (2) แล้วถามกลับ 1 คำถามเพื่อเลือกให้แคบลง เช่น "ชอบแนวหวานผลไม้หรือเย็นมิ้นต์คะ" / "งบประมาณเท่าไหร่คะ" / "เคยสูบรุ่นไหนมาก่อนไหมคะ"
+✅ จะแนบลิงก์เมนูต่อท้ายด้วยก็ได้ แต่ต้องมีคำแนะนำจริงมาก่อนเสมอ
+
 # คำที่ลูกค้าเรียก (สแลง) → รุ่นที่หมายถึง (สำคัญ อย่าตอบตัวเดียวถ้าคำนั้นหมายถึงหลายรุ่น)
 - "หัวเลโก้" / "เลโก้" / "หัวแบบเติม" / "หัวเติมน้ำยา" / "หัวเติมเอง" = หัวพอตแบบเติมน้ำยาเอง (refillable) — ร้านมี 3 ตัว: (1) RELX BOOST POD = 350 บาท (2) ABC LEGO 20K = 299 บาท (3) RELX POD CLEAR 18K = 390 บาท → เวลาลูกค้าถามหัวเลโก้/หัวเติม ให้เสนอทั้ง 3 ตัวนี้พร้อมราคา แล้วถามว่าสนใจตัวไหน ⛔ ห้ามตอบแค่ ABC LEGO ตัวเดียว
 - "หัวพอต" เฉยๆ (ไม่ระบุรุ่น) = ถามต่อว่าลูกค้าหมายถึงหัวของเครื่องรุ่นไหนคะ (RELX / INFY / MARBO ฯลฯ)
@@ -1231,6 +1239,8 @@ export default {
   },
   async fetch(request, env, ctx) {
     const url0 = new URL(request.url);
+    // k54: อ่านค่า "โมเดลที่ตั้งทับไว้" จาก KV ทุกครั้งที่ isolate เพิ่งเกิด (ครั้งเดียว ไม่ถ่วง)
+    if (MODEL_OVERRIDE === null) { try { MODEL_OVERRIDE = (await env.CONV.get("modeloverride")) || ""; } catch (e) { MODEL_OVERRIDE = ""; } }
     // 🔐 k39: ประตูล็อกกลาง — ทุกหน้าที่โชว์ "ข้อมูลภายในบริษัท ABC" ต้องมี ?key= เท่านั้น
     // (URL ของ worker เป็นสาธารณะอยู่แล้ว เพราะเมนูออนไลน์เรียกใช้ ใครเดาชื่อ path ถูกก็เปิดได้)
     const OKEY = () => !!env.XSELLY_KEY && url0.searchParams.get("key") === env.XSELLY_KEY;
@@ -1348,6 +1358,24 @@ export default {
       const v = (env.CONV && await env.CONV.get("lasterr")) || "";
       return new Response(v || JSON.stringify({ ผล: "ยังไม่มี error ค้างอยู่ ✅", build: BUILD }, null, 1),
         { headers: { "content-type": "application/json; charset=utf-8" } });
+    }
+    // 🔁 k54: สลับโมเดลสดๆ ไม่ต้องดีพลอย — /setmodel?key=...&m=deepseek/deepseek-chat  (&m= ว่าง = กลับค่าเริ่มต้น)
+    if (url0.pathname === "/setmodel") {
+      if (!OKEY()) return DENY();
+      const mv = url0.searchParams.get("m");
+      if (mv !== null) {
+        const v = mv.trim();
+        if (v) await env.CONV.put("modeloverride", v); else await env.CONV.delete("modeloverride");
+        MODEL_OVERRIDE = v || null;
+      }
+      const cur = (await env.CONV.get("modeloverride")) || "";
+      return new Response(JSON.stringify({
+        build: BUILD,
+        โมเดลที่ใช้อยู่: cur || MODELS[0],
+        ตั้งทับไว้: cur || "— ไม่ได้ตั้ง (ใช้ลำดับปกติ) —",
+        ลำดับสำรอง: MODELS,
+        วิธีใช้: "เปลี่ยน: /setmodel?key=...&m=deepseek/deepseek-chat | ยกเลิก: /setmodel?key=...&m=",
+      }, null, 1), { headers: { "Content-Type": "application/json; charset=utf-8" } });
     }
     if (url0.pathname === "/syncstock") {
       if (!OKEY()) return DENY(); // k39
@@ -2954,8 +2982,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
 }
 
 let _lastUsage = null;   // k33: จดโทเคน/ค่าใช้จ่ายครั้งล่าสุด (ดูที่ /credit)
+// k54: ปุ่มถอยฉุกเฉิน — ถ้าตั้งค่า MODEL_OVERRIDE ไว้ใน KV จะใช้ตัวนั้นเป็นหลักแทน
+// ตั้งผ่าน /setmodel?key=...&m=deepseek/deepseek-chat  ·  ล้างด้วย &m=  (ว่าง) → กลับไปใช้ลำดับใน MODELS
+let MODEL_OVERRIDE = null;
 async function askAI(apiKey, messages, models) {
-  const list = models || MODELS;
+  let base = models || MODELS;
+  if (!models && MODEL_OVERRIDE) base = [MODEL_OVERRIDE, ...MODELS.filter(m => m !== MODEL_OVERRIDE)];
+  const list = base;
   let idx = 0;
   for (const model of list) {
     // ตัวแรกให้เวลาคิดนาน (prompt ความรู้สินค้ายาว ใช้เวลา) ตัวสำรองให้สั้นลง กัน reply token หมดอายุ
