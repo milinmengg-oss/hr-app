@@ -1,0 +1,236 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 1990" width="1240" height="1990" font-family="'Sarabun','Noto Sans Thai','Leelawadee UI','Thonburi',sans-serif">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#7d7a70"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f8a5b"/></marker>
+</defs>
+<rect width="1240" height="1990" fill="#faf9f5"/>
+
+<rect x="0" y="0" width="1240" height="128" fill="#1f1e1b"/>
+<text x="48" y="58" font-size="32" font-weight="700" fill="#faf9f5">จีทู — ระบบตอบแชทอัตโนมัติ ร้าน ABC</text>
+<text x="48" y="96" font-size="17" fill="#a8a49a">ผังระบบทั้งหมด · ตอบลูกค้าทางไลน์ 100% ของข้อความ ตลอด 24 ชม. · เวอร์ชัน k42</text>
+<text x="1192" y="58" font-size="15" fill="#a8a49a" text-anchor="end">31 ก.ค. 2026</text>
+
+<!-- ═══ 1 · แหล่งข้อมูล ═══ -->
+<text x="48" y="176" font-size="21" font-weight="700" fill="#1f1e1b">1 · ข้อมูลที่จีทูดึงมาใช้ตอบลูกค้า</text>
+<text x="48" y="202" font-size="15" fill="#6b6a63">ไม่ได้ตอบจากความจำของ AI — ทุกคำตอบอ้างอิงข้อมูลจริงจาก 4 แหล่งนี้</text>
+
+<g>
+<rect x="48" y="220" width="272" height="150" rx="14" fill="#eef3f7" stroke="#5a7f9c" stroke-width="1.5"/>
+<text x="70" y="252" font-size="17" font-weight="700" fill="#2f4d66">LINE OA ของร้าน</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="70" y="282">· ข้อความลูกค้า</text>
+<text x="70" y="308">· รูปสลิปโอนเงิน</text>
+<text x="70" y="334">· รูปเมนูที่ลูกค้าวงกลม</text>
+<text x="70" y="360">· หมุดแผนที่ (ค่าส่งด่วน)</text>
+</g>
+
+<rect x="338" y="220" width="272" height="150" rx="14" fill="#eef3f7" stroke="#5a7f9c" stroke-width="1.5"/>
+<text x="360" y="252" font-size="17" font-weight="700" fill="#2f4d66">XSelly (ระบบขายจริง)</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="360" y="282">· ขายปุ๊บ ตัดสต็อกปั๊บ</text>
+<text x="360" y="308">· เชื่อมอัตโนมัติ ไม่ต้องคีย์</text>
+<text x="360" y="334">· ตรวจลายเซ็นทุกครั้ง</text>
+<text x="360" y="360">  (กันคนปลอมยิงข้อมูลเข้า)</text>
+</g>
+
+<rect x="628" y="220" width="272" height="150" rx="14" fill="#eef3f7" stroke="#5a7f9c" stroke-width="1.5"/>
+<text x="650" y="252" font-size="17" font-weight="700" fill="#2f4d66">ไฟล์สต็อกฐาน</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="650" y="282">· ซิงก์ทับอัตโนมัติทุกวัน</text>
+<text x="650" y="308">· กันตัวเลขเพี้ยนสะสม</text>
+<text x="650" y="334">· แอดมินสั่งซิงก์เองได้</text>
+<text x="650" y="360">· มีเวลาอัปเดตกำกับทุกกลิ่น</text>
+</g>
+
+<rect x="918" y="220" width="274" height="150" rx="14" fill="#eef3f7" stroke="#5a7f9c" stroke-width="1.5"/>
+<text x="940" y="252" font-size="17" font-weight="700" fill="#2f4d66">ฐานสินค้าในระบบ</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="940" y="282">· 65 รุ่น · 883 กลิ่น</text>
+<text x="940" y="308">· ราคาแท้ / โคลน แยกกัน</text>
+<text x="940" y="334">· เงื่อนไขโปรทุกแบบ</text>
+<text x="940" y="360">· เรทขายส่ง MARBO</text>
+</g>
+</g>
+
+<line x1="48" y1="404" x2="1192" y2="404" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<!-- ═══ 2 · เส้นทางข้อความ ═══ -->
+<text x="48" y="446" font-size="21" font-weight="700" fill="#1f1e1b">2 · เส้นทางของข้อความ 1 ข้อความ</text>
+<text x="48" y="472" font-size="15" fill="#6b6a63">หัวใจของระบบ · พยายามไม่ให้ถึง AI ตั้งแต่แรก เพราะทุกจุดที่ AI ตัดสินใจ คือจุดที่ผิดพลาดได้</text>
+
+<g stroke="#7d7a70" stroke-width="2" fill="none" marker-end="url(#a)">
+<path d="M224 566 H240"/><path d="M416 566 H432"/><path d="M608 566 H624"/><path d="M800 566 H816"/><path d="M992 566 H1008"/>
+</g>
+<g>
+<rect x="48" y="494" width="176" height="144" rx="12" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="66" y="524" font-size="16" font-weight="700" fill="#1f1e1b">1 · รับข้อความ</text>
+<g font-size="14" fill="#6b6a63"><text x="66" y="552">ลูกค้าทักเข้า</text><text x="66" y="574">ไลน์ร้าน</text></g>
+
+<rect x="240" y="494" width="176" height="144" rx="12" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="258" y="524" font-size="16" font-weight="700" fill="#1f1e1b">2 · ด่านหน้า</text>
+<g font-size="14" fill="#6b6a63"><text x="258" y="552">แอดมินคุยอยู่ไหม</text><text x="258" y="574">ถ้าใช่ จีทูเงียบ</text><text x="258" y="596">ไม่แย่งตอบ</text></g>
+
+<rect x="432" y="494" width="176" height="144" rx="12" fill="#e7f4ec" stroke="#2f8a5b" stroke-width="2.5"/>
+<text x="450" y="524" font-size="16" font-weight="700" fill="#1c5c3c">3 · ทางลัด</text>
+<g font-size="14" fill="#2f8a5b"><text x="450" y="552">16 เรื่อง</text><text x="450" y="574">โค้ดตอบเอง</text><text x="450" y="596">0.1 วินาที</text><text x="450" y="618">ต้นทุน 0 บาท</text></g>
+
+<rect x="624" y="494" width="176" height="144" rx="12" fill="#fdf2e0" stroke="#b8791f" stroke-width="2.5"/>
+<text x="642" y="524" font-size="16" font-weight="700" fill="#875810">4 · สมอง AI</text>
+<g font-size="14" fill="#b8791f"><text x="642" y="552">เรื่องที่เหลือ</text><text x="642" y="574">ป้อนสต็อกจริง</text><text x="642" y="596">+ ความจำให้ก่อน</text><text x="642" y="618">จุดเดียวที่เพี้ยนได้</text></g>
+
+<rect x="816" y="494" width="176" height="144" rx="12" fill="#fbebe9" stroke="#b4483c" stroke-width="2.5"/>
+<text x="834" y="524" font-size="16" font-weight="700" fill="#8a3129">5 · ด่านตรวจ</text>
+<g font-size="14" fill="#b4483c"><text x="834" y="552">9 ชั้น</text><text x="834" y="574">ต่อให้ AI พลาด</text><text x="834" y="596">ยังตัดทิ้งก่อน</text><text x="834" y="618">ถึงลูกค้า</text></g>
+
+<rect x="1008" y="494" width="184" height="144" rx="12" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="1026" y="524" font-size="16" font-weight="700" fill="#1f1e1b">6 · ตอบกลับ</text>
+<g font-size="14" fill="#6b6a63"><text x="1026" y="552">น้องอัญญาตอบ</text><text x="1026" y="574">เฉลี่ย 2-3 วินาที</text></g>
+</g>
+<path d="M520 638 V664 Q520 676 532 676 H1088 Q1100 676 1100 664 V642" fill="none" stroke="#2f8a5b" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#ag)"/>
+<text x="806" y="670" font-size="14.5" fill="#2f8a5b" font-weight="700" text-anchor="middle">16 เรื่องนี้ข้ามได้เลย ไม่ผ่าน AI</text>
+
+<line x1="48" y1="712" x2="1192" y2="712" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<!-- ═══ 3 · งานที่ทำได้เอง ═══ -->
+<text x="48" y="754" font-size="21" font-weight="700" fill="#1f1e1b">3 · งานที่จีทูทำเองได้ทั้งหมด (ไม่ต้องมีคน)</text>
+
+<g>
+<rect x="48" y="774" width="368" height="336" rx="14" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="70" y="806" font-size="17" font-weight="700" fill="#1f1e1b">ตอบคำถาม</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="70" y="838">· ค่าส่ง · โปร · เคลม · วิธีสั่ง</text>
+<text x="70" y="866">· รอบส่งด่วน · เวลาที่ได้รับ</text>
+<text x="70" y="894">· รุ่นนี้มีกลิ่นอะไรบ้าง</text>
+<text x="70" y="922">· กลิ่นนี้ยังมีของไหม (รายกลิ่น)</text>
+<text x="70" y="950">· แนะนำกลิ่นตามแนวที่ชอบ</text>
+<text x="70" y="978">· เทียบรุ่น / อธิบายสินค้า</text>
+<text x="70" y="1006">· ขอเปลี่ยนกลิ่นกลางออเดอร์</text>
+<text x="70" y="1034">· ตอบไทย–อังกฤษ</text>
+<text x="70" y="1062">· ส่งลิงก์เมนูออนไลน์</text>
+<text x="70" y="1090">· ปุ่มลัดให้กดแทนพิมพ์</text>
+</g>
+
+<rect x="436" y="774" width="368" height="336" rx="14" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="458" y="806" font-size="17" font-weight="700" fill="#1f1e1b">ปิดการขาย</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="458" y="838">· อ่านออเดอร์จากข้อความยาวๆ</text>
+<text x="458" y="866">· ออกการ์ดสรุปออเดอร์</text>
+<text x="458" y="894">· คิดเงินเอง ราคา+ค่าส่ง</text>
+<text x="458" y="922">· เช็คว่าเข้าโปรส่งฟรีไหม</text>
+<text x="458" y="950">· เรทขายส่ง / ของแถม</text>
+<text x="458" y="978">· เชียร์ให้ครบโปร</text>
+<text x="458" y="1006">· คิดค่าส่งด่วนจากหมุดแผนที่</text>
+<text x="458" y="1034">· ออกการ์ดเลขบัญชีให้โอน</text>
+<text x="458" y="1062">· ขอที่อยู่จัดส่งเป็นฟอร์ม</text>
+<text x="458" y="1090">· ทวนรายการก่อนยืนยันทุกครั้ง</text>
+</g>
+
+<rect x="824" y="774" width="368" height="336" rx="14" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="846" y="806" font-size="17" font-weight="700" fill="#1f1e1b">หลังปิดการขาย</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="846" y="838">· อ่านสลิปโอนเงินจากรูป</text>
+<text x="846" y="866">· ตรวจยอด/บัญชี/วันเวลา</text>
+<text x="846" y="894">· สลิปน่าสงสัย → ส่งแอดมิน</text>
+<text x="846" y="922">· ตามลูกค้าที่ยังไม่โอน</text>
+<text x="846" y="950">· จำชื่อ–ที่อยู่ลูกค้าเก่า</text>
+<text x="846" y="978">  ครั้งหน้าถาม “ส่งที่เดิมไหม”</text>
+<text x="846" y="1006">· จำบทสนทนา 24 ชม.</text>
+<text x="846" y="1034">· เคสมีปัญหา → ส่งต่อแอดมิน</text>
+<text x="846" y="1062">· เก็บ log ทุกแชท 30 วัน</text>
+<text x="846" y="1090">· ขึ้นคิวงานให้แอดมินดู</text>
+</g>
+</g>
+
+<line x1="48" y1="1150" x2="1192" y2="1150" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<!-- ═══ 4 · ความปลอดภัยข้อมูล ═══ -->
+<text x="48" y="1192" font-size="21" font-weight="700" fill="#1f1e1b">4 · การปกป้องข้อมูลบริษัท</text>
+<text x="48" y="1218" font-size="15" fill="#6b6a63">บังคับด้วยโค้ด ไม่ใช่แค่สั่ง AI — ต่อให้ AI พิมพ์ออกมา ระบบตัดทิ้งก่อนถึงลูกค้าเสมอ</text>
+
+<g>
+<rect x="48" y="1238" width="368" height="252" rx="14" fill="#fbebe9" stroke="#b4483c" stroke-width="1.5"/>
+<text x="70" y="1270" font-size="17" font-weight="700" fill="#8a3129">ห้ามหลุดเด็ดขาด</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="70" y="1302">✕ จำนวนสต็อกที่มีจริง</text>
+<text x="70" y="1330">✕ ชื่อบริษัทขนส่งที่ใช้</text>
+<text x="70" y="1358">✕ โน้ตภายในของระบบ</text>
+<text x="70" y="1386">✕ วันที่ของจะเข้า</text>
+<text x="70" y="1414">✕ ลดราคา/แถมนอกกติกา</text>
+<text x="70" y="1442">✕ เลขบัญชีจากปาก AI</text>
+<text x="70" y="1470">✕ ราคาเป็นช่วง (แท้/โคลนต้องแยก)</text>
+</g>
+
+<rect x="436" y="1238" width="368" height="252" rx="14" fill="#e7f4ec" stroke="#2f8a5b" stroke-width="1.5"/>
+<text x="458" y="1270" font-size="17" font-weight="700" fill="#1c5c3c">บอกลูกค้าได้</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="458" y="1302">✓ กลิ่นไหน “มี” หรือ “หมด”</text>
+<text x="458" y="1330">✓ ใช้ขนส่งเอกชน</text>
+<text x="458" y="1358">✓ ราคามาตรฐาน + โปรของร้าน</text>
+<text x="458" y="1386">✓ เคลม 7 / 14 / 21 / 30 วัน</text>
+<text x="458" y="1414">✓ รอบส่งด่วน กทม.–ปริมณฑล</text>
+<text x="458" y="1442">✓ พัสดุปกติ 2-3 วัน ทั่วประเทศ</text>
+<text x="458" y="1470">✓ เลขบัญชี (ระบบออกการ์ดเอง)</text>
+</g>
+
+<rect x="824" y="1238" width="368" height="252" rx="14" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="846" y="1270" font-size="17" font-weight="700" fill="#1f1e1b">ด่านตรวจ 9 ชั้น</text>
+<g font-size="14.5" fill="#3a3934">
+<text x="846" y="1302">1 เลขสต็อก · 2 โน้ตภายใน</text>
+<text x="846" y="1330">3 ชื่อขนส่ง · 4 กลิ่นที่ไม่มีจริง</text>
+<text x="846" y="1358">5 คำตอบว่างเปล่า</text>
+<text x="846" y="1386">6 ราคาเป็นช่วง · 7 ลดราคาเอง</text>
+<text x="846" y="1414">8 เลขบัญชี · 9 โยนแอดมินมั่ว</text>
+</g>
+<rect x="846" y="1436" width="324" height="40" rx="10" fill="#fbebe9"/>
+<text x="862" y="1462" font-size="14" fill="#8a3129">ทุกชั้นเกิดจากเคสจริงที่เคยพลาดมาก่อน</text>
+</g>
+
+<line x1="48" y1="1530" x2="1192" y2="1530" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<!-- ═══ 5 · ระบบรอบข้าง ═══ -->
+<text x="48" y="1572" font-size="21" font-weight="700" fill="#1f1e1b">5 · ระบบอื่นที่ต่อกับจีทู</text>
+
+<g>
+<rect x="48" y="1592" width="272" height="126" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="70" y="1624" font-size="16.5" font-weight="700" fill="#1f1e1b">เมนูออนไลน์</text>
+<g font-size="14" fill="#6b6a63"><text x="70" y="1652">ลูกค้าเปิดดูเอง</text><text x="70" y="1676">65 รุ่น 883 กลิ่น</text><text x="70" y="1700">บอกแค่ “มี / หมด”</text></g>
+
+<rect x="338" y="1592" width="272" height="126" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="360" y="1624" font-size="16.5" font-weight="700" fill="#1f1e1b">หลังบ้านเมนู</text>
+<g font-size="14" fill="#6b6a63"><text x="360" y="1652">แอดมินแก้เอง</text><text x="360" y="1676">ราคา รูป โปร ธีม</text><text x="360" y="1700">ไม่ต้องแตะโค้ด</text></g>
+
+<rect x="628" y="1592" width="272" height="126" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="650" y="1624" font-size="16.5" font-weight="700" fill="#1f1e1b">แผงควบคุมจีทู</text>
+<g font-size="14" fill="#6b6a63"><text x="650" y="1652">เปิด/ปิดบอทรายคน</text><text x="650" y="1676">ดูคิวงาน ออเดอร์</text><text x="650" y="1700">อ่านแชทย้อนหลัง</text></g>
+
+<rect x="918" y="1592" width="274" height="126" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="940" y="1624" font-size="16.5" font-weight="700" fill="#1f1e1b">แดชบอร์ดผู้บริหาร</text>
+<g font-size="14" fill="#6b6a63"><text x="940" y="1652">ยอดขาย รายจังหวัด</text><text x="940" y="1676">สต็อก เป้า vs จริง</text><text x="940" y="1700">แยกตามร้าน V</text></g>
+</g>
+<rect x="48" y="1734" width="1144" height="44" rx="10" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="70" y="1762" font-size="15" fill="#3a3934">ทุกหน้าที่เป็นข้อมูลภายใน ต้องใส่รหัสถึงจะเปิดได้ · คนนอกที่รู้ลิงก์ก็เข้าไม่ได้ · ลูกค้าเห็นได้แค่ชื่อสินค้า ราคา และ มี/หมด</text>
+
+<!-- ═══ 6 · คุณภาพ + ตัวเลข ═══ -->
+<text x="48" y="1834" font-size="21" font-weight="700" fill="#1f1e1b">6 · การควบคุมคุณภาพ</text>
+<g>
+<rect x="48" y="1852" width="272" height="94" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="184" y="1890" font-size="30" font-weight="700" fill="#1f1e1b" text-anchor="middle">36 ข้อ</text>
+<text x="184" y="1918" font-size="14" fill="#6b6a63" text-anchor="middle">ชุดทดสอบอัตโนมัติ</text>
+<text x="184" y="1938" font-size="14" fill="#6b6a63" text-anchor="middle">ต้องผ่านครบก่อนอัปเดตทุกครั้ง</text>
+
+<rect x="338" y="1852" width="272" height="94" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="474" y="1890" font-size="30" font-weight="700" fill="#1f1e1b" text-anchor="middle">ทุกวัน 21:00</text>
+<text x="474" y="1918" font-size="14" fill="#6b6a63" text-anchor="middle">ตรวจแชทจริงย้อนหลัง</text>
+<text x="474" y="1938" font-size="14" fill="#6b6a63" text-anchor="middle">หาคำตอบเพี้ยนก่อนลูกค้าบ่น</text>
+
+<rect x="628" y="1852" width="272" height="94" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="764" y="1890" font-size="30" font-weight="700" fill="#1f1e1b" text-anchor="middle">~9 สตางค์</text>
+<text x="764" y="1918" font-size="14" fill="#6b6a63" text-anchor="middle">ต้นทุนต่อ 1 ข้อความ</text>
+<text x="764" y="1938" font-size="14" fill="#6b6a63" text-anchor="middle">ทางลัด 16 เรื่อง = 0 บาท</text>
+
+<rect x="918" y="1852" width="274" height="94" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="1055" y="1890" font-size="30" font-weight="700" fill="#1f1e1b" text-anchor="middle">3 ชั้น</text>
+<text x="1055" y="1918" font-size="14" fill="#6b6a63" text-anchor="middle">AI สำรอง ถ้าตัวหลักล่ม</text>
+<text x="1055" y="1938" font-size="14" fill="#6b6a63" text-anchor="middle">ระบบไม่มีวันเงียบ</text>
+</g>
+</svg>
