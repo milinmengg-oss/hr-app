@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1580" width="1080" height="1580" font-family="'Sarabun','Noto Sans Thai','Leelawadee UI','Thonburi',sans-serif">
+<defs>
+<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#7d7a70"/></marker>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#2f8a5b"/></marker>
+</defs>
+<rect width="1080" height="1580" fill="#faf9f5"/>
+
+<rect x="0" y="0" width="1080" height="126" fill="#1f1e1b"/>
+<text x="56" y="58" font-size="31" font-weight="700" fill="#faf9f5">จีทู — ระบบตอบแชทอัตโนมัติ ร้าน ABC</text>
+<text x="56" y="94" font-size="17" fill="#a8a49a">ผังการทำงานจริง · ตอบลูกค้าทางไลน์ 100% ของข้อความ · เวอร์ชัน k42</text>
+<text x="1024" y="58" font-size="15" fill="#a8a49a" text-anchor="end">31 ก.ค. 2026</text>
+
+<text x="56" y="182" font-size="20" font-weight="700" fill="#1f1e1b">เส้นทางของข้อความ 1 ข้อความ</text>
+
+<g stroke="#7d7a70" stroke-width="2" fill="none" marker-end="url(#a)">
+<path d="M300 268 V300"/><path d="M300 388 V420"/><path d="M300 508 V540"/><path d="M300 628 V660"/><path d="M300 748 V780"/>
+</g>
+
+<g>
+<rect x="56" y="198" width="488" height="70" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="82" y="228" font-size="20" font-weight="700" fill="#1f1e1b">1 · ลูกค้าทักเข้าไลน์ร้าน</text>
+<text x="82" y="254" font-size="15" fill="#6b6a63">ทุกข้อความเข้าจีทูก่อนเสมอ</text>
+
+<rect x="56" y="300" width="488" height="88" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="82" y="330" font-size="20" font-weight="700" fill="#1f1e1b">2 · ด่านหน้า</text>
+<text x="82" y="356" font-size="15" fill="#6b6a63">เช็คว่าแอดมินกำลังคุยเคสนี้อยู่ไหม</text>
+<text x="82" y="378" font-size="15" fill="#6b6a63">ถ้าใช่ จีทูเงียบทันที ไม่แย่งตอบ</text>
+
+<rect x="56" y="420" width="488" height="88" rx="14" fill="#e7f4ec" stroke="#2f8a5b" stroke-width="2.5"/>
+<text x="82" y="450" font-size="20" font-weight="700" fill="#1c5c3c">3 · ทางลัดตายตัว — 16 เรื่อง</text>
+<text x="82" y="476" font-size="15" fill="#2f8a5b">โค้ดตอบเอง ไม่เรียก AI เลย</text>
+<text x="82" y="498" font-size="15" fill="#2f8a5b">ตอบใน 0.1 วินาที · ต้นทุน 0 บาท · ผิดไม่ได้</text>
+
+<rect x="56" y="540" width="488" height="88" rx="14" fill="#fdf2e0" stroke="#b8791f" stroke-width="2.5"/>
+<text x="82" y="570" font-size="20" font-weight="700" fill="#875810">4 · สมอง AI — เรื่องที่เหลือ</text>
+<text x="82" y="596" font-size="15" fill="#b8791f">ป้อนสต็อกจริง + ความจำ 24 ชม. ให้ก่อนตอบ</text>
+<text x="82" y="618" font-size="15" fill="#b8791f">จุดเดียวในระบบที่มีโอกาสเพี้ยน</text>
+
+<rect x="56" y="660" width="488" height="88" rx="14" fill="#fbebe9" stroke="#b4483c" stroke-width="2.5"/>
+<text x="82" y="690" font-size="20" font-weight="700" fill="#8a3129">5 · ตัวกรองขาออก — 9 ชั้น</text>
+<text x="82" y="716" font-size="15" fill="#b4483c">ต่อให้ AI พลาด ยังมีด่านตรวจก่อนถึงลูกค้า</text>
+<text x="82" y="738" font-size="15" fill="#b4483c">ตัดข้อมูลลับ · กันมโน · กันลดราคาเอง</text>
+
+<rect x="56" y="780" width="488" height="70" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="82" y="810" font-size="20" font-weight="700" fill="#1f1e1b">6 · น้องอัญญาตอบกลับลูกค้า</text>
+<text x="82" y="836" font-size="15" fill="#6b6a63">เฉลี่ย 2-3 วินาที</text>
+</g>
+
+<path d="M544 464 H578 Q596 464 596 482 V798 Q596 816 578 816 H556" fill="none" stroke="#2f8a5b" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#ag)"/>
+<text x="608" y="636" font-size="15" fill="#2f8a5b" font-weight="700">ข้ามได้เลย</text>
+<text x="608" y="658" font-size="14" fill="#2f8a5b">ไม่ต้องผ่าน AI</text>
+
+<rect x="628" y="198" width="396" height="652" rx="14" fill="#f4f3ee" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="654" y="234" font-size="18" font-weight="700" fill="#1f1e1b">16 เรื่องที่ตอบเองได้ ไม่ใช้ AI</text>
+<g font-size="15.5" fill="#3a3934">
+<text x="654" y="272">· กี่วันถึง / ส่งนานไหม</text>
+<text x="654" y="304">· รอบสุดท้ายกี่โมง / ได้วันนี้ไหม</text>
+<text x="654" y="336">· รอบส่งด่วนกี่โมงบ้าง</text>
+<text x="654" y="368">· มีโปรอะไรบ้าง</text>
+<text x="654" y="400">· ซื้อกี่ชิ้นถึงส่งฟรี</text>
+<text x="654" y="432">· เคลมได้กี่วัน / เงื่อนไขเคลม</text>
+<text x="654" y="464">· ค่าส่งเท่าไหร่ / ส่งยังไง</text>
+<text x="654" y="496">· วิธีสั่งซื้อ</text>
+<text x="654" y="528">· ของเข้าวันไหน</text>
+<text x="654" y="560">· รุ่นนี้มีกลิ่นอะไรบ้าง</text>
+<text x="654" y="592">· กลิ่นนี้ยังมีของไหม</text>
+<text x="654" y="624">· ขอเปลี่ยนกลิ่น</text>
+<text x="654" y="656">· เช็คสถานะ / เลขพัสดุ</text>
+<text x="654" y="688">· ขอดูเมนูสินค้า</text>
+<text x="654" y="720">· ของยังไม่ถึง / ของเสีย</text>
+<text x="654" y="752">· ขอคุยกับแอดมิน</text>
+</g>
+<rect x="654" y="778" width="344" height="52" rx="10" fill="#e7f4ec"/>
+<text x="672" y="800" font-size="14.5" fill="#1c5c3c" font-weight="700">เรื่องพวกนี้เคยตอบผิดมาแล้วทั้งนั้น</text>
+<text x="672" y="820" font-size="14.5" fill="#2f8a5b">จึงย้ายออกจาก AI มาเป็นข้อความตายตัว</text>
+
+<line x1="56" y1="890" x2="1024" y2="890" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<text x="56" y="938" font-size="20" font-weight="700" fill="#1f1e1b">กฎความปลอดภัยข้อมูลบริษัท</text>
+<text x="56" y="966" font-size="15" fill="#6b6a63">บังคับด้วยโค้ด ไม่ใช่แค่สั่ง AI — ต่อให้ AI พิมพ์ออกมา ระบบตัดทิ้งก่อนถึงลูกค้า</text>
+
+<g>
+<rect x="56" y="990" width="470" height="230" rx="14" fill="#fbebe9" stroke="#b4483c" stroke-width="1.5"/>
+<text x="82" y="1024" font-size="17" font-weight="700" fill="#8a3129">ห้ามหลุดเด็ดขาด</text>
+<g font-size="15.5" fill="#3a3934">
+<text x="82" y="1058">✕ จำนวนสต็อกที่มีอยู่จริง</text>
+<text x="82" y="1090">✕ ชื่อบริษัทขนส่งที่ร้านใช้</text>
+<text x="82" y="1122">✕ โน้ตภายในของระบบ</text>
+<text x="82" y="1154">✕ เลขบัญชี (ออกจากระบบเท่านั้น)</text>
+<text x="82" y="1186">✕ วันที่ของจะเข้า</text>
+</g>
+
+<rect x="554" y="990" width="470" height="230" rx="14" fill="#e7f4ec" stroke="#2f8a5b" stroke-width="1.5"/>
+<text x="580" y="1024" font-size="17" font-weight="700" fill="#1c5c3c">บอกลูกค้าได้</text>
+<g font-size="15.5" fill="#3a3934">
+<text x="580" y="1058">✓ กลิ่นไหน “มี” หรือ “หมด”</text>
+<text x="580" y="1090">✓ ใช้ขนส่งเอกชน</text>
+<text x="580" y="1122">✓ ราคามาตรฐาน + โปรของร้าน</text>
+<text x="580" y="1154">✓ เงื่อนไขเคลม 7/14/21/30 วัน</text>
+<text x="580" y="1186">✓ รอบส่งด่วน กทม.–ปริมณฑล</text>
+</g>
+</g>
+
+<line x1="56" y1="1262" x2="1024" y2="1262" stroke="#d9d6cc" stroke-width="1.5"/>
+
+<text x="56" y="1310" font-size="20" font-weight="700" fill="#1f1e1b">ตัวเลขระบบ</text>
+<g>
+<rect x="56" y="1332" width="228" height="112" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="170" y="1382" font-size="38" font-weight="700" fill="#1f1e1b" text-anchor="middle">36</text>
+<text x="170" y="1412" font-size="14.5" fill="#6b6a63" text-anchor="middle">ข้อสอบอัตโนมัติ</text>
+<text x="170" y="1432" font-size="14.5" fill="#6b6a63" text-anchor="middle">ต้องผ่านครบก่อนอัพทุกครั้ง</text>
+
+<rect x="302" y="1332" width="228" height="112" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="416" y="1382" font-size="38" font-weight="700" fill="#1f1e1b" text-anchor="middle">~9 สต.</text>
+<text x="416" y="1412" font-size="14.5" fill="#6b6a63" text-anchor="middle">ต้นทุนต่อ 1 ข้อความ</text>
+<text x="416" y="1432" font-size="14.5" fill="#6b6a63" text-anchor="middle">ทางลัด 16 เรื่อง = 0 บาท</text>
+
+<rect x="548" y="1332" width="228" height="112" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="662" y="1382" font-size="38" font-weight="700" fill="#1f1e1b" text-anchor="middle">24/7</text>
+<text x="662" y="1412" font-size="14.5" fill="#6b6a63" text-anchor="middle">ตอบตลอดเวลา</text>
+<text x="662" y="1432" font-size="14.5" fill="#6b6a63" text-anchor="middle">เฉลี่ย 2-3 วินาที</text>
+
+<rect x="794" y="1332" width="230" height="112" rx="14" fill="#efeee8" stroke="#d9d6cc" stroke-width="1.5"/>
+<text x="909" y="1382" font-size="38" font-weight="700" fill="#1f1e1b" text-anchor="middle">883</text>
+<text x="909" y="1412" font-size="14.5" fill="#6b6a63" text-anchor="middle">กลิ่นใน 65 รุ่น</text>
+<text x="909" y="1432" font-size="14.5" fill="#6b6a63" text-anchor="middle">เช็คสต็อกจริงทุกครั้ง</text>
+</g>
+
+<rect x="0" y="1490" width="1080" height="90" fill="#1f1e1b"/>
+<text x="56" y="1528" font-size="16" fill="#faf9f5">ทิศทางพัฒนา · ย้ายคำถามจากช่องส้ม (AI ตัดสินใจ) ไปช่องเขียว (โค้ดตอบเอง) ให้มากที่สุด</text>
+<text x="56" y="1556" font-size="16" fill="#a8a49a">เปิดร้านวันแรกมีทางลัด 5 เรื่อง · วันนี้ 16 เรื่อง · ยิ่งเพิ่ม จีทูยิ่งไม่มีโอกาสตอบเพี้ยน</text>
+</svg>
