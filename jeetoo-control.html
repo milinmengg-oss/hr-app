@@ -40,6 +40,11 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
 #qcount{color:#ff5d5d;} #ocount{color:#bdfb00;}
 .qempty{font-size:13px;color:#7a7a7a;text-align:center;padding:14px 0;}
 .qcard{background:#1f1f1f;border:1px solid #333;border-left:3px solid #ff5d5d;border-radius:12px;padding:12px 13px;margin-bottom:10px;}
+/* 🚨 คิวที่เกี่ยวกับ "เงิน/ของเสีย" — ต้องเด่นกว่าคิวทั่วไป */
+.qcard.urgent{background:#2a1414;border:1px solid #7a2020;border-left:5px solid #ff4d4d;box-shadow:0 0 0 1px rgba(255,77,77,.25);}
+.qcard.urgent .qreason{color:#fff;background:#c62828;display:inline-block;padding:3px 10px;border-radius:20px;font-weight:700;}
+.qcard.urgent .qmsg{background:#1e0f0f;border-left:3px solid #c62828;padding-left:9px;}
+.qcard.urgent .qdone{background:#3a2020;border-color:#7a3030;color:#a58a8a;}
 .qtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
 .qtop b{font-size:15px;color:#fff;}
 .qtime{font-size:11px;color:#8a8a8a;white-space:nowrap;}
@@ -250,15 +255,29 @@ async function loadQueue(){
     const d=await (await fetch(q('/ctl/queue'))).json(); const list=d.queue||[];
     $('qcount').textContent = list.length? '('+list.length+')':'';
     $('queue').innerHTML = list.length? list.map(function(it){
-      return '<div class="qcard"><div class="qtop"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
-        +'<div class="qreason">'+esc(it.reason)+'</div>'
+      // 🚨 เคสที่เกี่ยวกับเงิน/ของเสีย = ห้ามกดเสร็จมั่ว ต้องเด่นและมีด่านกั้น
+      const rs = String(it.reason||'');
+      const urg = /สลิป|ยกเลิก|คืนเงิน|ของเสีย|หลังการขาย|เคลม|ของไม่|ไม่ถึง|ส่งผิด|code 1\d{3}|⛔|⚠/.test(rs);
+      const tip = urg ? (/สลิป/.test(rs) ? 'เช็คเงินเข้าบัญชีจริงก่อนกดเสร็จ'
+                       : /ยกเลิก/.test(rs) ? 'ลูกค้าขอยกเลิก — เช็คว่าลงออเดอร์ไปแล้วหรือยัง'
+                       : 'ตอบลูกค้าใน LINE ให้จบก่อนกดเสร็จ') : '';
+      return '<div class="qcard'+(urg?' urgent':'')+'" id="qc_'+it.uid.replace(/[^a-zA-Z0-9]/g,'')+'"><div class="qtop"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><span class="qtime">'+timeAgo(it.t)+'</span></div>'
+        +'<div class="qreason">'+esc(rs)+'</div>'
         +(it.msg?'<div class="qmsg">“'+esc(it.msg)+'”</div>':'')
+        +(urg?'<div class="owarn"><span class="blink">🚨</span><span>'+esc(tip)+'</span></div>':'')
         +'<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
         +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
-        +'<button class="qdone" onclick="markDone(\''+it.uid+'\')">✅ เสร็จ</button></div></div>';
+        +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เสร็จ</button></div></div>';
     }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
     return list.length;
   }catch(e){ return 0; }
+}
+function markDone2(uid,el){
+  const card=el&&el.closest?el.closest('.qcard'):null;
+  if(card&&card.classList.contains('urgent')){
+    if(!confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหมคะ?\nกดตกลง = จีทูจะกลับมาตอบแชทนี้ต่อ')) return;
+  }
+  markDone(uid);
 }
 async function markDone(uid){ try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); loadQueue(); refresh(); }catch(e){} }
 
