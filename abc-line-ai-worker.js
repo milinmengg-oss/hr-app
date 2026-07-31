@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k52-bakeoff";
+const BUILD = "2026-07-31-k53-showreplies";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1456,9 +1456,10 @@ export default {
         { q: "หัวพอต MARBO ZERO องุ่น มีไหม", yes: [/3%|5%|ความแรง/], why: "ต้องถามความแรงก่อน" },
         { q: "แนะนำพอตสูบทิ้งหน่อย", yes: [/[ก-๙]/], no: [/[\u4e00-\u9fff]/], why: "ต้องตอบภาษาไทย" },
       ];
+      const SHOW = url0.searchParams.get("show") === "1"; // k53: โชว์คำตอบทุกข้อ ไม่ใช่แค่ข้อที่พลาด
       const results = [];
       for (const model of models) {
-        let score = 100, fails = [], ms = 0, err = "";
+        let score = 100, fails = [], ms = 0, err = "", all = [];
         for (const c of QS) {
           const t0 = Date.now();
           let rep = "";
@@ -1474,8 +1475,11 @@ export default {
           for (const re of (c.no || [])) if (re.test(rep)) bad = true;
           for (const re of (c.yes || [])) if (!re.test(rep)) bad = true;
           if (bad) { score -= 10; fails.push(c.q + " → " + c.why + "  ▸ \"" + rep.replace(/\n/g, " ").slice(0, 90) + "\""); }
+          if (SHOW) all.push({ ถาม: c.q, ตอบ: rep.replace(/\n/g, " ⏎ "), ผ่าน: !bad, ยาว: rep.length });
         }
-        results.push({ model, คะแนน: Math.max(0, score) + "/100", เวลาเฉลี่ย: Math.round(ms / QS.length) + " ms", ข้อที่พลาด: fails });
+        const row = { model, คะแนน: Math.max(0, score) + "/100", เวลาเฉลี่ย: Math.round(ms / QS.length) + " ms", ความยาวเฉลี่ย: SHOW ? Math.round(all.reduce((s, x) => s + x.ยาว, 0) / (all.length || 1)) + " ตัวอักษร" : undefined, ข้อที่พลาด: fails };
+        if (SHOW) row["คำตอบทุกข้อ"] = all;
+        results.push(row);
       }
       results.sort((a, b) => parseInt(b["คะแนน"]) - parseInt(a["คะแนน"]));
       return new Response(JSON.stringify({ build: BUILD, จำนวนข้อสอบ: QS.length, ผล: results }, null, 1),
