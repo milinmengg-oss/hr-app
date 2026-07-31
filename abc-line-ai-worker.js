@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k59-orderfix";
+const BUILD = "2026-08-01-k60-iqosfree";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -92,7 +92,7 @@ function preferHead(mdl, txt) {
   return alt || mdl;
 }
 
-const PROMO_MSG = "🎁 โปรโมชั่นของร้านตอนนี้ค่ะ 💕\n\n🚚 ส่งฟรี เมื่อซื้อครบ 1,000 บาทขึ้นไป\n(ต่ำกว่า 1,000 บาท ค่าส่ง 40 บาท ทั่วประเทศ)\n\n📦 ส่งฟรีตามจำนวน (ไม่ต้องครบ 1,000)\n• หัวน้ำยา — ครบ 10 หัว\n• บิ๊กพอต / ชุด KIT — ครบ 4 ชิ้น\n• พอตใช้แล้วทิ้ง — ครบ 4 แท่ง\n\n⚠️ IQOS · น้ำยาขวด · นิโคตินพอช ไม่ร่วมโปรส่งฟรีนะคะ\n\nสนใจรุ่นไหนแจ้งได้เลยค่ะ เดี๋ยวอัญญาสรุปยอดให้ ✨";
+const PROMO_MSG = "🎁 โปรโมชั่นของร้านตอนนี้ค่ะ 💕\n\n🚚 ส่งฟรี เมื่อซื้อครบ 1,000 บาทขึ้นไป\n(ต่ำกว่า 1,000 บาท ค่าส่ง 40 บาท ทั่วประเทศ)\n\n📦 ส่งฟรีตามจำนวน (ไม่ต้องครบ 1,000)\n• หัวน้ำยา — ครบ 10 หัว\n• บิ๊กพอต / ชุด KIT — ครบ 4 ชิ้น\n• พอตใช้แล้วทิ้ง — ครบ 4 แท่ง\n• ไส้บุหรี่ IQOS — ครบ 2 ชิ้น\n\n⚠️ เครื่อง IQOS · น้ำยาขวด · นิโคตินพอช ไม่ร่วมโปรส่งฟรีนะคะ\n\nสนใจรุ่นไหนแจ้งได้เลยค่ะ เดี๋ยวอัญญาสรุปยอดให้ ✨";
 const CLAIM_MSG = "📋 ระยะเวลารับเคลมสินค้าค่ะ\n\n• ซื้อ 1-19 แท่ง → เคลมได้ภายใน 7 วัน\n• ซื้อ 20 แท่งขึ้นไป → ภายใน 14 วัน\n• ซื้อ 50 แท่งขึ้นไป → ภายใน 21 วัน\n• ซื้อ 100 แท่งขึ้นไป → ภายใน 30 วัน\n(นับจากวันที่ได้รับสินค้าค่ะ)\n\n📸 หลักฐานที่ต้องมีทุกครั้ง\n1) รูป/คลิปกล่องพัสดุ + ใบปะหน้าที่อยู่ ให้เห็นชัด\n2) คลิปตอนแกะกล่อง เห็นว่าได้รับอะไร กี่ชิ้น\n3) คลิปสินค้าที่มีปัญหา พร้อมอธิบายอาการ\n\n⚠️ ไม่มีคลิปตอนแกะกล่อง ทางร้านไม่สามารถเคลมให้ได้นะคะ 🙏🏻\nถ้าสินค้ามีปัญหา แจ้งได้เลยค่ะ เดี๋ยวแอดมินหลังการขายดูแลให้ทันทีค่ะ 💕";
 
 // ===== ข้อความเมนู (ส่งทันทีเมื่อลูกค้าขอเมนู/ถามมีอะไรบ้าง) =====
@@ -587,7 +587,9 @@ function findPrice(modelText) {
 const BIGPOD = ["RELX BOOST POD", "RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO"];
 const SMALLPOD = ["INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"];
 function catOf(key) {
-  if (/POUCH|SALTNIC|FREEBASE|IQOS|ไส้บุหรี่/i.test(key)) return "other"; // ไม่เข้าโปรส่งฟรีของพอต
+  // 🚬 k60: เจ้าของร้านแจ้ง 1/8 — "ไส้บุหรี่ IQOS ครบ 2 ชิ้น = ส่งฟรี" (เฉพาะไส้บุหรี่ ไม่รวมเครื่อง)
+  if (/ไส้บุหรี่/.test(key)) return "iqos";
+  if (/POUCH|SALTNIC|FREEBASE|IQOS/i.test(key)) return "other"; // เครื่อง IQOS / น้ำยาขวด / นิโคตินพอช = ไม่ร่วมโปรส่งฟรี
   if (/^เครื่อง/.test(key)) return "device";
   if (/\(KIT\)/.test(key)) return "bigpod";          // ชุด KIT นับรวมกับ Big Pod (4 ชิ้นส่งฟรี)
   if (BIGPOD.indexOf(key) !== -1) return "bigpod";     // หัวน้ำยาใหญ่ Big Pod → 4 ชิ้นส่งฟรี
@@ -616,7 +618,7 @@ function parseItems(reply) {
 function computeOrder(items, expressFee) {
   let cloneQty = 0;
   for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
-  let goods = 0, disp = 0, small = 0, big = 0; const rows = [];
+  let goods = 0, disp = 0, small = 0, big = 0, iqos = 0; const rows = [];
   for (const it of items) {
     // 🐛 k59: เดิมเช็คแค่ /ฟรี/ → กลิ่น "มิ้นต์ฟรีซ" (freeze) มีคำว่า "ฟรี" อยู่ข้างใน
     //   → ระบบคิดว่าเป็นของแถม ตั้งราคา 0 → ยอดรวม 0 → การ์ดโดนบล็อก → ลูกค้าติดลูป
@@ -630,7 +632,7 @@ function computeOrder(items, expressFee) {
     if (isFree) unit = 0;
     const line = unit * it.qty;
     goods += line;
-    if (!isFree) { const c = p ? catOf(p.key) : "disp"; if (c === "disp") disp += it.qty; else if (c === "smallpod") small += it.qty; else if (c === "bigpod") big += it.qty; }
+    if (!isFree) { const c = p ? catOf(p.key) : "disp"; if (c === "disp") disp += it.qty; else if (c === "smallpod") small += it.qty; else if (c === "bigpod") big += it.qty; else if (c === "iqos") iqos += it.qty; }
     const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + (isFree ? "" : " x" + it.qty) + (isFree ? " (แถมฟรี 🎁)" : "");
     rows.push({ label, line, unknown: !p, free: isFree });
   }
@@ -643,7 +645,7 @@ function computeOrder(items, expressFee) {
   }
   // 🎁 ออเดอร์ที่ใช้ "โปรแถมสินค้า" (มีของแถมในบิล) = ไม่เข้าโปรส่งฟรี ต้องจ่ายค่าส่ง 40 ตามปกติ
   const hasGift = rows.some(r => r.free);
-  const freeShip = !hasGift && (disp >= 4 || small >= 10 || big >= 4 || cloneQty >= 20);
+  const freeShip = !hasGift && (disp >= 4 || small >= 10 || big >= 4 || iqos >= 2 || cloneQty >= 20);   // k60: ไส้บุหรี่ IQOS 2 ชิ้น = ส่งฟรี
   const ship = freeShip ? 0 : 40;
   return { rows, goods, ship, total: goods + ship, freeShip, express: false, gift: hasGift };
 }
@@ -893,7 +895,7 @@ const NO_GUESS_RULE = "\n\n# ⛔ ห้ามเดา\n" +
 "- ⛔ ห้ามขอเบอร์โทร/LINE ID เพื่อ \"แจ้งเมื่อของเข้า\" เด็ดขาด (ร้านไม่มีบริการนี้ + ลูกค้าอยู่ในไลน์อยู่แล้ว)\n" +
 "- ⛔ ห้ามระบุวันที่ของจะเข้าเด็ดขาด (ห้ามพูด '3-5 วัน' '1 สัปดาห์' 'สัปดาห์หน้า' ฯลฯ) ร้านระบุไม่ได้ → บอกว่าทักมาเช็คใหม่ได้เรื่อยๆ แล้วเสนอกลิ่นที่มีของแทน\n" +
 "- ⛔ ห้ามรับปากว่า 'พอของเข้าจะแจ้ง/จะจดไว้ให้' เพราะร้านไม่มีระบบตามแจ้งลูกค้า\n" +
-"- ⛔ โปรส่งฟรีมีเฉพาะ: สูบทิ้ง ≥4 แท่ง | Big Pod/KIT ≥4 ชิ้น | หัวพอตเล็ก ≥10 หัว | MARBO โคลน ≥20 แท่ง\n" +
+"- ⛔ โปรส่งฟรีมีเฉพาะ: สูบทิ้ง ≥4 แท่ง | Big Pod/KIT ≥4 ชิ้น | หัวพอตเล็ก ≥10 หัว | ไส้บุหรี่ IQOS ≥2 ชิ้น | MARBO โคลน ≥20 แท่ง\n" +
 "  ⛔⛔ IQOS/TEREA · น้ำยาขวด (SALTNIC/FREEBASE) · นิโคตินเพ้า **ไม่มีโปรส่งฟรี** ห้ามแต่งโปรให้เด็ดขาด (เช่นห้ามพูดว่า \'ซื้อ 2 คอต ส่งฟรี\')\n" +
 "- 🏷 เวลาแนะนำ/ลิสต์กลิ่น: ใช้ **ชื่อกลิ่นภาษาไทยตรงตามรายการร้านเท่านั้น** ห้ามแปลเป็นอังกฤษ ห้ามตั้งชื่อกลิ่นเอง (เช่น ห้ามพูด \'Mango Tango\' / \'Watermelon Ice\' — ร้านใช้ชื่อ แตงโม, บลูเบอร์รี่มิ้นต์)\n" +
 "- ⛔ RELX BOOST POD **ไม่มีชุด KIT** — มีแต่ หัว 350 บาท กับ เครื่อง RELX CREATOR 20K 250 บาท แยกกัน ห้ามเสนอชุด KIT/ราคา 499 ของ BOOST POD";
@@ -1037,6 +1039,7 @@ https://cutt.ly/menu4"
 ## 🎁 โปรหลัก (เข้าเงื่อนไข = ส่งฟรีพัสดุ | คละยี่ห้อได้ | ซื้อหลายโปรรวมกันได้)
 - หัวน้ำยาเล็ก (หัวพอตราคา 120-140: INFY PLUS, MARBO ZERO, RELX INFINITY, RELX LARGE, RELX ULTRA) ครบ 10 หัว → ส่งฟรี
 - พอตใช้แล้วทิ้ง ครบ 4 แท่ง → ส่งฟรี
+- ไส้บุหรี่ IQOS (JP / MALAY / INDO) ครบ 2 ชิ้น → ส่งฟรี  ⛔ เครื่อง IQOS ILUMA ไม่นับรวม
 - หัวน้ำยาใหญ่ Big Pod (RELX BOOST POD, RELX POD CLEAR 18K, ELFBAR SWAP, ESKO BAR SWITCH, KS QUIK PRO, M SWITCH, VAZER RELOAD, ABC TANK, ABC LEGO) และ/หรือ ชุด KIT รวมครบ 4 ชิ้น → ส่งฟรี
 - Iqos (คอต/ไส้) ครบ 2 คอต → ส่งฟรี
 ⛔ RELX BOOST POD / ABC LEGO / หัวราคา 299-390 = "Big Pod" (โปร 4 ชิ้น) ไม่ใช่หัวน้ำยาเล็ก (10 หัว) — อย่าสับสน
