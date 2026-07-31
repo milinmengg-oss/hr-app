@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k64-expresszone";
+const BUILD = "2026-08-01-k65-sticker";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2026,7 +2026,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
     if (ev.type !== "message" || !ev.message) return;
     const mtype = ev.message.type;
-    if (mtype !== "text" && mtype !== "image" && mtype !== "location") return; // ข้ามสติกเกอร์/เสียง ฯลฯ
+    if (mtype !== "text" && mtype !== "image" && mtype !== "location" && mtype !== "sticker") return; // ข้ามเสียง/วิดีโอ/ไฟล์
     const userId = (ev.source && ev.source.userId) || "anon";
     const replyToken = ev.replyToken;
     if (!replyToken) return;
@@ -2071,6 +2071,29 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       } else {
         await lineReply(TOKEN, replyToken, "รบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาอีกครั้งนะคะ เดี๋ยวเช็คค่าส่งด่วนให้ค่ะ 🙏🏻", userId);
       }
+      return;
+    }
+
+    // ── 😊 k65: ลูกค้าส่งสติกเกอร์ (เจ้าของร้านแจ้ง 1/8 ว่าเดิมจีทูเงียบใส่) ──
+    // เดิมข้ามทิ้งเลย = ลูกค้าทักมาแล้วเงียบ ดูเหมือนร้านไม่สนใจ
+    // LINE ส่ง keywords ของสติกเกอร์มาให้ด้วย → เดาอารมณ์ได้ว่าขอบคุณ/ตกลง/ทักทาย
+    // ⛔ ไม่เรียก AI (ต้นทุน 0 บาท · ตอบทันที) และไม่นับเป็นบทสนทนา
+    if (mtype === "sticker") {
+      const kw = (Array.isArray(ev.message.keywords) ? ev.message.keywords.join(" ") : "").toLowerCase();
+      let msg;
+      if (/thank|thanks|thank you|grateful/.test(kw)) {
+        msg = "ยินดีค่ะ 💕 มีอะไรให้อัญญาช่วยอีกไหมคะ";
+      } else if (/ok|okay|yes|agree|nod|got it|understand/.test(kw)) {
+        msg = "รับทราบค่ะ 💕";
+      } else if (/hello|hi|greeting|welcome|wave/.test(kw)) {
+        msg = "สวัสดีค่ะ 💕 สนใจสินค้าตัวไหน บอกอัญญาได้เลยนะคะ";
+      } else if (/sad|cry|angry|sorry|upset/.test(kw)) {
+        msg = "มีอะไรให้อัญญาช่วยไหมคะ 🙏🏻 พิมพ์บอกได้เลยค่ะ";
+      } else {
+        // สติกเกอร์ทั่วไป — ตอบสั้นๆ ให้รู้ว่าเห็นแล้ว แล้วชวนคุยต่อ
+        msg = "รับทราบค่ะ 💕 สนใจสินค้าตัวไหน หรืออยากดูเมนู บอกอัญญาได้เลยนะคะ";
+      }
+      await lineReply(TOKEN, replyToken, msg, userId);
       return;
     }
 
