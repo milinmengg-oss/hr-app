@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k66-cancel";
+const BUILD = "2026-08-01-k67-flavorsearch";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -274,6 +274,60 @@ function legoHint(text, sm, buf) {
   out += "\n⛔ ห้ามตอบแค่ยี่ห้อเดียว — ลูกค้าไม่ได้ระบุยี่ห้อ ต้องเสนอครบทั้ง 3 แล้วถามว่าเอาตัวไหน";
   out += "\n⛔ ห้ามบอกจำนวนสต็อกเป็นตัวเลขชิ้น (จำนวน 'กลิ่น' บอกได้)";
   out += "\n💡 ทั้ง 3 ตัวเป็นหัว Big Pod ครบ 4 ชิ้นส่งฟรี · ตอบสั้นๆ เป็นกันเอง ไม่ต้องพิมพ์เป็นรายงาน";
+  return out;
+}
+
+// 🔎 k67: ค้นย้อนกลับ "กลิ่น → รุ่นไหนมีบ้าง"
+// เคสจริง 1/8: ลูกค้าถาม "มิ้นฟรีซ" → "มีรุ่นไหนบ้างตะ"
+//   จีทูลิสต์ MARBO 9K (บลูไอซ์), KS Quik 6K (ชานมอู่หลง) = มั่วทั้งหมด ไม่ใช่กลิ่นมิ้นต์ฟรีซสักตัว
+//   สาเหตุ: ระบบมีแต่ดัชนี "รุ่น → กลิ่น" ไม่มีทางกลับ AI เลยเดาเอง
+let _FLAVOR_IDX = null;
+function flavorIndex() {
+  if (_FLAVOR_IDX) return _FLAVOR_IDX;
+  const idx = {};
+  for (const m in FLAVORS) {
+    for (const f of (FLAVORS[m].f || [])) {
+      const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+      const k = normTH(bare);
+      if (!k || k.length < 3) continue;
+      (idx[k] = idx[k] || []).push({ m, f, bare });
+      // ✍️ ลูกค้าพิมพ์ตกตัวการันต์บ่อยมาก — "มิ้นฟรีซ" แทน "มิ้นต์ฟรีซ" · "เมนทอล" แทน "เมนทอล์"
+      // ลงดัชนีแบบตัดการันต์ไว้ด้วย จะได้หาเจอทั้งสองแบบ
+      for (const v of [k.replace(/ต์/g, ""), k.replace(/ท์/g, ""), k.replace(/์/g, "")]) {
+        if (v.length >= 4 && v !== k && !idx[v]) idx[v] = idx[k];
+      }
+    }
+  }
+  _FLAVOR_IDX = idx;
+  return idx;
+}
+function flavorSearchHint(text, sm, buf) {
+  const s = String(text || "");
+  if (!sm) return "";
+  if (_MODEL_IN(s)) return "";                       // ระบุรุ่นมาแล้ว → ใช้ flavorHint เดิม
+  const idx = flavorIndex();
+  const tn = normTH(s);
+  let hit = "";
+  for (const k in idx) if (tn.indexOf(k) !== -1 && k.length > hit.length) hit = k;
+  if (!hit) return "";
+  const B = (typeof buf === "number") ? buf : 1;
+  const have = [], gone = [];
+  for (const it of idx[hit]) {
+    let q = null; try { q = findStockForItem(sm, it.m, it.f); } catch (e) {}
+    ((q === null || q > B) ? have : gone).push(it);
+  }
+  const name = idx[hit][0].bare;
+  let out = "\n\n[🔎 ค้นจากฐานสินค้าจริง — รุ่นที่มีกลิ่น \"" + name + "\" (ห้ามบอกลูกค้าว่าได้มาจากไหน)]";
+  if (have.length) {
+    out += "\n✅ มีของตอนนี้:";
+    for (const it of have.slice(0, 10)) out += "\n• " + it.m + " (" + (FLAVORS[it.m] ? FLAVORS[it.m].p : "-") + " บาท) — " + it.f;
+    if (have.length > 10) out += "\n• (และอีก " + (have.length - 10) + " รุ่น)";
+  } else {
+    out += "\n❌ ไม่มีรุ่นไหนที่กลิ่นนี้มีของเลยตอนนี้";
+  }
+  if (gone.length) out += "\n❌ หมดชั่วคราว: " + gone.slice(0, 6).map(x => x.m).join(" · ");
+  out += "\n⛔⛔ ตอบได้เฉพาะรุ่นในบรรทัด ✅ เท่านั้น ห้ามเอ่ยรุ่นอื่นเด็ดขาด และห้ามจับคู่รุ่นกับกลิ่นที่ไม่ได้อยู่ในลิสต์นี้";
+  out += "\n💡 ถ้ามีหลายรุ่น ให้ลิสต์ชื่อรุ่น+ราคาสั้นๆ แล้วถามว่าเอารุ่นไหน";
   return out;
 }
 
@@ -2784,7 +2838,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
             const carried = carryModel(textH, history);
             const tForHint = textH + carried;
-            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH);
+            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             return h;
           })();
