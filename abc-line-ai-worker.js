@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k44-menustock";
+const BUILD = "2026-07-31-k45-nolistdump";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2540,7 +2540,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       //   ตัวกรอง 2.7 ตัดทิ้งหมด เหลือแค่ "ในรุ่น MARBO 9K แนะนำค่ะ 💕" แล้วว่างเปล่า = ลูกค้างง
       // แก้: ถ้าเกริ่นว่าจะแนะนำ/มีกลิ่น แต่ไม่เหลือรายการเลย → เติมกลิ่นที่ "มีของจริง" ของรุ่นนั้นให้แทน
       try {
-        const _intro = /แนะนำ|มีกลิ่น|กลิ่นที่มี|เลือกได้|ดังนี้|ตัวเลือก/.test(reply);
+        // k45: ต้องเป็น "คำถามหากลิ่น" จริงๆ เท่านั้น
+        // เคสจริง 31/7: ลูกค้าถาม "ไอคอส คืออะไร" (ถามความหมาย) → จีทูเอาลิสต์กลิ่น TEREA มาแปะหัวข้อความ
+        //   เพราะคำตอบมีคำว่า "ให้เลือก" แล้วเข้าเงื่อนไขเติมลิสต์ของ k40 = อ่านแล้วงงหนักกว่าเดิม
+        const _askFlavor = /กลิ่น|สี|รส|แนะนำ|มีอะไรบ้าง|มีไรบ้าง|เย็น|หวาน|เปรี้ยว|ตัวไหนดี|อันไหนดี/.test(String(userForHistory && userForHistory.content || ""));
+        const _isWhat = /คือ ?อะไร|คืออะไร|แปลว่า|ต่างกันยังไง|ต่างกันไง|ใช้ยังไง|ยังไง|what is/i.test(String(userForHistory && userForHistory.content || ""));
+        const _intro = _askFlavor && !_isWhat && /แนะนำ|มีกลิ่น|กลิ่นที่มี|ดังนี้/.test(reply);
         const _bullets = (reply.match(/^\s*[-•●*▪✅👉]/gm) || []).length;
         // ⚠️ อ่านสต็อกจาก KV ตรงนี้เอง — ตัวแปร smForHint อยู่คนละบล็อก เรียกตรงๆ จะ ReferenceError
         let _sm = null, _buf = 1;
@@ -2555,7 +2560,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             const _show = _have.slice(0, 12);
             reply = reply.replace(/(แนะนำค่ะ[^\n]*|ดังนี้ค่ะ[^\n]*|มีกลิ่น[^\n]*)\n/, "$1\n\n" + _show.map(f => "• " + f).join("\n") + "\n") ;
             if ((reply.match(/^\s*•/gm) || []).length === 0) {
-              reply = _show.map(f => "• " + f).join("\n") + "\n\n" + reply;
+              // k45: ต่อท้าย ไม่แปะไว้หัวข้อความ (เดิมแปะหัวแล้วลูกค้าเจอลิสต์ก่อนคำอธิบาย)
+              reply = reply.trim() + "\n\n" + _show.map(f => "• " + f).join("\n");
             }
             if (_have.length > _show.length) reply += "\n(ดูครบทุกกลิ่นได้ที่เมนูค่ะ https://cutt.ly/abc-menu)";
             console.log("EMPTY_LIST_FIXED " + _mdl + " +" + _show.length);
