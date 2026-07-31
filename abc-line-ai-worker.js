@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k50-gemini";
+const BUILD = "2026-07-31-k51-legoflavor";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1949,17 +1949,48 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         return;
       }
 
-      // 🧱 k48: ถาม "หัวเลโก้ / หัวเติมน้ำยา" แบบไม่ระบุยี่ห้อ → ต้องถามกลับ ห้ามเดายี่ห้อ
-      //    ร้านมี 3 ยี่ห้อ ราคาต่างกัน — ตอบยี่ห้อเดียวแล้วบอกว่าหมด = ลูกค้าเดินออกทั้งที่มีของ
+      // 🧱 k48+k51: "หัวเลโก้ / หัวเติมน้ำยา" — ร้านมี 3 ยี่ห้อ ห้ามเดายี่ห้อ
+      //   k51 (เคสจริง 31/7): ลูกค้าพิมพ์ "เอาเลโก้องุ่น" = สั่งซื้อพร้อมระบุกลิ่นแล้ว
+      //   แต่ระบบส่งลิสต์ 3 ยี่ห้อเดิมกลับไปซ้ำ = ไม่พาไปต่อ ลูกค้าติดอยู่กับที่
+      //   แก้: ถ้าระบุกลิ่นมาด้วย → บอกเลยว่ากลิ่นนั้นมีในยี่ห้อไหนบ้าง
       if (/เลโก้|lego|หัวเติม|หัวแบบเติม|เติมน้ำยาเอง|หัวรีฟิล|refill/i.test(t)
         && !/abc|เอบีซี|relx|รีแลค|boost|บูส|clear|คลีย/i.test(t)) {
         let _sm = {}, _bf = 1;
         try { if (env.CONV) { _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); _bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) { }
         const LEGO3 = [["RELX BOOST POD", 350], ["RELX POD CLEAR 18K", 390], ["ABC LEGO 20K", 299]];
+        const have = (m, f) => { let q = null; try { q = findStockForItem(_sm, m, f); } catch (e) { } return q === null || q > _bf; };
+
+        // ── ลูกค้าระบุกลิ่นมาด้วยไหม (เทียบกับกลิ่นจริงของ 3 ยี่ห้อนี้) ──
+        const nt = normTH(t);
+        let pick = "", pickLen = 0;
+        for (const [m] of LEGO3) for (const f of ((FLAVORS[m] && FLAVORS[m].f) || [])) {
+          const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+          const nb = normTH(bare);
+          if (nb.length >= 3 && nt.indexOf(nb) !== -1 && nb.length > pickLen) { pick = bare; pickLen = nb.length; }
+        }
+
+        if (pick) {
+          // มีกลิ่นระบุมา → บอกว่ากลิ่นนี้มีในยี่ห้อไหน
+          const rows = [];
+          for (const [m, p2] of LEGO3) {
+            const fl = ((FLAVORS[m] && FLAVORS[m].f) || []).filter(f => normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "")) === normTH(pick));
+            if (!fl.length) { rows.push("• " + m + " " + p2 + " บาท — ไม่มีกลิ่นนี้"); continue; }
+            const ok = fl.filter(f => have(m, f));
+            rows.push("• " + m + " " + p2 + " บาท — " + (ok.length ? "✅ มีของ (" + ok.join(" / ") + ")" : "หมดชั่วคราว"));
+          }
+          const anyOk = rows.some(r => r.indexOf("✅") !== -1);
+          await lineReply(TOKEN, replyToken,
+            "กลิ่น " + pick + " ของหัวเติมน้ำยา เช็คให้แล้วนะคะ 💕\n\n" + rows.join("\n") +
+            (anyOk
+              ? "\n\nรับยี่ห้อไหนดีคะ แจ้งจำนวนมาได้เลย เดี๋ยวอัญญาสรุปยอดให้ค่ะ ✨"
+              : "\n\nกลิ่นนี้หมดทุกยี่ห้อเลยค่ะ 🙏🏻 บอกแนวกลิ่นที่ชอบมาได้นะคะ เดี๋ยวหาตัวใกล้เคียงให้ค่ะ 💕"), userId);
+          return;
+        }
+
+        // ไม่ระบุกลิ่น → ถามกลับว่าเอายี่ห้อไหน
         const line = LEGO3.map(([m, p2]) => {
           const fl = (FLAVORS[m] && FLAVORS[m].f) || [];
-          let n = 0;
-          for (const f of fl) { let q = null; try { q = findStockForItem(_sm, m, f); } catch (e) { } if (q === null || q > _bf) n++; }
+          const n = fl.filter(f => have(m, f)).length;
           return "• " + m + " " + p2 + " บาท — " + (n ? "มีของ " + n + " กลิ่น" : "หมดชั่วคราว");
         }).join("\n");
         await lineReply(TOKEN, replyToken,
