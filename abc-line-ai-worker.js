@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k47-loading";
+const BUILD = "2026-07-31-k48-lego3";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -146,7 +146,10 @@ const TH_MODEL = [
   [/พอตคลีย|pod\s*clear|รีแลค\s*คลีย/i, "RELX POD CLEAR 18K"],
   [/รีแลค\s*อินฟิ|relx\s*infinity|อินฟินิตี้/i, "หัวพอต RELX INFINITY"],
   [/อินฟี่|infy\s*plus|อินฟี\s*พลัส/i, "หัวพอต INFY PLUS"],
-  [/เลโก้|abc\s*lego/i, "ABC LEGO 20K"],
+  // k48: ถอด "เลโก้" ลอยๆ ออก — ร้านมีหัวแบบเติมน้ำยาเอง 3 ยี่ห้อ ห้ามเดาว่าเป็น ABC
+  //   เคสจริง 31/7: ลูกค้าถาม "หัวเลโก้เหลืออะไรบ้าง" → ระบบล็อกเป็น ABC LEGO ตัวเดียว
+  //   แล้วยัดสต็อกว่า "หมดทุกกลิ่น" → จีทูบอกลูกค้าว่าหมด ทั้งที่อีก 2 ยี่ห้อมีของ = เสียยอด
+  [/abc\s*lego|เอบีซี\s*เลโก้|เลโก้\s*abc/i, "ABC LEGO 20K"],
   [/แทงค์|abc\s*tank/i, "ABC TANK 22K"],
   [/หัว\s*(abc|เอบีซี)|(abc|เอบีซี)\s*หัว|(abc|เอบีซี)[^\n]{0,10}(big\s*pod|bigpod|บิ๊กพอต)|(big\s*pod|bigpod|บิ๊กพอต)[^\n]{0,10}(abc|เอบีซี)|สนใจ\s*(abc|เอบีซี)/i, "ABC LEGO 20K"],
   [/หัว\s*(abc|เอบีซี)|(abc|เอบีซี)\s*หัว|(abc|เอบีซี)[^\n]{0,10}(big\s*pod|bigpod|บิ๊กพอต)|(big\s*pod|bigpod|บิ๊กพอต)[^\n]{0,10}(abc|เอบีซี)|สนใจ\s*(abc|เอบีซี)/i, "ABC TANK 22K"],
@@ -1939,6 +1942,26 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         || /(?:กี่|เท่าไห?ร่|ต้องซื้อ|ครบเท่าไ|ยังไง|เงื่อนไข)[^\n]{0,14}ส่งฟรี|ส่งฟรี[^\n]{0,14}(?:กี่|ยังไง|เงื่อนไข|เท่าไห?ร่|ต้องซื้อ)/.test(t))
         && !/แจ้งปัญหา|ของเสีย|เคลม/.test(t)) {
         await lineReply(TOKEN, replyToken, PROMO_MSG, userId);
+        return;
+      }
+
+      // 🧱 k48: ถาม "หัวเลโก้ / หัวเติมน้ำยา" แบบไม่ระบุยี่ห้อ → ต้องถามกลับ ห้ามเดายี่ห้อ
+      //    ร้านมี 3 ยี่ห้อ ราคาต่างกัน — ตอบยี่ห้อเดียวแล้วบอกว่าหมด = ลูกค้าเดินออกทั้งที่มีของ
+      if (/เลโก้|lego|หัวเติม|หัวแบบเติม|เติมน้ำยาเอง|หัวรีฟิล|refill/i.test(t)
+        && !/abc|เอบีซี|relx|รีแลค|boost|บูส|clear|คลีย/i.test(t)) {
+        let _sm = {}, _bf = 1;
+        try { if (env.CONV) { _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); _bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) { }
+        const LEGO3 = [["RELX BOOST POD", 350], ["RELX POD CLEAR 18K", 390], ["ABC LEGO 20K", 299]];
+        const line = LEGO3.map(([m, p2]) => {
+          const fl = (FLAVORS[m] && FLAVORS[m].f) || [];
+          let n = 0;
+          for (const f of fl) { let q = null; try { q = findStockForItem(_sm, m, f); } catch (e) { } if (q === null || q > _bf) n++; }
+          return "• " + m + " " + p2 + " บาท — " + (n ? "มีของ " + n + " กลิ่น" : "หมดชั่วคราว");
+        }).join("\n");
+        await lineReply(TOKEN, replyToken,
+          "หัวพอตแบบเติมน้ำยาเอง (หัวเลโก้) ทางร้านมี 3 ยี่ห้อค่ะ 💕\n\n" + line +
+          "\n\nสนใจยี่ห้อไหนดีคะ บอกอัญญาได้เลย เดี๋ยวเช็คกลิ่นที่มีของให้ทันทีค่ะ ✨\n" +
+          "(ทั้ง 3 ตัวเป็นหัว Big Pod ครบ 4 ชิ้นส่งฟรีนะคะ 🚚)", userId);
         return;
       }
 
