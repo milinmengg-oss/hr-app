@@ -221,7 +221,7 @@ CATS.forEach((c,i)=>{
     if(m.hide) return;
     const D=DESC[m.n]||{}; var PUFFO={"RELX BOOST POD":"20,000 คำ","M SWITCH":"15,000 คำ","STAR 2,500":"2,500 คำ"}; if(PUFFO[m.n]&&!D.puff) D.puff=PUFFO[m.n];
     const im=IMG[m.id]?'<div class="mainimg"><img loading="lazy" src="'+IMG[m.id]+'" onerror="this.parentElement.innerHTML=\'<span class=noimg>ABC</span>\'"></div>':'<div class="mainimg"><span class="noimg">ABC</span></div>';
-    h+='<div class="model" data-id="'+m.id+'"><div class="mhead"><b>'+m.n+'</b>'+(D.puff?'<span class="puff">'+D.puff+'</span>':'')+'<span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt" style="display:none"></span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div>';
+    h+='<div class="model" data-id="'+m.id+'" data-name="'+m.n.replace(/"/g,"&quot;")+'"><div class="mhead"><b>'+m.n+'</b>'+(D.puff?'<span class="puff">'+D.puff+'</span>':'')+'<span class="price">'+m.p.toLocaleString()+'.-</span><span class="havecnt" style="display:none"></span><span class="oos" style="display:none">หมดทุกกลิ่น</span></div>';
     h+='<div class="dbox"><div class="dcol">';
     if(TAGIMG[m.n]) h+='<img class="tagimg" loading="lazy" src="'+TAGIMG[m.n]+'" onerror="this.style.display=\'none\'">'; else if(D.tag) h+='<div class="tag"><small>จุดเด่น</small><b>'+D.tag+'</b></div>';
     if(D.use) h+='<div class="use"><small>ใช้งานกับเครื่อง</small><b>'+D.use+'</b></div>';
@@ -242,10 +242,10 @@ CATS.forEach((c,i)=>{
 }
 function go(id){ document.querySelectorAll(".page").forEach(p=>p.classList.remove("on")); document.getElementById(id).classList.add("on"); document.getElementById("backbtn").style.display=(id==="home")?"none":"block"; scrollTo(0,0); }
 function loadStock(){
-fetch(W+"/flavors").then(r=>r.json()).then(st=>{
+fetch(W+"/menustock").then(r=>r.json()).then(st=>{
   document.querySelectorAll(".model").forEach(md=>{
-    const id=md.dataset.id; let have=0,tot=0;
-    md.querySelectorAll(".chip").forEach(ch=>{ tot++; if(st[id+"|"+ch.dataset.f]===false){} else { ch.classList.add("in"); have++; } });
+    const nm=md.dataset.name||"", id=md.dataset.id; let have=0,tot=0;
+    md.querySelectorAll(".chip").forEach(ch=>{ tot++; if(st[nm+"|"+ch.dataset.f]===false){} else { ch.classList.add("in"); have++; } });
     if(tot){ if(have){ const hc=md.querySelector(".havecnt"); hc.textContent="มีของ "+have+" กลิ่น"; hc.style.display="inline-block"; } else md.querySelector(".oos").style.display="inline-block"; }
   });
   document.getElementById("livetxt").textContent="สต็อกสด · อัปเดต "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+" น.";

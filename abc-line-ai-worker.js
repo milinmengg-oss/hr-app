@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k43-strength";
+const BUILD = "2026-07-31-k44-menustock";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1644,6 +1644,28 @@ export default {
           const flav = parts.slice(1).join(" - ");
           const key = NM2ID[nm] + "|" + norm(flav);
           out[key] = (out[key] === true) || (sm[nm] > bufB); // ถ้ามีตัวใดตัวหนึ่งเหลือเกินกันชน = กลิ่นนี้มีของ
+        }
+        return new Response(JSON.stringify(out), { headers: CORS });
+      } catch (e) { return new Response("{}", { headers: CORS }); }
+    }
+
+    // ── สถานะ มี/หมด สำหรับ "เมนูออนไลน์" — คีย์ = "ชื่อรุ่น|ชื่อกลิ่น" ตรงตามฐานสินค้า ──
+    // k44: /flavors เดิมใช้ตาราง NM2ID ซึ่งชื่อกลิ่นยังเป็นแบบเก่า (ไม่มีความแรง)
+    //      พอ k43 แยก 3%/5% แล้ว เมนูหาไม่เจอ → ขึ้น "หมด" ทั้งที่มีของ
+    //      อันนี้คำนวณจาก FLAVORS + สต็อกจริง ด้วยตัวจับคู่ตัวเดียวกับที่จีทูใช้ = ตรงกันเสมอ
+    if (url0.pathname === "/menustock") {
+      const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
+      try {
+        const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+        const buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+        const out = {};
+        for (const model in FLAVORS) {
+          const fl = FLAVORS[model].f || [];
+          if (!fl.length) { const q = findStockForItem(sm, model, model); out[model + "|"] = (q === null) || q > buf; continue; }
+          for (const f of fl) {
+            let q = null; try { q = findStockForItem(sm, model, f); } catch (e) { }
+            out[model + "|" + f] = (q === null) || q > buf;   // ไม่รู้จัก = ถือว่ามี (อย่าปิดการขายเอง)
+          }
         }
         return new Response(JSON.stringify(out), { headers: CORS });
       } catch (e) { return new Response("{}", { headers: CORS }); }
