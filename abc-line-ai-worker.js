@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k29-claimdays";
+const BUILD = "2026-07-31-k30-modelmatch";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -37,6 +37,53 @@ const VISION_MODELS = [
   "qwen/qwen-2.5-vl-72b-instruct",
   "google/gemini-2.0-flash-exp:free",
 ];
+
+
+// 🎯 k30: หา "รุ่น" จากข้อความลูกค้าแบบให้คะแนน (แก้เคสจริง 31/7: "หัว esko มีกลิ่นไหนบ้าง" → ตอบกลิ่น DUAL SMASH)
+// จับได้ทั้งภาษาอังกฤษตัวเล็ก/ตัวใหญ่ + รู้ว่า "หัว" = หัวน้ำยา ไม่ใช่เครื่อง/ตัวใช้แล้วทิ้ง
+const HEAD_RE = /^หัวพอต|SWITCH|BOOST POD|POD CLEAR|SWAP|TANK 22K|LEGO 20K|VAZER RELOAD 15K$|KS QUIK PRO 15K$/i;
+function modelFromText(txt) {
+  const low = " " + String(txt || "").toLowerCase().replace(/[()%]/g, " ").replace(/\s+/g, " ") + " ";
+  if (low.trim().length < 2) return null;
+  const wantHead = /หัว|หัวน้ำยา|หัวพอต|refill/.test(low);
+  const wantDevice = /เครื่อง|ตัวเครื่อง|บอดี้|body/.test(low);
+  const wantKit = /kit|คิท|ครบชุด|ยกเซ็ต/.test(low);
+  const kNum = (low.match(/(\d{1,2})\s*k\b/) || [])[1];
+  let best = null, bestScore = 0;
+  for (const k in FLAVORS) {
+    const kl = k.toLowerCase().replace(/[()%]/g, " ");
+    const toks = kl.split(/\s+/).filter(w => w.length >= 2 && !/^\d+$/.test(w));
+    if (!toks.length) continue;
+    let hit = 0;
+    for (const w of toks) if (low.indexOf(" " + w) !== -1 || low.indexOf(w + " ") !== -1) hit++;
+    if (!hit) continue;
+    let sc = hit * 10 - (toks.length - hit) * 2;
+    if (kNum && new RegExp("(^|[^0-9])" + kNum + "\\s*k\\b", "i").test(k)) sc += 12;
+    const isHead = HEAD_RE.test(k), isDev = /^เครื่อง/.test(k), isKit = /\(KIT\)/i.test(k);
+    if (wantHead) { if (isHead && !isKit) sc += 18; if (isDev || isKit) sc -= 25; }
+    if (wantDevice) { if (isDev) sc += 18; else sc -= 12; }
+    if (wantKit) { if (isKit) sc += 18; } else if (isKit) sc -= 8;
+    if (!wantDevice && isDev) sc -= 10;
+    if (sc > bestScore) { bestScore = sc; best = k; }
+  }
+  return bestScore >= 12 ? best : null;
+}
+
+// k30b: ลูกค้าพิมพ์ไทย เช่น "หัวมาโบ" → TH_MODEL จับได้ MARBO 9K (ตัวใช้แล้วทิ้ง) ต้องสลับเป็นหัวน้ำยาแบรนด์เดียวกัน
+function preferHead(mdl, txt) {
+  if (!mdl) return mdl;
+  const low = String(txt || "").toLowerCase();
+  if (!/หัว|refill/.test(low)) return mdl;
+  if (HEAD_RE.test(mdl)) return mdl;
+  const brand = (String(mdl).match(/[A-Z][A-Z0-9]+/g) || [])[0];
+  if (!brand) return mdl;
+  let alt = null;
+  for (const k in FLAVORS) {
+    if (!HEAD_RE.test(k) || /\(KIT\)/i.test(k) || /^เครื่อง/.test(k)) continue;
+    if (k.toUpperCase().indexOf(brand) !== -1) { if (!alt || k.length < alt.length) alt = k; }
+  }
+  return alt || mdl;
+}
 
 const CLAIM_MSG = "📋 ระยะเวลารับเคลมสินค้าค่ะ\n\n• ซื้อ 1-19 แท่ง → เคลมได้ภายใน 7 วัน\n• ซื้อ 20 แท่งขึ้นไป → ภายใน 14 วัน\n• ซื้อ 50 แท่งขึ้นไป → ภายใน 21 วัน\n• ซื้อ 100 แท่งขึ้นไป → ภายใน 30 วัน\n(นับจากวันที่ได้รับสินค้าค่ะ)\n\n📸 หลักฐานที่ต้องมีทุกครั้ง\n1) รูป/คลิปกล่องพัสดุ + ใบปะหน้าที่อยู่ ให้เห็นชัด\n2) คลิปตอนแกะกล่อง เห็นว่าได้รับอะไร กี่ชิ้น\n3) คลิปสินค้าที่มีปัญหา พร้อมอธิบายอาการ\n\n⚠️ ไม่มีคลิปตอนแกะกล่อง ทางร้านไม่สามารถเคลมให้ได้นะคะ 🙏🏻\nถ้าสินค้ามีปัญหา แจ้งได้เลยค่ะ เดี๋ยวแอดมินหลังการขายดูแลให้ทันทีค่ะ 💕";
 
@@ -2141,6 +2188,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
         if (!mdl) for (const [re, key] of TH_MODEL) { if (cand.some(c => re.test(c))) { mdl = key; break; } }
         if (!mdl) for (const k of FLAVOR_KEYS) if (normTH(textH).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+        mdl = preferHead(mdl, textH);
         if (!mdl && history.length) {   // ถามต่อจากรุ่นที่เพิ่งคุยกัน
           const last = String(history[history.length - 1].content || "");
           for (const k of FLAVOR_KEYS) if (normTH(last).indexOf(normTH(k)) !== -1) { mdl = k; break; }
@@ -2155,14 +2203,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       }
       // 🌸 k26: "มีกลิ่นอะไรบ้าง" → ลิสต์กลิ่นที่มีของจริงจากสต็อกสด (ห้ามให้ AI แต่งประโยคเอง — เคสจริง 30/7: ตอบ "พร้อมส่ง" กับ "(หมดชั่วคราว)" ในข้อความเดียวจนลูกค้างง)
       if (/มีกลิ่น(อะไร|ไหน|ใด)|กลิ่น(อะไร|ไหน)บ้าง|กลิ่นอะไรมั่ง|เหลือกลิ่น(อะไร|ไหน)|เหลืออะไรบ้าง|มีอะไรเหลือ|มีสีอะไรบ้าง|สีอะไรบ้าง|ครบทุกกลิ่น(มั้ย|ไหม)?|กลิ่นครบ(มั้ย|ไหม)|กลิ่น(อะไร|ไหน)หมด|หมดกลิ่น(อะไร|ไหน)|หมดอะไรบ้าง/i.test(text)) {
-        let mdl = null;
-        const cand = [textH, textH.replace(/\s+/g, "")];
-        for (const [re, key] of TH_MODEL) { if (cand.some(c => re.test(c))) { mdl = key; break; } }
+        let mdl = modelFromText(textH);                      // k30: จับชื่อรุ่นจากข้อความก่อนเสมอ
+        if (!mdl) {
+          const cand = [textH, textH.replace(/\s+/g, "")];
+          for (const [re, key] of TH_MODEL) { if (cand.some(c => re.test(c))) { mdl = key; break; } }
+        }
         if (!mdl) for (const k of FLAVOR_KEYS) if (normTH(textH).indexOf(normTH(k)) !== -1) { mdl = k; break; }
-        if (!mdl && history.length) {   // ถามต่อจากรุ่นที่เพิ่งคุยกัน (ดูย้อน 4 ข้อความ)
-          for (let hi = history.length - 1; hi >= Math.max(0, history.length - 4) && !mdl; hi--) {
-            const last = String(history[hi].content || "");
-            for (const k of FLAVOR_KEYS) if (normTH(last).indexOf(normTH(k)) !== -1) { mdl = k; break; }
+        mdl = preferHead(mdl, textH);
+        if (!mdl && history.length) {   // ถามต่อจากรุ่นที่ "ลูกค้า" เพิ่งพูดถึง (ไม่เอาลิสต์ที่บอทแนะนำ)
+          for (let hi = history.length - 1; hi >= Math.max(0, history.length - 6) && !mdl; hi--) {
+            if (history[hi].role !== "user") continue;
+            mdl = modelFromText(String(history[hi].content || ""));
           }
         }
         if (!mdl) { await lineReply(TOKEN, replyToken, MENU_MSG, userId); return; }
