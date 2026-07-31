@@ -21,12 +21,12 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-07-31-k27-staleorder";
+const BUILD = "2026-07-31-k28-fastreply";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
-  "deepseek/deepseek-chat",              // หลัก: V3 — เชื่อฟังกฎแม่น นิ่งกว่า
-  "google/gemini-2.5-flash",             // สำรอง 1: เร็วที่สุด
+  "google/gemini-2.5-flash",             // หลัก: เร็วสุด (~0.8 วิ) — k28: สลับขึ้นมาเพราะลูกค้ารอนาน
+  "deepseek/deepseek-chat",              // สำรอง 1: V3 เชื่อฟังกฎแม่น แต่ช้ากว่า (~2.3 วิ)
   "qwen/qwen-2.5-72b-instruct",          // สำรอง 2
 ];
 
@@ -1647,6 +1647,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       }
       return; // เงียบให้แอดมินดูแล
     }
+    // 💬 k28: โชว์ "..." ทันทีตั้งแต่วินาทีแรก (ไม่ await = ไม่หน่วงการตอบ)
+    // เดิมเรียกตอนท้ายๆ หลังอ่าน KV หลายชั้น ลูกค้าเลยเห็นจุดช้า 5-10 วิ เหมือนบอทค้าง
+    try { lineLoading(TOKEN, userId); } catch (e) {}
+
     // เงียบแชทให้แอดมินดูแล + จดเข้าคิว (ชื่อลูกค้า+เหตุผล+ข้อความล่าสุด+เวลา) เก็บไว้ในค่าของ mute key เอง (ไม่เพิ่มการเขียน KV)
     const muteNow = async (reason, msg) => {
       try {
@@ -1894,8 +1898,6 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       ? "\n\n# การชำระเงิน\nระบบจะส่งการ์ดข้อมูลโอน (ธนาคาร/เลขบัญชี/ชื่อบัญชี) ให้ลูกค้าเองหลังกดปุ่ม \"ยืนยันรายการ\" — คุณไม่รู้และห้ามพิมพ์ข้อมูลโอนใดๆ เอง ถ้าลูกค้าถามเลขบัญชี ให้ตอบว่า \"กดปุ่มยืนยันรายการในการ์ดได้เลยค่ะ เดี๋ยวระบบส่งข้อมูลการชำระเงินให้ทันทีนะคะ 💕\"\n⛔ ห้ามพิมพ์สรุปยอดซ้ำเป็นข้อความหลังการ์ดยืนยันออกแล้ว — การ์ดคือข้อมูลจริง"
       : "");
 
-    // 💬 โชว์ "จุดกำลังพิมพ์" (loading animation) ให้ลูกค้าเห็นระหว่างจีทูคิดคำตอบ
-    await lineLoading(TOKEN, userId);
 
     // ⛔ รายชื่อรุ่นที่หมดสต็อกทั้งรุ่น (ทุกกลิ่นเหลือ 0) → ห้ามจีทูเอาไปแนะนำ
     let outNote = "";
@@ -2610,7 +2612,7 @@ async function lineLoading(token, userId) {
     await fetch("https://api.line.me/v2/bot/chat/loading/start", {
       method: "POST",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId: userId, loadingSeconds: 20 }),
+      body: JSON.stringify({ chatId: userId, loadingSeconds: 10 }),
     });
   } catch (e) {}
 }
