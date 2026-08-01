@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k79-fakeslip";
+const BUILD = "2026-08-02-k80-slipdirect";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2741,9 +2741,21 @@ async function handleEvent(ev, env, TOKEN, shopId) {
 
     if (mtype === "image") {
     showLoading();   // k47: อ่านรูปใช้เวลา ต้องโชว์จุดไข่ปลา
-      // ── ลูกค้าส่งรูป (มักเป็นเมนูที่วงกลมสินค้า) → ให้ AI อ่านรูป ──
-      const dataUri = await getLineImage(ev.message.id, TOKEN);
-      if (!dataUri) {
+      // 🧾 k80 เคสจริง 2/8 (เจ้านายเทสโอนจริง 320 บาท): ส่งสลิป K+ ของจริง แต่ vision ไม่ตอบแท็ก [SLIP]
+      //   → สลิปโดนปฏิบัติเหมือนรูปทั่วไป → SlipOK ไม่เคยถูกเรียก → คำตอบโดนตาข่าย k36 กิน
+      //   → ลูกค้าได้ "ขออภัย เข้าใจคำถามไม่ตรง + ลิงก์เมนู" = โอนเงินแล้วโดนเมิน!
+      //   แก้: ถ้ามีออเดอร์สถานะ "รอโอน" ค้างอยู่ → รูปที่ส่งมาแทบร้อยทั้งร้อยคือสลิป
+      //   ให้เข้าทางตรวจ SlipOK ทันที ไม่ต้องผ่าน vision (เร็วขึ้น ถูกลง และพลาดไม่ได้)
+      let _slipForced = false;
+      try {
+        if (env.CONV) {
+          const _ov = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (_ov) { const _oj = JSON.parse(_ov); if (_oj && _oj.status && _oj.status.indexOf("รอโอน") !== -1) _slipForced = true; }
+        }
+      } catch (e) {}
+      if (_slipForced) { console.log("SLIP_FORCED awaiting-payment"); }
+      const dataUri = _slipForced ? null : await getLineImage(ev.message.id, TOKEN);
+      if (!dataUri && !_slipForced) {
         await lineReply(TOKEN, replyToken, "ขออภัยค่ะ รูปโหลดไม่ได้ 🙏🏻 รบกวนพิมพ์ชื่อรุ่น/กลิ่นที่ต้องการมาได้เลยนะคะ", userId);
         return;
       }
@@ -2780,7 +2792,9 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           { type: "image_url", image_url: { url: dataUri } }
         ]
       };
-      reply = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...histForAI(history, 8), visionMsg], VISION_MODELS);
+      reply = _slipForced ? "[SLIP]" : await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...histForAI(history, 8), visionMsg], VISION_MODELS);
+      // k80: vision พูดถึงสลิป/การโอน แต่ลืมพิมพ์แท็ก [SLIP] → นับเป็นสลิปไว้ก่อน (กันหลุดซ้ำ — SlipOK เป็นคนตัดสินจริง)
+      if (reply.indexOf("[SLIP]") === -1 && /สลิป|โอนเงินสำเร็จ|ยอดโอน|โอนสำเร็จ/i.test(reply)) { console.log("SLIP_INFERRED " + String(reply).slice(0, 50)); reply = "[SLIP]"; }
       if (reply.indexOf("[SLIP]") !== -1) {
         // เป็นสลิปโอนเงิน → ตรวจกับ SlipOK แล้วเทียบยอดกับออเดอร์
         // ✅ สลิปผ่าน  → จีทูขอที่อยู่จัดส่งต่อ (ไม่มิ้วต์) แล้วค่อยสรุปออเดอร์
