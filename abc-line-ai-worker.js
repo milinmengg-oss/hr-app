@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k83-rename";
+const BUILD = "2026-08-02-k84-paidok";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2328,6 +2328,31 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         try {
           const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
           if (ok) {
+            // 💳 k84 เคสจริง 2/8 (1.01 น.): จ่ายแล้ว (สลิปผ่าน ✅) ระบบถาม "ส่งที่เดิมไหมคะ"
+            //   ลูกค้าตอบ "โอเค" → k76 นับเป็นยืนยันออเดอร์ → ส่งการ์ดเลขบัญชีซ้ำ! (จ่ายไปแล้ว)
+            //   แก้: ถ้าออเดอร์จ่ายแล้ว "โอเค/ยืนยัน" = ตอบเรื่องที่อยู่ → ปิดออเดอร์ด้วยที่เดิม
+            //   และถามเลขบัญชีตอนจ่ายแล้ว = แจ้งว่าชำระเรียบร้อย ไม่ส่งการ์ดซ้ำทุกกรณี
+            {
+              const _oPaid = JSON.parse(ok);
+              if (_oPaid && _oPaid.status && _oPaid.status.indexOf("✅") !== -1) {
+                if (_oPaid.status.indexOf("พร้อมจัดส่ง") !== -1) {
+                  await lineReply(TOKEN, replyToken, "ออเดอร์ของคุณลูกค้าชำระเงินและลงระบบเรียบร้อยแล้วนะคะ ✅ รอรับสินค้าได้เลยค่ะ 💕", userId);
+                  return;
+                }
+                let _cAddr = null;
+                try { const cv = await env.CONV.get("cust:" + shopId + ":" + userId); if (cv) { const c = JSON.parse(cv); if (c && c.addr) _cAddr = c; } } catch (e) {}
+                if (_cAddr) {
+                  _oPaid.block = (_oPaid.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "") + "\nชื่อผู้รับ: " + (_cAddr.name || "-") + "\nเบอร์: " + (_cAddr.tel || "-") + "\nที่อยู่: " + _cAddr.addr + "\nชำระ: โอน (ตรวจสลิปผ่านแล้ว ✅)";
+                  _oPaid.status = "ชำระแล้ว ✅ (พร้อมจัดส่ง)";
+                  await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_oPaid), { expirationTtl: 259200 });
+                  console.log("PAID_CONFIRM_AS_SAMEADDR");
+                  await lineReply(TOKEN, replyToken, "รับทราบค่ะ ส่งที่เดิมนะคะ 📍\n" + (_cAddr.name ? _cAddr.name + " " : "") + (_cAddr.tel ? _cAddr.tel + "\n" : "") + _cAddr.addr + "\n\nแอดมินลงออเดอร์ให้เรียบร้อยค่ะ 🎉 จะได้รับสินค้าภายใน 2-3 วันนะคะ ขอบคุณที่อุดหนุนค่ะ 💕", userId);
+                  return;
+                }
+                await lineReply(TOKEN, replyToken, "ระบบได้รับยอดชำระเรียบร้อยแล้วนะคะ ✅\nรบกวนแจ้งที่อยู่จัดส่ง + ชื่อผู้รับ + เบอร์โทรศัพท์ได้เลยค่ะ 📍💕", userId);
+                return;
+              }
+            }
             // 🕐 k27: กันยืนยันออเดอร์ค้างเก่า — เคสจริง 31/7: ลูกค้าสั่ง MARBO 13:32,
             // 14:47 ถามรุ่นใหม่ (ของหมด) แล้วพิมพ์ "ยืนยัน" ระบบส่งเลขบัญชีของออเดอร์เก่าให้ทันที
             // ถ้าการ์ดออกไปเกิน 20 นาที (หรือมีการคุยรุ่นอื่นคั่น) ต้องทวนก่อน ห้ามส่งเลขบัญชีเอง
