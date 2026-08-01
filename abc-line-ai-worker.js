@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k85-restockask";
+const BUILD = "2026-08-02-k87-expfee";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1710,6 +1710,49 @@ export default {
         { headers: { "content-type": "application/json; charset=utf-8" } });
     }
     // 🔁 k54: สลับโมเดลสดๆ ไม่ต้องดีพลอย — /setmodel?key=...&m=deepseek/deepseek-chat  (&m= ว่าง = กลับค่าเริ่มต้น)
+    // 🛵 k87: แอดมินกรอกค่าส่งด่วนจากแผงควบคุม → ระบบคิดยอดใหม่ + ออกการ์ดให้ลูกค้าเอง
+    //   เคสจริง 2/8: แอดมินเช็คแอปแล้วพิมพ์ "ค่าส่ง 185 บาทครับ" ในแชทเอง
+    //   แต่ LINE ไม่ส่ง webhook ตอนแอดมินพิมพ์ → ระบบไม่มีทางรู้เลข 185 → การ์ดคิดค่าส่ง 40 (พัสดุ) = ขาดทุน 145
+    //   ทางแก้เดียวที่ปลอดภัย: แอดมินกรอกตัวเลขในแผงควบคุม ระบบเป็นคนคิด+แจ้งลูกค้า
+    //   /expfee?key=..&shop=v20&uid=Uxxx&fee=185
+    if (url0.pathname === "/expfee") {
+      if (!OKEY()) return DENY();
+      const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
+      const uid = url0.searchParams.get("uid") || "";
+      const fee = Math.round(+(url0.searchParams.get("fee") || 0));
+      const J = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" } });
+      if (!uid || !(fee >= 0)) return J({ ผล: "ต้องมี uid และ fee" }, 400);
+      const sh = SHOPS[shop]; const TK = sh && env[sh.tokenEnv];
+      if (!TK) return J({ ผล: "ไม่รู้จักร้าน " + shop }, 400);
+      try {
+        let ex = {}; try { const v = await env.CONV.get("exp:" + shop + ":" + uid); if (v) ex = JSON.parse(v); } catch (e) {}
+        ex.fee = fee; ex.pending = false; ex.t = Date.now();
+        await env.CONV.put("exp:" + shop + ":" + uid, JSON.stringify(ex), { expirationTtl: 7200 });
+        // มีออเดอร์รอโอนค้างอยู่ → คิดยอดใหม่ด้วยค่าส่งด่วนจริง + ออกการ์ดใหม่
+        let msgs = [{ type: "text", text: "ค่าส่งด่วนจากแอปคือ " + fee + " บาทค่ะ 🛵 (ตามแอปเป๊ะๆ ไม่มีบวกเพิ่ม)" }];
+        let total = null;
+        const ov = await env.CONV.get("ord:" + shop + ":" + uid);
+        if (ov) {
+          const oj = JSON.parse(ov);
+          if (oj && oj.status === "รอโอน 💰" && Array.isArray(oj.items) && oj.items.length) {
+            const c2 = computeOrder(oj.items, fee);
+            oj.block = "📦 ออเดอร์ (รอโอน)\n" + c2.rows.map(r => "- " + r.label + " = " + r.line).join("\n") + "\nยอดสินค้า " + c2.goods + "\nค่าส่งด่วน " + c2.ship + "\nรวมยอดชำระ " + c2.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
+            oj.t = Date.now();
+            await env.CONV.put("ord:" + shop + ":" + uid, JSON.stringify(oj), { expirationTtl: 259200 });
+            await env.CONV.put("card:" + shop + ":" + uid, JSON.stringify({ sig: c2.rows.map(r => r.label).join("|") + "#" + c2.total, t: Date.now() }), { expirationTtl: 7200 });
+            msgs.push({ type: "flex", altText: "ยืนยันรายการสั่งซื้อ (ส่งด่วน)", contents: orderConfirmFlex(c2) });
+            total = c2.total;
+          }
+        }
+        await fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST", headers: { "Authorization": `Bearer ${TK}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ to: uid, messages: msgs }),
+        });
+        await env.CONV.delete("mute:" + shop + ":" + uid);   // ปลดคิวรอเช็คราคา
+        console.log("EXPFEE_SET shop=" + shop + " fee=" + fee + " total=" + total);
+        return J({ ผล: "แจ้งค่าส่งด่วน " + fee + " บาทให้ลูกค้าแล้ว ✅", ยอดรวมใหม่: total, build: BUILD });
+      } catch (e) { return J({ ผล: "พลาด: " + String(e).slice(0, 120) }, 500); }
+    }
     if (url0.pathname === "/setmodel") {
       if (!OKEY()) return DENY();
       const mv = url0.searchParams.get("m");
@@ -2239,13 +2282,23 @@ async function handleEvent(ev, env, TOKEN, shopId) {
 
     // ── โหมดแอดมินดูแล: ถ้าแชทนี้ถูกส่งต่อให้คนแล้ว จีทูเงียบ (12 ชม.) ──
     const muteKey = `mute:${shopId}:${userId}`;
-    if (env.CONV && (await env.CONV.get(muteKey))) {
-      // คำปลุก: พิมพ์ #เปิดบอท ในแชทนั้น → จีทูกลับมาทันที
-      if (mtype === "text" && /#?เปิดบอท|#bot/i.test(ev.message.text)) {
-        await env.CONV.delete(muteKey);
-        await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕", userId);
+    if (env.CONV) {
+      const _mv = await env.CONV.get(muteKey);
+      if (_mv) {
+        // 🔇 k86 (เจอจากตัวจำลองลูกค้า 2/8): ปักหมุดส่งด่วน → ระบบมิ้วต์รอแอดมินเช็คราคา
+        //   แต่บอทเพิ่งบอกเองว่า "ระหว่างรอ เลือกสินค้าเพิ่มได้เลยนะคะ" → ลูกค้าสั่งของต่อ → เงียบสนิท 1 ชม.!
+        //   แก้: มิ้วต์จากเหตุ "เช็คค่าส่งด่วน" = แค่คิวให้แอดมินแจ้งราคา ไม่ใช่ปิดแชท — จีทูขายต่อได้ปกติ
+        let _qOnly = false;
+        try { const _mj = JSON.parse(_mv); _qOnly = /เช็คค่าส่งด่วน/.test(String((_mj && _mj.reason) || "")); } catch (e) {}
+        if (!_qOnly) {
+          // คำปลุก: พิมพ์ #เปิดบอท ในแชทนั้น → จีทูกลับมาทันที
+          if (mtype === "text" && /#?เปิดบอท|#bot/i.test(ev.message.text)) {
+            await env.CONV.delete(muteKey);
+            await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕", userId);
+          }
+          return; // เงียบให้แอดมินดูแล
+        }
       }
-      return; // เงียบให้แอดมินดูแล
     }
     // 💬 k47: โชว์ "..." เฉพาะตอนที่ต้องรอจริง
     // k28 เดิมสั่งขึ้นทุกข้อความ รวมทางลัดที่ตอบใน 0.1 วิ → จุดโผล่แวบเดียวแล้วดับ ดูเหมือนระบบสะดุด
