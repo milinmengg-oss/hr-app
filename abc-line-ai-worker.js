@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k88-summaryfix";
+const BUILD = "2026-08-02-k89-typo";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -316,6 +316,78 @@ function flavorIndex() {
   }
   _FLAVOR_IDX = idx;
   return idx;
+}
+// ✍️✍️ k89 เคสจริง 2/8 (เจ้านายเจอ "ทุกครั้ง" ที่มาเทส):
+//   เจ้านายพิมพ์เร็ว/พิมพ์ย่อ — "Ks สัปรส" (=KS สับปะรด ตก บ+ะ) · "โบองุ่น" (=มาโบ) · "วัปรส"
+//   ระบบจับคำไม่ได้เลย → วน "ขออนุญาตทวนอีกครั้งนะคะ" ซ้ำๆ = ลูกค้าจริงก็หนีเหมือนกัน
+//   แก้: เดาคำที่สะกดเพี้ยนด้วยระยะแก้ไข (edit distance) ถ้าใกล้พอ ให้ "ถามยืนยัน" ⛔ ไม่ใช่สั่งเลย
+function _lev(a, b) {                       // ระยะแก้ไข (ตัดจบไวถ้าเกิน 2)
+  const n = a.length, m = b.length;
+  if (Math.abs(n - m) > 2) return 9;
+  let prev = Array.from({ length: m + 1 }, (_, j) => j);
+  for (let i = 1; i <= n; i++) {
+    const cur = [i]; let best = i;
+    for (let j = 1; j <= m; j++) {
+      const v = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j - 1], prev[j], cur[j - 1]);
+      cur[j] = v; if (v < best) best = v;
+    }
+    if (best > 2) return 9;
+    prev = cur;
+  }
+  return prev[m];
+}
+// โครงพยัญชนะไทย — ตัดสระ/วรรณยุกต์ทิ้ง ("สัปรส"→สปรส · "สับปะรด"→สบปรด) เทียบกันแล้วใกล้กันมาก
+function _skel(x) { return String(x || "").replace(/[\u0E30-\u0E3A\u0E47-\u0E4E\u0E40-\u0E44\u0E46]/g, ""); }
+function typoHint(text, sm, buf) {
+  const s = String(text || "");
+  if (s.length > 60) return "";
+  const idx = flavorIndex();
+  const B = (typeof buf === "number") ? buf : 1;
+  // 🎯 ถ้าลูกค้าเอ่ยรุ่น/แบรนด์มาด้วย ("Ks สัปรส") → เดาเฉพาะกลิ่นของแบรนด์นั้น
+  //    ไม่งั้น "สัปรส" จะไปใกล้ "สไปร์ท" ของแบรนด์อื่นแทนที่จะเป็น "สับปะรด" ของ KS
+  let scope = null;
+  try {
+    const mIn = _MODEL_IN(s);
+    let bases = [];
+    if (mIn) bases = [mIn];
+    else {
+      const up = " " + s.toUpperCase().replace(/[^A-Z0-9ก-๙]+/g, " ") + " ";
+      for (const k in FLAVORS) {
+        const toks = k.toUpperCase().split(/[\s()]+/).filter(t => /^[A-Z]{2,}$/.test(t) && t !== "KIT");
+        if (toks.some(t => up.indexOf(" " + t + " ") !== -1 || up.indexOf(" " + t) !== -1)) bases.push(k);
+      }
+    }
+    if (bases.length) {
+      scope = new Set();
+      for (const b of bases) for (const f of (FLAVORS[b] && FLAVORS[b].f) || []) scope.add(normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim()));
+    }
+  } catch (e) {}
+  const keys = Object.keys(idx).filter(k => !scope || scope.has(k));
+  // ตัดคำจากข้อความลูกค้า (ไทย/อังกฤษ) เอาเฉพาะชิ้นยาว ≥4 ที่ยังหาไม่เจอแบบตรงตัว
+  // ⛔ คำสั่งงาน/คำทั่วไป ห้ามเอาไปเดาเป็นชื่อกลิ่น (เคสจริง: "ยืนยัน" เกือบโดนเดาเป็นกลิ่น)
+  const STOPW = /^(ยืนยัน|ยกเลิก|สวัสดี|ขอบคุณ|ครับผม|ที่เดิม|พัสดุ|ส่งด่วน|เท่าไหร่|เท่าไร|ราคา|จำนวน|สอบถาม|รบกวน|ตกลง|โอนแล้ว|โอนเงิน|บัญชี|สลิป|จัดส่ง|ปลายทาง|แอดมิน|เมนู|โปรโมชั่น|ทักทาย)/;
+  const chunks = (normTH(s).match(/[ก-๙]{4,}|[A-Z]{4,}/g) || []).filter(c => !STOPW.test(c)).slice(0, 6);
+  const hits = [];
+  for (const c of chunks) {
+    if (idx[c]) continue;                                  // ตรงตัวอยู่แล้ว → ตัวช่วยอื่นจัดการ
+    let best = null, bd = 3;
+    for (const k of keys) {
+      if (Math.abs(k.length - c.length) > 2) continue;
+      const d = Math.min(_lev(c, k), _lev(_skel(c), _skel(k)) + 0.5);
+      if (d < bd || (d === bd && best && k.length > best.length)) { bd = d; best = k; }
+    }
+    if (best && bd <= 2.5 && best.length >= 4) {
+      // ต้องมีของจริงอย่างน้อย 1 รุ่น ถึงจะเสนอ
+      const rows = idx[best].filter(r => { let q = null; try { q = findStockForItem(sm, r.m, r.f); } catch (e) {} return q === null || q > B; });
+      if (rows.length) hits.push({ typo: c, guess: rows[0].bare, models: [...new Set(rows.map(r => r.m))].slice(0, 3) });
+    }
+    if (hits.length >= 2) break;
+  }
+  if (!hits.length) return "";
+  return "\n\n[✍️ ลูกค้าน่าจะพิมพ์ชื่อกลิ่นตกตัวอักษร — ระบบเดาให้ว่า:]\n"
+    + hits.map(h => "• \"" + h.typo + "\" น่าจะหมายถึงกลิ่น \"" + h.guess + "\" (มีในรุ่น: " + h.models.join(", ") + ")").join("\n")
+    + "\n✅ ให้ถามยืนยันสั้นๆ ว่า \"หมายถึง <รุ่น> กลิ่น<ชื่อกลิ่น> ใช่ไหมคะ\" แล้วรอลูกค้าตอบ"
+    + "\n⛔ ห้ามออกบล็อกทวนคำสั่งซื้อจากคำที่เดา และห้ามบอกว่าหมด/ไม่มีรุ่นนี้";
 }
 function flavorSearchHint(text, sm, buf) {
   const s = String(text || "");
@@ -3214,7 +3286,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
             const carried = carryModel(textH, history);
             const tForHint = textH + carried;
-            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint);
+            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint) + typoHint(textH, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             return h;
           })();
@@ -3642,6 +3714,14 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         // แถวไหนหาราคาไม่เจอ (unknown) หรือยอดสินค้ารวม ≤ 0 = ไม่ออกการ์ด ถามทวนรุ่น/กลิ่น/จำนวนแทน
         if (calc.rows.some(r => r.unknown && !r.free) || calc.goods <= 0) {
           console.log("CARD_NOPRICE_BLOCK " + calc.rows.map(r => r.label).join("|").slice(0, 80));
+          // 🔁 k89: กันวนประโยคเดิม — ถามซ้ำรอบ 2 ใน 10 นาที ต้องเปลี่ยนวิธีช่วย ไม่ใช่พูดเดิม
+          let _again = 0;
+          try { if (env.CONV) { _again = +((await env.CONV.get("reask:" + shopId + ":" + userId)) || 0) + 1; await env.CONV.put("reask:" + shopId + ":" + userId, String(_again), { expirationTtl: 600 }); } } catch (e) {}
+          if (_again >= 2) {
+            await lineReply(TOKEN, replyToken, "ขออภัยที่ถามซ้ำนะคะ 🙏🏻 จีทูยังจับชื่อรุ่นไม่ได้ค่ะ\n\nเลือกจากเมนูนี้แล้วส่งชื่อรุ่นมาได้เลยค่ะ 👇\nhttps://cutt.ly/menu4\n(หรือส่งรูปสินค้ามาก็ได้นะคะ เดี๋ยวจีทูเช็คให้ทันทีค่ะ 💕)", userId);
+            try { await muteNow("ลูกค้าสั่งซ้ำแต่ระบบจับรุ่นไม่ได้ 🔁 — แอดมินช่วยดู", String(msgText || "")); } catch (e) {}
+            return;
+          }
           await lineReply(TOKEN, replyToken, "ขออนุญาตทวนรายการอีกครั้งนะคะ 🙏🏻 รบกวนแจ้ง รุ่นสินค้า + กลิ่น/สี + จำนวน ที่ต้องการอีกทีค่ะ เดี๋ยวสรุปยอดที่ถูกต้องให้ทันทีเลยนะคะ 💕", userId);
           return;
         }
