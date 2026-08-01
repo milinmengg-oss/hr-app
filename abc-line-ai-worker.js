@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k71-nopolicy";
+const BUILD = "2026-08-01-k73-podclear";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -149,7 +149,7 @@ const TH_MODEL = [
   [/มาโบ\s*9|marbo\s*9|มาโบเก้า/i, "MARBO 9K"],
   [/มาโบ\s*10|marbo\s*10/i, "MARBO 10K"],
   [/บูสพอต|บูสท์|boost\s*pod|รีแลค\s*บูส/i, "RELX BOOST POD"],
-  [/พอตคลีย|pod\s*clear|รีแลค\s*คลีย/i, "RELX POD CLEAR 18K"],
+  [/พอตคลีย|พอ[ดต]\s*เคลีย(ร์)?|พ็อ[ดต]\s*เคลีย(ร์)?|เคลียร?18|pod\s*clear|รีแลค\s*คลีย|รีแล็?ค\s*เคลีย/i, "RELX POD CLEAR 18K"],
   [/รีแลค\s*อินฟิ|relx\s*infinity|อินฟินิตี้/i, "หัวพอต RELX INFINITY"],
   [/อินฟี่|infy\s*plus|อินฟี\s*พลัส/i, "หัวพอต INFY PLUS"],
   // k48: ถอด "เลโก้" ลอยๆ ออก — ร้านมีหัวแบบเติมน้ำยาเอง 3 ยี่ห้อ ห้ามเดาว่าเป็น ABC
@@ -171,7 +171,8 @@ const TH_MODEL = [
   [/โวซูน|vosoon/i, "VOSOON 23K"],
   [/สปาร์ต้า|sparta/i, "RELX SPARTA 20K"],
   [/ดีว่า|diva/i, "RELX DIVA 30K"],
-  [/สแมชโก|smash\s*go/i, "RELX SMASH GO 12K"],
+  [/สแมชโก|smash\s*go|รีแ[รล]็?[คก]\s*สแมช|relx\s*smash/i, "RELX SMASH GO 12K"],
+  [/สแมช|smash/i, "RELX SMASH GO 12K"],   // k73: "สแมช" เดี่ยวๆ (DUAL SMASH มี pattern ของตัวเองอยู่ก่อนหน้าแล้ว)
   [/จอยเวย์\s*ทวิน|joiway\s*twins/i, "JOIWAY TWINS 20K"],
   [/จอยเวย์|joiway/i, "JOIWAY 12K"],
   [/คาร์ดินอล|kardinal/i, "NICOTINE POUCH - KARDINAL POUCH"],
@@ -227,7 +228,11 @@ function carryModel(text, hist) {
       if (k) return " " + k;
     }
     for (let i = hist.length - 1; i >= 0 && i >= hist.length - 4; i--) {
-      const k = _MODEL_IN(hist[i] && hist[i].content);
+      const c = String((hist[i] && hist[i].content) || "");
+      // k73: ข้อความบอทที่กำลัง "ขอโทษว่าของหมด" ห้ามเอารุ่นมาใช้ต่อ
+      // เคสจริง 1/8: บอทบอก "ESKO หมดทุกกลิ่น" → ลูกค้าถามเรื่องอื่น → ระบบดันแบกESKOมาตอบซ้ำอีก 3 รอบ
+      if (/ขออภัย|หมดชั่วคราว|หมดทุกกลิ่น|หมดสต็อก/.test(c)) continue;
+      const k = _MODEL_IN(c);
       if (k) return " " + k;
     }
   } catch (e) {}
@@ -663,6 +668,9 @@ const PRICE_KEYS = Object.keys(PRICE).sort((a, b) => b.length - a.length); // �
 
 // ── สแลง/คำสะกดไทย → รุ่นจริง (ใบ้ให้ AI ตรงรุ่น กันเดาเป็น MARBO 9K) ──
 const ALIAS = [
+  // k73 เคสจริง 1/8: ลูกค้าถาม "ชุดพร้อมสูบเหลือไร" → จีทูตอบวนแต่ ESKO ที่หมด
+  [/ชุด\s*พร้อมสูบ|เซ็?ต\s*พร้อมสูบ|ชุดเซ็?ท|ชุด\s*kit|พร้อมสูบ/i,
+   "ชุดพร้อมสูบ = ชุด KIT (เครื่อง+หัว) ร้านมี 4 รุ่น: ESKO BAR SWITCH 20K (KIT) 499 · KS QUIK PRO 15K (KIT) 499 · M SWITCH 15K (KIT) 499 · VAZER RELOAD 15K (KIT) 450 — ⛔ ตอบให้ครบทุกรุ่นที่มีของ ห้ามตอบแค่รุ่นเดียว"],
   [/เอลบา\s*ส?ว?อ?ฟ|เอลบาร์\s*สวอ?ป?|สวอฟ|สวอป|elf\s*bar\s*swap|elfbar\s*swap|\bswap\b/i, "ELFBAR SWAP 25K (หัว Big Pod ของค่าย ELFBAR ราคา 350)"],
   [/เอลบา|เอลบาร์|เอลฟ์?บาร์?|elf\s*bar|elfbar|joinone|จอยวัน/i, "ค่าย ELFBAR — ร้านมี: หัว ELFBAR SWAP 25K (350) + เครื่อง ELFBAR JOINONE (349, เครื่องมีแต่ 'สี' ไม่มีกลิ่น) ⛔ ไม่ใช่ MARBO"],
   [/มาโบ\s*สวิ[ชซ]|มาโบ\s*สวิต|เอ็ม\s*สวิ[ชซ]|m\s*swi[ct]?ch|m\s*swich/i, "M SWITCH (หัว 350 / เครื่อง M SWITCH 15K = 250 / KIT 499) — ไม่ใช่ MARBO 9K"],
@@ -3268,7 +3276,20 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           + "\n" + (history.length ? String(history[history.length - 1].content || "") : "");
         const mk = (txt) => { const s = new Set(), n = normTH(txt); for (const k of FLAVOR_KEYS) if (n.indexOf(normTH(k)) !== -1) s.add(normTH(k)); for (const [re, key] of TH_MODEL) if (re.test(txt)) s.add(normTH(key)); return s; };
         const wide = mk(convText), narrow = mk(narrowText);
-        const hit = (it, set) => { const m = normTH(it.model); for (const a of set) if (m.indexOf(a) !== -1 || a.indexOf(m) !== -1) return true; return false; };
+        // 🐛 k72 (เคสจริง): ลูกค้าพิมพ์ "เอามาโบองุ่น 2 ตัว" → Qwen เขียนบล็อกว่า "มาโบ | องุ่น | 2"
+        //   ระบบแปล "มาโบ" = MARBO 9K ได้อยู่แล้ว แต่ด่านกันลอกออเดอร์เก่าเทียบ "ชื่อดิบ" ตรงๆ
+        //   "มาโบ" ไม่ตรงกับ "MARBO 9K" → ถือว่าเป็นรุ่นที่ลูกค้าไม่ได้สั่ง → ไม่ออกการ์ด
+        //   = ลูกค้าสั่งครบทุกอย่างแล้ว แต่ได้ข้อความ "รบกวนแจ้งรุ่น+กลิ่น+จำนวนอีกที" วนไป
+        // แก้: แปลงชื่อรุ่นเป็นชื่อทางการก่อนเทียบทุกครั้ง
+        const canon = (v) => { try { return _MODEL_IN(v) || v; } catch (e) { return v; } };
+        const hit = (it, set) => {
+          for (const nm of [it.model, canon(it.model)]) {
+            const m = normTH(nm);
+            if (!m) continue;
+            for (const a of set) if (m.indexOf(a) !== -1 || a.indexOf(m) !== -1) return true;
+          }
+          return false;
+        };
         if (wide.size) {
           const keep = items.filter(it => hit(it, wide));
           const okNow = narrow.size ? items.some(it => hit(it, narrow)) : true; // ต้องมีอย่างน้อย 1 ตัวที่ตรงกับสิ่งที่คุยกันอยู่ตอนนี้
