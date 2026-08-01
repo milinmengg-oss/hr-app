@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k73-podclear";
+const BUILD = "2026-08-01-k74-askback";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -422,6 +422,31 @@ function styleHint(text, sm, buf) {
   out += "\n⛔⛔ ห้ามเอ่ยชื่อกลิ่นที่ไม่ได้อยู่ในลิสต์นี้เด็ดขาด — เคยหลุดมาแล้ว: \"องุ่นแดง\" \"องุ่นมิ้นต์\" \"บลูราสเบอร์รี่\" ซึ่งร้านไม่มี ลูกค้าตอบกลับว่า \"มั่วมาก\"";
   out += "\n💡 เสนอ 3-5 กลิ่นพอ แล้วถามว่าเอากลิ่นไหน ไม่ต้องลิสต์ทั้งหมด";
   return out;
+}
+
+// 🎯 k74: "ตอบให้เป๊ะ" — ถ้าลูกค้าถามหาสินค้าแต่ระบบจับคู่ไม่ได้เลย ให้ถามกลับ ⛔ ห้ามเดา
+// ปัญหาเดิม: เจอคำไม่รู้จัก ("พอดเคลีย" ก่อนแก้) → AI เดารุ่นเอง หรือระบบหยิบรุ่นเก่ามาตอบ = "ตอบมั่ว"
+// หลักใหม่: รู้จริงค่อยตอบ · ไม่รู้ให้ถาม — ลูกค้าไม่โกรธที่ถูกถามซ้ำ แต่โกรธที่ได้คำตอบผิด
+function unknownAskHint(text, sm, buf) {
+  const s = String(text || "");
+  // ต้องดูเหมือน "ถามหาสินค้า" ก่อน (มีเจตนาซื้อ/ถามของ)
+  if (!/มี.{0,15}(มั้ย|ไหม|ป่าว|เปล่า|บ้าง)|เอา|ขอ|สั่ง|ราคา|เท่าไห?ร่|กี่บาท|ตัวไหน|รุ่นไหน|ขาย/.test(s)) return "";
+  // ถ้าจับคู่อะไรได้สักอย่าง = ไม่ใช่เคสนี้ (มีตัวช่วยอื่นจัดการอยู่แล้ว)
+  try {
+    if (_MODEL_IN(s)) return "";
+    for (const [re] of BRAND_TH) if (re.test(s)) return "";
+    for (const [re] of ALIAS) if (re.test(s)) return "";
+    if (STYLE_MAP.some(([, ask]) => ask.test(s))) return "";
+    const idx = flavorIndex(); const tn = normTH(s);
+    for (const k in idx) if (tn.indexOf(k) !== -1) return "";
+  } catch (e) { return ""; }
+  // ตัดคำถามทั่วไปที่ไม่มีชื่อสินค้า ("มีโปรมั้ย" "มีอะไรขายบ้าง") — พวกนี้มีทางลัด/ตัวช่วยอยู่แล้ว
+  if (/โปร|ส่งฟรี|เมนู|อะไรบ้าง|อะไรขาย|ขายอะไร|ของอะไร|เก็บปลายทาง|ปลายทาง|ค่าส่ง|กี่วัน|กี่โมง|ที่อยู่|บัญชี|โอน|สลิป|เคลม|ประกัน|แอดมิน|ยกเลิก|สถานะ|พัสดุ/.test(s)) return "";
+  // เหลือแต่เคส "ถามหาสินค้าด้วยคำที่ระบบไม่รู้จักเลย"
+  return "\n\n[🎯 ระบบค้นชื่อสินค้าจากข้อความนี้ไม่เจอเลย — คำที่ลูกค้าใช้อาจสะกดเพี้ยน/เป็นชื่อเล่นที่ไม่รู้จัก/หรือร้านไม่มีขาย]"
+    + "\n⛔⛔ ห้ามเดาว่าเป็นรุ่นไหนเด็ดขาด และห้ามหยิบรุ่นจากบทสนทนาเก่ามาตอบแทน"
+    + "\n✅ ให้ถามกลับสั้นๆ เช่น \"รบกวนพิมพ์ชื่อรุ่นอีกครั้ง หรือส่งรูปสินค้ามาได้เลยค่ะ 🙏🏻 เดี๋ยวอัญญาเช็คให้ทันทีค่ะ\""
+    + "\n✅ หรือถ้าพอเดาได้ว่าลูกค้าน่าจะหมายถึงอะไร ให้ **ถามยืนยันก่อน** (\"หมายถึง ... ใช่ไหมคะ\") ห้ามตอบราคา/สต็อกจนกว่าลูกค้ายืนยัน";
 }
 
 function flavorHint(text, sm, buf){
@@ -2978,7 +3003,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
             const carried = carryModel(textH, history);
             const tForHint = textH + carried;
-            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint);
+            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             return h;
           })();
