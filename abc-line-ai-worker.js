@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-01-k69-whosaid";
+const BUILD = "2026-08-01-k70-style";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -339,6 +339,83 @@ function flavorSearchHint(text, sm, buf) {
   if (gone.length) out += "\n❌ หมดชั่วคราว: " + gone.slice(0, 6).map(x => x.m).join(" · ");
   out += "\n⛔⛔ ตอบได้เฉพาะรุ่นในบรรทัด ✅ เท่านั้น ห้ามเอ่ยรุ่นอื่นเด็ดขาด และห้ามจับคู่รุ่นกับกลิ่นที่ไม่ได้อยู่ในลิสต์นี้";
   out += "\n💡 ถ้ามีหลายรุ่น ให้ลิสต์ชื่อรุ่น+ราคาสั้นๆ แล้วถามว่าเอารุ่นไหน";
+  return out;
+}
+
+// 🎨 k70: "ค้นตามแนวกลิ่น" — ปิดรูสุดท้ายที่ทำให้จีทูมโนชื่อกลิ่น
+// เคสจริง: "สูบทิ้งอันไหนเย็นๆคะ" / "มาโบ 9k ชอบแนวเย็นๆหวานๆ"
+//   ลูกค้าไม่ได้บอกชื่อกลิ่น บอกแค่ "แนว" → ระบบไม่มีอะไรส่งให้ AI → AI เดาเอง
+//   เคยหลุด: องุ่นแดง · องุ่นมิ้นต์ · มิ้นต์บริสุทธิ์ · บลูราสเบอร์รี่ · ไอซ์บลาสต์ (ไม่มีสักตัวในร้าน)
+//   ลูกค้าพิมพ์กลับมาว่า "มั่วมาก"
+// วิธีแก้: แปลง "แนว" เป็นตัวกรอง แล้วคัดจากกลิ่นจริง 913 ตัวที่มีของ
+const STYLE_MAP = [
+  ["เย็น/มิ้นต์", /เย็น|มิ้น|มินท์|เมนทอล|ไอซ์|ไอ้ซ|ฟรีซ|ฟรีส|คูล|cool|ice|mint|เปปเปอร์มิ้น|สเปียร์มิ้น|ซ่า ?เย็น/i,
+    /มิ้นต์|มิ้น|เมนทอล|ไอซ์|เย็น|ฟรีซ|ฟรีส|คูล|สเปียร์|เปปเปอร์|มิ้นติ์/],
+  ["หวาน", /หวาน|sweet|ลูกอม|ขนม|นุ่ม/i,
+    /องุ่น|สตรอ|แตงโม|ลูกอม|เยลลี่|กัมมี่|หมากฝรั่ง|น้ำผึ้ง|คาราเมล|ไอติม|ไอศ|นม|ชานม|ยาคูลท์|โยเกิร์ต|พีช|ลิ้นจี่|มะม่วง|เมล่อน|แอปเปิ้ล|กล้วย|เชอร์รี่|เบอร์รี่|บับเบิ้ล|ท๊อฟฟี่|คุกกี้|ช็อค|เผือก/],
+  ["เปรี้ยว/ซ่า", /เปรี้ยว|ซ่า|โซดา|sour|น้ำอัดลม/i,
+    /เลม่อน|มะนาว|ส้ม|เปรี้ยว|โซดา|สับปะรด|เสาวรส|ยูสุ|เกรปฟรุต|แบล็คเคอ|ราสเบอร์|สปาร์ค|สไปร|แฟนต้า|โคล่า|รูทเบียร์|เรดบลู|มะเฟือง|ซิตรัส/],
+  ["ผลไม้", /ผลไม้|fruit|ผลไม/i,
+    /องุ่น|สตรอ|แตงโม|พีช|ลิ้นจี่|มะม่วง|เมล่อน|แอปเปิ้ล|กล้วย|เชอร์รี่|เบอร์รี่|บลูเบอร์|ฝรั่ง|สับปะรด|ส้ม|มะนาว|เสาวรส|กีวี่|ราสเบอร์|มัลเบอร์|ลูกเกด|มะพร้าว|ทุเรียน|ชมพู่|อโล|ว่านหางจระเข้/],
+  ["ชา", /ชา(เขียว|ไทย|นม|ดำ|มะลิ|อู่หลง)?|มัทฉะ|อู่หลง|หลงจิน|กวนอิน|tea/i,
+    /ชา|อู่หลง|มัทฉะ|หลงจิน|กวนอิน|มะลิ/],
+  ["โคล่า/น้ำอัดลม", /โคล่า|โค้ก|น้ำอัดลม|cola|coke|สไปร|แฟนต้า|รูทเบียร์/i,
+    /โคล่า|โซดา|สไปร|แฟนต้า|รูทเบียร์|เรดบลู|สปาร์ค/],
+  ["กาแฟ/นม", /กาแฟ|coffee|ลาเต้|นม|มิลค์|ครีม|โยเกิร์ต|ชีส/i,
+    /กาแฟ|โกปิโก้|ลาเต้|คอฟฟี่|นม|มิลค์|ครีม|โยเกิร์ต|ชีสเค้ก|ไอติม|ไอศ|ยาคูลท์|ท๊อฟฟี่/],
+  ["ยาสูบ", /ยาสูบ|บุหรี่จริง|รสบุหรี่|tobacco|regular/i,
+    /ยาสูบ|ซิก้าร์|regular|tobacco/i],
+];
+function styleHint(text, sm, buf) {
+  const s = String(text || "");
+  if (!sm) return "";
+  // ⛔ ถ้าเอ่ยชื่อกลิ่นตรงๆ อยู่แล้ว ไม่ต้องยุ่ง (flavorSearchHint จัดการ)
+  const styles = STYLE_MAP.filter(([, ask]) => ask.test(s));
+  if (!styles.length) return "";
+  const B = (typeof buf === "number") ? buf : 1;
+  const mdl = _MODEL_IN(s);                    // ระบุรุ่นมาด้วยไหม
+  // 🗂 ลูกค้าบอกหมวดมาด้วยไหม — "สูบทิ้งอันไหนเย็นๆ" ต้องไม่โผล่หัวพอตมาปน
+  let cat = "";
+  if (/สูบทิ้ง|สูบละทิ้ง|ใช้แล้วทิ้ง|พอตทิ้ง|แบบทิ้ง/.test(s)) cat = "disp";
+  else if (/หัวเล็ก|หัวพอตเล็ก|หัวน้ำยาเล็ก|พอตหัวเล็ก/.test(s)) cat = "smallpod";
+  else if (/บิ๊กพอต|big ?pod|หัวใหญ่|หัวน้ำยาใหญ่|หัวเติม|เลโก้/i.test(s)) cat = "bigpod";
+  else if (/^เครื่อง|เครื่องเปล่า|ตัวเครื่อง/.test(s)) cat = "device";
+  const models = mdl ? [mdl]
+    : Object.keys(FLAVORS).filter(m => { if (!cat) return true; try { return catOf(m) === cat; } catch (e) { return true; } });
+  const inStock = (m, f) => { let q = null; try { q = findStockForItem(sm, m, f); } catch (e) {} return q === null || q > B; };
+  let out = "";
+  for (const [name, , match] of styles.slice(0, 2)) {   // เอาไม่เกิน 2 แนว กัน prompt ยาว
+    const hits = [];
+    for (const m of models) {
+      for (const f of ((FLAVORS[m] && FLAVORS[m].f) || [])) {
+        if (!match.test(f)) continue;
+        if (!inStock(m, f)) continue;
+        hits.push({ m, f });
+        if (hits.length >= 40) break;
+      }
+      if (hits.length >= 40) break;
+    }
+    if (!hits.length) {
+      out += "\n\n[🎨 แนว \"" + name + "\"" + (mdl ? " ในรุ่น " + mdl : "") + " — ตอนนี้ไม่มีกลิ่นไหนมีของเลย]"
+        + "\n✅ บอกลูกค้าตรงๆ ว่าแนวนี้หมดชั่วคราว แล้วถามว่าลองแนวอื่นไหม ⛔ ห้ามแต่งชื่อกลิ่นขึ้นมาเอง";
+      continue;
+    }
+    out += "\n\n[🎨 กลิ่นแนว \"" + name + "\" ที่มีของจริงตอนนี้" + (mdl ? " (รุ่น " + mdl + ")" : "") + " — ห้ามบอกลูกค้าว่าได้มาจากไหน]";
+    if (mdl) {
+      out += "\n" + hits.slice(0, 14).map(x => "• " + x.f).join("\n");
+    } else {
+      const byModel = {};
+      for (const h of hits) (byModel[h.m] = byModel[h.m] || []).push(h.f);
+      let n = 0;
+      for (const m in byModel) {
+        if (n++ >= 6) break;
+        out += "\n• " + m + " (" + (FLAVORS[m] ? FLAVORS[m].p : "-") + " บาท): " + byModel[m].slice(0, 4).join(" · ");
+      }
+    }
+  }
+  if (!out) return "";
+  out += "\n⛔⛔ ห้ามเอ่ยชื่อกลิ่นที่ไม่ได้อยู่ในลิสต์นี้เด็ดขาด — เคยหลุดมาแล้ว: \"องุ่นแดง\" \"องุ่นมิ้นต์\" \"บลูราสเบอร์รี่\" ซึ่งร้านไม่มี ลูกค้าตอบกลับว่า \"มั่วมาก\"";
+  out += "\n💡 เสนอ 3-5 กลิ่นพอ แล้วถามว่าเอากลิ่นไหน ไม่ต้องลิสต์ทั้งหมด";
   return out;
 }
 
@@ -664,8 +741,14 @@ function catOf(key) {
   if (/POUCH|SALTNIC|FREEBASE|IQOS/i.test(key)) return "other"; // เครื่อง IQOS / น้ำยาขวด / นิโคตินพอช = ไม่ร่วมโปรส่งฟรี
   if (/^เครื่อง/.test(key)) return "device";
   if (/\(KIT\)/.test(key)) return "bigpod";          // ชุด KIT นับรวมกับ Big Pod (4 ชิ้นส่งฟรี)
-  if (BIGPOD.indexOf(key) !== -1) return "bigpod";     // หัวน้ำยาใหญ่ Big Pod → 4 ชิ้นส่งฟรี
-  if (SMALLPOD.indexOf(key) !== -1) return "smallpod"; // หัวน้ำยาเล็ก → 10 หัวส่งฟรี
+  // 🐛 k70 (บั๊กเสียเงินจริง): ลิสต์ BIGPOD/SMALLPOD เก็บชื่อแบบไม่มีคำนำหน้า ("RELX INFINITY")
+  //   แต่ชื่อจริงในระบบคือ "หัวพอต RELX INFINITY" → เทียบไม่ตรง → ตกไปเป็น "disp"
+  //   ผลคือ สั่งหัวพอตเล็ก 4 หัว ได้ส่งฟรีทันที ทั้งที่โปรหัวเล็กต้องครบ 10 หัว
+  //   = ร้านเสียค่าส่ง 40 บาท ทุกครั้งที่ลูกค้าสั่งหัวเล็ก 4-9 หัว
+  const bare = String(key).replace(/^(หัวพอต|หัวน้ำยา)\s*/, "").trim();
+  if (BIGPOD.indexOf(key) !== -1 || BIGPOD.indexOf(bare) !== -1) return "bigpod";     // Big Pod → 4 ชิ้นส่งฟรี
+  if (SMALLPOD.indexOf(key) !== -1 || SMALLPOD.indexOf(bare) !== -1) return "smallpod"; // หัวเล็ก → 10 หัวส่งฟรี
+  if (/^หัวพอต/.test(key)) return "smallpod";        // ตาข่ายกันพลาด: ขึ้นต้นว่า "หัวพอต" = หัวเล็กเสมอ
   return "disp"; // พอตใช้แล้วทิ้ง → 4 แท่งส่งฟรี
 }
 function cloneTier(n) { return n >= 1000 ? 190 : n >= 500 ? 200 : n >= 300 ? 210 : n >= 200 ? 220 : n >= 100 ? 230 : n >= 50 ? 240 : n >= 20 ? 250 : 290; }
@@ -2876,7 +2959,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
             const carried = carryModel(textH, history);
             const tForHint = textH + carried;
-            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint);
+            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             return h;
           })();
