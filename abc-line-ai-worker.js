@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k106-smartpromo";
+const BUILD = "2026-08-02-k106b-smartpromo";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2758,14 +2758,25 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         try {
           let _hist = [];
           try { if (env.CONV) _hist = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]"); } catch (e) {}
-          const _mdl = (_MODEL_IN(t) || String(carryModel(t + " มีโปรมั้ย", _hist) || "").trim() || "").trim();
+          // k106b: อ่านรุ่นจากบทสนทนาตรงๆ (ไม่พึ่ง carryModel เพราะ "มีโปรมั้ย" ไม่เข้าเงื่อนไขคำถามสินค้า)
+          let _mdl = _MODEL_IN(t) || "";
+          if (!_mdl) for (let i = _hist.length - 1; i >= 0 && i >= _hist.length - 6; i--) {
+            const _g = _MODEL_IN(String((_hist[i] || {}).content || ""));
+            if (_g) { _mdl = _g; break; }
+          }
+          _mdl = String(_mdl || "").trim();
           if (_mdl) {
-            const _cat = catOf(_mdl);
+            // k106b: หัวน้ำยาแท้ๆ (ไม่ใช่ KIT) ต้องเป็น "ครบ 10 หัว" · เครื่อง/ไส้ IQOS แยกให้ชัด
+            let _cat = catOf(_mdl);
+            if (HEAD_RE.test(_mdl) && !/\(KIT\)/i.test(_mdl) && !/^เครื่อง/.test(_mdl)) _cat = "smallpod";
+            // k106b: ดูจากคำในบทสนทนาด้วย (ชื่อรุ่นที่จับได้อาจเป็นไส้บุหรี่ ทั้งที่ลูกค้าคุยเรื่องเครื่อง)
+            const _scan = _mdl + " " + t + " " + _hist.slice(-4).map(h => String((h || {}).content || "")).join(" ");
+            const _no = /เครื่อง\s*IQOS|IQOS\s*ILUMA|FREEBASE|SALTNIC|POUCH|น้ำยาขวด|นิโคตินพอช/i.test(_scan);
+            if (/\(KIT\)|ชุด ?KIT|บิ๊กพอต/i.test(_scan)) _cat = "bigpod";
             const _rule = _cat === "iqos" ? { n: "2 ชิ้น", t: "ไส้บุหรี่ IQOS" }
                         : _cat === "smallpod" ? { n: "10 หัว", t: "หัวน้ำยา" }
                         : _cat === "bigpod" ? { n: "4 ชิ้น", t: "บิ๊กพอต / ชุด KIT" }
                         : _cat === "disp" ? { n: "4 แท่ง", t: "พอตใช้แล้วทิ้ง" } : null;
-            const _no = /^เครื่อง IQOS|^FREEBASE|^SALTNIC|POUCH/i.test(_mdl);
             if (_no) {
               _pm = "สำหรับ " + _mdl + " ขออนุญาตแจ้งตามจริงนะคะ 🙏🏻\n⚠️ รุ่นนี้ไม่ร่วมโปรส่งฟรีค่ะ (เครื่อง IQOS · น้ำยาขวด · นิโคตินพอช)\n\n🚚 แต่ถ้ายอดรวมครบ 1,000 บาทขึ้นไป = ส่งฟรีค่ะ\n(ต่ำกว่า 1,000 ค่าส่ง 40 บาท)\n\nสนใจรับกี่ชิ้นดีคะ 💕";
             } else if (_rule) {
