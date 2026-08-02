@@ -441,7 +441,8 @@ async function savePay(){
   if(!v && !confirm('ล้างค่า = กลับไปใช้บัญชีตั้งต้นใน Cloudflare — ยืนยัน?')) return;
   try{
     const r=await (await fetch(q('/ctl/payinfo'),{method:'POST',body:v})).json();
-    if(r.error){ $('msg').textContent=r.error; return; }
+    if(r.error){ alert(r.error); $('msg').textContent=r.error; return; }
+    alert('✅ บันทึกเลขบัญชีสำเร็จ — การ์ดโอนเงินหลังจากนี้ใช้บัญชีใหม่ทันที');
     $('msg').textContent='✅ บันทึกเลขบัญชีแล้ว — มีผลทันที';
     loadNotice();
   }catch(e){ $('msg').textContent='บันทึกไม่สำเร็จ: '+e.message; }
