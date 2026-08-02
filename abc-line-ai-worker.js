@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k90-nameguard";
+const BUILD = "2026-08-02-k91-factgate";
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1840,6 +1840,20 @@ export default {
         return J({ ผล: "แจ้งค่าส่งด่วน " + fee + " บาทให้ลูกค้าแล้ว ✅", ยอดรวมใหม่: total, build: BUILD });
       } catch (e) { return J({ ผล: "พลาด: " + String(e).slice(0, 120) }, 500); }
     }
+    // 📊 k91: คุณภาพคำตอบรายวัน — จีทูตอบไปกี่ข้อความ ระบบกันความมั่วไปกี่ครั้ง
+    if (url0.pathname === "/quality") {
+      if (!OKEY()) return DENY();
+      const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
+      const days = [];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(Date.now() + 7 * 3600 * 1000 - i * 86400000).toISOString().slice(0, 10);
+        let q = null; try { const v = await env.CONV.get("qc:" + shop + ":" + d); if (v) q = JSON.parse(v); } catch (e) {}
+        if (q) days.push({ วันที่: d, ตอบทั้งหมด: q.n, กันความมั่วไว้: q.bad, ราคาผิด: q.price, เรียกประเภทผิด: q.device, แบรนด์ไม่รู้จัก: q.model,
+          ความแม่น: q.n ? (Math.round((1 - q.bad / q.n) * 1000) / 10) + "%" : "-" });
+      }
+      return new Response(JSON.stringify({ ร้าน: shop, build: BUILD, รายวัน: days }, null, 1),
+        { headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" } });
+    }
     if (url0.pathname === "/setmodel") {
       if (!OKEY()) return DENY();
       const mv = url0.searchParams.get("m");
@@ -2348,6 +2362,73 @@ async function appendChatLog(env, shopId, userId, userMsg, botMsg) {
     await env.CONV.put(k, JSON.stringify(arr), { expirationTtl: 2592000 });
   } catch (e) {}
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// 🛡️ k91 "ด่านตรวจข้อเท็จจริง" (fact gate) — โค้ดตัดสินข้อเท็จจริง AI แค่เรียบเรียงคำพูด
+//   หลักเดียวกับที่ทำให้เรื่องเงินหยุดพัง: อะไรที่ย้ายมาให้โค้ดตรวจ จะไม่มั่วอีกเลย
+//   ตรวจ 3 อย่างก่อนข้อความถึงลูกค้า: (1) ราคาผิด (2) เรียก "เครื่อง" กับหัวน้ำยา (3) ชื่อแบรนด์ที่ไม่มีจริง
+//   ทุกครั้งที่แก้/บล็อก จะนับสถิติไว้ให้ดูที่ /quality (แผงควบคุมโชว์ให้)
+const _BRANDS_OK = (() => {
+  const s = new Set();
+  for (const k in FLAVORS) for (const t of String(k).toUpperCase().split(/[\s()]+/)) if (/^[A-Z]{3,}$/.test(t)) s.add(t);
+  for (const t of ["ABC", "LINE", "GRAB", "KIT", "POD", "OK", "QR", "IQOS", "TEREA", "NICOTINE", "POUCH", "SALTNIC", "FREEBASE", "ML", "MG", "PUFF", "PUFFS"]) s.add(t);
+  return s;
+})();
+// รุ่นที่ "ไม่ใช่เครื่อง" (หัวน้ำยา/พอตใช้แล้วทิ้ง) — ห้ามมีคำว่า "เครื่อง" นำหน้า
+const _NOT_DEVICE = Object.keys(FLAVORS).filter(k => !/^เครื่อง/.test(k)).sort((a, b) => b.length - a.length);
+
+function factGate(reply) {
+  let out = String(reply || "");
+  const hit = { price: 0, device: 0, model: 0 };
+  try {
+    // (1) 🏷 ราคาผิด → แก้เป็นราคาจริงจากตาราง
+    out = out.split("\n").map(line => {
+      if (/ค่าส่ง|รวม|ยอด|แถม|ส่วนลด|ประหยัด|โปร|ขั้นต่ำ|ครบ/.test(line)) return line;   // บรรทัดเรื่องเงินอื่น ไม่ยุ่ง
+      // ⚠️ ถ้าบรรทัดเดียวพูดหลายรุ่น → ไม่แตะ (กันแก้ราคาผิดรุ่น)
+      const mks = PRICE_KEYS.filter(k => line.toUpperCase().indexOf(k.toUpperCase()) !== -1);
+      const mk = mks.length ? mks[0] : null;
+      if (!mk) return line;
+      if (mks.filter(k => PRICE[k] !== PRICE[mk]).length) return line;
+      const real = PRICE[mk];
+      return line.replace(/(\d{2,5})\s*บาท/g, (m0, n) => {
+        const v = +n;
+        if (v === real || v < 50 || v > 9999) return m0;
+        hit.price++; console.log("FACT_PRICE_FIXED " + mk + " " + v + "→" + real);
+        return real + " บาท";
+      });
+    }).join("\n");
+
+    // (2) 🔌 เรียก "เครื่อง" กับของที่เป็นหัวน้ำยา/พอต → ตัดคำว่าเครื่องออก
+    for (const k of _NOT_DEVICE) {
+      const bare = k.replace(/^(หัวพอต|หัวน้ำยา)\s*/, "");
+      if (bare.length < 5) continue;
+      const re = new RegExp("เครื่อง\\s*(" + bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+      if (re.test(out)) { out = out.replace(re, "$1"); hit.device++; console.log("FACT_DEVICE_FIXED " + bare); }
+    }
+
+    // (3) 🚫 ชื่อแบรนด์ที่ร้านไม่มี (AI แต่งขึ้น) → นับไว้ + เตือนใน log (ไม่ตัดข้อความ กันตัดผิด)
+    const seen = new Set();
+    for (const t of (out.toUpperCase().match(/[A-Z]{3,}/g) || [])) {
+      if (_BRANDS_OK.has(t) || seen.has(t)) continue;
+      seen.add(t); hit.model++; console.log("FACT_UNKNOWN_BRAND " + t);
+    }
+  } catch (e) {}
+  return { text: out, hit, fixed: hit.price + hit.device + hit.model };
+}
+// 📊 นับสถิติรายวัน (ดูได้ที่ /quality) — เก็บ 7 วัน
+async function bumpQuality(env, shopId, hit, fixed) {
+  try {
+    if (!env.CONV) return;
+    const d = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+    const key = "qc:" + shopId + ":" + d;
+    let q = { n: 0, price: 0, device: 0, model: 0, bad: 0 };
+    try { const v = await env.CONV.get(key); if (v) q = JSON.parse(v); } catch (e) {}
+    q.n++; q.price += hit.price; q.device += hit.device; q.model += hit.model;
+    if (fixed) q.bad++;
+    await env.CONV.put(key, JSON.stringify(q), { expirationTtl: 604800 });
+  } catch (e) {}
+}
+
 async function handleEvent(ev, env, TOKEN, shopId) {
   try {
     // ── เพิ่มเพื่อน (follow) → ส่งการ์ดต้อนรับ + ปุ่มเมนู ──
@@ -3600,6 +3681,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
       } catch (e) {}
     }
+    // 🛡️ k91: ด่านตรวจข้อเท็จจริง — ตรวจ/แก้ ราคา · ประเภทสินค้า · แบรนด์ที่ไม่มีจริง แล้วนับสถิติ
+    try {
+      const _fg = factGate(reply);
+      reply = _fg.text;
+      await bumpQuality(env, shopId, _fg.hit, _fg.fixed);
+    } catch (e) {}
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
     const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(msgText || "").trim());
     if (saidNo) {
