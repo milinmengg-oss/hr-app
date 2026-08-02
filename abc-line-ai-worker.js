@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k96-cleanword";
+const BUILD = "2026-08-02-k97-comma";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2426,11 +2426,12 @@ function factGate(reply) {
       if (!mk) return line;
       if (mks.filter(k => PRICE[k] !== PRICE[mk]).length) return line;
       const real = PRICE[mk];
-      return line.replace(/(\d{2,5})\s*บาท/g, (m0, n) => {
-        const v = +n;
+      // ⚠️ k97: ต้องรองรับเลขมีจุลภาค — เดิม "2,150 บาท" ถูกอ่านเป็น "150" แล้วแก้เป็น "2,2150" (เคสจริง IQOS)
+      return line.replace(/(\d[\d,]{0,8})\s*บาท/g, (m0, n) => {
+        const v = +String(n).replace(/,/g, "");
         if (v === real || v < 50 || v > 9999) return m0;
         hit.price++; console.log("FACT_PRICE_FIXED " + mk + " " + v + "→" + real);
-        return real + " บาท";
+        return real.toLocaleString("en-US") + " บาท";
       });
     }).join("\n");
 
