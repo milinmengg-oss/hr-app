@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k114-dupslip";
+const BUILD = "2026-08-02-k115-flavorguard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -3217,9 +3217,30 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       }
       // k100 เคสจริง 2/8 (18.43 น.): "มีไรขายบ้าง" หลุด regex → AI สุ่มโชว์รุ่นเดียว (ELFBAR SWAP)
       //   คำถามกว้างต้องได้เมนูรวม ไม่ใช่รุ่นที่ AI นึกออก — เก็บสำนวน ไร/อาราย/หยัง ให้ครบ
+      // 🍬 k115 (เจ้าของร้าน 2/8 22.21 น.): "เลโม้มีอะไรบ้าง" / "มีกลิ่นอะไรบ้าง" โดนทางลัดเมนูดักไปหมด
+      //   เจ้าของร้านสั่ง: ห้ามโยนลิงก์เมนูบ่อยๆ ต้องแนะนำสินค้า/กลิ่นที่มีจริงตามที่ลูกค้าถาม
+      //   แก้: ถามเรื่องกลิ่น/รส/สี = ไม่ใช่คำขอเมนู · ถ้ากำลังคุยรุ่นไหนอยู่ = ให้ AI ตอบด้วยสต็อกจริง
       if (/เมนู|มี(อะไร|ไร|อาราย|หยัง)(ขาย)?(บ้าง|มั่ง)|ขาย(อะไร|ไร|หยัง)(บ้าง|มั่ง)?|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t)) {
-        await lineReply(TOKEN, replyToken, MENU_MSG, userId);
-        return;
+        const _askFlavor = /กลิ่น|รส|สี|ความแรง|นิโค|เหลือ/.test(t);        // ถามของในรุ่น ≠ ขอเมนูรวม
+        const _askMenuDirect = /เมนู|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t);  // ขอเมนูตรงๆ
+        let _ctxModel = "";
+        try {
+          _ctxModel = _MODEL_IN(t) || "";
+          if (!_ctxModel && env.CONV) {
+            const _h = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]");
+            for (let i = _h.length - 1; i >= 0 && i >= _h.length - 6 && !_ctxModel; i--) {
+              const _c = String((_h[i] || {}).content || "");
+              if (/ขออภัย|หมดชั่วคราว/.test(_c)) continue;
+              _ctxModel = _MODEL_IN(_c) || "";
+            }
+          }
+        } catch (e) {}
+        if (_askMenuDirect || (!_askFlavor && !_ctxModel)) {
+          await lineReply(TOKEN, replyToken, MENU_MSG, userId);
+          return;
+        }
+        // มีบริบทรุ่น หรือถามเรื่องกลิ่น → ปล่อยให้ระบบตอบด้วยสต็อกจริง (ไม่ return)
+        console.log("K115_MENU_SKIPPED ctx=" + _ctxModel.slice(0, 24) + " flavor=" + _askFlavor);
       }
     }
 
@@ -3629,7 +3650,19 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         // k68: "เหลืออะไรบ้าง / มีอะไรบ้าง / มีกี่อัน" ก็คือขอให้ช่วยลิสต์ ไม่ใช่ขอลิงก์เมนู
         // เคสจริงจาก log: "เลโก้ เหลืออะไรบ้าง" → ได้ลิงก์เมนูเปล่าๆ ทั้งที่ควรบอกว่ามี 3 ยี่ห้อไหนบ้าง
         const _wantRec = /แนะนำ|ไม่รู้|เลือกไม่ถูก|ตัวไหนดี|รุ่นไหนดี|กลิ่นไหนดี|อะไรดี|ขายดี|ยอดฮิต|นิยม|มือใหม่|ช่วยเลือก|เหลืออะไร|เหลือไร|เหลือกลิ่นไหน|มีกี่(อัน|แบบ|ตัว|รุ่น|กลิ่น)|แบรนไหน|แบรนด์ไหน|ยี่ห้อไหน|รุ่นไหนมี/.test(textH);
-        if (!mdl && !_wantRec) { await lineReply(TOKEN, replyToken, MENU_MSG, userId); return; }
+        // k115: ก่อนโยนเมนู ลองหารุ่นจากบทสนทนาล่าสุด (รวมข้อความบอท) — ลูกค้ามักถามต่อว่า "มีกลิ่นอะไรบ้าง"
+        if (!mdl) {
+          for (let hi = history.length - 1; hi >= Math.max(0, history.length - 6) && !mdl; hi--) {
+            const _c = String((history[hi] || {}).content || "");
+            if (/ขออภัย|หมดชั่วคราว|หมดทุกกลิ่น/.test(_c)) continue;
+            mdl = modelFromText(_c) || (_MODEL_IN(_c) || "");
+          }
+        }
+        if (!mdl && !_wantRec) {
+          // k115: เจ้าของร้านสั่ง — ห้ามโยนลิงก์เมนูบ่อยๆ ให้ช่วยลูกค้าเลือกแทน
+          await lineReply(TOKEN, replyToken, "ได้เลยค่ะ 💕 รบกวนบอกรุ่นที่สนใจหน่อยนะคะ เดี๋ยวจีทูเช็คกลิ่นที่มีของจริงให้ทันทีค่ะ\n(เช่น MARBO 9K · INFY · RELX · ESKO BAR · KS QUIK — หรือบอกแนวที่ชอบก็ได้ค่ะ เช่น สายเย็น สายผลไม้ สายหวาน)", userId);
+          return;
+        }
         if (mdl) {
           // ถ้าบทสนทนาพูดถึงตัวโคลน/เทียบแท้ และรุ่นนี้มีเวอร์ชั่นโคลน → ใช้ตัวโคลน
           const recentTxt = textH + " " + history.slice(-4).map(h => String(h.content || "")).join(" ");
@@ -3975,6 +4008,39 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
       } catch (e) {}
     }
+    // 🍬 k115 (เจ้าของร้าน 2/8 22.31 น.): ลูกค้าพิมพ์ "เอามิ้น" → บอทถาม "หมายถึง BOOST POD กลิ่นองุ่น ใช่ไหมคะ"
+    //   = โมเดล Qwen เดาชื่อกลิ่นที่ไม่มีเค้าอยู่ในคำลูกค้าเลย (deepseek เดาน้อยกว่า)
+    //   แก้ที่โค้ด ไม่ใช่ที่โมเดล: กลิ่นที่บอททายต้อง "มีเค้าอยู่ในคำที่ลูกค้าพิมพ์" เท่านั้น
+    //   ถ้าไม่ตรง → แทนที่ด้วยกลิ่นจริงที่ตรงคำลูกค้าในรุ่นนั้น (หาไม่เจอค่อยถามเปิด)
+    try {
+      const _mg = reply.match(/หมายถึง\s*(.{0,40}?)\s*กลิ่น\s*([^\s,\n]{2,20})/);
+      if (_mg) {
+        const _guess = normTH(_mg[2].replace(/[ใช่ไหมคะครับ?]+$/g, ""));
+        const _cust = normTH(String(msgText || ""));
+        const _hit = _guess.length >= 2 && (_cust.indexOf(_guess) !== -1 || _guess.indexOf(_cust) !== -1 || _cust.split(/\s+/).some(w => w.length >= 2 && _guess.indexOf(normTH(w)) !== -1));
+        if (!_hit) {
+          console.log("K115_FLAVOR_GUESS_BLOCKED guess=" + _mg[2]);
+          // หากลิ่นจริงที่ "ตรงคำลูกค้า" ในรุ่นที่กำลังคุย
+          let _m2 = _MODEL_IN(String(msgText || "")) || _MODEL_IN(String(_mg[1] || "")) || "";
+          if (!_m2) for (let i = history.length - 1; i >= 0 && i >= history.length - 6 && !_m2; i--) _m2 = _MODEL_IN(String((history[i] || {}).content || "")) || "";
+          const _words = _cust.replace(/[0-9]/g, " ").split(/\s+/).filter(w => w.length >= 2);
+          let _cands = [];
+          if (_m2 && FLAVORS[_m2]) {
+            for (const f of (FLAVORS[_m2].f || [])) {
+              const _nf = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+              if (_words.some(w => _nf.indexOf(w) !== -1)) {
+                const _q = findStockForItem(smForQR || {}, _m2, f);
+                if (_q === null || _q > (bufForQR || 1)) _cands.push(f);
+              }
+              if (_cands.length >= 6) break;
+            }
+          }
+          reply = _cands.length
+            ? (_m2 + " แนวนี้ที่มีของตอนนี้ค่ะ 💕\n" + _cands.map(f => "- " + f).join("\n") + "\n\nรับกลิ่นไหนดีคะ ✨")
+            : "ขอเช็คให้ตรงนิดนึงนะคะ 🙏🏻 รบกวนพิมพ์ชื่อกลิ่นที่ต้องการเต็มๆ อีกครั้งค่ะ (หรือบอกแนวที่ชอบก็ได้ค่ะ เช่น มิ้นต์เย็น ผลไม้ องุ่น) เดี๋ยวจีทูเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕";
+        }
+      }
+    } catch (e) {}
     // 🚫 k113: โหมดส่งด่วนจ่ายแล้ว (มีหมุด) — AI ห้ามไล่ขอที่อยู่พัสดุ (เลขที่/เขต/ถนน/รหัสไปรษณีย์)
     try {
       if (env.CONV && /ที่อยู่จัดส่ง|เขต\/จังหวัด|รหัสไปรษณีย์|ชื่อถนน|บ้านเลขที่|เลขที่ชัดเจน/.test(reply)) {
