@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k110-expaddr";
+const BUILD = "2026-08-02-k112-simfix";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -1852,7 +1852,7 @@ export default {
       try {
         let ex = {}; try { const v = await env.CONV.get("exp:" + shop + ":" + uid); if (v) ex = JSON.parse(v); } catch (e) {}
         // k101: หมุดนอกเขต (เกิน 60 กม.) → ไม่ให้กรอกค่าส่งด่วนเลย กันเลขหลุดถึงลูกค้า
-        if (ex && typeof ex.km === "number" && ex.km > 60) return J({ ผล: "❌ หมุดลูกค้าอยู่นอกเขตส่งด่วน (~" + ex.km + " กม.) — พื้นที่นี้ส่งพัสดุเท่านั้น แจ้งลูกค้าว่าส่งพัสดุ 40 บาทนะคะ" }, 400);
+        if (ex && (ex.outzone || (typeof ex.km === "number" && ex.km > 60))) return J({ ผล: "❌ หมุดลูกค้าอยู่นอกเขตส่งด่วน (~" + (ex.km || "?") + " กม.) — พื้นที่นี้ส่งพัสดุเท่านั้น แจ้งลูกค้าว่าส่งพัสดุ 40 บาทนะคะ" }, 400);
         ex.fee = fee; ex.pending = false; ex.t = Date.now();
         EXPFEE.set(shop + ":" + uid, { fee, t: Date.now() });   // k107
         await env.CONV.put("exp:" + shop + ":" + uid, JSON.stringify(ex), { expirationTtl: 7200 });
@@ -2113,13 +2113,46 @@ export default {
           return J({ ok: 1, name: nm, kb: Math.round(buf.byteLength / 1024) });
         }
 
+        // ⚡ k111: อ่าน KV เป็นชุดพร้อมกัน (เดิมไล่ทีละคีย์เรียงกัน = แชท 30 คนรอ 60 รอบ ~2-3 วิ)
+        const readAll = async (prefix, cap) => {
+          const list = await env.CONV.list({ prefix, limit: cap || 100 });
+          const vals = await Promise.all(list.keys.map(k => env.CONV.get(k.name)));
+          const out = [];
+          for (let i = 0; i < list.keys.length; i++) if (vals[i]) out.push({ name: list.keys[i].name, v: vals[i] });
+          return out;
+        };
+        const buildQueue = (rows) => rows.map(({ name, v }) => {
+          let e = {}; try { e = JSON.parse(v); } catch (x) {}
+          return { uid: e.uid || name.split(":").pop(), name: e.name || "", reason: e.reason || "เคสปัญหา", msg: e.msg || "", t: e.t || 0 };
+        }).sort((a, b) => b.t - a.t);
+        const buildOrders = (rows) => rows.map(({ name, v }) => {
+          let e = {}; try { e = JSON.parse(v); } catch (x) {}
+          const st = e.status || "รอโอน 💰";
+          if (st.indexOf("✅") === -1) return null;
+          return { uid: e.uid || name.split(":").pop(), name: e.name || "", block: e.block || "", status: st, t: e.t || 0 };
+        }).filter(Boolean).sort((a, b) => b.t - a.t);
+        // 🧩 k111: หลังบ้านโหลดทีเดียวจบ — สถานะ+คิว+ออเดอร์+แชท ในคำขอเดียว (เดิมยิง 4 ครั้ง)
+        if (act === "board") {
+          const [off, muteRows, ordRows, chatRows, notice] = await Promise.all([
+            env.CONV.get("botoff:" + shop),
+            readAll("mute:" + shop + ":"),
+            readAll("ord:" + shop + ":"),
+            readAll("chat:" + shop + ":", 60),
+            env.CONV.get("notice:" + shop),
+          ]);
+          const queue = buildQueue(muteRows);
+          const mutedSet = new Set(muteRows.map(r => r.name.split(":").pop()));
+          const reasonOf = {}; for (const it of queue) reasonOf[it.uid] = it.reason;
+          const chats = chatRows.map(({ name, v }) => {
+            let e = {}; try { e = JSON.parse(v); } catch (x) {}
+            const uid = e.uid || name.split(":").pop();
+            return { uid, name: e.name || "", t: e.t || 0, muted: mutedSet.has(uid), reason: reasonOf[uid] || "" };
+          }).sort((a, b) => b.t - a.t).slice(0, 30);
+          return J({ on: !off, muted: queue.length, queue, orders: buildOrders(ordRows), chats, ประกาศ: notice || "", build: BUILD });
+        }
         if (act === "status") {
-          const off = await env.CONV.get("botoff:" + shop);
-          const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });
-          // นับเฉพาะคีย์ที่มีค่าจริง (list ของ KV อาจโชว์คีย์ที่เพิ่งลบ/หมดอายุค้างได้ชั่วคราว)
-          let muted = 0;
-          for (const k of list.keys) { if (await env.CONV.get(k.name)) muted++; }
-          return J({ on: !off, muted });
+          const [off, muteRows] = await Promise.all([env.CONV.get("botoff:" + shop), readAll("mute:" + shop + ":")]);
+          return J({ on: !off, muted: muteRows.length });
         }
         if (act === "on") { await env.CONV.delete("botoff:" + shop); return J({ ok: 1, on: true }); }
         if (act === "off") { await env.CONV.put("botoff:" + shop, "1"); return J({ ok: 1, on: false }); }
@@ -2131,16 +2164,7 @@ export default {
         }
         // รายการแชทที่รอแอดมินดูแล (ชื่อ+เหตุผล+ข้อความ+เวลา)
         if (act === "queue") {
-          const list = await env.CONV.list({ prefix: "mute:" + shop + ":" });
-          const items = [];
-          for (const k of list.keys) {
-            const v = await env.CONV.get(k.name);
-            if (!v) continue; // คีย์ค้าง (เพิ่งลบ/หมดอายุ) — ข้าม
-            let e = {}; try { e = JSON.parse(v); } catch (x) {}
-            items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", reason: e.reason || "เคสปัญหา", msg: e.msg || "", t: e.t || 0 });
-          }
-          items.sort((a, b) => b.t - a.t);
-          return J({ queue: items });
+          return J({ queue: buildQueue(await readAll("mute:" + shop + ":")) });
         }
         // 👥 รายชื่อแชทที่จีทูคุยอยู่ (2 วันล่าสุด) + สถานะว่าแอดมินคุมอยู่ไหม
         // 💬 ดูบทสนทนาย้อนหลังของลูกค้า 1 คน (แอดมินจะได้ไม่ต้องไปเปิดหาใน LINE)
@@ -2196,19 +2220,16 @@ export default {
           });
         }
         if (act === "chats") {
-          const list = await env.CONV.list({ prefix: "chat:" + shop + ":" });
-          const items = [];
-          for (const k of list.keys) {
-            const v = await env.CONV.get(k.name);
-            if (!v) continue;
+          const [chatRows, muteRows] = await Promise.all([readAll("chat:" + shop + ":", 60), readAll("mute:" + shop + ":")]);
+          const mutedSet = new Set(muteRows.map(r => r.name.split(":").pop()));
+          const reasonOf = {};
+          for (const { name, v } of muteRows) { try { reasonOf[name.split(":").pop()] = JSON.parse(v).reason || ""; } catch (x) {} }
+          const items = chatRows.map(({ name, v }) => {
             let e = {}; try { e = JSON.parse(v); } catch (x) {}
-            const uid = e.uid || k.name.split(":").pop();
-            const m = await env.CONV.get("mute:" + shop + ":" + uid);
-            let reason = ""; if (m) { try { reason = JSON.parse(m).reason || ""; } catch (x) {} }
-            items.push({ uid, name: e.name || "", t: e.t || 0, muted: !!m, reason });
-          }
-          items.sort((a, b) => b.t - a.t);
-          return J({ chats: items.slice(0, 30) });
+            const uid = e.uid || name.split(":").pop();
+            return { uid, name: e.name || "", t: e.t || 0, muted: mutedSet.has(uid), reason: reasonOf[uid] || "" };
+          }).sort((a, b) => b.t - a.t).slice(0, 30);
+          return J({ chats: items });
         }
         // ⏸ แอดมินสั่งปิดจีทูเฉพาะแชทนี้เอง
         if (act === "mute1") {
@@ -2227,17 +2248,7 @@ export default {
         }
         // 📦 รายการออเดอร์ที่จีทูปิดการขายได้ รอแอดมินลง XSelly
         if (act === "orders") {
-          const list = await env.CONV.list({ prefix: "ord:" + shop + ":" });
-          const items = [];
-          for (const k of list.keys) {
-            const v = await env.CONV.get(k.name);
-            let e = {}; try { e = JSON.parse(v); } catch (x) {}
-            const st = e.status || "รอโอน 💰";
-            // โชว์เฉพาะออเดอร์ที่ "ชำระแล้ว ✅" (พร้อมลง XSelly) — ออเดอร์รอโอนยังเก็บไว้ (ระบบเตือน) แต่ไม่ขึ้นคิว
-            if (st.indexOf("✅") === -1) continue;
-            items.push({ uid: e.uid || k.name.split(":").pop(), name: e.name || "", block: e.block || "", status: st, t: e.t || 0 });
-          }
-          items.sort((a, b) => b.t - a.t);
+          const items = buildOrders(await readAll("ord:" + shop + ":"));
           return J({ orders: items });
         }
         // แอดมินกด "ลง XSelly แล้ว" → ลบออเดอร์ออกจากคิว
@@ -2587,6 +2598,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         //   → มีเลข 3,680 บาทหลุดถึงลูกค้า ทั้งที่กฎร้าน: ส่งด่วนเฉพาะ กทม.+ปริมณฑล เท่านั้น
         //   k64 กันได้แค่ "ข้อความพิมพ์" แต่หมุดจริงไม่เคยถูกเช็คระยะ → เช็คตรงนี้เลย เกิน 60 กม. = นอกเขต
         if (km > 60) {
+          // k112 (จากตัวจำลอง 2/8): เก็บร่องรอย "นอกเขต" ไว้ — ถ้าแอดมินเผลอกรอกค่าส่งในแผง /expfee จะปฏิเสธให้เอง
+          try { if (env.CONV) await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify({ outzone: true, km, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
           await lineReply(TOKEN, replyToken,
             "ขออนุญาตแจ้งนะคะ 🙏🏻 จากหมุดที่ส่งมา พื้นที่นี้อยู่นอกเขตส่งด่วนค่ะ (ส่งด่วนได้เฉพาะ กทม. และปริมณฑล)\n\n📦 พื้นที่นี้ส่งแบบพัสดุได้ค่ะ ค่าส่ง 40 บาท จัดส่งออกภายใน 1-2 วัน ได้รับภายใน 2-3 วัน (ซื้อครบโปร = ส่งฟรีนะคะ)\n\nรับสินค้ารุ่นไหน กลิ่นอะไรดีคะ 💕", userId);
           return;
@@ -2834,6 +2847,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           const { km } = riderFee(ll.lat, ll.lng);   // k75: กม.ไว้ให้แอดมินกะระยะ ไม่เอาไปคิดเงิน
           const mapLink = "https://www.google.com/maps?q=" + ll.lat + "," + ll.lng;
           if (km > 60) {
+            try { if (env.CONV) await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify({ outzone: true, km, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}   // k112
             await lineReply(TOKEN, replyToken, "ขออนุญาตแจ้งนะคะ 🙏🏻 จากลิงก์ที่ส่งมา พื้นที่นี้อยู่นอกเขตส่งด่วนค่ะ (ส่งด่วนได้เฉพาะ กทม. และปริมณฑล)\n\n📦 พื้นที่นี้ส่งแบบพัสดุได้ค่ะ ค่าส่ง 40 บาท ได้รับภายใน 2-3 วัน (ซื้อครบโปร = ส่งฟรีนะคะ)\n\nรับสินค้ารุ่นไหน กลิ่นอะไรดีคะ 💕", userId);
             return;
           }
@@ -3068,7 +3082,10 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         }
         let exp = null;
         try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) exp = JSON.parse(ex); } } catch (e) {}
-        if (exp && exp.pending) {
+        if (exp && exp.outzone) {
+          // k112: ลูกค้าเคยปักหมุดนอกเขตแล้ว ถามส่งด่วนซ้ำ → ตอบตรงๆ ไม่วนขอหมุดใหม่
+          await lineReply(TOKEN, replyToken, "ต้องขออภัยด้วยนะคะ 🙏🏻 หมุดที่แชร์มาอยู่นอกเขตส่งด่วนค่ะ (ส่งด่วนได้เฉพาะ กทม. และปริมณฑล)\n📦 พื้นที่นี้ส่งพัสดุได้ค่ะ ค่าส่ง 40 บาท ได้รับใน 2-3 วัน (ซื้อครบโปรส่งฟรีนะคะ)\nรับรุ่นไหนดีคะ 💕", userId);
+        } else if (exp && exp.pending) {
           await lineReply(TOKEN, replyToken, "ได้รับหมุดแล้วนะคะ 📍 แอดมินกำลังเช็คค่าส่งด่วนจากแอปให้อยู่ค่ะ เดี๋ยวแจ้งราคาทันทีนะคะ 🛵💕", userId);
         } else if (exp && typeof exp.fee === "number") {
           await lineReply(TOKEN, replyToken, "จากหมุดที่ส่งมา ค่าส่งด่วนจากแอปคือ " + exp.fee + " บาทค่ะ (ระยะทาง ~" + exp.km + " กม.) 🛵\nรับสินค้ารุ่นไหน กลิ่นอะไร กี่ชิ้นดีคะ 💕", userId);
@@ -3140,6 +3157,25 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         return;
       }
       if (/รูปแบบการจัดส่ง|วิธีการจัดส่ง|การจัดส่ง|ค่าส่งเท่าไหร่|ค่าจัดส่ง|ส่งยังไง|จัดส่งยังไง|ส่งแบบไหน/.test(t)) {
+        // k112 (จากตัวจำลอง 2/8): ลูกค้าอยู่กลางโหมดส่งด่วน (แจ้งราคาแล้ว/รอราคา) ถาม "ค่าส่งเท่าไหร่"
+        //   เดิมโดนข้อความจัดส่งทั่วไป+โปรส่งฟรีตัดหน้า = สับสนคนละโหมด → ตอบราคาจริงของแชทนี้ก่อน
+        try {
+          if (env.CONV) {
+            const _exS = await env.CONV.get("exp:" + shopId + ":" + userId);
+            const _efS = EXPFEE.get(shopId + ":" + userId);
+            let _feeS = (_efS && Date.now() - _efS.t < 7200000) ? _efS.fee : null;
+            let _pendS = false;
+            if (_exS) { try { const _e = JSON.parse(_exS); if (_feeS === null && typeof _e.fee === "number") _feeS = _e.fee; else if (_e.pending) _pendS = true; } catch (e2) {} }
+            if (_feeS !== null) {
+              await lineReply(TOKEN, replyToken, "ค่าส่งด่วนจากแอปสำหรับหมุดของคุณลูกค้าคือ " + _feeS + " บาทค่ะ 🛵\n(หรือพัสดุปกติ 40 บาท ได้รับใน 2-3 วันค่ะ)\nรับแบบไหนดีคะ 💕", userId);
+              return;
+            }
+            if (_pendS) {
+              await lineReply(TOKEN, replyToken, "แอดมินกำลังเช็คค่าส่งด่วนจากแอปให้อยู่ค่ะ เดี๋ยวแจ้งราคาทันทีนะคะ 🛵\n(หรือรับแบบพัสดุปกติ ค่าส่ง 40 บาท ก็ได้ค่ะ) 💕", userId);
+              return;
+            }
+          }
+        } catch (e) {}
         await lineReply(TOKEN, replyToken, SHIP_MSG, userId);
         return;
       }

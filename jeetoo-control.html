@@ -256,9 +256,9 @@ function alertNew(oc,qc){
 }
 
 /* ═══ แท็บ 1 ═══ */
-async function loadQueue(){
+async function loadQueue(data){
   try{
-    const d=await (await fetch(q('/ctl/queue'))).json(); const list=d.queue||[];
+    const d=data||await (await fetch(q('/ctl/queue'))).json(); const list=d.queue||[];
     $('qcount').textContent = list.length? '('+list.length+')':'';
     $('queue').innerHTML = list.length? list.map(function(it){
       // 🚨 เคสที่เกี่ยวกับเงิน/ของเสีย = ห้ามกดเสร็จมั่ว ต้องเด่นและมีด่านกั้น
@@ -319,9 +319,9 @@ function orderDone2(uid,el){
   }
   orderDone(uid);
 }
-async function loadOrders(){
+async function loadOrders(data){
   try{
-    const d=await (await fetch(q('/ctl/orders'))).json(); const o=d.orders||[];
+    const d=data||await (await fetch(q('/ctl/orders'))).json(); const o=d.orders||[];
     $('ocount').textContent = o.length? '('+o.length+')':'';
     $('orders').innerHTML = o.length? o.map(function(it){
       const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,''); const b=it.block||'';
@@ -359,8 +359,8 @@ async function orderDone(uid){ try{ await fetch(q('/ctl/orderdone?uid='+encodeUR
 
 /* ═══ แท็บ 2: แชท + บทสนทนา ═══ */
 function toggleOnlyOpen(){ ONLYOPEN=!ONLYOPEN; $('foltxt').textContent=ONLYOPEN?'แสดงเฉพาะที่แอดมินคุมอยู่':'แสดงทุกแชท'; renderChats(); }
-async function loadChats(){
-  try{ const d=await (await fetch(q('/ctl/chats'))).json(); CHATS=d.chats||[]; renderChats(); }catch(e){}
+async function loadChats(data){
+  try{ const d=data||await (await fetch(q('/ctl/chats'))).json(); CHATS=d.chats||[]; renderChats(); }catch(e){}
 }
 function renderChats(){
   const kw=($('csearch').value||'').trim().toLowerCase();
@@ -483,8 +483,14 @@ async function uploadStock(){
 
 /* ═══ ทั่วไป ═══ */
 async function refresh(){
-  try{ const s=await api('status'); render(s.on,s.muted);
-    const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0);
+  /* k111: โหลดทีเดียวจบ — สถานะ+คิว+ออเดอร์+แชท ในคำขอเดียว (เดิม 4 คำขอ) */
+  try{
+    const r=await fetch(q('/ctl/board'));
+    if(r.status===403){ localStorage.removeItem('g2key'); KEY=''; init(); throw new Error('รหัสไม่ถูกต้อง'); }
+    const b=await r.json();
+    render(b.on,b.muted);
+    const c=await Promise.all([loadOrders(b),loadQueue(b)]); alertNew(c[0]||0,c[1]||0);
+    if(TAB===2) loadChats(b);
   }catch(e){ $('msg').textContent=e.message; }
 }
 async function toggle(){
@@ -504,7 +510,7 @@ function init(){
   if(KEY){
     $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh();
     if(_poll) clearInterval(_poll);
-    _poll=setInterval(async function(){ const c=await Promise.all([loadOrders(),loadQueue()]); alertNew(c[0]||0,c[1]||0); if(TAB===2) loadChats(); },20000);
+    _poll=setInterval(refresh,15000);
     document.addEventListener('click',function once(){ try{ _actx=_actx||new (window.AudioContext||window.webkitAudioContext)(); if(_actx.state==='suspended')_actx.resume(); }catch(e){} document.removeEventListener('click',once); });
   } else {
     $('keybox').classList.remove('hidden'); $('panel').classList.add('hidden');
