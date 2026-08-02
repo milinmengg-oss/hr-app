@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k101-geofence";
+const BUILD = "2026-08-02-k102-expresswait";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -3917,8 +3917,33 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         await lineReply(TOKEN, replyToken, L("outStock", LANG, outOfStock.model, outOfStock.flavor) || ("ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕"), userId);
       } else if (items.length) {
         // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
-        let expFee = null;
-        try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; } } } catch (e) {}
+        let expFee = null, _expPending = false;
+        try { if (env.CONV) { const ex = await env.CONV.get("exp:" + shopId + ":" + userId); if (ex) { const ej = JSON.parse(ex); if (ej && typeof ej.fee === "number") expFee = ej.fee; else if (ej && ej.pending) _expPending = true; } } } catch (e) {}
+        // 🛵 k102 เคสจริง 2/8 (19.00 น.): "เอา มาโบองุ่น 2 ส่งด่วน" → การ์ดออกเป็นค่าส่งพัสดุ 40 รวม 740
+        //   ทั้งที่ค่าส่งด่วนยังไม่รู้ (แอดมินยังไม่เช็ค) → ลูกค้าโอน 740 = ยอดผิดแน่นอน
+        //   แก้: สั่งพร้อมคำว่าส่งด่วน (หรือหมุดรอราคาอยู่) แต่ยังไม่มีราคา → เก็บรายการไว้ ขอหมุด/รอราคา
+        //   แล้วให้ k87 ออกการ์ดยอดจริงตอนแอดมินกรอกราคา — ห้ามออกการ์ดยอดพัสดุตัดหน้า
+        const _wantExpress = /ส่งด่วน|แกร?[็ๆ]?[บป]|grab|ไรเดอร์|rider|เมสเซนเจอร์|ลาลามูฟ/i.test(String(msgText || ""));
+        if ((_wantExpress || _expPending) && expFee === null) {
+          const _c0 = computeOrder(items, null);
+          const _lines = _c0.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
+          try {
+            if (env.CONV) {
+              const _nm = await lineProfileName(TOKEN, userId);
+              await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({
+                name: _nm, items,
+                block: "📦 ออเดอร์ (รอโอน)\n" + _lines + "\nยอดสินค้า " + _c0.goods + "\nค่าส่งด่วน (รอแอดมินเช็คจากแอป)\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)",
+                t: Date.now(), status: "รอโอน 💰", uid: userId
+              }), { expirationTtl: 259200 });
+            }
+          } catch (e) {}
+          await lineReply(TOKEN, replyToken,
+            "รับออเดอร์ไว้แล้วค่ะ 🧾\n" + _lines + "\nยอดสินค้า " + _c0.goods + " บาท\n\n" +
+            (_expPending
+              ? "🛵 แอดมินกำลังเช็คค่าส่งด่วนจากแอปอยู่ค่ะ ทราบราคาแล้วระบบจะสรุปยอดรวม + ส่งการ์ดยืนยันให้ทันทีนะคะ 💕"
+              : "🛵 รับแบบส่งด่วน รบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาให้หน่อยนะคะ\nเดี๋ยวแอดมินเช็คค่าส่งจากแอป แล้วระบบจะสรุปยอดรวม + ส่งการ์ดยืนยันให้ทันทีค่ะ 💕"), userId);
+          return;
+        }
         const calc = computeOrder(items, expFee);
         // 🛑 k14: การ์ดต้องมีราคาครบทุกรายการ — เคสจริง 28/7: ลูกค้าพิมพ์ "เอาครับ" → AI หยิบ
         // "ไอคอส JP FUSION MENTHOL" จากบริบทเก่า ชื่อไม่ตรงตารางราคา → การ์ดยอดสินค้า 0 บาทหลุดออกไป
