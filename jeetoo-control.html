@@ -158,6 +158,12 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
         <textarea id="notice" placeholder="ยังไม่มีประกาศ…"></textarea>
         <button class="sub" onclick="saveNotice()">💾 บันทึกให้จีทูรู้</button>
 
+        <div class="sechead">💳 ข้อมูลโอนเงินของร้านนี้</div>
+        <div class="stnote">เลขบัญชีที่ระบบส่งให้ลูกค้าตอนกดยืนยันรายการ — แก้ที่นี่ได้เลย มีผลทันที (ระบบจดประวัติการแก้ทุกครั้ง)<br>รูปแบบ: บรรทัด 1 = ธนาคาร + เลขบัญชี · บรรทัด 2 = ชื่อบัญชี</div>
+        <textarea id="payinfo" placeholder="ธนาคารกสิกรไทย 123-4-56789-0&#10;ชื่อบัญชี ..."></textarea>
+        <div class="stnote" id="paysrc" style="opacity:.7;"></div>
+        <button class="sub" onclick="savePay()">💾 บันทึกเลขบัญชี</button>
+
         <div class="sechead">❤️ สุขภาพระบบ</div>
         <div class="hgrid" id="health">กำลังโหลด…</div>
         <button class="sub" onclick="loadHealth()">🔄 เช็คใหม่</button>
@@ -421,12 +427,25 @@ async function unmute1(uid){
 /* ═══ แท็บ 3: ประกาศ + สุขภาพ + สต็อก ═══ */
 async function loadNotice(){
   try{ const d=await (await fetch(q('/ctl/notice'))).json(); $('notice').value=d['ประกาศ']||''; }catch(e){}
+  try{ const d=await (await fetch(q('/ctl/payinfo'))).json(); $('payinfo').value=d['ข้อมูลโอน']||'';
+    const h=(d['แก้ล่าสุด']||[])[0]; $('paysrc').textContent='ที่มา: '+(d['แหล่งที่มา']||'-')+(h?' · แก้ล่าสุด '+h['เวลา']:''); }catch(e){}
 }
 async function saveNotice(){
   $('msg').textContent='กำลังบันทึก…';
   try{ await fetch(q('/ctl/notice'),{method:'POST',body:$('notice').value});
     $('msg').textContent=$('notice').value.trim()?'✅ จีทูรับรู้ประกาศแล้ว':'✅ ยกเลิกประกาศแล้ว'; loadHealth(); }
   catch(e){ $('msg').textContent='⛔ บันทึกไม่สำเร็จ'; }
+async function savePay(){
+  const v=$('payinfo').value.trim();
+  if(v && !confirm('ยืนยันเปลี่ยนเลขบัญชีรับโอน?\n\n'+v+'\n\nลูกค้าทุกคนหลังจากนี้จะโอนเข้าบัญชีนี้ทันที')) return;
+  if(!v && !confirm('ล้างค่า = กลับไปใช้บัญชีตั้งต้นใน Cloudflare — ยืนยัน?')) return;
+  try{
+    const r=await (await fetch(q('/ctl/payinfo'),{method:'POST',body:v})).json();
+    if(r.error){ $('msg').textContent=r.error; return; }
+    $('msg').textContent='✅ บันทึกเลขบัญชีแล้ว — มีผลทันที';
+    loadNotice();
+  }catch(e){ $('msg').textContent='บันทึกไม่สำเร็จ: '+e.message; }
+}
 }
 async function loadHealth(){
   $('health').textContent='กำลังโหลด…';
