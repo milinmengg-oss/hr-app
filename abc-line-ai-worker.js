@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k115-flavorguard";
+const BUILD = "2026-08-02-k116-payadmin";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -29,6 +29,20 @@ const BUILD = "2026-08-02-k115-flavorguard";
 const UNMUTED = new Map();
 // 🔇 k114: มิ้วต์ที่เพิ่งตั้ง — จำในเครื่องทันที (แคช KV 60 วิ ทำให้จีทูตอบแทรกช่วงแอดมินเพิ่งรับเคส)
 const MUTED = new Map();
+// 💳 k116: เลขบัญชีรับโอนต่อร้าน — แอดมินแก้เองได้จากหลังบ้าน (KV "pay:<shop>")
+//   ถ้ายังไม่เคยตั้งในหลังบ้าน จะใช้ค่าเดิมจาก Cloudflare Secret (PAY_V20) เป็นตัวสำรอง
+//   หมายเหตุ: PAYC = แคชในเครื่อง 60 วิ กันแคช KV ทำให้บัญชีที่เพิ่งแก้ยังไม่ขึ้น
+const PAYC = new Map();
+async function payOf(env, shopId) {
+  const k = "pay:" + shopId;
+  const c = PAYC.get(k);
+  if (c && Date.now() - c.t < 60000) return c.v;
+  let v = "";
+  try { if (env.CONV) v = (await env.CONV.get(k)) || ""; } catch (e) {}
+  if (!v) v = env["PAY_" + String(shopId).toUpperCase()] || "";
+  PAYC.set(k, { v, t: Date.now() });
+  return v;
+}
 // 🛵 k107: ค่าส่งด่วนที่แอดมินเพิ่งกรอก — จำในเครื่องทันที (KV อ่านช้า/แคช 60 วิ ทำให้จีทูบอก "กำลังเช็ค" ทั้งที่แจ้งราคาแล้ว)
 const EXPFEE = new Map();
 const wakeKey = (shop, uid) => shop + ":" + uid;
@@ -2152,6 +2166,35 @@ export default {
           }).sort((a, b) => b.t - a.t).slice(0, 30);
           return J({ on: !off, muted: queue.length, queue, orders: buildOrders(ordRows), chats, ประกาศ: notice || "", build: BUILD });
         }
+        // 💳 k116: แอดมินดู/แก้เลขบัญชีรับโอนของร้านเองได้ (ไม่ต้องรบกวนคนดูแล Cloudflare)
+        if (act === "payinfo") {
+          if (request.method === "POST") {
+            const txt = (await request.text() || "").trim().slice(0, 400);
+            if (txt) {
+              // กันกรอกผิดจนลูกค้าโอนผิดบัญชี: ต้องมีเลขบัญชีอย่างน้อย 8 หลัก + ชื่อบัญชี
+              const digits = (txt.match(/\d/g) || []).length;
+              if (digits < 8) return J({ error: "❌ ไม่พบเลขบัญชี (ต้องมีตัวเลขอย่างน้อย 8 หลัก) — ยังไม่บันทึกนะคะ" });
+              if (txt.split("\n").filter(l => l.trim()).length < 2) return J({ error: "❌ ต้องมีอย่างน้อย 2 บรรทัด: ธนาคาร+เลขบัญชี / ชื่อบัญชี" });
+              await env.CONV.put("pay:" + shop, txt);
+              // จดประวัติการแก้ไว้ 90 วัน (ใครแก้เมื่อไหร่ เป็นอะไร) — ตรวจสอบย้อนหลังได้
+              let hist = []; try { hist = JSON.parse((await env.CONV.get("paylog:" + shop)) || "[]"); } catch (e) {}
+              hist.unshift({ t: Date.now(), เวลา: new Date(Date.now() + 7 * 3600000).toISOString().replace("T", " ").slice(0, 16), ตั้งเป็น: txt.slice(0, 120) });
+              await env.CONV.put("paylog:" + shop, JSON.stringify(hist.slice(0, 30)), { expirationTtl: 7776000 });
+            } else {
+              await env.CONV.delete("pay:" + shop);   // ล้าง = กลับไปใช้ค่าใน Cloudflare
+            }
+            PAYC.delete("pay:" + shop);
+            console.log("PAYINFO_CHANGED shop=" + shop);
+            return J({ ok: 1, ข้อมูลโอน: (await env.CONV.get("pay:" + shop)) || "(กลับไปใช้ค่าตั้งต้นใน Cloudflare)" });
+          }
+          const cur = (await env.CONV.get("pay:" + shop)) || "";
+          let hist = []; try { hist = JSON.parse((await env.CONV.get("paylog:" + shop)) || "[]"); } catch (e) {}
+          return J({
+            ข้อมูลโอน: cur || (env["PAY_" + shop.toUpperCase()] || ""),
+            แหล่งที่มา: cur ? "แก้จากหลังบ้าน" : "ค่าตั้งต้นใน Cloudflare",
+            แก้ล่าสุด: hist.slice(0, 5),
+          });
+        }
         if (act === "status") {
           const [off, muteRows] = await Promise.all([env.CONV.get("botoff:" + shop), readAll("mute:" + shop + ":")]);
           return J({ on: !off, muted: muteRows.length });
@@ -2731,7 +2774,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             }
             const b = JSON.parse(ok).block || "";
             const total = (b.match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/) || ["", ""])[1];
-            const pay = env["PAY_" + shopId.toUpperCase()] || "";
+            const pay = await payOf(env, shopId);   // k116
             if (total && pay) {
               const acctNo = (pay.match(/\d[\d\- ]{5,}\d/) || [""])[0].replace(/\s/g, "");
               const pl = pay.split("\n").map(s => s.trim()).filter(Boolean);
@@ -3263,7 +3306,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
 
     // ข้อมูลชำระเงินของร้าน (ตั้งเป็น secret ชื่อ PAY_V20 ใน Cloudflare — ไม่อยู่ในโค้ดสาธารณะ)
-    const payInfo = env["PAY_" + shopId.toUpperCase()] || "";
+    const payInfo = await payOf(env, shopId);   // k116
     // 🔒 k15: ห้ามส่งข้อมูลโอนเข้าสมอง AI เด็ดขาด (เคสจริง 28/7: จีทูพิมพ์ "ข้อมูลโอน: ชื่อ <เจ้าของบัญชี>" ก่อนลูกค้ากดยืนยัน)
     // ระบบส่งการ์ดเลขบัญชีเองหลังกดยืนยันอยู่แล้ว — AI ไม่รู้ = รั่วไม่ได้
     const sysPrompt = SYSTEM_PROMPT + (payInfo
