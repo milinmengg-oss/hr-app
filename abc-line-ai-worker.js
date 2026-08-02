@@ -21,12 +21,14 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k113-expclose";
+const BUILD = "2026-08-02-k114-dupslip";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
 //   แก้: จำ "คนที่เพิ่งปลดมิ้วต์" ไว้ในหน่วยความจำของ Worker ด้วย → กลับมาตอบทันทีไม่ต้องรอ KV
 const UNMUTED = new Map();
+// 🔇 k114: มิ้วต์ที่เพิ่งตั้ง — จำในเครื่องทันที (แคช KV 60 วิ ทำให้จีทูตอบแทรกช่วงแอดมินเพิ่งรับเคส)
+const MUTED = new Map();
 // 🛵 k107: ค่าส่งด่วนที่แอดมินเพิ่งกรอก — จำในเครื่องทันที (KV อ่านช้า/แคช 60 วิ ทำให้จีทูบอก "กำลังเช็ค" ทั้งที่แจ้งราคาแล้ว)
 const EXPFEE = new Map();
 const wakeKey = (shop, uid) => shop + ":" + uid;
@@ -2243,7 +2245,7 @@ export default {
         // แอดมินกดว่า "ดูแลเสร็จแล้ว" แชทเดียว → จีทูกลับมาตอบแชทนั้น
         if (act === "done") {
           const uid = url0.searchParams.get("uid");
-          if (uid) { await env.CONV.delete("mute:" + shop + ":" + uid); UNMUTED.set(wakeKey(shop, uid), Date.now()); }
+          if (uid) { await env.CONV.delete("mute:" + shop + ":" + uid); UNMUTED.set(wakeKey(shop, uid), Date.now()); MUTED.delete(wakeKey(shop, uid)); }
           return J({ ok: 1 });
         }
         // 📦 รายการออเดอร์ที่จีทูปิดการขายได้ รอแอดมินลง XSelly
@@ -2553,7 +2555,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     if (env.CONV) {
       const _wk = UNMUTED.get(wakeKey(shopId, userId));
       if (_wk && Date.now() - _wk < 600000) { try { await env.CONV.delete(muteKey); } catch (e) {} }   // k94: เพิ่งกดเสร็จ → ตอบได้เลย
-      const _mv = (_wk && Date.now() - _wk < 600000) ? null : await env.CONV.get(muteKey);
+      let _mv = (_wk && Date.now() - _wk < 600000) ? null : await env.CONV.get(muteKey);
+      // k114: มิ้วต์เพิ่งตั้งเมื่อครู่ (ยังไม่ทันเข้าแคช KV) → เชื่อความจำในเครื่อง
+      if (!_mv && !(_wk && Date.now() - _wk < 600000)) {
+        const _mm = MUTED.get(wakeKey(shopId, userId));
+        if (_mm && Date.now() - _mm.t < 600000) _mv = JSON.stringify({ uid: userId, reason: _mm.reason, t: _mm.t });
+        else if (_mm) MUTED.delete(wakeKey(shopId, userId));
+      }
       if (_mv) {
         // 🔇 k86 (เจอจากตัวจำลองลูกค้า 2/8): ปักหมุดส่งด่วน → ระบบมิ้วต์รอแอดมินเช็คราคา
         //   แต่บอทเพิ่งบอกเองว่า "ระหว่างรอ เลือกสินค้าเพิ่มได้เลยนะคะ" → ลูกค้าสั่งของต่อ → เงียบสนิท 1 ชม.!
@@ -2564,6 +2572,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           // คำปลุก: พิมพ์ #เปิดบอท ในแชทนั้น → จีทูกลับมาทันที
           if (mtype === "text" && /#?เปิดบอท|#bot/i.test(ev.message.text)) {
             await env.CONV.delete(muteKey);
+            MUTED.delete(wakeKey(shopId, userId));   // k114
             await lineReply(TOKEN, replyToken, "จีทูกลับมาดูแลต่อแล้วค่ะ ✨ สอบถามได้เลยนะคะ 💕", userId);
           }
           return; // เงียบให้แอดมินดูแล
@@ -2582,6 +2591,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (!env.CONV) return;
         const name = await lineProfileName(TOKEN, userId);
         const entry = { name, reason: reason || "เคสปัญหา", msg: (msg || "").slice(0, 120), t: Date.now(), uid: userId };
+        MUTED.set(wakeKey(shopId, userId), { t: Date.now(), reason: entry.reason });   // k114: เงียบทันที ไม่รอแคช KV
+        UNMUTED.delete(wakeKey(shopId, userId));
         await env.CONV.put(muteKey, JSON.stringify(entry), { expirationTtl: 3600 });
       } catch (e) {}
     };
@@ -3404,6 +3415,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               const code = sok.code || (sok.data && sok.data.code) || 0;
               statusLine = "⛔ สลิปมีปัญหา (code " + code + "): " + m.slice(0, 60) + " — แอดมินเช็คด่วน";
               if (code === 1012 || /ซ้ำ|duplicate|เคย|ตรวจสอบแล้ว|ตรวจแล้ว|already|used/i.test(m)) {
+                // k114 (เคสจริง 2/8 21.32 น.): ลูกค้าส่งสลิปใบเดิมซ้ำทั้งที่ออเดอร์ "ชำระแล้ว ✅" อยู่แล้ว
+                //   เดิม: เขียนทับสถานะเป็น "⚠️ สลิปเคยตรวจแล้ว" = ออเดอร์ที่จ่ายแล้วกลายเป็นยังไม่จ่าย
+                //   → จีทูวนขอกดยืนยัน/ขอสลิปใหม่ ลูกค้างงหนัก | แก้: จ่ายแล้ว = จบ ยืนยันซ้ำเฉยๆ
+                if (ordObj && /✅/.test(ordObj.status || "")) {
+                  const _nxt = _expOrd
+                    ? (/พร้อมจัดส่ง/.test(ordObj.status || "") ? "ออเดอร์พร้อมจัดส่งตามหมุดแล้วนะคะ 🛵" : "รบกวนขอ ชื่อผู้รับ + เบอร์โทร สำหรับไรเดอร์ติดต่อด้วยค่ะ 💕")
+                    : (/พร้อมจัดส่ง/.test(ordObj.status || "") ? "ออเดอร์ลงระบบพร้อมจัดส่งแล้วนะคะ 📦" : "รบกวนแจ้งที่อยู่จัดส่งต่อได้เลยค่ะ 💕");
+                  await lineReply(TOKEN, replyToken, "ออเดอร์นี้ชำระเงินเรียบร้อยแล้วค่ะ ✅ (สลิปใบนี้ตรวจผ่านไปก่อนหน้านี้แล้วนะคะ)\n" + _nxt, userId);
+                  console.log("K114_DUP_SLIP_ALREADY_PAID");
+                  return;
+                }
                 // สลิปซ้ำ = โอนถูกแล้ว แต่ส่งสลิปใบเดิมที่เคยตรวจไปแล้ว → ส่งต่อแอดมินยืนยัน (ไม่โทษลูกค้า)
                 statusLine = "⚠️ สลิปนี้เคยตรวจแล้ว (อาจส่งซ้ำ) — แอดมินยืนยันด่วน";
                 customerMsg = "✅ ได้รับสลิปแล้วนะคะ 🙏🏻 ระบบตรวจพบว่าสลิปนี้เคยส่งเข้ามาแล้ว เดี๋ยวแอดมินเช็คและยืนยันการชำระให้อีกครั้งค่ะ 💕";
@@ -3420,7 +3442,8 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         // อัพสถานะออเดอร์ให้แอดมินเห็นผลตรวจ
         try {
           if (ordObj) {
-            ordObj.status = statusLine;
+            // k114: สลิปมีปัญหาห้ามล้มสถานะ "ชำระแล้ว ✅" ที่ยืนยันไปแล้ว
+            if (slipPassed || !/✅/.test(ordObj.status || "")) ordObj.status = statusLine;
             if (slipPassed && _expOrd && _expOrd.lat && !/maps/.test(ordObj.block || "")) ordObj.block = (ordObj.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "") + "\nจัดส่ง: ส่งด่วนตามหมุด 📍 https://maps.google.com/?q=" + _expOrd.lat + "," + _expOrd.lng;
             await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 });
           }
@@ -4209,6 +4232,17 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         } catch (e) {}
         if (dup) {
           console.log("CARD_DUP_BLOCK sig=" + sig.slice(0, 60));
+          // k114: ถ้าออเดอร์จ่ายแล้ว ห้ามชวนกดยืนยันใหม่ (เคสจริง 21.32: ลูกค้าจ่ายแล้วถูกบอกให้กดยืนยันอีก)
+          let _paidDup = false, _stD = "";
+          try { const _o = await env.CONV.get("ord:" + shopId + ":" + userId); if (_o) { const _oj = JSON.parse(_o); _stD = String(_oj.status || ""); _paidDup = /✅/.test(_stD); } } catch (e) {}
+          if (_paidDup) {
+            let _exD = null; try { const _x = await env.CONV.get("exp:" + shopId + ":" + userId); if (_x) _exD = JSON.parse(_x); } catch (e) {}
+            const _nxt = /พร้อมจัดส่ง/.test(_stD) ? "ออเดอร์พร้อมจัดส่งแล้วนะคะ 💕"
+              : (_exD && _exD.lat) ? "รบกวนขอ ชื่อผู้รับ + เบอร์โทร สำหรับไรเดอร์ติดต่อด้วยค่ะ 💕"
+              : "รบกวนแจ้งที่อยู่จัดส่งต่อได้เลยค่ะ 💕";
+            await lineReply(TOKEN, replyToken, "ออเดอร์นี้ชำระเงินเรียบร้อยแล้วนะคะ ✅ ไม่ต้องกดยืนยันซ้ำค่ะ\n" + _nxt, userId);
+            return;
+          }
           await lineReply(TOKEN, replyToken, "รายการเดิมยังอยู่ในระบบนะคะ 🙏🏻 กดปุ่ม \"ยืนยันรายการ\" ในการ์ดด้านบนได้เลยค่ะ\nหรือถ้าอยากเปลี่ยนรุ่น/กลิ่น/จำนวน แจ้งมาได้เลยนะคะ 💕", userId);
           return;
         }
