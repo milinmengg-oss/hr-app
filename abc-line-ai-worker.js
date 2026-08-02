@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k98-compat";
+const BUILD = "2026-08-02-k99-truecount";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2412,6 +2412,13 @@ const _BRANDS_OK = (() => {
 })();
 // รุ่นที่ "ไม่ใช่เครื่อง" (หัวน้ำยา/พอตใช้แล้วทิ้ง) — ห้ามมีคำว่า "เครื่อง" นำหน้า
 const _NOT_DEVICE = Object.keys(FLAVORS).filter(k => !/^เครื่อง/.test(k)).sort((a, b) => b.length - a.length);
+// k99: คำอังกฤษที่ "ไม่ใช่ชื่อแบรนด์" — มาจากชื่อกลิ่นจริงในระบบ + คำใช้งานทั่วไป
+const _WORDS_OK = (() => {
+  const s = new Set();
+  for (const k in FLAVORS) for (const f of (FLAVORS[k].f || [])) for (const t of String(f).toUpperCase().match(/[A-Z]{3,}/g) || []) s.add(t);
+  for (const t of ["THB", "BAHT", "LINE", "MAPS", "GOOGLE", "GRAB", "OKAY", "YES", "NEW", "FREE", "SALE", "MAX", "MINI", "PLUS", "PRO", "AND", "FOR", "THE", "YOU", "ADMIN", "SLIP", "COD", "VAT", "URL", "HTTPS", "COM", "MENTHOL", "REGULAR", "SMOOTH", "PEARL", "EDITION", "WAVE", "BLACK", "BLUE", "GREEN", "PURPLE", "YELLOW", "BRIGHT", "TROPICAL", "RUBY", "SUN", "OASIS", "CLEAR", "RICH", "WARM", "MINT", "FUSION", "BALANCED", "SIENNA", "BRONZE", "AMBER", "RUSSET", "TURQUOISE", "ZING", "SHINE", "VELVET", "STARLING", "STELLAR", "DIMENSION", "APRICITY", "YUGEN", "GOLDEN", "RIVIERA", "BERRINE", "AUBURN", "MULINT", "PERINT", "BERMIN", "FUCHSIA", "SUNSHINE", "CITRUS", "CRUSH", "LEMON", "COLA", "PEACH", "COFFEE", "SPEARMINT", "PEPPERMINT", "WATERMELON", "MANGO", "BLUEBERRY", "ICE", "COOL", "FRESH", "POUCH"]) s.add(t);
+  return s;
+})();
 
 function factGate(reply) {
   let out = String(reply || "");
@@ -2444,9 +2451,15 @@ function factGate(reply) {
     }
 
     // (3) 🚫 ชื่อแบรนด์ที่ร้านไม่มี (AI แต่งขึ้น) → นับไว้ + เตือนใน log (ไม่ตัดข้อความ กันตัดผิด)
+    // ⚠️ k99: เดิมนับคำอังกฤษทั่วไปเป็น "แบรนด์มั่ว" ด้วย (SMOOTH/REGULAR/MENTHOL = ชื่อกลิ่น IQOS,
+    //   OK/LINE/MAPS = คำใช้งานทั่วไป) → ตัวเลข /quality ดูแย่กว่าความจริง อ่านแล้วไปแก้ผิดจุด
+    //   ตอนนี้: (ก) รู้จักทุกคำที่โผล่ในชื่อกลิ่นจริง (ข) มีบัญชีคำอังกฤษทั่วไป (ค) ต้องดูเหมือนชื่อรุ่นจริงๆ
     const seen = new Set();
     for (const t of (out.toUpperCase().match(/[A-Z]{3,}/g) || [])) {
-      if (_BRANDS_OK.has(t) || seen.has(t)) continue;
+      if (_BRANDS_OK.has(t) || _WORDS_OK.has(t) || seen.has(t)) continue;
+      // นับเฉพาะที่ "ดูเหมือนชื่อสินค้า" — อยู่ติดกับตัวเลข K/พัฟ หรือคำว่ารุ่น/ยี่ห้อ
+      const near = new RegExp("(รุ่น|ยี่ห้อ|แบรนด์)\\s*" + t + "|" + t + "\\s*\\d{1,2}\\s*K\\b", "i");
+      if (!near.test(out)) continue;
       seen.add(t); hit.model++; console.log("FACT_UNKNOWN_BRAND " + t);
     }
   } catch (e) {}
