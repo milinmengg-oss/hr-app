@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k107-fastfee";
+const BUILD = "2026-08-02-k110-expaddr";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2942,19 +2942,24 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       //   = ลูกค้าขอยกเลิก แต่ได้คำตอบว่ากำลังจะเปิดออเดอร์ใหม่ให้
       const _cancel = /ยกเลิก|ไม่เอาแล้ว|ไม่เอาละ|ไม่เอาค่ะ|ไม่เอาครับ|ไม่ต้องแล้ว|ไม่รับแล้ว|cancel|เอาออก|ตัดออก/i.test(t);
       if (_cancel) {
-        let hadOrder = false;
+        // k108 (เคสจริง 2/8 20.47 น.): ยกเลิกออเดอร์ที่ "ยังไม่โอน" แล้วจีทูเงียบไปเลย
+        //   เพราะทุกเคสถูกส่งเข้าคิวแอดมิน+มิ้วต์ ทั้งที่ยังไม่มีเงินเข้า = ยกเลิกให้เองได้ปลอดภัย
+        //   แก้: โอนแล้ว (✅) เท่านั้นถึงต้องให้คนดูแล — ที่เหลือยกเลิกทันที คุยต่อได้เลย
+        let paidOrder = false;
         try {
           if (env.CONV) {
+            const o = await env.CONV.get("ord:" + shopId + ":" + userId);
+            if (o) { try { const oj = JSON.parse(o); if (/ชำระแล้ว|✅/.test(String(oj.status || ""))) paidOrder = true; } catch (e2) { paidOrder = true; } }
+            if (!paidOrder) await env.CONV.delete("ord:" + shopId + ":" + userId);
             await env.CONV.delete("exp:" + shopId + ":" + userId);   // ล้างค่าส่งด่วนที่จำไว้
             await env.CONV.delete("card:" + shopId + ":" + userId);  // ล้างการ์ดที่ค้าง
-            const o = await env.CONV.get("ord:" + shopId + ":" + userId);
-            if (o) { hadOrder = true; }
           }
         } catch (e) {}
-        if (hadOrder) {
-          // มีออเดอร์ค้างในระบบแล้ว → ให้คนดูแล (อาจโอนเงินมาแล้ว/ลงระบบไปแล้ว)
+        EXPFEE.delete(shopId + ":" + userId);   // k108: ล้างค่าส่งในหน่วยความจำด้วย กันออเดอร์ใหม่แอบใช้ค่าเก่า
+        if (paidOrder) {
+          // โอนเงินมาแล้ว → ให้คนดูแลเรื่องคืนเงิน/แก้รายการ
           await lineReply(TOKEN, replyToken, "รับทราบค่ะ 🙏🏻 เดี๋ยวแอดมินเช็คออเดอร์แล้วดำเนินการยกเลิกให้นะคะ 💕", userId);
-          try { await muteNow("ขอยกเลิกออเดอร์ ⚠️", t); } catch (e) {}
+          try { await muteNow("ขอยกเลิกออเดอร์ (โอนแล้ว) ⚠️", t); } catch (e) {}
         } else {
           await lineReply(TOKEN, replyToken, "รับทราบค่ะ 🙏🏻 ยกเลิกรายการให้เรียบร้อยแล้วนะคะ\nถ้าอยากสั่งใหม่หรือให้จีทูแนะนำรุ่นอื่น บอกได้เลยค่ะ 💕", userId);
         }
@@ -3066,7 +3071,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (exp && exp.pending) {
           await lineReply(TOKEN, replyToken, "ได้รับหมุดแล้วนะคะ 📍 แอดมินกำลังเช็คค่าส่งด่วนจากแอปให้อยู่ค่ะ เดี๋ยวแจ้งราคาทันทีนะคะ 🛵💕", userId);
         } else if (exp && typeof exp.fee === "number") {
-          await lineReply(TOKEN, replyToken, "จากหมุดที่ส่งมา ค่าส่งด่วนประมาณ " + exp.fee + " บาทค่ะ (ระยะทาง ~" + exp.km + " กม.) 🛵\nรับสินค้ารุ่นไหน กลิ่นอะไร กี่ชิ้นดีคะ 💕", userId);
+          await lineReply(TOKEN, replyToken, "จากหมุดที่ส่งมา ค่าส่งด่วนจากแอปคือ " + exp.fee + " บาทค่ะ (ระยะทาง ~" + exp.km + " กม.) 🛵\nรับสินค้ารุ่นไหน กลิ่นอะไร กี่ชิ้นดีคะ 💕", userId);
         } else {
           // 🌙 k83 เคสจริง 2/8 (0.54 น.): ลูกค้าถาม "ดึกๆส่งแกร็บมั้ย" → บอทชวนแชร์โลเคชั่นเฉยๆ ไม่ตอบเรื่องเวลา
           //   ทั้งที่ตอนนั้นเลยรอบสุดท้าย (จ่ายก่อน 20.45) ไปแล้ว = เหมือนรับปากว่าส่งได้เลย
@@ -3285,9 +3290,24 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           if (ok) { ordObj = JSON.parse(ok); const m = (ordObj.block || "").match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/); if (m) expected = +m[1].replace(/,/g, ""); }
         } catch (e) {}
 
-        // 💾 ลูกค้าเก่ามีที่อยู่บันทึกไว้ → เสนอ "ส่งที่เดิม" แทนฟอร์มเต็ม
-        let ADDR_FORM = "\n\nรบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕\nหากส่งที่อยู่ไม่ครบถ้วนหรือไม่ถูกต้องจะทำให้สินค้าจัดส่งล่าช้านะคะ 🥹";   // k12: เจ้าของร้านยืนยันให้ขอเบอร์โทรได้ (ขนส่งต้องใช้ติดต่อ)
+        // 🛵 k110 (เคสจริง 2/8 20.53 น.): ออเดอร์ส่งด่วน (ปักหมุดแล้ว) แต่สลิปผ่านแล้วจีทูถาม
+        //   "ส่งที่เดิมไหมคะ" พร้อมที่อยู่พัสดุเก่า (ระยอง!) — คนละโหมดกันเลย
+        //   แก้: ถ้าออเดอร์นี้เป็นส่งด่วน → ปิดด้วยหมุดที่แชร์ไว้ ขอแค่ชื่อผู้รับ+เบอร์สำหรับไรเดอร์
+        let _expOrd = null;
         try {
+          if (env.CONV) {
+            const _ex = await env.CONV.get("exp:" + shopId + ":" + userId);
+            if (_ex) { const _ej = JSON.parse(_ex); if (_ej && (typeof _ej.fee === "number" || _ej.lat)) _expOrd = _ej; }
+          }
+        } catch (e) {}
+        if (!_expOrd) { const _efm = EXPFEE.get(shopId + ":" + userId); if (_efm && Date.now() - _efm.t < 7200000) _expOrd = _efm; }
+        if (!_expOrd && ordObj === null) { /* ord ยังไม่โหลด — เช็คด้านล่างหลังโหลด */ }
+
+        // 💾 ลูกค้าเก่ามีที่อยู่บันทึกไว้ → เสนอ "ส่งที่เดิม" แทนฟอร์มเต็ม (เฉพาะโหมดพัสดุ)
+        let ADDR_FORM = "\n\nรบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕\nหากส่งที่อยู่ไม่ครบถ้วนหรือไม่ถูกต้องจะทำให้สินค้าจัดส่งล่าช้านะคะ 🥹";   // k12: เจ้าของร้านยืนยันให้ขอเบอร์โทรได้ (ขนส่งต้องใช้ติดต่อ)
+        if (_expOrd) {
+          ADDR_FORM = "\n\n🛵 รอบนี้จัดส่งด่วนตามหมุดที่แชร์ไว้นะคะ 📍\nรบกวนขอ ชื่อผู้รับ + เบอร์โทร สำหรับไรเดอร์ติดต่อด้วยค่ะ 💕";
+        } else try {
           const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
           if (cv) {
             const c = JSON.parse(cv);
@@ -3307,11 +3327,11 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               const recv = (d.receiver && (d.receiver.displayName || d.receiver.name)) || "";
               if (!expected) {
                 slipPassed = true;
-                statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " บาท → " + recv + " (รอที่อยู่จัดส่ง)";
+                statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " บาท → " + recv + (_expOrd ? " (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)" : " (รอที่อยู่จัดส่ง)");
                 customerMsg = "✅ สลิปถูกต้อง จำนวนเงิน " + slipAmt + " บาท เข้าบัญชีร้านเรียบร้อยค่ะ 🎉 ขอบคุณที่อุดหนุนนะคะ 💕" + ADDR_FORM;
               } else if (Math.abs(slipAmt - expected) <= 1) {
                 slipPassed = true;
-                statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + " (รอที่อยู่จัดส่ง)";
+                statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + (_expOrd ? " (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)" : " (รอที่อยู่จัดส่ง)");
                 customerMsg = "✅ สลิปถูกต้อง จำนวนเงิน " + slipAmt + " บาท ตรงกับยอดออเดอร์เรียบร้อยค่ะ 🎉 ขอบคุณที่อุดหนุนนะคะ 💕" + ADDR_FORM;
               } else {
                 statusLine = "⚠️ ยอดไม่ตรง: สลิป " + slipAmt + " / ออเดอร์ " + expected + " → " + recv + " — แอดมินเช็คด่วน";
@@ -3337,7 +3357,13 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         } catch (e) {}
 
         // อัพสถานะออเดอร์ให้แอดมินเห็นผลตรวจ
-        try { if (ordObj) { ordObj.status = statusLine; await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 }); } } catch (e) {}
+        try {
+          if (ordObj) {
+            ordObj.status = statusLine;
+            if (slipPassed && _expOrd && _expOrd.lat && !/maps/.test(ordObj.block || "")) ordObj.block = (ordObj.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "") + "\nจัดส่ง: ส่งด่วนตามหมุด 📍 https://maps.google.com/?q=" + _expOrd.lat + "," + _expOrd.lng;
+            await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 });
+          }
+        } catch (e) {}
 
         if (slipPassed) {
           // ชำระผ่าน → จีทูขอที่อยู่ต่อ (ไม่มิ้วต์) + จดประวัติว่าชำระแล้ว เพื่อให้จีทูรู้ว่าต้องขอที่อยู่แล้วสรุปออเดอร์
@@ -3398,8 +3424,12 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               const keep = maxScore >= 2 ? scored.filter(x => x.score >= 2) : scored;
               keep.sort((a, b) => b.score - a.score);
               const hit = keep.slice(0, 8).map(x => x.nm);
+              // k109 (เคสจริง 2/8 20.50 น.): "ตอนแรกบอกมี พอสั่งบอกหมด" — บรรทัดนี้เคยใช้ >0 = มีของ
+              //   แต่ตอนออกการ์ดใช้ "เหลือ ≤ กันชน = หมด" → ของเหลือ 1 ชิ้น AI บอกมี สั่งจริงบอกหมด
+              //   แก้: ใช้กันชนเดียวกันทุกจุด
+              const _bufN = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
               stockNote = "\n\n# สต็อกจริงตอนนี้ (ข้อมูลภายใน — อัพเดตอัตโนมัติจากคลัง เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
-                hit.map(nm => "- " + nm + ": " + (sm[nm] > 0 ? "มีของ (จำนวนภายใน " + sm[nm] + " — ห้ามบอกลูกค้า)" : "❌ หมด")).join("\n") +
+                hit.map(nm => "- " + nm + ": " + (sm[nm] > _bufN ? "มีของ (จำนวนภายใน " + sm[nm] + " — ห้ามบอกลูกค้า)" : "❌ หมด")).join("\n") +
                 "\nกติกา: อ่านชื่อรุ่น+กลิ่นในแต่ละบรรทัดให้ตรงเป๊ะ ⛔ ห้ามเอาสถานะ (มีของ/หมด) ของรุ่นหรือกลิ่นหนึ่งไปตอบแทนอีกอันเด็ดขาด — เช่น 'MARBO 9K - องุ่น' กับ 'MARBO 9K - องุ่นลิ้นจี่' คนละตัวกัน ห้ามกุเอง ถ้ารุ่น/กลิ่นที่ลูกค้าพูดถึงไม่มีในรายการนี้แบบตรงตัว ให้ตอบ 'เดี๋ยวแอดมินเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻' ถ้ากลิ่นที่ลูกค้าสั่งหมด ให้แจ้งว่าหมดชั่วคราวและแนะนำกลิ่นที่ยังมีของแทน\n⛔⛔ ความลับบริษัท: 'จำนวนภายใน' ใช้เช็คว่าพอส่งไหมเท่านั้น ห้ามบอกตัวเลขจำนวนสต็อกให้ลูกค้าเด็ดขาด — ตอบได้แค่ 'กลิ่นนี้มีค่ะ' / 'กลิ่นนี้หมดค่ะ' ถ้าลูกค้าถามว่ามีกี่ชิ้น/เหลือเท่าไหร่ ตอบว่า 'มีพร้อมส่งค่ะ 💕' (ถ้าเหลือน้อยกว่าที่ลูกค้าจะสั่ง ให้บอกว่า 'ตอนนี้มีจำนวนจำกัด เดี๋ยวแอดมินเช็คให้อีกครั้งนะคะ' โดยไม่บอกตัวเลข)";
             }
           }
@@ -4012,6 +4042,30 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           : "รับรุ่นไหน กลิ่น/สีอะไร จำนวนเท่าไหร่ดีคะ 💕";
         await lineReply(TOKEN, replyToken, ask, userId);
       } else if (outOfStock) {
+        // k109 (เคสจริง 2/8 20.51 น.): ลูกค้าเปลี่ยนเป็น "สตอเบอรี่" → ระบบจับคู่ สตรอว์เบอร์รี่ (หมด) แล้วบอกหมดห้วนๆ
+        //   ทั้งที่ สตรอว์เบอร์รี่มิลค์เชค / สตรอว์เบอร์รี่กีวี่ ยังมีของ (จีทูเพิ่งลิสต์เสนอเองด้วยซ้ำ)
+        //   แก้: ก่อนบอกหมด หา "กลิ่นตระกูลเดียวกันที่ยังมีของ" ในรุ่นนั้น แล้วเสนอให้เลือกเลย
+        let _alts = [];
+        try {
+          if (env.CONV) {
+            const _smB = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+            const _bufB = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+            const _nq = normTH(String(outOfStock.flavor).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+            let _fk = FLAVORS[outOfStock.model] ? outOfStock.model : null;
+            if (!_fk) for (const k in FLAVORS) if (normTH(k) === normTH(outOfStock.model)) { _fk = k; break; }
+            if (_fk && _nq.length >= 3) for (const f of (FLAVORS[_fk].f || [])) {
+              const _nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+              if (_nb === _nq || _nb.indexOf(_nq) === -1) continue;
+              const _q = findStockForItem(_smB, _fk, f);
+              if (_q === null || _q > _bufB) _alts.push(f);
+              if (_alts.length >= 4) break;
+            }
+          }
+        } catch (e) { _alts = []; }
+        if (_alts.length) {
+          await lineReply(TOKEN, replyToken, "ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nแต่ตระกูลเดียวกันยังมีของนะคะ:\n" + _alts.map(f => "- " + f).join("\n") + "\n\nรับตัวไหนแทนดีคะ 💕", userId);
+          return;
+        }
         await lineReply(TOKEN, replyToken, L("outStock", LANG, outOfStock.model, outOfStock.flavor) || ("ขออภัยค่ะ 🙏🏻 " + outOfStock.model + " กลิ่น" + outOfStock.flavor + " ตอนนี้หมดชั่วคราวค่ะ\nรบกวนเลือกกลิ่นอื่น หรือให้แอดมินแนะนำกลิ่นที่มีของแทนไหมคะ 💕"), userId);
       } else if (items.length) {
         // ถ้าลูกค้าเลือกส่งด่วน (มี exp: จากการปักหมุด) → ใช้ค่าส่งด่วนในการ์ด
