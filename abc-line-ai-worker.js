@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k103-pinaddr";
+const BUILD = "2026-08-02-k105-sysmemory";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -1873,6 +1873,17 @@ export default {
           method: "POST", headers: { "Authorization": `Bearer ${TK}`, "Content-Type": "application/json" },
           body: JSON.stringify({ to: uid, messages: msgs }),
         });
+        // 🧠 k105 (เจ้าของร้านชี้ 2/8): แอดมินกรอกค่าส่งในแผงถูกต้องแล้ว แต่จีทู "ไม่รู้" ว่าระบบแจ้งราคาไปแล้ว
+        //   เพราะข้อความที่ระบบ push ไม่เคยถูกบันทึกลงความจำแชท → พอลูกค้าทวง "69 บาทไง" จีทูเดาว่าเป็นราคาสินค้า
+        //   แก้ที่ต้นเหตุ: บันทึกข้อความระบบลงความจำด้วย จีทูจะเห็นบทสนทนาครบเหมือนคนอ่านแชท
+        try {
+          const _hk = "conv3:" + shop + ":" + uid;
+          let _h = [];
+          try { _h = JSON.parse((await env.CONV.get(_hk)) || "[]"); } catch (e) {}
+          _h.push({ role: "assistant", content: "ค่าส่งด่วนจากแอปคือ " + fee + " บาทค่ะ 🛵 (ค่าส่งด่วนรอบนี้ = " + fee + " บาท ยืนยันแล้ว)", t: Date.now() });
+          if (total) _h.push({ role: "assistant", content: "สรุปยอดรวม " + total + " บาท (รวมค่าส่งด่วน " + fee + " แล้ว) ส่งการ์ดยืนยันให้ลูกค้าแล้ว", t: Date.now() });
+          await env.CONV.put(_hk, JSON.stringify(_h.slice(-20)), { expirationTtl: 3600 });
+        } catch (e) {}
         await env.CONV.delete("mute:" + shop + ":" + uid);   // ปลดคิวรอเช็คราคา
         console.log("EXPFEE_SET shop=" + shop + " fee=" + fee + " total=" + total);
         return J({ ผล: "แจ้งค่าส่งด่วน " + fee + " บาทให้ลูกค้าแล้ว ✅", ยอดรวมใหม่: total, build: BUILD });
@@ -3811,6 +3822,35 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             reply = reply.replace(/(ยอดรวม:\s*)[\d,]+/, "$1" + _total);
             const _items = _b.split("\n").filter(l => /^- /.test(l)).map(l => l.replace(/^- /, "").replace(/\s*=\s*[\d,]+\s*$/, ""));
             if (_items.length) reply = reply.replace(/สินค้า:[ \t]*.+/, "สินค้า: " + _items.join(" + "));
+          }
+        }
+      } catch (e) {}
+    }
+    // 🚫 k104 เคสจริง 2/8 (19.32 น.): ลูกค้าเลือกส่งด่วน แต่บอทตอบ "รับ MARBO 9K 4 แท่งค่ะ ส่งฟรีเลยนะคะ"
+    //   โปรส่งฟรีใช้กับพัสดุเท่านั้น → ถ้าลูกค้าอยู่ในโหมดส่งด่วน (มี exp:) ห้ามพูดคำว่าส่งฟรีเด็ดขาด
+    try {
+      if (env.CONV && /ส่งฟรี|ฟรีค่าส่ง|ไม่มีค่าส่ง/.test(reply)) {
+        const _ex = await env.CONV.get("exp:" + shopId + ":" + userId);
+        if (_ex) {
+          console.log("FREESHIP_IN_EXPRESS_BLOCKED");
+          reply = reply.replace(/[^\n]*(ส่งฟรี|ฟรีค่าส่ง|ไม่มีค่าส่ง)[^\n]*/g, "").replace(/\n{3,}/g, "\n\n").trim();
+          reply = (reply ? reply + "\n\n" : "") + "🛵 หมายเหตุ: รอบส่งด่วนคิดค่าส่งตามระยะทางเสมอนะคะ (โปรส่งฟรีใช้กับพัสดุปกติค่ะ)";
+        }
+      }
+    } catch (e) {}
+    // 💬 k104: ลูกค้าทวงราคาที่แอดมินเพิ่งแจ้ง ("ก็แจ้งมาแล้วไม่ใช่หรอคะ 69 บาท")
+    //   เดิม AI เอาเลขไปตีความเป็นราคาสินค้า แล้วตอบเรื่อง MARBO/ABC LEGO คนละเรื่อง
+    if (/(แจ้ง|บอก).{0,12}(มา)?แล้ว|ไม่ใช่หรอ|ใช่ไหมคะ?\s*\d|^\d{2,4}\s*บาท/.test(String(msgText || "")) && /\d{2,4}/.test(String(msgText || ""))) {
+      try {
+        if (env.CONV) {
+          const _ex = await env.CONV.get("exp:" + shopId + ":" + userId);
+          if (_ex) {
+            const _ej = JSON.parse(_ex);
+            const _said = +(String(msgText).match(/(\d{2,4})/) || [])[1];
+            if (_ej && typeof _ej.fee === "number" && Math.abs(_said - _ej.fee) <= 1) {
+              await lineReply(TOKEN, replyToken, "ถูกต้องค่ะ 🙏🏻 ค่าส่งด่วนจากแอปคือ " + _ej.fee + " บาทค่ะ 🛵\nแจ้งรุ่น + กลิ่น + จำนวน ที่ต้องการได้เลยนะคะ เดี๋ยวสรุปยอดรวมให้ทันทีค่ะ 💕", userId);
+              return;
+            }
           }
         }
       } catch (e) {}
