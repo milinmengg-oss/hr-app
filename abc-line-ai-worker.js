@@ -21,7 +21,13 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-02-k93-freeship";
+const BUILD = "2026-08-02-k94-fastwake";
+
+// ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วจีทูเงียบต่ออีกเกือบ 1 นาที
+//   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
+//   แก้: จำ "คนที่เพิ่งปลดมิ้วต์" ไว้ในหน่วยความจำของ Worker ด้วย → กลับมาตอบทันทีไม่ต้องรอ KV
+const UNMUTED = new Map();
+const wakeKey = (shop, uid) => shop + ":" + uid;
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -2181,7 +2187,7 @@ export default {
         // แอดมินกดว่า "ดูแลเสร็จแล้ว" แชทเดียว → จีทูกลับมาตอบแชทนั้น
         if (act === "done") {
           const uid = url0.searchParams.get("uid");
-          if (uid) await env.CONV.delete("mute:" + shop + ":" + uid);
+          if (uid) { await env.CONV.delete("mute:" + shop + ":" + uid); UNMUTED.set(wakeKey(shop, uid), Date.now()); }
           return J({ ok: 1 });
         }
         // 📦 รายการออเดอร์ที่จีทูปิดการขายได้ รอแอดมินลง XSelly
@@ -2485,7 +2491,9 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     // ── โหมดแอดมินดูแล: ถ้าแชทนี้ถูกส่งต่อให้คนแล้ว จีทูเงียบ (12 ชม.) ──
     const muteKey = `mute:${shopId}:${userId}`;
     if (env.CONV) {
-      const _mv = await env.CONV.get(muteKey);
+      const _wk = UNMUTED.get(wakeKey(shopId, userId));
+      if (_wk && Date.now() - _wk < 600000) { try { await env.CONV.delete(muteKey); } catch (e) {} }   // k94: เพิ่งกดเสร็จ → ตอบได้เลย
+      const _mv = (_wk && Date.now() - _wk < 600000) ? null : await env.CONV.get(muteKey);
       if (_mv) {
         // 🔇 k86 (เจอจากตัวจำลองลูกค้า 2/8): ปักหมุดส่งด่วน → ระบบมิ้วต์รอแอดมินเช็คราคา
         //   แต่บอทเพิ่งบอกเองว่า "ระหว่างรอ เลือกสินค้าเพิ่มได้เลยนะคะ" → ลูกค้าสั่งของต่อ → เงียบสนิท 1 ชม.!
