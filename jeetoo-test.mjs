@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -985,6 +985,79 @@ async function memTests() {
     const t141 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     T.push({ n: 162, name: 'k141 ถามแบรนด์ RELX → ห้ามตอบเป็นเรื่อง MARBO ล้วนๆ ต้องลิสต์รุ่น RELX จริง',
       ok: !/MARBO/.test(t141) && /RELX/.test(t141), why: t141.slice(0, 80).replace(/\n/g, ' | ') });
+  }
+  {
+    // ── k144 (เคสจริง 3/8): "โอเครวมยอดให้เลย" → ระบบอ่านว่าอยู่ "จังหวัดเลย" = นอกเขตส่งด่วน
+    //    ผลคือปฏิเสธส่งด่วนกับลูกค้า กทม. ทันที และล็อกผิดไปทั้งบทสนทนา
+    const falsePos = ['โอเครวมยอดให้เลย', 'เอาเลยค่ะ', 'สั่งเลยครับ', 'ได้เลย', 'ไม่มีเลย', 'ยังไม่ได้เลย', 'ตากลม', 'แพร่หลาย', 'สรุปยอดเลย'];
+    const bad = falsePos.filter(x => matchUpcountry(x));
+    T.push({ n: 166, name: 'k144 คำลงท้าย "เลย/ตาก/แพร่" ต้องไม่ถูกอ่านเป็นชื่อจังหวัด',
+      ok: !bad.length, why: bad.length ? 'ยังจับผิด: ' + bad.map(x => x + '→' + matchUpcountry(x)).join(', ') : '' });
+
+    // ต้องยังจับจังหวัดจริงได้ ไม่งั้นด่านส่งด่วนพัง
+    const truePos = [['อยู่จังหวัดเลยค่ะ', 'เลย'], ['อยู่ตากครับ', 'ตาก'], ['ส่งไปเชียงใหม่', 'เชียงใหม่'], ['อยู่ขอนแก่น', 'ขอนแก่น'], ['จ.น่าน', 'น่าน'], ['ปลายทางตรัง', 'ตรัง']];
+    const miss = truePos.filter(([txt, want]) => matchUpcountry(txt) !== want);
+    T.push({ n: 167, name: 'k144 จังหวัดจริงต้องยังจับได้ (อยู่จังหวัดเลย / อยู่ตาก / เชียงใหม่)',
+      ok: !miss.length, why: miss.length ? 'จับไม่ได้: ' + miss.map(([t2, w]) => t2 + ' → ได้ "' + matchUpcountry(t2) + '" ควรเป็น ' + w).join(' · ') : '' });
+  }
+  {
+    // ── k145 (เคสจริง 3/8): ลูกค้าไทยพิมพ์ "Marbo 9 k" → ระบบล็อกภาษาเป็นอังกฤษ 7 วัน
+    //    → AI ถูกสั่ง "ห้ามตอบภาษาไทย" → ลูกค้าไทยโดนตอบอังกฤษทั้งย่อหน้า
+    const thaiCustomer = ['Marbo 9 k', 'MARBO 9K', 'relx infinity', 'ks quik pro', 'boost pod', 'infy 20k'];
+    const wrong = thaiCustomer.filter(x => detectLang(x) === 'en');
+    T.push({ n: 168, name: 'k145 ลูกค้าพิมพ์ชื่อรุ่นอังกฤษล้วน → ห้ามสลับเป็นโหมดภาษาอังกฤษ',
+      ok: !wrong.length, why: wrong.length ? 'ยังสลับเป็น en: ' + wrong.join(', ') : '' });
+
+    // ฝรั่งจริงต้องยังได้ภาษาอังกฤษ
+    const realEn = ['do you have marbo in stock', 'how much is shipping', 'hello can i order'];
+    const missEn = realEn.filter(x => detectLang(x) !== 'en');
+    T.push({ n: 169, name: 'k145 ลูกค้าต่างชาติพิมพ์ประโยคอังกฤษจริง → ต้องยังได้โหมดอังกฤษ',
+      ok: !missEn.length, why: missEn.length ? 'ไม่เข้าโหมด en: ' + missEn.join(', ') : '' });
+  }
+  {
+    // ── k146 (เคสจริง 3/8 · /quality นับ "ราคาผิด" 9 ครั้งในวันเดียว):
+    //    factGate เห็น "MARBO 9K โคลน 290 บาท" แล้วจับได้แค่คีย์ "MARBO 9K" (350)
+    //    → แก้ 290 ที่ถูกอยู่แล้ว ให้กลายเป็น 350 = ด่านกันมั่วสร้างความมั่วเอง
+    const r1 = factGate('MARBO 9K โคลน (เทียบแท้) 290 บาทค่ะ');
+    T.push({ n: 170, name: 'k146 ราคาโคลน 290 ที่ถูกอยู่แล้ว → ด่านห้ามแก้เป็น 350',
+      ok: /290/.test(r1.text) && !/350/.test(r1.text), why: r1.text.slice(0, 70) });
+
+    // เรทขายส่งก็โดนแก้เป็น 350 หมดเหมือนกัน
+    const r2 = factGate('เรทขายส่ง MARBO 9K โคลน\n500 แท่งขึ้นไป = 200 บาท/แท่ง\n1000 แท่งขึ้นไป = 190 บาท/แท่ง');
+    T.push({ n: 171, name: 'k146 เรทขายส่ง 200/190 บาทต่อแท่ง → ด่านห้ามแก้เป็น 350',
+      ok: /200/.test(r2.text) && /190/.test(r2.text), why: r2.text.replace(/\n/g, ' | ').slice(0, 90) });
+
+    // ต้องยังแก้ราคาที่ผิดจริงได้ (ไม่ใช่ปิดด่านทิ้ง)
+    const r3 = factGate('MARBO 9K ราคา 999 บาทค่ะ');
+    T.push({ n: 172, name: 'k146 ราคาที่ผิดจริงต้องยังถูกแก้ (999 → 350) ด่านไม่ตายไปเลย',
+      ok: /350/.test(r3.text) && !/999/.test(r3.text), why: r3.text.slice(0, 70) });
+
+    // k146b: findPrice ต้องแยกโคลนออกจากแท้ แม้ AI ไม่ใส่วงเล็บ
+    const fp = findPrice('MARBO 9K โคลน');
+    T.push({ n: 173, name: 'k146b findPrice("MARBO 9K โคลน") ต้องได้ 290 ไม่ใช่ 350 (คิดเงินในการ์ด)',
+      ok: fp && fp.price === 290, why: fp ? fp.key + ' = ' + fp.price : 'หาไม่เจอ' });
+  }
+  {
+    // ── k147 (เคสจริง 3/8 — แย่ที่สุดของวัน): ลูกค้า "โอนตังค์คืนได้ไหมไม่อยากได้แล้ว"
+    //    → บอทตอบ fallback "ไม่เข้าใจคำถาม + ลิงก์เมนู" วน 2 รอบ จนลูกค้าพิมพ์ "ไม่ให้อภัยตอบมา"
+    store = new Map();
+    store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K147';
+    sent = []; aiCalled = false;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'โอนตังค์คืนได้ไหมไม่อยากได้แล้ว', id: '1' } }, env, 'TOKEN', 'v20');
+    const t147 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    let r147 = ''; try { r147 = JSON.parse(store.get('mute:v20:' + uid) || '{}').reason || ''; } catch (e) {}
+    T.push({ n: 174, name: 'k147 ขอเงินคืน → เข้าคิวคนจริง + ห้ามยิงลิงก์เมนูใส่',
+      ok: !!r147 && !/cutt\.ly/.test(t147), why: 'คิว="' + r147.slice(0, 30) + '" ตอบ=' + t147.slice(0, 60).replace(/\n/g, ' ') });
+
+    // k147b: "โอนคืน" เฉยๆ (ไม่มีคำว่าเงิน/ตังค์คั่น) เดิมหลุดด่าน
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    const uid2 = 'K147b';
+    sent = []; aiCalled = false;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid2 }, message: { type: 'text', text: 'ขอโอนคืนได้มั้ยคะ', id: '1' } }, env, 'TOKEN', 'v20');
+    let r147b = ''; try { r147b = JSON.parse(store.get('mute:v20:' + uid2) || '{}').reason || ''; } catch (e) {}
+    T.push({ n: 175, name: 'k147b คำว่า "โอนคืน" (ไม่มีคำว่าเงินคั่น) ต้องเข้าคิวคนจริงด้วย',
+      ok: !!r147b, why: 'คิว="' + r147b.slice(0, 40) + '"' });
   }
   {
     // ── k143 (เคสจริง 3/8): ลูกค้าถาม "มีหัวแบบสูบแล้วทิ้งไหม" → บอทตอบ "MARBO 9K เป็นพอตใช้แล้วทิ้ง"
