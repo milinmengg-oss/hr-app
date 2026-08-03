@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1730,6 +1730,39 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k155: ห้ามอ้างถึงรูปที่ลูกค้าไม่เคยส่ง ═══
+//   เคสจริง 3/8 23.51 (C•): ลูกค้าพิมพ์ "Relx" แล้ว "รุ่นนี้" ติดกัน → "Relx" หายจากความจำ (ความจำถูกทับ)
+//   → AI เห็นแค่ [แอดมิน: ส่งรูปสินค้ามาได้เลยค่ะ] [ลูกค้า: รุ่นนี้] → กุเองว่า "แอดมินไม่เห็นรูปที่ส่งมานะคะ"
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const real = 'ขออภัยค่ะคุณลูกค้า แอดมินไม่เห็นรูปที่ส่งมานะคะ รบกวนส่งรูปอีกครั้ง หรือพิมพ์ชื่อรุ่นมาได้เลยค่ะ 🙏🏻';
+  const histNoImg = [
+    { role: 'user', content: 'มีของเข้ามั้ยครับ' },
+    { role: 'assistant', content: 'รบกวนพิมพ์ชื่อรุ่นอีกครั้ง หรือส่งรูปสินค้ามาได้เลยค่ะ 🙏🏻' },
+    { role: 'user', content: 'รุ่นนี้' },
+  ];
+  const g1 = ghostImageGate(real, histNoImg, 'text');
+  t(238, 'เคสจริง: ลูกค้าไม่เคยส่งรูป → ห้ามบอกว่า "ไม่เห็นรูปที่ส่งมา"', g1.blocked && !/ไม่เห็นรูป/.test(g1.reply), 'ยังหลุดถึงลูกค้า');
+  t(239, 'เคสจริง: ห้ามสั่งให้ "ส่งรูปอีกครั้ง" ในสิ่งที่ไม่เคยทำ', !/ส่งรูปอีกครั้ง/.test(g1.reply), 'ยังสั่งให้ทำซ้ำ');
+  t(240, 'เคสจริง: ต้องยังชวนคุยต่อได้ (ไม่เงียบใส่ลูกค้า)', /พิมพ์ชื่อรุ่น/.test(g1.reply), 'ตัดทิ้งจนคุยต่อไม่ได้');
+
+  const histImg = histNoImg.concat([{ role: 'user', content: '[ลูกค้าส่งรูปเมนู/สินค้าที่วงกลมไว้ — รุ่นที่อยู่ในรูป: RELX BOOST POD]' }]);
+  t(241, 'ลูกค้าเคยส่งรูปจริง → พูดถึงรูปได้ตามปกติ', ghostImageGate(real, histImg, 'text').blocked === false, 'ด่านทำงานผิดจังหวะ');
+  t(242, 'ลูกค้ากำลังส่งรูปมาในเทิร์นนี้ → ห้ามแตะ', ghostImageGate(real, histNoImg, 'image').blocked === false, 'บล็อกตอนลูกค้าส่งรูปจริง');
+  t(243, 'ลูกค้าเคยส่งรูปแบบ content ไม่ใช่ข้อความ → พูดถึงได้', ghostImageGate(real, histNoImg.concat([{ role: 'user', content: [{ type: 'image_url' }] }]), 'text').blocked === false, 'อ่านรูปแบบ vision ไม่ออก');
+
+  const ok = 'RELX BOOST POD 350 บาทค่ะ 💕 รับกลิ่นไหนดีคะ';
+  t(244, 'ข้อความปกติที่ไม่พูดถึงรูป ห้ามโดนแตะ', ghostImageGate(ok, histNoImg, 'text').reply === ok, 'ไปแก้ข้อความที่ถูกอยู่แล้ว');
+  const askPic = 'รบกวนพิมพ์ชื่อรุ่นอีกครั้ง หรือส่งรูปสินค้ามาได้เลยค่ะ 🙏🏻';
+  t(245, 'ชวนให้ส่งรูป (ยังไม่เคยส่ง) = ถูกต้อง ห้ามบล็อก', ghostImageGate(askPic, histNoImg, 'text').blocked === false, 'บล็อกประโยคที่ถูก');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ความจำ/รูป]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ความจำ/รูป]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k154: ลูกค้าบอกข้อมูลครบแล้ว ห้ามถามซ้ำ / ห้ามลืม ═══
 //   เคสจริง 3/8 23.10 (JW): "เอาบูสพอดจ้ะ" → ตอบ "ESKO BAR SWITCH หมดชั่วคราว" (รุ่นจาก 3 เทิร์นก่อน)
 //   เคสจริง 3/8 22.50 (m): "เอามาโบ องุ่นว่าน" → ตอบลิสต์กลิ่นแล้วถามกลิ่นซ้ำ → ลูกค้าเงียบหาย = ออเดอร์หลุด
