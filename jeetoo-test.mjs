@@ -1751,6 +1751,50 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k158: ตอบอะไรออกไป ต้องถูกจดความจำเสมอ (แก้รากบั๊กความจำทั้งตระกูล) ═══
+//   เดิม: ตอบลูกค้าได้ ~71 ทาง แต่จดความจำแค่ 3 ทาง → ทางลัดทั้งหมด "ตอบแล้วจบ ไม่จด"
+//   → เทิร์นถัดไป AI ไม่รู้ว่าเพิ่งพูดอะไร = ต้นเหตุร่วมของ k69 · k150 · k155 · k157
+{
+  const T = [];
+  // ทางลัดสติกเกอร์ (k65) = ตอบตายตัว ไม่เรียก AI ไม่เคยผ่านทางเขียนความจำหลักเลย
+  {
+    store = new Map();
+    store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K158a';
+    sent = []; aiCalled = false;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'sticker', id: '1', keywords: ['Thank you'] } }, env, 'TOKEN', 'v20');
+    const h = JSON.parse(store.get('conv3:v20:' + uid) || '[]');
+    T.push({ n: 260, name: 'k158 ทางลัดสติกเกอร์ → ต้องจดความจำ (เดิมไม่จดเลย)', ok: h.length >= 1 && h.some(x => x.role === 'assistant'), why: 'ความจำมี ' + h.length + ' รายการ' });
+  }
+  // ทางลัด "ขอเมนู" — อีกทางที่ตอบแล้ว return ทันที
+  {
+    store = new Map();
+    store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K158b';
+    sent = []; aiCalled = false;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ขอเมนู', id: '2' } }, env, 'TOKEN', 'v20');
+    const h = JSON.parse(store.get('conv3:v20:' + uid) || '[]');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    T.push({ n: 261, name: 'k158 ทางลัดขอเมนู → จดทั้งคำถามลูกค้าและคำตอบ', ok: !txt || (h.some(x => x.role === 'user') && h.some(x => x.role === 'assistant')), why: 'ตอบ=' + (txt ? 'มี' : 'ไม่มี') + ' ความจำ=' + h.length });
+  }
+  // ⚠️ ห้ามเขียนซ้ำ 2 รอบเมื่อทางหลักเขียนไปแล้ว
+  {
+    store = new Map();
+    store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K158c';
+    sent = []; aiCalled = false;
+    aiReply = 'สวัสดีค่ะ 💕 รับรุ่นไหนดีคะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'สวัสดีครับ อยากได้พอต', id: '3' } }, env, 'TOKEN', 'v20');
+    const h = JSON.parse(store.get('conv3:v20:' + uid) || '[]');
+    const asst = h.filter(x => x.role === 'assistant').length;
+    T.push({ n: 262, name: 'k158 ทางหลักเขียนแล้ว → ห้ามเขียนซ้ำตอนออก', ok: asst <= 1, why: 'มีคำตอบบอทในความจำ ' + asst + ' รายการ (ควร 1)' });
+  }
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[รากความจำ]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[รากความจำ]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k157: รุ่น+กลิ่นอยู่เทิร์นก่อน เหลือแค่จำนวน → ต้องออกการ์ด ไม่ใช่ถามซ้ำ ═══
 //   เคสจริง 4/8 00.03-00.07 (m): บอกครบ 4 รอบ แชร์หมุดแล้ว คิดค่าส่ง 66 บาทแล้ว การ์ดไม่เคยออก
 {

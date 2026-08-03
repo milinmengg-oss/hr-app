@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-04-k157-cartfix";
+const BUILD = "2026-08-04-k158-memroot";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -51,6 +51,17 @@ const TRACK = new Map();
 const CANCELLED = new Map();
 // 🔁 k149: จำข้อความล่าสุดที่ส่งให้แต่ละคน กันตอบซ้ำเป๊ะๆ (uid → {sig, t, n})
 const LASTOUT = new Map();
+// 🧠🧠🧠 k158 — "ทางออกเดียวของความจำ" (แก้รากของบั๊กความจำทั้งตระกูล)
+//   ปัญหาที่เจอซ้ำๆ ทั้งคืน 3-4 ส.ค. (k69 · k150 · k155 · k157) จริงๆ คือรูเดียวกัน:
+//     จีทูตอบลูกค้าได้ ~71 ทาง (lineReply แล้ว return) แต่ **จดความจำแค่ 3 ทาง**
+//     → ทางที่เหลือ "ตอบแล้วจบ ไม่เคยจดว่าคุยอะไรไป"
+//     → เทิร์นถัดไป AI ไม่รู้ว่าเพิ่งพูดอะไร = จำรุ่นผิด · ถามซ้ำ · ตอบซ้ำเป๊ะ · กุว่าลูกค้าส่งรูป
+//   เดิมแก้ทีละอาการ → อาการใหม่โผล่เรื่อยๆ เพราะรูยังอยู่
+//   กฎใหม่: **ตอบอะไรออกไป ต้องถูกจดเสมอ** โดยไม่ต้องไปแก้ทีละจุดใน 71 ทาง
+//     lineReply จดสิ่งที่ตอบลง TURN → safeHandle เขียนลงความจำใน finally ถ้าทางหลักยังไม่ได้เขียน
+//   ⚠️ ใช้ Map แยกตาม userId ไม่ใช่ตัวแปร global เดี่ยว — บทเรียนจากบั๊ก SOLD_OUT_MODELS
+//      (global ข้าม await → ข้อมูลลูกค้า A ทับ B) · คนละคนจะไม่ทับกันเด็ดขาด
+const TURN = new Map();
 // 🆘 k147: เกณฑ์ "ขอเงินคืน / ลูกค้าโกรธ" — ใช้ร่วมกันทั้งด่าน k127 (ขาเข้า) และด่านกันตัดเคสทิ้ง (ขาออก)
 //   เดิมเขียนแยกกัน 2 ที่ แล้วฝั่งขาออกครอบคลุมแคบกว่า → เคสเงินคืนหลุดไปเจอลิงก์เมนู
 //   k147b: เพิ่ม "โอนคืน" (เดิมบังคับต้องมีคำว่าเงิน/ตังค์คั่น → "โอนคืน" หลุด)
@@ -423,6 +434,11 @@ function carryFlavor(text, hist) {
   if (!/รับกี่ชิ้น|มีของพร้อมส่ง|ยังมีของ|มีพร้อมส่ง|มีค่ะ|มีนะคะ/.test(c)) return "";
   const ms = [];
   for (const k in FLAVORS) if (k.length >= 5 && c.indexOf(k) !== -1) ms.push(k);
+  // 🔤 k158 (เคสจริง 4/8 00.14): บอทพิมพ์ "จากรูปเห็น RELX SPARTA กลิ่น..." แต่ชื่อจริงในระบบคือ
+  //   "RELX SPARTA 20K" → เทียบแบบเป๊ะตัวอักษรหาไม่เจอ = พากลิ่นข้ามเทิร์นไม่ได้
+  //   ปัญหาเดียวกับบล็อก k150 ที่ใช้ indexOf ชื่อเต็มเหมือนกัน
+  //   → ถ้าเทียบเป๊ะไม่เจอ ให้ใช้ตัวจับรุ่นตัวเดียวกับที่ใช้อ่านข้อความลูกค้า (_MODEL_IN)
+  if (!ms.length) { const _k = _MODEL_IN(c); if (_k && FLAVORS[_k]) ms.push(_k); }
   if (ms.length !== 1) return "";                 // บอทพูดถึงหลายรุ่น = ยังไม่ชัด อย่าเดา
   const v = FLAVORS[ms[0]];
   if (!v || !v.f.length) return "";
@@ -513,6 +529,8 @@ function carryModel(text, hist) {
         if (!_neg && _pos) {
           const _ms = [];
           for (const k in FLAVORS) if (k.length >= 5 && _c.indexOf(k) !== -1) _ms.push(k);
+          // k158: บอทมักพิมพ์ชื่อรุ่นไม่ครบ ("RELX SPARTA" แทน "RELX SPARTA 20K") → เทียบเป๊ะพลาด
+          if (!_ms.length) { const _k1 = _MODEL_IN(_c); if (_k1 && FLAVORS[_k1]) _ms.push(_k1); }
           if (_ms.length === 1) return " " + _ms[0];   // บอทเพิ่งยืนยันรุ่นเดียวชัดๆ = รุ่นที่คุยค้างอยู่
         }
       }
@@ -3140,7 +3158,42 @@ function listify(reply) {
   } catch (e) { return reply; }
 }
 
+// 🧠🧠🧠 k158 — ห่อ handleEvent ด้วย "ทางออกเดียวของความจำ"
+//   ไม่ว่าข้างในจะออกทางไหนใน ~71 ทาง (ตอบปกติ · ทางลัด · early return · โยนข้อผิดพลาด)
+//   ถ้าตอบลูกค้าไปแล้วแต่ทางหลักยังไม่ได้จด → จดตรงนี้เสมอ
+//   ⚠️ ต้องอยู่ที่ handleEvent เอง ไม่ใช่ที่ safeHandle — ไม่งั้นผู้เรียกอื่น (รวมถึงชุดทดสอบ)
+//      จะไม่ได้การรับประกันนี้ และรูจะเปิดกลับมาเงียบๆ อีก
 async function handleEvent(ev, env, TOKEN, shopId) {
+  const _uid = (ev && ev.source && ev.source.userId) || "";
+  if (!_uid) return handleEventCore(ev, env, TOKEN, shopId);
+  const _m = ev && ev.message;
+  const _utext = ev && ev.type === "postback" ? "[ลูกค้ากดปุ่มในการ์ด]"
+    : !_m ? ""
+    : _m.type === "text" ? String(_m.text || "")
+    : _m.type === "image" ? "[รูปภาพ]"
+    : _m.type === "sticker" ? "[สติกเกอร์]"
+    : _m.type === "location" ? "[ตำแหน่งที่ตั้ง]" : "[" + _m.type + "]";
+  const _ctx = { key: "conv3:" + shopId + ":" + _uid, userText: _utext, replies: [], written: false };
+  TURN.set(_uid, _ctx);
+  try {
+    return await handleEventCore(ev, env, TOKEN, shopId);
+  } finally {
+    try {
+      TURN.delete(_uid);
+      if (env.CONV && !_ctx.written && _ctx.replies.length) {
+        // อ่านของล่าสุดก่อนต่อท้ายเสมอ (กฎเดียวกับ k155 — ห้ามเขียนทับด้วยก้อนเก่า)
+        let _base = [];
+        try { const _cur = await env.CONV.get(_ctx.key); if (_cur) { const _p = JSON.parse(_cur); if (Array.isArray(_p)) _base = _p; } } catch (e4) {}
+        const _add = [];
+        if (_ctx.userText) _add.push({ role: "user", content: _ctx.userText });
+        _add.push({ role: "assistant", content: _ctx.replies.join("\n") });
+        await env.CONV.put(_ctx.key, JSON.stringify(stampHist([..._base, ..._add].slice(-20))), { expirationTtl: HIST_TTL });
+        console.log("K158_HIST_SAVED_ON_EXIT " + _ctx.replies.length + " msg");
+      }
+    } catch (e5) { console.log("K158_SKIP " + String(e5).slice(0, 60)); }
+  }
+}
+async function handleEventCore(ev, env, TOKEN, shopId) {
   try {
     // ── เพิ่มเพื่อน (follow) → ส่งการ์ดต้อนรับ + ปุ่มเมนู ──
     if (ev.type === "follow" && ev.replyToken) {
@@ -5499,6 +5552,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         } catch (e) {}
         const next = stampHist([..._base, userForHistory, { role: "assistant", content: reply }].slice(-20));
         await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
+        try { const _t = TURN.get(userId); if (_t) _t.written = true; } catch (e) {}   // k158: ทางหลักเขียนแล้ว ไม่ต้องเขียนซ้ำตอนออก
         // 🗒 k10: log ถาวร 30 วัน สำหรับขุดวิเคราะห์
         await appendChatLog(env, shopId, userId, (typeof userForHistory.content === "string" ? userForHistory.content : "[รูปภาพ]"), reply);
       }
@@ -5764,6 +5818,9 @@ async function lineReply(token, replyToken, text, userId, quick) {
     : _dupN === 2
     ? "ขออภัยที่ตอบไม่ตรงคำถามนะคะ 🙏🏻 รบกวนช่วยขยายความอีกนิดได้ไหมคะว่าอยากทราบเรื่องไหนเป็นพิเศษ เดี๋ยวแอดมินตอบให้ตรงจุดเลยค่ะ\n(หรือถ้าอยากคุยกับทีมงานคนจริง พิมพ์ \"ขอคุยกับคน\" ได้เลยนะคะ 💕)"
     : msg };
+  // 🧠 k158: จดสิ่งที่ "ตอบออกไปจริง" ลงสมุดของเทิร์นนี้ — ไม่ว่าจะถูกเรียกจากทางไหนใน ~71 ทาง
+  //   จดข้อความที่ลูกค้าเห็นจริง (one.text) ไม่ใช่ msg ดิบ เพราะ k149 อาจเปลี่ยนสำนวนตอนตอบซ้ำ
+  try { const _t = userId && TURN.get(userId); if (_t) _t.replies.push(String(one.text || msg)); } catch (e) {}
   let q = quick;
   if (!q) { try { q = buildQuickReply(msg, "", _qrStock, _qrBuf); } catch (e) {} }
   if (q && q.items && q.items.length) one.quickReply = q;
