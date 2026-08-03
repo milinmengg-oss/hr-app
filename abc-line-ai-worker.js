@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k129-pickcarry";
+const BUILD = "2026-08-03-k130-sharedstock";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -61,6 +61,14 @@ function trackMsg(rec) {
     + "ระบบขนส่งอาจอัปเดตสถานะช้าประมาณ 6-12 ชม. หลังส่งออกนะคะ 💕";
 }
 const wakeKey = (shop, uid) => shop + ":" + uid;
+
+// 📦 k130 (เจ้าของร้านยืนยัน 3/8): **สต็อกทุกร้านใช้ก้อนเดียวกัน ไม่แยกร้าน**
+//   โครงสร้างเดิมรองรับอยู่แล้ว — คีย์ "stockmap" ไม่มีชื่อร้านนำหน้า = ทุกร้านอ่านก้อนเดียวกัน
+//   แต่พอมี 5 ร้านแย่งของก้อนเดียว ความเสี่ยงใหม่คือ "ขายชิ้นสุดท้ายพร้อมกัน":
+//     ร้าน A กับ ร้าน B เห็นเลข 1 เท่ากัน → ปิดออเดอร์ทั้งคู่ → ของมีชิ้นเดียวแต่ขายไป 2 ที่
+//     (ยิ่งช่วงโปร/ยิงแอดพร้อมกัน ยิ่งเจอบ่อย)
+//   → ขยับกันชนจาก 1 เป็น 3 ชิ้น: เหลือ ≤3 ถือว่าหมด กันไว้ให้ออเดอร์ที่กำลังค้างอยู่ในมือลูกค้า
+//   ปรับได้ตลอดที่ /stockage?key=...&buf=N (ถ้าของหมุนเร็วมากอาจต้องขยับขึ้นอีก)
 
 // ⚡ 3 ตัวพอ — ยิ่งมีตัวสำรองเยอะ ยิ่งเสี่ยงรอนาน (แต่ละครั้งที่สลับ = บวกเวลารอ)
 const MODELS = [
@@ -1904,7 +1912,7 @@ export default {
     if (url0.pathname === "/qrtest") {
       if (!OKEY()) return DENY(); // k39
       let sm = null, bf = 1;
-      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) {}
+      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); bf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) {}
       const t = url0.searchParams.get("t") || "";
       const q = buildQuickReply(t, url0.searchParams.get("u") || "", sm, bf);
       return new Response(JSON.stringify({
@@ -1924,7 +1932,7 @@ export default {
       const qs = (url0.searchParams.get("t") || "").split("||").map(x => x.trim()).filter(Boolean).slice(0, 6);
       if (!qs.length) return new Response("ใส่ ?t=คำถามลูกค้า (คั่นหลายคำถามด้วย ||)", { status: 400 });
       let sm = {}, buf = 1;
-      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) {}
+      try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) {}
       // รุ่นที่หมดทุกกลิ่น (ใช้ตรวจว่าแอดมินเผลอเสนอของหมดไหม)
       const soldOutModels = [];
       for (const k in FLAVORS) {
@@ -2190,7 +2198,7 @@ export default {
         โหมดกันขายของข้อมูลเก่า: maxAge ? ("เปิด — ถ้าข้อมูลเก่ากว่า " + maxAge + " ชม. จะให้ทีมงานเช็คก่อน") : "ปิด (ตั้งค่าด้วย ?set=24)",
         อัปเดตล่าสุดจาก_XSelly: last ? new Date(last).toLocaleString("th-TH", { timeZone: "Asia/Bangkok" }) : "ยังไม่เคยมี webhook เข้ามาเลย",
         ชั่วโมงที่ผ่านมา: last ? Math.round((now3 - last) / H * 10) / 10 : null,
-        กันชนสต็อก: "เหลือ ≤ " + parseInt((await env.CONV.get("stockbuffer")) || "1", 10) + " ชิ้น = ถือว่าหมด (เปลี่ยนด้วย ?buf=N&key=...)",
+        กันชนสต็อก: "เหลือ ≤ " + parseInt((await env.CONV.get("stockbuffer")) || "3", 10) + " ชิ้น = ถือว่าหมด (เปลี่ยนด้วย ?buf=N&key=...)",
         กลิ่นทั้งหมดในระบบ: Object.keys(sm).length,
         ข้อมูลสด: fresh, ข้อมูลเก่า: stale, ไม่เคยอัปเดตเลย: never,
         สรุป: last ? "webhook ทำงานอยู่ ✅" : "⛔ XSelly ไม่เคยส่งข้อมูลมาเลย — สต็อกที่แอดมินใช้คือข้อมูลตอนตั้งค่าครั้งแรก (ต้องให้เดฟตั้ง webhook)"
@@ -2540,7 +2548,7 @@ export default {
         const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
         const nm2id = NM2ID; // ตารางจับคู่ ชื่อกลิ่น→รหัสรุ่นมินิแอพ (ฝังในโค้ด ไม่ต้อง seed)
         // รวมยอดต่อรุ่น (product id) → รุ่นไหนรวมแล้ว > 0 = มีของ
-        const bufA = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+        const bufA = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
         const total = {};
         for (const nm in nm2id) { const id = nm2id[nm]; total[id] = (total[id] || 0) + (sm[nm] > bufA ? sm[nm] : 0); }
         const out = {};
@@ -2554,7 +2562,7 @@ export default {
       const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
       try {
         const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
-        const bufB = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+        const bufB = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
         const norm = (s) => s.trim().replace(/\s+/g, " ").toLowerCase();
         const out = {};
         for (const nm in NM2ID) {
@@ -2576,7 +2584,7 @@ export default {
       const CORS = { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=60" };
       try {
         const sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
-        const buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+        const buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
         const out = {};
         for (const model in FLAVORS) {
           const fl = FLAVORS[model].f || [];
@@ -3625,7 +3633,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         //   ผลคือ รุ่นที่เหลือกลิ่นละ 1 ชิ้น ยอดรวมไม่เป็น 0 → ไม่ถูกใส่ในลิสต์ห้ามเสนอ
         //   เคสจริง 1/8: ถาม "แบรนด์ abc มีของมั้ย" → แอดมินตอบ "มีค่ะ ABC LEGO 20K / ABC TANK 22K"
         //   ทั้งที่ ABC หมดทั้งแบรนด์ = เสนอของที่ส่งให้ลูกค้าไม่ได้
-        const _buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10) || 0;
+        const _buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10) || 0;
         // 🐛 k119 (เจ้าของร้าน 3/8 23.34 น.): "เดี๋ยวมีเดี๋ยวหมด งงสต็อก"
         //   ต้นตอ: ระบบนับสต็อก 2 วิธีที่ไม่ตรงกัน —
         //     (ก) ตรงนี้ รวมยอดตาม "ชื่อขึ้นต้นในไฟล์คลัง" (RELX BOOST POD / RELX BOOST POD 5% = คนละก้อน)
@@ -3886,7 +3894,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
               // k109 (เคสจริง 2/8 20.50 น.): "ตอนแรกบอกมี พอสั่งบอกหมด" — บรรทัดนี้เคยใช้ >0 = มีของ
               //   แต่ตอนออกการ์ดใช้ "เหลือ ≤ กันชน = หมด" → ของเหลือ 1 ชิ้น AI บอกมี สั่งจริงบอกหมด
               //   แก้: ใช้กันชนเดียวกันทุกจุด
-              const _bufN = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+              const _bufN = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
               stockNote = "\n\n# สต็อกจริงตอนนี้ (ข้อมูลภายใน — อัพเดตอัตโนมัติจากคลัง เชื่อข้อมูลนี้เหนือกว่ารายการสินค้า)\n" +
                 hit.map(nm => "- " + nm + ": " + (sm[nm] > _bufN ? "มีของ (จำนวนภายใน " + sm[nm] + " — ห้ามบอกลูกค้า)" : "❌ หมด")).join("\n") +
                 "\nกติกา: อ่านชื่อรุ่น+กลิ่นในแต่ละบรรทัดให้ตรงเป๊ะ ⛔ ห้ามเอาสถานะ (มีของ/หมด) ของรุ่นหรือกลิ่นหนึ่งไปตอบแทนอีกอันเด็ดขาด — เช่น 'MARBO 9K - องุ่น' กับ 'MARBO 9K - องุ่นลิ้นจี่' คนละตัวกัน ห้ามกุเอง ถ้ารุ่น/กลิ่นที่ลูกค้าพูดถึงไม่มีในรายการนี้แบบตรงตัว ให้ตอบ 'เดี๋ยวทีมงานเช็คสต็อกและยืนยันให้อีกครั้งนะคะ 🙏🏻' ถ้ากลิ่นที่ลูกค้าสั่งหมด ให้แจ้งว่าหมดชั่วคราวและแนะนำกลิ่นที่ยังมีของแทน\n⛔⛔ ความลับบริษัท: 'จำนวนภายใน' ใช้เช็คว่าพอส่งไหมเท่านั้น ห้ามบอกตัวเลขจำนวนสต็อกให้ลูกค้าเด็ดขาด — ตอบได้แค่ 'กลิ่นนี้มีค่ะ' / 'กลิ่นนี้หมดค่ะ' ถ้าลูกค้าถามว่ามีกี่ชิ้น/เหลือเท่าไหร่ ตอบว่า 'มีพร้อมส่งค่ะ 💕' (ถ้าเหลือน้อยกว่าที่ลูกค้าจะสั่ง ให้บอกว่า 'ตอนนี้มีจำนวนจำกัด เดี๋ยวทีมงานเช็คให้อีกครั้งนะคะ' โดยไม่บอกตัวเลข)";
@@ -3899,7 +3907,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       try {
         if (env.CONV) {
           smForHint = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
-          bufForHint = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+          bufForHint = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
         }
       } catch (e) {}
       smForQR = smForHint; bufForQR = bufForHint;   // เก็บไว้ให้ปุ่ม Quick Reply ใช้ตอนส่งข้อความ
@@ -4162,7 +4170,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
       if (/หมดทุกกลิ่น|หมดทั้งรุ่น|หมดหมดทุก|ไม่เหลือกลิ่นไหนเลย/.test(reply)) {
         try {
           const _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
-          const _bf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10) || 0;
+          const _bf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10) || 0;
           // หารุ่นที่ถูกเอ่ยในคำตอบ แล้วเช็คว่าจริงไหมว่าหมดทุกกลิ่น
           for (const m in FLAVORS) {
             if (m.length < 5 || reply.indexOf(m) === -1) continue;
@@ -4309,7 +4317,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         // ⚠️ อ่านสต็อกจาก KV ตรงนี้เอง — ตัวแปร smForHint อยู่คนละบล็อก เรียกตรงๆ จะ ReferenceError
         let _sm = null, _buf = 1;
         if (_intro && _bullets === 0 && _hintModels.length) {
-          try { if (env.CONV) { _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); _buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10); } } catch (e) { }
+          try { if (env.CONV) { _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); _buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) { }
         }
         if (_intro && _bullets === 0 && _hintModels.length && _sm) {
           const _mdl = _hintModels[0];
@@ -4621,7 +4629,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         if (env.CONV) {
           const smChk = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
           // 🛡 กันชนสต็อก: เหลือน้อยกว่า/เท่ากับ N ชิ้น = ถือว่าไม่พร้อมขาย (มักเป็นเศษค้างในระบบ ไม่ใช่ของจริง)
-          const buf = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+          const buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
           // ⏱ กันขายของที่ "ข้อมูลสต็อกเก่าเกินไป" (เปิด/ปิดที่ /stockage?key=...&set=ชั่วโมง | 0 = ปิด)
           const maxAgeH = parseInt((await env.CONV.get("stockmaxage")) || "0", 10);
           const tsMap = maxAgeH ? JSON.parse((await env.CONV.get("stockts")) || "{}") : null;
@@ -4676,7 +4684,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
         try {
           if (env.CONV) {
             const _smB = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
-            const _bufB = parseInt((await env.CONV.get("stockbuffer")) || "1", 10);
+            const _bufB = parseInt((await env.CONV.get("stockbuffer")) || "3", 10);
             const _nq = normTH(String(outOfStock.flavor).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
             let _fk = FLAVORS[outOfStock.model] ? outOfStock.model : null;
             if (!_fk) for (const k in FLAVORS) if (normTH(k) === normTH(outOfStock.model)) { _fk = k; break; }
