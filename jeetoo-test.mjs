@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1537,9 +1537,30 @@ async function memTests() {
     sent = []; aiCalled = false;
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'image', id: '99' } }, env, 'TOKEN', 'v20');
     const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
-    T.push({ n: 105, name: 'k80 ส่งรูปตอนรอโอน → เข้าทางสลิปเลย ไม่เรียก vision ไม่เมินลูกค้า',
-      ok: !aiCalled && /สลิป/.test(txt) && !/เข้าใจคำถามไม่ตรง|cutt\.ly/.test(txt),
-      why: 'ai=' + aiCalled + ' out=' + txt.slice(0, 70) });
+    // k156: เดิมเทสนี้ยืนยันว่า "ห้ามเรียก vision" — แต่นั่นคือต้นเหตุบั๊กเคส JW 3/8 23.58
+    //   (รูปเมนูโดนเหมาเป็นสลิปหมด) ตอนนี้ให้ vision ดูก่อนเสมอ
+    //   สิ่งที่ต้องกันคือ "ผลลัพธ์" ไม่ใช่ "วิธีการ": ลูกค้าโอนเงินแล้วต้องไม่โดนเมินเด็ดขาด
+    T.push({ n: 105, name: 'k80 ส่งรูปตอนรอโอน + vision ดูไม่ออก → ยังเข้าทางสลิป ไม่เมินลูกค้า',
+      ok: /สลิป/.test(txt) && !/เข้าใจคำถามไม่ตรง|cutt\.ly/.test(txt),
+      why: 'out=' + txt.slice(0, 70) });
+  }
+
+  // ── k156 (เคสจริง 3/8 23.58 JW): รอโอนค้างอยู่ แต่ลูกค้าส่ง "รูปเมนู" มาถามกลิ่นต่อ ──
+  //    ต้องตอบเรื่องสินค้า ⛔ ห้ามตอบว่า "ได้รับสลิปแล้ว" และห้ามเด้งเคสด่วนปลอมเข้าหลังบ้าน
+  {
+    store = new Map();
+    store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K156';
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: 'รวมยอดชำระ 1400', items: [], t: Date.now(), status: 'รอโอน 💰', uid }));
+    sent = []; aiCalled = false;
+    const prevReply = aiReply;
+    aiReply = 'จากรูปเห็นเป็น DUAL SMASH 20K ค่ะ 💕 กลิ่นที่วงไว้คือ ชาหลงจิน กับ สตรอว์เบอร์รี่ รับอย่างละกี่ชิ้นดีคะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'image', id: '98' } }, env, 'TOKEN', 'v20');
+    const txt2 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    aiReply = prevReply;
+    T.push({ n: 106.5, name: 'k156 รอโอนค้าง + ส่งรูปเมนู → ตอบเรื่องสินค้า ห้ามตอบว่าเป็นสลิป',
+      ok: !/ได้รับสลิป|ตรวจอัตโนมัติไม่สำเร็จ|QR/.test(txt2) && /DUAL SMASH|กลิ่น/.test(txt2),
+      why: 'out=' + txt2.slice(0, 90) });
   }
   {
     // k80: ไม่มีออเดอร์ → รูปยังไปทาง vision ตามปกติ
@@ -1730,6 +1751,32 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k156: มีออเดอร์รอโอนค้าง ห้ามเหมาว่าทุกรูปคือสลิป ═══
+//   เคสจริง 3/8 23.58 (JW): สั่ง BOOST POD ไว้ (รอโอน) แล้วส่งรูปเมนู BIG POD วงกลิ่นไว้มาถามต่อ
+//   → "ได้รับสลิปแล้วนะคะ ระบบตรวจอัตโนมัติไม่สำเร็จ" + เคสด่วนปลอม "code 1007: รูปภาพไม่มี QR Code"
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+
+  // vision อ่านออกว่าเป็นเมนู/สินค้า → ห้ามเหมาเป็นสลิป
+  t(246, 'เคสจริง: vision อ่านเมนูที่วงไว้ออก → ไม่ใช่สลิป',
+    slipVisionClear('จากรูปเห็นเป็น DUAL SMASH 20K ค่ะ 💕 กลิ่นที่วงไว้คือ ชาหลงจิน กับ สตรอว์เบอร์รี่ รับอย่างละกี่ชิ้นดีคะ') === true, 'ยังโดนเหมาเป็นสลิป');
+  t(247, 'vision อ่านรูปสินค้าจริงออก → ไม่ใช่สลิป',
+    slipVisionClear('จากรูปเห็น M SWITCH 15K และ RELX BOOST POD ค่ะ สนใจตัวไหน กลิ่นอะไร กี่ชิ้นดีคะ') === true, 'ยังโดนเหมาเป็นสลิป');
+  t(248, 'vision ขอให้ถ่ายใหม่เพราะเบลอ (พูดถึงรุ่น) → ไม่ใช่สลิป',
+    slipVisionClear('รบกวนถ่ายให้เห็นชื่อรุ่นบนกล่องชัดๆ อีกครั้ง หรือพิมพ์ชื่อรุ่นมาก็ได้นะคะ 🙏🏻') === true, 'ยังโดนเหมาเป็นสลิป');
+
+  // ⚠️ ห้ามถอดตาข่าย k80 — สลิปจริงที่ vision อ่านไม่ออก ยังต้องเข้าทางตรวจสลิป
+  t(249, 'k80 ไม่ถอยหลัง: vision ตอบว่าง → ยังถือเป็นสลิป', slipVisionClear('') === false, 'สลิปจริงหลุด = ลูกค้าโอนแล้วโดนเมิน');
+  t(250, 'k80 ไม่ถอยหลัง: vision ตอบสั้นจนไม่มีเนื้อหา → ยังถือเป็นสลิป', slipVisionClear('ไม่ทราบค่ะ') === false, 'สลิปจริงหลุด');
+  t(251, 'k80 ไม่ถอยหลัง: vision ตอบกำกวมไม่พูดถึงรุ่น/กลิ่น → ยังถือเป็นสลิป', slipVisionClear('ขออภัยค่ะ ระบบขัดข้องชั่วคราว ลองใหม่อีกครั้งนะคะ') === false, 'สลิปจริงหลุด');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[รูป/สลิป]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[รูป/สลิป]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k155: ห้ามอ้างถึงรูปที่ลูกค้าไม่เคยส่ง ═══
 //   เคสจริง 3/8 23.51 (C•): ลูกค้าพิมพ์ "Relx" แล้ว "รุ่นนี้" ติดกัน → "Relx" หายจากความจำ (ความจำถูกทับ)
 //   → AI เห็นแค่ [แอดมิน: ส่งรูปสินค้ามาได้เลยค่ะ] [ลูกค้า: รุ่นนี้] → กุเองว่า "แอดมินไม่เห็นรูปที่ส่งมานะคะ"
