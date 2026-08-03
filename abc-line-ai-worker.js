@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k141-brandguard";
+const BUILD = "2026-08-03-k143-catguard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -4376,6 +4376,52 @@ async function handleEvent(ev, env, TOKEN, shopId) {
                 + (rows.length > 10 ? "\n• (และอีก " + (rows.length - 10) + " รุ่น)" : "")
                 + "\n\nสนใจรุ่นไหน เดี๋ยวแอดมินลิสต์กลิ่นให้เลยค่ะ ✨"
               : "ขออภัยค่ะ 🙏🏻 ตอนนี้ " + _want + " หมดชั่วคราวทุกรุ่นเลยนะคะ\nสนใจแบรนด์อื่นไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕";
+          }
+        }
+      } catch (e) {}
+      // 🗂 k143 (เคสจริง 3/8): ลูกค้าถาม "มีหัวแบบสูบแล้วทิ้งไหม" → บอทตอบ "MARBO 9K เป็นพอตใช้แล้วทิ้ง"
+      //   MARBO 9K = พอตทั้งแท่ง **ไม่ใช่หัว** → ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน
+      //   ด่านระดับที่ 4 (หมวด) — ครบชุด: กลิ่น k125 · รุ่น k117/k126/k140 · แบรนด์ k141 · หมวด k143
+      //   หลักเดิม: ดักที่ "ความขัดแย้ง" (หมวดที่ถาม vs หมวดของรุ่นที่ตอบ) ตัดสินด้วย catOf เท่านั้น ห้ามเดาจากชื่อ (k106c)
+      try {
+        const _cm = String(msgText || "");
+        const _askHead = /หัว(?!หิน|ข้อ|ใจ|เรื่อง|หน้า)/.test(_cm);              // หัวพอต/หัวน้ำยา/หัวเติม (กันคำว่า หัวหิน ฯลฯ)
+        const _askDisp = /(?:ใช้|สูบ)\s*แล้ว\s*ทิ้ง|ใช้ทิ้ง|แบบทิ้ง|disposable/i.test(_cm);
+        const _askIqos = /ไส้บุหรี่|terea|ทีเรีย/i.test(_cm);
+        // ลูกค้าเอ่ยชื่อรุ่นเอง = รู้อยู่แล้วว่าจะเอาอะไร → ปล่อยให้ด่านระดับรุ่น (k117/k126/k140) ทำงานแทน
+        let _namedMdl = false; try { _namedMdl = !!_MODEL_IN(_cm); } catch (e) {}
+        // "หัว" ชนะ "ทิ้ง" — เคสจริงลูกค้าพิมพ์ "หัวแบบสูบแล้วทิ้ง" = อยากได้ "หัว" (ของร้านเป็นแบบเติมเท่านั้น)
+        const _wantC = _askHead ? ["smallpod", "bigpod"] : _askDisp ? ["disp"] : _askIqos ? ["iqos"] : null;
+        if (_wantC && !_namedMdl) {
+          const _catSafe = (k) => { try { return catOf(k); } catch (e) { return "other"; } };
+          const _inReply = [];
+          for (const k in FLAVORS) if (k.length >= 5 && reply.indexOf(k) !== -1) _inReply.push(k);
+          const _rightC = _inReply.filter(k => _wantC.indexOf(_catSafe(k)) !== -1);
+          const _wrongCat = _inReply.filter(k => _wantC.indexOf(_catSafe(k)) === -1);
+          // ขัดแย้งจริงเท่านั้น: มีการเอ่ยรุ่น แต่ "ไม่มีสักรุ่น" อยู่ในหมวดที่ลูกค้าถาม
+          if (_inReply.length && !_rightC.length && _wrongCat.length) {
+            console.log("K143_WRONG_CATEGORY ถามหมวด=" + _wantC.join("/") + " ตอบ=" + _wrongCat.join(","));
+            const _sm3 = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+            const _bf3 = parseInt((await env.CONV.get("stockbuffer")) || "3", 10) || 0;
+            const _rows3 = [];
+            for (const k in FLAVORS) {
+              if (_wantC.indexOf(_catSafe(k)) === -1) continue;
+              const fl = FLAVORS[k].f || [];
+              const left = fl.length
+                ? fl.filter(f => { let q = null; try { q = findStockForItem(_sm3, k, f); } catch (e) {} return q === null || q > _bf3; }).length
+                : 1;
+              if (left) _rows3.push("• " + k + " (" + FLAVORS[k].p + " บาท)");
+            }
+            const _lbl = _askHead ? "หัวพอต (แบบเติม ใช้คู่กับเครื่อง)" : _askDisp ? "พอตใช้แล้วทิ้ง (ทั้งแท่ง ไม่ต้องใช้เครื่อง)" : "ไส้บุหรี่ IQOS";
+            // ลูกค้าถาม "หัว + สูบแล้วทิ้ง" พร้อมกัน → อธิบายความต่างก่อน กันเข้าใจผิดซื้อผิดประเภท
+            const _note3 = (_askHead && _askDisp)
+              ? "ขออนุญาตแจ้งก่อนนะคะ 🙏🏻 หัวพอตของทางร้านเป็นแบบเติม ใช้คู่กับเครื่องค่ะ ส่วนแบบสูบแล้วทิ้งจะเป็นพอตทั้งแท่ง ไม่ต้องใช้เครื่องนะคะ\n\n"
+              : "";
+            reply = _rows3.length
+              ? _note3 + _lbl + " ที่มีพร้อมส่งตอนนี้ค่ะ 💕\n" + _rows3.slice(0, 10).join("\n")
+                + (_rows3.length > 10 ? "\n• (และอีก " + (_rows3.length - 10) + " รุ่น)" : "")
+                + "\n\nสนใจรุ่นไหน เดี๋ยวแอดมินลิสต์กลิ่นให้เลยค่ะ ✨"
+              : _note3 + "ขออภัยค่ะ 🙏🏻 ตอนนี้" + _lbl + " หมดชั่วคราวค่ะ\nสนใจแบบอื่นไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕";
           }
         }
       } catch (e) {}
