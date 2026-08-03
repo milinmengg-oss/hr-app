@@ -302,6 +302,23 @@ async function sendExpFee(uid,btn){
     loadQueue(); refresh();
   }catch(e){ btn.disabled=false; btn.textContent='ส่งให้ลูกค้า'; alert('ส่งไม่สำเร็จ ลองใหม่นะคะ'); }
 }
+// 📦 k124: แอดมินวางเลขพัสดุ → ระบบส่งให้ลูกค้าเอง + จำไว้ตอบ "ของถึงไหน" ทีหลัง
+//   (คำถามอันดับ 1 ที่ระบบเคยตอบไม่ได้ — เจอ 8,620 ครั้งในแชทร้านหลัก)
+async function sendTrack(uid,bid,btn){
+  const inp=document.getElementById('tk_'+bid), sel=document.getElementById('tc_'+bid);
+  const no=String(inp&&inp.value||'').trim().toUpperCase().replace(/\s+/g,'');
+  if(!/^[A-Z0-9-]{9,20}$/.test(no)){ alert('เลขพัสดุไม่ถูกต้องนะคะ 🙏\n\nต้องยาว 9-20 ตัว เป็นตัวเลข/ตัวอักษรอังกฤษเท่านั้น\nที่กรอกมา: '+(no||'(ว่าง)')); if(inp)inp.focus(); return; }
+  const c=(sel&&sel.value)||'flash';
+  if(!confirm('ส่งเลขพัสดุให้ลูกค้าเลยไหมคะ?\n\nเลข: '+no+'\nขนส่ง: '+(c==='kerry'?'Kerry':'Flash')+'\n\nระบบจะส่งเลข + ลิงก์เช็คสถานะให้ลูกค้าทันที')) return;
+  btn.disabled=true; btn.textContent='กำลังส่ง...';
+  try{
+    const r=await (await fetch(q('/track?uid='+encodeURIComponent(uid)+'&no='+encodeURIComponent(no)+'&c='+c))).json();
+    if(r['ผล']&&/❌/.test(r['ผล'])){ btn.disabled=false; btn.textContent='ส่งเลขพัสดุ'; alert(r['ผล']); return; }
+    btn.textContent='ส่งแล้ว ✅';
+    alert(r['ผล']||'ส่งเลขพัสดุให้ลูกค้าแล้วค่ะ ✅');
+    refresh();
+  }catch(e){ btn.disabled=false; btn.textContent='ส่งเลขพัสดุ'; alert('ส่งไม่สำเร็จ ลองใหม่นะคะ'); }
+}
 function markDone2(uid,el){
   const card=el&&el.closest?el.closest('.qcard'):null;
   if(card&&card.classList.contains('urgent')){
@@ -350,6 +367,11 @@ async function loadOrders(data){
         +'<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'
         +(chips?'<div class="chips">'+chips+'</div>':'')
         +(bad?'<button class="oack" onclick="ackBad(\'c_'+bid+'\')">🔓 ฉันเช็คยอดเงินเข้าแล้ว — ปลดล็อกปุ่มลงออเดอร์</button>':'')
+        // 📦 k124: ก๊อปเลขพัสดุจาก XSelly มาวางตรงนี้ → ระบบส่งให้ลูกค้า + จำไว้ตอบ "ของถึงไหน" เอง
+        +'<div class="expbox">📦 เลขพัสดุ (ก๊อปจาก XSelly มาวางได้เลย) — ระบบจะส่งให้ลูกค้าพร้อมลิงก์เช็คสถานะ'
+          +'<div class="exprow"><input type="text" placeholder="เช่น TH01234567890" id="tk_'+bid+'" style="flex:2">'
+          +'<select id="tc_'+bid+'"><option value="flash">Flash</option><option value="kerry">Kerry</option></select>'
+          +'<button class="expsend" onclick="sendTrack(\''+it.uid+'\',\''+bid+'\',this)">ส่งเลขพัสดุ</button></div></div>'
         +'<div class="orow"><button class="ocopy" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอก</button>'
         +'<button class="ochat" onclick="openChat()">💬 แชท</button>'
         +'<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
