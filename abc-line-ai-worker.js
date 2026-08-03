@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k128-fallback";
+const BUILD = "2026-08-03-k129-pickcarry";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -295,6 +295,34 @@ function carryModel(text, hist) {
         }
       } catch (e) {}
       return "";
+    }
+    // 🛒 k129 (เคสจริง 3/8 16.04): บอทลิสต์กลิ่น MARBO 9K ให้ → ลูกค้าตอบ "- เยลลี่ 1" (สั่งเลย)
+    //   ระบบไม่นับว่าเป็น "คำถามเรื่องของ" (CARRY_ASK_RE ไม่ผ่าน) → ลืมว่าคุยรุ่นไหนอยู่
+    //   → ไปค้นย้อนกลับว่า "กลิ่นเยลลี่มีรุ่นไหนบ้าง" แล้วถามลูกค้าใหม่ว่าเอารุ่นไหน = ถอยหลัง 1 ก้าว
+    //   กฎ: ลูกค้าพิมพ์ "ชื่อกลิ่น + จำนวน" ลอยๆ ทันทีหลังบอทลิสต์กลิ่นของรุ่นเดียว → คือสั่งรุ่นนั้น
+    {
+      const _t = String(text || "").trim();
+      const _isPick = /^[-•]?\s*[ก-๙a-z\s]{2,25}\s*\d{1,3}\s*(ชิ้น|อัน|แท่ง|หัว|ตัว)?$/i.test(_t) || /^[-•]\s*\S/.test(_t);
+      if (_isPick && Array.isArray(hist)) {
+        for (let i = hist.length - 1; i >= 0 && i >= hist.length - 2; i--) {
+          const m = hist[i];
+          if (!m || m.role !== "assistant") continue;
+          const c = String(m.content || "");
+          // บอทต้องเพิ่งลิสต์กลิ่นของ "รุ่นเดียว" เท่านั้น ถ้าลิสต์หลายรุ่นถือว่ากำกวม ไม่เดา
+          const models = [];
+          for (const k in FLAVORS) if (c.indexOf(k) !== -1) models.push(k);
+          if (models.length !== 1) break;
+          // และกลิ่นที่ลูกค้าพิมพ์ต้องมีอยู่จริงในรุ่นนั้น
+          const tn = normTH(_t);
+          const fl = (FLAVORS[models[0]] && FLAVORS[models[0]].f) || [];
+          const okF = fl.some(f => {
+            const nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+            return nb.length >= 3 && tn.indexOf(nb) !== -1;
+          });
+          if (okF) return " " + models[0];
+          break;
+        }
+      }
     }
     if (!CARRY_ASK_RE.test(String(text || ""))) return ""; // ไม่ได้ถามเรื่องของ ไม่ต้องยุ่ง
     if (!Array.isArray(hist) || !hist.length) return "";
