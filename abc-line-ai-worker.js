@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k125-cardguard";
+const BUILD = "2026-08-03-k126-infy";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -198,6 +198,12 @@ const TH_MODEL = [
   [/บูสพอต|บูสท์|boost\s*pod|รีแลค\s*บูส/i, "RELX BOOST POD"],
   [/พอตคลีย|พอ[ดต]\s*เคลีย(ร์)?|พ็อ[ดต]\s*เคลีย(ร์)?|เคลียร?18|pod\s*clear|รีแลค\s*คลีย|รีแล็?ค\s*เคลีย/i, "RELX POD CLEAR 18K"],
   [/รีแลค\s*อินฟิ|relx\s*infinity|อินฟินิตี้/i, "หัวพอต RELX INFINITY"],
+  // 🎯 k126: ตระกูล INFY มี 5 รุ่น — ต้องแยกให้ออกก่อนตกไปที่ "อินฟี่ลอยๆ = หัวพอต INFY PLUS"
+  //    เคสจริง 3/8: "อินฟี่ 20เค เหลือกลิ่นไหนมั่ง" → ระบบตอบ RELX SMASH GO 12K (คนละแบรนด์เลย)
+  [/(อินฟี่?|infy)\s*บาร์?\s*(โปร|pro)|infy\s*bar\s*pro/i, "INFY BAR PRO 20K"],
+  [/(อินฟี่?|infy)\s*บาร์\s*15\s*k|infy\s*bar\s*15/i, "INFY BAR 15K"],
+  [/(อินฟี่?|infy)\s*20\s*k/i, "INFY 20K"],
+  [/(อินฟี่?|infy)\s*12\s*k/i, "INFY 12K"],
   [/อินฟี่|infy\s*plus|อินฟี\s*พลัส/i, "หัวพอต INFY PLUS"],
   // k48: ถอด "เลโก้" ลอยๆ ออก — ร้านมีหัวแบบเติมน้ำยาเอง 3 ยี่ห้อ ห้ามเดาว่าเป็น ABC
   //   เคสจริง 31/7: ลูกค้าถาม "หัวเลโก้เหลืออะไรบ้าง" → ระบบล็อกเป็น ABC LEGO ตัวเดียว
@@ -249,9 +255,14 @@ function normTH(s){ return String(s||"").toUpperCase().replace(/[\s\-_.]/g,""); 
 // เคสจริง 1/8: ลูกค้าถาม "เอสโค่เข้าเมื่อไหร่" → แล้วถามต่อ "มีกลิ่นไรเหลือบ้าง"
 //   ข้อความหลังไม่มีชื่อรุ่น → ระบบไม่แนบสต็อกให้ → แอดมินตอบ "เดี๋ยวทีมงานเช็คให้" วนไปเรื่อยๆ
 // วิธีแก้: ถ้าข้อความนี้ถามเรื่องกลิ่น/ของ แต่ไม่ได้เอ่ยชื่อรุ่น → ย้อนดูบทสนทนาหา "รุ่นล่าสุดที่คุยกัน"
+// 🔤 k126 (เคสจริง 3/8 15.03): ลูกค้าพิมพ์ "อินฟี่ 20เค" — คนไทยเขียน K เป็น "เค"
+//   ระบบอ่านไม่ออก เลยจับได้แค่ "อินฟี่" ลอยๆ → ชี้ไปผิดรุ่น → ตอบ RELX SMASH GO 12K คนละเรื่อง
+//   แก้ที่ต้นทาง: แปลง "20เค" → "20K" ก่อนจับรุ่นทุกครั้ง (ครอบคลุม 9เค/12เค/15เค/20เค/25เค/30เค)
+const _K2 = (s) => String(s || "").replace(/(\d+)\s*(เค|ค่ะ?K)/gi, "$1K").replace(/(\d+)\s*เค/g, "$1K");
 const _MODEL_IN = (s) => {
   const raw = String(s || ""), nosp = raw.replace(/\s+/g, "");
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp)) return key;
+  const rk = _K2(raw), nk = _K2(nosp);
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(rk) || re.test(nk)) return key;
   const tn = normTH(raw);
   for (const k of FLAVOR_KEYS) if (normTH(k).length >= 4 && tn.indexOf(normTH(k)) !== -1) return k;
   return "";
@@ -677,7 +688,8 @@ function flavorHint(text, sm, buf){
   // k16: เทียบทั้งข้อความดิบและแบบตัดเว้นวรรค — ลูกค้าพิมพ์ "บูส พอต" (มีเว้นวรรค) ต้องจับได้เหมือน "บูสพอต"
   const raw = String(text || ""), nosp = raw.replace(/\s+/g, "");
   const dt = deTone(raw), dtn = deTone(nosp);   // k117: ตัดวรรณยุกต์ก่อนเทียบ
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(dt) || re.test(dtn)) add(key);
+  const kk = _K2(raw), kkn = _K2(nosp), kkd = _K2(dt), kkdn = _K2(dtn);   // k126: "20เค" → "20K"
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(dt) || re.test(dtn) || re.test(kk) || re.test(kkn) || re.test(kkd) || re.test(kkdn)) add(key);
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
   _hintModels = hits.slice();   // k16: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
   if (!hits.length) return "";
