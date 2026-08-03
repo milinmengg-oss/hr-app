@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k140-qtycarry";
+const BUILD = "2026-08-03-k141-brandguard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -4341,6 +4341,42 @@ async function handleEvent(ev, env, TOKEN, shopId) {
           reply = typeof _fee === "number"
             ? "รอบนี้จัดส่งด่วนตามหมุดที่แชร์ไว้แล้วนะคะ 📍\nค่าส่งด่วนของคุณลูกค้าคือ " + _fee + " บาทค่ะ 🛵\n\nนับจากรอบส่งออก รอรับสินค้าประมาณ 1-3 ชม. ค่ะ 💕"
             : "รับหมุดของคุณลูกค้าไว้แล้วนะคะ 📍 ทีมงานกำลังเช็คค่าส่งด่วนให้อยู่ค่ะ เดี๋ยวแจ้งราคาทันทีนะคะ 🛵💕";
+        }
+      } catch (e) {}
+      // 🏷 k141 (เคสจริง 3/8 19.30): ลูกค้าพิมพ์ "Relx ใช้ทิ้งมีอะไรบ้าง" → ระบบตอบลิสต์กลิ่น **MARBO 9K**
+      //   รอบก่อนหน้าก็ตอบ MARBO อีก ทั้งที่กำลังคุย RELX SPARTA 20K อยู่
+      //   ต้นเหตุ: ด่าน k117 กันได้เฉพาะตอนลูกค้าเอ่ย "รุ่น" เดียวชัดๆ
+      //           แต่ "relx" คือ **แบรนด์** ที่มีหลายรุ่น → ด่านไม่ทำงาน AI เลยหยิบรุ่นเก่าจากบทสนทนามาตอบ
+      //   กฎใหม่ (ระดับแบรนด์): ลูกค้าเอ่ยแบรนด์เดียว → คำตอบห้ามเป็นเรื่องแบรนด์อื่นล้วนๆ
+      try {
+        const _cust = String(msgText || "");
+        const _bIn = BRAND_TH.filter(([re]) => re.test(_cust)).map(([, b]) => b);
+        if (_bIn.length === 1) {
+          const _want = _bIn[0];
+          const _modelsInReply = [];
+          for (const k in FLAVORS) if (k.length >= 5 && reply.indexOf(k) !== -1) _modelsInReply.push(k);
+          const _brandOf = (k) => { const hit = BRAND_TH.find(([re]) => re.test(k)); return hit ? hit[1] : ""; };
+          const _wrong = _modelsInReply.filter(k => _brandOf(k) !== _want);
+          const _right = _modelsInReply.filter(k => _brandOf(k) === _want);
+          if (_modelsInReply.length && !_right.length && _wrong.length) {
+            console.log("K141_WRONG_BRAND ถาม=" + _want + " ตอบ=" + _wrong.join(","));
+            const _sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}"));
+            const _bf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10) || 0;
+            const rows = [];
+            for (const k in FLAVORS) {
+              if (_brandOf(k) !== _want) continue;
+              const fl = FLAVORS[k].f || [];
+              const left = fl.length
+                ? fl.filter(f => { let q = null; try { q = findStockForItem(_sm, k, f); } catch (e) {} return q === null || q > _bf; }).length
+                : 1;
+              if (left) rows.push("• " + k + " (" + FLAVORS[k].p + " บาท)");
+            }
+            reply = rows.length
+              ? "ของแบรนด์ " + _want + " ที่มีพร้อมส่งตอนนี้ค่ะ 💕\n" + rows.slice(0, 10).join("\n")
+                + (rows.length > 10 ? "\n• (และอีก " + (rows.length - 10) + " รุ่น)" : "")
+                + "\n\nสนใจรุ่นไหน เดี๋ยวแอดมินลิสต์กลิ่นให้เลยค่ะ ✨"
+              : "ขออภัยค่ะ 🙏🏻 ตอนนี้ " + _want + " หมดชั่วคราวทุกรุ่นเลยนะคะ\nสนใจแบรนด์อื่นไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕";
+          }
         }
       } catch (e) {}
       // 🤝 k133: ด่านจับ "ขัดกันเองในข้อความเดียว"
