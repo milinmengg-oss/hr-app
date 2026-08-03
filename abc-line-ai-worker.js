@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k124-tracking";
+const BUILD = "2026-08-03-k125-cardguard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -446,6 +446,23 @@ function flavorIndex() {
 //   เจ้านายพิมพ์เร็ว/พิมพ์ย่อ — "Ks สัปรส" (=KS สับปะรด ตก บ+ะ) · "โบองุ่น" (=มาโบ) · "วัปรส"
 //   ระบบจับคำไม่ได้เลย → วน "ขออนุญาตทวนอีกครั้งนะคะ" ซ้ำๆ = ลูกค้าจริงก็หนีเหมือนกัน
 //   แก้: เดาคำที่สะกดเพี้ยนด้วยระยะแก้ไข (edit distance) ถ้าใกล้พอ ให้ "ถามยืนยัน" ⛔ ไม่ใช่สั่งเลย
+// k125: ระยะแก้ไขแบบไม่จำกัดผลต่างความยาว — ใช้ตอนเทียบคำที่ลูกค้าพิมพ์ตกหลายตัว
+//   (_lev ด้านล่างตัดจบไวเพื่อความเร็ว คืน 9 ทันทีถ้าความยาวต่างเกิน 2 ซึ่งใช้กับเคสนี้ไม่ได้)
+function _levFull(a, b) {
+  a = String(a || ""); b = String(b || "");
+  const n = a.length, m = b.length;
+  if (!n) return m; if (!m) return n;
+  if (n > 40 || m > 40) return 99;
+  let prev = Array.from({ length: m + 1 }, (_, j) => j);
+  for (let i = 1; i <= n; i++) {
+    const cur = [i];
+    for (let j = 1; j <= m; j++) {
+      cur[j] = a[i - 1] === b[j - 1] ? prev[j - 1] : 1 + Math.min(prev[j - 1], prev[j], cur[j - 1]);
+    }
+    prev = cur;
+  }
+  return prev[m];
+}
 function _lev(a, b) {                       // ระยะแก้ไข (ตัดจบไวถ้าเกิน 2)
   const n = a.length, m = b.length;
   if (Math.abs(n - m) > 2) return 9;
@@ -4405,6 +4422,66 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
     if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
       let items = parseItems(reply);
+      // 🛒 k125 (เคสจริง 3/8 14.16 — เจ้าของร้านชี้): ลูกค้าพิมพ์ "ตังแท้ก้ได้ครับ" (ตอบเรื่องแท้/โคลน)
+      //   แต่ระบบ **เลือกกลิ่นให้เอง** (บลูไอซ์ + องุ่นว่านหางจระเข้) แล้วออกการ์ด 740 บาท
+      //   = การ์ดที่ลูกค้ากดโอนได้จริง แต่ของในนั้นลูกค้าไม่เคยสั่ง → เสียเงินจริง เสียความเชื่อใจ
+      //   กฎเหล็ก: ทุกกลิ่นในการ์ด **ลูกค้าต้องเคยพิมพ์เอง** อย่างน้อยหนึ่งครั้ง
+      //   ข้อยกเว้นเดียว: บอทเพิ่งเสนอกลิ่น "เดียว" แล้วลูกค้าตอบรับ (เอาเลย/รับ/โอเค) → ถือว่าเลือกแล้ว
+      try {
+        if (items.length) {
+          const _rawSaid = [String((ev.message && ev.message.text) || "")]
+            .concat((history || []).filter(h => h && h.role === "user").map(h => typeof h.content === "string" ? h.content : ""));
+          const _said = _rawSaid.map(x => normTH(x)).join(" ");
+          // ตัดเป็นคำๆ จากข้อความ "ดิบ" (normTH ตัดช่องว่างทิ้ง ถ้าตัดหลังจะกลายเป็นก้อนเดียว)
+          const _saidTok = _rawSaid.join(" ").split(/[\s,·|/]+/).map(x => normTH(x)).filter(Boolean);
+          // ข้อความล่าสุดของบอท (ไว้เช็คกรณี "เสนอกลิ่นเดียวแล้วลูกค้ารับ")
+          let _lastBot = "";
+          for (let i = (history || []).length - 1; i >= 0; i--) {
+            const h = history[i];
+            if (h && h.role === "assistant" && typeof h.content === "string") { _lastBot = h.content; break; }
+          }
+          const _yes = /^(เอา|เอาเลย|รับ|รับเลย|ตกลง|โอเค|ok|okay|ได้|ได้เลย|จัดเลย|เอาอันนั้น|ตามนั้น|ยืนยัน)\b/i.test(String((ev.message && ev.message.text) || "").trim());
+          const _unconfirmed = [];
+          for (const it of items) {
+            const bare = String(it.flavor || "").replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+            if (!bare) continue;
+            const nb = normTH(bare);
+            if (nb.length >= 2 && _said.indexOf(nb) !== -1) continue;          // ลูกค้าพิมพ์เอง ✅
+            // ✍️ ลูกค้าพิมพ์ตกตัวอักษร ("สตอเบอรี่" = สตรอว์เบอร์รี่) ก็ต้องนับว่าเลือกเองแล้ว
+            //    ไม่งั้นด่านนี้จะไปขวางลูกค้าที่สั่งจริงแต่สะกดไม่เป๊ะ = เสียลูกค้าฟรีๆ
+            //    ⚠️ ใช้ _lev ตรงๆ ไม่ได้ เพราะมันคืน 9 ทันทีถ้าความยาวต่างเกิน 2
+            //       ("สตอเบอรี่" สั้นกว่า "สตรอว์เบอร์รี่" ถึง 5 ตัว) → ต้องวัดจาก "โครงพยัญชนะ" แบบไม่จำกัดความยาว
+            let _typoOk = false;
+            try {
+              if (nb.length >= 4) {
+                const _sk = _skel(nb);
+                const _lim = Math.max(2, Math.ceil(_sk.length * 0.4));
+                for (const tk of _saidTok) {
+                  if (tk.length < 3) continue;
+                  if (_levFull(_skel(tk), _sk) <= _lim) { _typoOk = true; break; }
+                }
+              }
+            } catch (e) {}
+            if (_typoOk) continue;
+            // บอทเสนอกลิ่นนี้ "ตัวเดียว" แล้วลูกค้าตอบรับ → ผ่าน
+            if (_yes && _lastBot) {
+              const fl = (FLAVORS[it.model] && FLAVORS[it.model].f) || [];
+              const inBot = fl.filter(f => _lastBot.indexOf(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim()) !== -1);
+              if (inBot.length === 1 && normTH(String(inBot[0]).replace(/\s*\d+(\.\d+)?%\s*$/, "")) === nb) continue;
+            }
+            _unconfirmed.push((it.model || "") + " " + bare);
+          }
+          if (_unconfirmed.length) {
+            console.log("K125_CARD_BLOCKED ลูกค้าไม่ได้เลือกเอง: " + _unconfirmed.join(" · "));
+            const _mdl = items[0] && items[0].model ? items[0].model : "";
+            await lineReply(TOKEN, replyToken,
+              "ขออนุญาตเช็คให้ชัดก่อนนะคะ 🙏🏻 จะได้ไม่ผิดรายการค่ะ\n\n" +
+              (_mdl ? "รบกวนแจ้งกลิ่นที่ต้องการของ " + _mdl + " + จำนวน มาได้เลยค่ะ\n" : "รบกวนแจ้งกลิ่นที่ต้องการ + จำนวน มาได้เลยค่ะ\n") +
+              "(เช่น \"องุ่น 2 ชิ้น\") แล้วแอดมินจะสรุปยอดให้ทันทีค่ะ 💕", userId);
+            return;
+          }
+        }
+      } catch (e) {}
       // 💰 ลูกค้าขอ "ราคาส่ง" แต่บล็อกเป็น MARBO ของแท้ → เรทส่งมีเฉพาะโคลน ต้องถามก่อน ห้ามออกการ์ดราคาแท้
       try {
         const wantWholesale = /ราคาส่ง|เรทส่ง|ขายส่ง|ราคาขายส่ง|เรทขายส่ง|ยกลัง|ราคายกโหล/.test(
