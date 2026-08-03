@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k119-stockone";
+const BUILD = "2026-08-03-k120-nosilence";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2458,7 +2458,31 @@ export default {
     const events = body.events || [];
 
     // ตอบ 200 ให้ LINE ทันที แล้วประมวลผลเบื้องหลัง
-    ctx.waitUntil(Promise.all(events.map(ev => handleEvent(ev, env, TOKEN, shopId))));
+    // 🛟 k120 (เคสจริง 2/8 23.09 น.): ลูกค้าถาม "ชานมชาจีเป็นยังไงคะ" แล้วระบบเงียบสนิท
+    //   ไม่มีคำตอบ ไม่เข้าคิวแอดมิน และไม่ถูกบันทึกในประวัติเลย = ลูกค้าหายไปโดยไม่มีใครรู้
+    //   (เทสโค้ดแล้วไม่ crash → สาเหตุอยู่นอกโค้ด เช่น AI/เครือข่ายสะดุดชั่วขณะ)
+    //   ตาข่ายชั้นสุดท้าย: ไม่ว่าพังตรงไหน ห้ามเงียบ — ต้องตอบลูกค้า + เด้งเข้าคิวให้คนดูแลเสมอ
+    const safeHandle = async (ev) => {
+      try {
+        await handleEvent(ev, env, TOKEN, shopId);
+      } catch (err) {
+        console.log("HANDLER_CRASH " + String((err && err.message) || err).slice(0, 200));
+        try {
+          const uid = (ev.source && ev.source.userId) || "";
+          const rt = ev.replyToken;
+          if (rt) await lineReply(TOKEN, rt, "รอสักครู่นะคะ 🙏🏻 ทีมงานกำลังเข้ามาดูแลให้ค่ะ 💕", uid);
+          if (uid && env.CONV) {
+            let nm = ""; try { nm = await lineProfileName(TOKEN, uid); } catch (e2) {}
+            await env.CONV.put("mute:" + shopId + ":" + uid, JSON.stringify({
+              uid, name: nm, reason: "⚠️ ระบบสะดุด ตอบอัตโนมัติไม่ได้ — แอดมินช่วยดูด่วน",
+              msg: String((ev.message && ev.message.text) || "[" + ((ev.message && ev.message.type) || "?") + "]").slice(0, 120),
+              t: Date.now()
+            }), { expirationTtl: 3600 });
+          }
+        } catch (e3) {}
+      }
+    };
+    ctx.waitUntil(Promise.all(events.map(ev => safeHandle(ev))));
     return new Response("OK", { status: 200 });
   }
 };
