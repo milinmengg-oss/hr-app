@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1751,6 +1751,36 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k157: รุ่น+กลิ่นอยู่เทิร์นก่อน เหลือแค่จำนวน → ต้องออกการ์ด ไม่ใช่ถามซ้ำ ═══
+//   เคสจริง 4/8 00.03-00.07 (m): บอกครบ 4 รอบ แชร์หมุดแล้ว คิดค่าส่ง 66 บาทแล้ว การ์ดไม่เคยออก
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const tag = h => /ห้ามลิสต์กลิ่นซ้ำ/.test(h) ? (/ออกบล็อกทวนคำสั่งซื้อได้เลย/.test(h) ? 'การ์ด' : 'ถามจำนวน')
+    : (/ลิสต์กลิ่นไม่เกิน 10/.test(h) ? 'ลิสต์กลิ่น' : '-');
+  // บอทเพิ่งยืนยันกลิ่นเดียวชัดๆ แล้วถามจำนวน
+  const H = [{ role: 'user', content: 'มาโบ ว่านหาง' },
+             { role: 'assistant', content: 'มีค่ะ 💕 MARBO 9K (350 บาท) กลิ่นองุ่นว่านหางจระเข้มีของพร้อมส่งค่ะ รับกี่ชิ้นดีคะ' }];
+  const run = s => tag(flavorHint(s + carryFlavor(s, H), stockmap, 1));
+
+  t(252, 'เคสจริง "1ชิ้น ส่งแกรปครับ" (บอกแค่จำนวน) → ต้องออกการ์ด', run('1ชิ้น ส่งแกรปครับ') === 'การ์ด', 'ได้ ' + run('1ชิ้น ส่งแกรปครับ') + ' = วนถามซ้ำ ออเดอร์ไม่ปิด');
+  t(253, 'เคสจริง "มาโบว่านท่าง 1ชิ้น" (สะกดเพี้ยน) → ต้องออกการ์ด', run('มาโบว่านท่าง 1ชิ้น') === 'การ์ด', 'ได้ ' + run('มาโบว่านท่าง 1ชิ้น'));
+  t(254, 'เคสจริง "มาโบว่านหาง 1 ชิ้น ส่งแกรป" → ต้องออกการ์ด', run('มาโบว่านหาง 1 ชิ้น ส่งแกรป') === 'การ์ด', 'ได้ ' + run('มาโบว่านหาง 1 ชิ้น ส่งแกรป'));
+  t(255, 'ยังไม่บอกจำนวน ("รับครับ") → ถามจำนวน ไม่เดาเป็น 1', run('รับครับ') === 'ถามจำนวน', 'ได้ ' + run('รับครับ'));
+
+  // ⚠️ ห้ามพากลิ่นเก่ามาทับเมื่อลูกค้าเปลี่ยนใจเอง
+  t(256, 'ลูกค้าเปลี่ยนกลิ่นเอง → ห้ามพากลิ่นเก่ามาทับ', carryFlavor('เอาองุ่นลิ้นจี่ 2 ชิ้น', H) === '', 'ทับกลิ่นที่ลูกค้าเพิ่งเปลี่ยน = ส่งผิดกลิ่น');
+  // ⚠️ บทเรียน k69/k150: ห้ามหยิบรุ่น/กลิ่นจากประโยคที่บอกว่าของหมด
+  t(257, 'บอทเพิ่งบอกว่ากลิ่นนั้นหมด → ห้ามพามา', carryFlavor('1 ชิ้น', [{ role: 'assistant', content: 'ขออภัยค่ะ MARBO 9K กลิ่นองุ่นว่านหางจระเข้ ของหมดชั่วคราวค่ะ' }]) === '', 'พากลิ่นที่หมดมาออกการ์ด');
+  t(258, 'บอทลิสต์หลายกลิ่น (ลูกค้ายังไม่เลือก) → ห้ามเดา', carryFlavor('1 ชิ้น', [{ role: 'assistant', content: 'MARBO 9K มีกลิ่น องุ่น · แตงโม · โคล่า ค่ะ รับกี่ชิ้นดีคะ' }]) === '', 'เดากลิ่นแทนลูกค้า');
+  t(259, 'เทิร์นล่าสุดเป็นของลูกค้า (ไม่ใช่บอท) → ไม่พาอะไรมา', carryFlavor('1 ชิ้น', [{ role: 'user', content: 'มาโบ' }]) === '', 'หยิบผิดฝั่ง');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ปิดการขาย]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ปิดการขาย]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k156: มีออเดอร์รอโอนค้าง ห้ามเหมาว่าทุกรูปคือสลิป ═══
 //   เคสจริง 3/8 23.58 (JW): สั่ง BOOST POD ไว้ (รอโอน) แล้วส่งรูปเมนู BIG POD วงกลิ่นไว้มาถามต่อ
 //   → "ได้รับสลิปแล้วนะคะ ระบบตรวจอัตโนมัติไม่สำเร็จ" + เคสด่วนปลอม "code 1007: รูปภาพไม่มี QR Code"
