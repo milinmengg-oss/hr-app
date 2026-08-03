@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1730,6 +1730,53 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k153: จีทูต้องรู้ว่าตอนนี้กี่โมง — ห้ามรับปากว่า "ยังทันรอบวันนี้" ตอนเลยรอบไปแล้ว ═══
+//   เคสจริง 3/8 23.14 (ลูกค้า B🦋A · ยืนยันด้วยแคปหน้าจอ LINE ว่าส่งถึงลูกค้าจริง):
+//   "หลัง 20.45 รอบส่งออก 10.30 วันถัดไปค่ะ **ตอนนี้ยังพอมีเวลาเหลืออยู่**" = ขัดกันเองในข้อความเดียว
+{
+  const T = [];
+  // เวลาไทย = UTC+7 → Date.UTC(...,16,14) = 23.14 น. เวลาไทย
+  const at = (h, m) => Date.UTC(2026, 7, 3, h - 7, m);
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+
+  t(206, 'เวลา 23.14 (เคสจริง) = เลยรอบส่งด่วนแล้ว', thTime(at(23, 14)).afterLast === true, 'ไม่รู้ว่าเลยรอบ');
+  t(207, 'เวลา 14.00 กลางวัน = ยังอยู่ในรอบ', thTime(at(14, 0)).afterLast === false, 'ดันคิดว่าเลยรอบ');
+  t(208, 'ขอบรอบ 20.45 พอดี = ยังทัน', thTime(at(20, 45)).afterLast === false, 'ตัดเร็วไป 1 นาที');
+  t(209, 'ขอบรอบ 20.46 = เลยรอบแล้ว', thTime(at(20, 46)).afterLast === true, 'ปล่อยผ่านหลังปิดรอบ');
+  t(210, 'ตี 3 (ร้านเปิดถึงตี 2-3) = เลยรอบแล้ว', thTime(at(3, 0)).afterLast === true, 'กลางดึกยังบอกว่าทัน');
+  t(211, 'เวลาแสดงผลถูกต้อง 23.14', thTime(at(23, 14)).hhmm === '23.14', 'ได้ ' + thTime(at(23, 14)).hhmm);
+
+  // ── ด่านขาออก: ประโยคที่เคยหลุดถึงลูกค้าจริง ต้องโดนตัด ──
+  const real = 'หลัง 20.45 น. รอบส่งด่วนจะออกเป็นรอบ 10.30 น. ของวันถัดไปค่ะ 🙏🏻\nตอนนี้ยังพอมีเวลาเหลืออยู่ รบกวนรอทีมงานแจ้งค่าส่งด่วนก่อนนะคะ 🛵💕';
+  const g1 = latePromiseGate(real, at(23, 14));
+  t(212, 'เคสจริง 23.14: ตัด "ตอนนี้ยังพอมีเวลาเหลืออยู่" ออก', g1.blocked && !/ยังพอมีเวลา/.test(g1.reply), 'ยังหลุดถึงลูกค้า');
+  t(213, 'เคสจริง 23.14: ยังคงประโยคที่ถูก (รอบ 10.30 วันถัดไป) ไว้', /10\.30/.test(g1.reply), 'ตัดประโยคที่ถูกทิ้งด้วย');
+  t(214, 'เคสจริง 23.14: บอกเวลาจริงให้ลูกค้ารู้', /23\.14/.test(g1.reply), 'ไม่บอกว่าตอนนี้กี่โมง');
+
+  const g2 = latePromiseGate('ใช่ค่ะ ถ้าชำระเงินและลงออเดอร์เรียบร้อยก่อน 20.45 น. รอบส่งด่วนจะออกภายในวันนี้ และได้รับภายใน 1-3 ชม. ค่ะ 🛵', at(23, 13));
+  t(215, 'เคสจริง 23.13: ตัดประโยคเงื่อนไข "ก่อน 20.45 น. จะออกภายในวันนี้"', g2.blocked && !/ก่อน\s*20\.45/.test(g2.reply), 'ยังรับปากว่าทันวันนี้');
+  t(216, 'เคสจริง 23.13: เหลือแต่ข้อความจริง ไม่เหลือเศษประโยคขาดหัว', !/^\s*(และ|แต่|ค่ะ)/.test(g2.reply), 'เหลือเศษประโยค: ' + g2.reply.slice(0, 30));
+
+  const g3 = latePromiseGate('ขออภัยที่ทำให้ผิดหวังนะคะ 🙏🏻 แต่ถ้าชำระเงินและลงออเดอร์เรียบร้อยก่อน 20.45 น. ยังทันรอบส่งด่วนวันนี้ค่ะ', at(23, 14));
+  t(217, 'เคสจริง "อ้าวนึกว่าจะได้คืนนี้" → ห้ามยืนยันซ้ำว่ายังทัน', g3.blocked && !/ยังทัน/.test(g3.reply), 'ยังยืนยันผิดซ้ำ');
+
+  // ── ห้ามด่านทำงานผิดเวลา (บทเรียน k146: ด่านกันมั่วกลายเป็นตัวสร้างความมั่วเอง) ──
+  const day = 'ถ้าชำระเงินก่อน 20.45 น. มีโอกาสได้รับภายในวันนี้ค่ะ 🛵';
+  t(218, 'กลางวัน 14.00: ห้ามแตะข้อความที่ถูกอยู่แล้ว', latePromiseGate(day, at(14, 0)).blocked === false && latePromiseGate(day, at(14, 0)).reply === day, 'ด่านทำงานผิดเวลา');
+  const other = 'MARBO 9K (350 บาท) มีกลิ่นองุ่นพร้อมส่งค่ะ 💕 รับกี่ชิ้นดีคะ';
+  t(219, 'ดึก 23.14: ข้อความที่ไม่เกี่ยวกับเวลา ห้ามโดนแตะ', latePromiseGate(other, at(23, 14)).reply === other, 'ไปตัดข้อความสินค้าทิ้ง');
+  t(220, 'ดึก 23.14: ประโยคอธิบายกฎที่ถูก ("หลัง 20.45...") ต้องผ่านได้', /หลัง 20\.45/.test(g1.reply), 'ตัดประโยคอธิบายกฎที่ถูกทิ้ง');
+
+  // ── หมายเหตุต่อท้ายทางลัดส่งด่วน (ก้อน exp.pending / exp.fee ที่เดิมไม่เช็คเวลาเลย) ──
+  t(221, 'lateNote ตอนดึก: บอกรอบถัดไป 10.30 น.', /10\.30/.test(lateNote(at(23, 14))), 'ไม่บอกรอบถัดไป');
+  t(222, 'lateNote กลางวัน: ต้องเงียบ (ไม่รบกวนลูกค้า)', lateNote(at(14, 0)) === '', 'โผล่ตอนกลางวัน');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[เวลา]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[เวลา]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ ทดสอบ "แยกความแรงนิโคติน" (k43) — จำลองคีย์สต็อกจริงของร้าน ═══
 function strengthTests() {
   const T = [];
@@ -1770,7 +1817,10 @@ for (const t of strengthTests()) {
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
 
-const TOTAL = CASES.length + 29;   // k70: +5 ข้อหมวดสินค้า+แนวกลิ่น
+// k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
+//   → ขึ้น "ผ่าน 204/110" คือตัวหารน้อยกว่าตัวผ่าน อ่านแล้วนึกว่าเทสพัง
+//   นับจากของจริงแทน: ผ่าน + ไม่ผ่าน = จำนวนเทสทั้งหมดเสมอ ไม่ต้องแก้มืออีก
+const TOTAL = pass + fails.length;
 
 console.log('\n' + '═'.repeat(60));
 console.log(`ผ่าน ${pass}/${TOTAL}` + (fails.length ? `  ${RED}ไม่ผ่าน ${fails.length} ข้อ${RESET}` : `  ${GRN}ครบทุกข้อ 🎉${RESET}`));
