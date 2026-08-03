@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1751,6 +1751,27 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k162: เปิดหลายร้าน — เพิ่มร้านด้วย env + หลังบ้านสลับร้านได้ ═══
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const E = { LINE_TOKEN_V20: 't', LINE_SECRET_V20: 's', LINE_TOKEN_V21: 't', LINE_SECRET_V21: 's', LINE_TOKEN_V22: 't' };
+
+  t(280, 'ร้านเดิม v20 ต้องใช้ได้เหมือนเดิม (ไม่ถอยหลัง)', !!shopOf(E, 'v20') && shopOf(E, 'v20').tokenEnv === 'LINE_TOKEN_V20', 'ร้านที่ใช้อยู่จริงพัง');
+  t(281, 'ร้านใหม่ตั้ง env ครบ → ใช้ได้เลย ไม่ต้องแก้โค้ด', !!shopOf(E, 'v21') && shopOf(E, 'v21').tokenEnv === 'LINE_TOKEN_V21', 'ต้องแก้โค้ดทุกครั้งที่เปิดร้าน');
+  t(282, '⛔ ตั้ง env ไม่ครบ (ขาด secret) → ห้ามเปิดใช้', shopOf(E, 'v22') === null, 'เปิดร้านที่ยังตั้งค่าไม่ครบ');
+  t(283, '⛔ ร้านที่ไม่มีอยู่จริง → ปฏิเสธ', shopOf(E, 'v99') === null, 'รับเว็บฮุคของร้านที่ไม่รู้จัก');
+  // ⚠️ ชื่อร้านถูกใช้เป็นทั้ง path เว็บฮุคและคำนำหน้าคีย์ใน KV → ต้องกันอักขระแปลก
+  t(284, '⛔ ชื่อร้านมีอักขระแปลก ("../v20") → ปฏิเสธ', shopOf(E, '../v20') === null, 'ชื่อร้านแปลกหลุดเข้าไปเป็นคีย์ KV');
+  t(285, '⛔ ชื่อร้านมีจุด/ขีด → ปฏิเสธ', shopOf(E, 'abc.v20') === null && shopOf(E, 'a-b') === null, 'ชื่อร้านแปลกหลุด');
+  t(286, 'รายชื่อร้านสำหรับหลังบ้าน = เฉพาะร้านที่ตั้งครบ', JSON.stringify(Object.keys(shopList(E)).sort()) === JSON.stringify(['v20', 'v21']), 'ได้ ' + Object.keys(shopList(E)).join(','));
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[หลายร้าน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[หลายร้าน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k160: สั่งของพร้อมบอก "ส่งแกรป" ในข้อความเดียว → ออเดอร์ต้องไม่หาย ═══
 {
   const T = [];

@@ -145,8 +145,9 @@ body{padding-bottom:96px!important;}          /* เว้นที่ให้�
 <body>
 <div class="box">
   <div class="card">
-    <h1><span class="dot" id="dot"></span> จีทู — ร้าน V20</h1>
+    <h1><span class="dot" id="dot"></span> <span id="shopname">จีทู — ร้าน V20</span></h1>
     <div class="status" id="status">กำลังเช็คสถานะ…</div>
+    <div id="shopbar" style="display:none;margin-top:12px;"></div>
     <div class="bell" id="bell"></div>
 
     <div id="keybox">
@@ -237,7 +238,43 @@ const $=id=>document.getElementById(id);
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
 function saveKey(){ KEY=$('key').value.trim(); if(!KEY){$('msg').textContent='ใส่รหัสก่อนค่ะ';return;} localStorage.setItem('g2key',KEY); init(); }
-const q=p=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+encodeURIComponent(KEY)+'&shop=v20';
+/* 🏪 k162: เลิกล็อก shop=v20 — เปิด 5 ร้านแล้วหลังบ้านต้องสลับร้านได้
+   ⚠️ สำคัญมาก: แอดมินต้องเห็นตลอดเวลาว่ากำลังดู "ร้านไหน" อยู่
+      ไม่งั้นจะเผลอปิดจีทู/ตอบลูกค้าผิดร้าน ซึ่งมองไม่ออกจากหน้าจอเลย */
+let SHOP=localStorage.getItem('g2shop')||'v20';
+let SHOPS_ALL=[];
+const q=p=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+encodeURIComponent(KEY)+'&shop='+encodeURIComponent(SHOP);
+async function loadShops(){
+  try{
+    const d=await (await fetch(W+'/ctl/shops?key='+encodeURIComponent(KEY))).json();
+    SHOPS_ALL=d['ร้าน']||[];
+  }catch(e){ SHOPS_ALL=[]; }
+  if(SHOPS_ALL.length && !SHOPS_ALL.some(function(s){return s['ร้าน']===SHOP;})) SHOP=SHOPS_ALL[0]['ร้าน'];
+  renderShopBar();
+}
+function renderShopBar(){
+  const el=$('shopbar'); if(!el) return;
+  if(SHOPS_ALL.length<2){ el.innerHTML=''; el.style.display='none'; return; }
+  el.style.display='';
+  el.innerHTML='<div style="font-size:12.5px;color:#9a9a9a;margin-bottom:6px;">🏪 กำลังดูร้าน</div>'
+    + SHOPS_ALL.map(function(s){
+        const on=s['ร้าน']===SHOP;
+        const warn=s['พร้อมเปิด'].indexOf('⛔')===0?' ⚠️':'';
+        return '<button class="cbtn '+(on?'stop':'go')+'" style="margin:3px 4px 3px 0;'+(on?'font-weight:700;':'opacity:.75;')+'" onclick="switchShop(\''+s['ร้าน']+'\')">'
+          +(on?'✅ ':'')+esc(s['ชื่อ'])+warn+'</button>';
+      }).join('');
+  const cur=SHOPS_ALL.filter(function(s){return s['ร้าน']===SHOP;})[0];
+  if(cur && cur['พร้อมเปิด'].indexOf('⛔')===0){
+    el.innerHTML+='<div style="margin-top:8px;padding:9px 11px;border-radius:9px;background:#3a2020;color:#ffb4b4;font-size:12.5px;line-height:1.6;">'
+      +'⚠️ ร้านนี้ยังตั้งค่าไม่ครบ<br>• ข้อมูลโอน: '+esc(cur['ข้อมูลโอน'])+'<br>• ตรวจสลิป: '+esc(cur['ตรวจสลิป'])+'</div>';
+  }
+}
+function switchShop(id){
+  if(id===SHOP) return;
+  SHOP=id; localStorage.setItem('g2shop',id);
+  CHATS=[]; $('msg').textContent='สลับไปร้าน '+id+' แล้วค่ะ';
+  renderShopBar(); init();
+}
 function bakeoff(){
   if(!KEY){ $('msg').textContent='ยังไม่ได้ใส่รหัสค่ะ'; return; }
   var m='google/gemini-2.5-flash-lite,qwen/qwen3.7-flash,deepseek/deepseek-chat';
@@ -287,6 +324,11 @@ async function api(act){
 }
 function render(on,muted){
   ON=on;
+  // k162: ให้หัวข้อบอกชื่อร้านที่กำลังดูจริงๆ (เดิมเขียนตายตัวว่า "ร้าน V20")
+  try{
+    const _c=SHOPS_ALL.filter(function(s){return s['ร้าน']===SHOP;})[0];
+    $('shopname').textContent='จีทู — '+(_c? _c['ชื่อ'] : ('ร้าน '+SHOP.toUpperCase()));
+  }catch(e){}
   $('dot').className='dot '+(on?'on':'off');
   $('status').innerHTML=on?'<b style="color:#00e676;">🟢 จีทูกำลังตอบลูกค้า</b>'+(muted?'<br>มี <b>'+muted+'</b> แชทที่แอดมินดูแลอยู่':'')
                           :'<b style="color:#ff5d5d;">🔴 จีทูปิดอยู่ — แอดมินคุมเองทั้งหมด</b>';
@@ -604,7 +646,9 @@ async function unmute(){
 let _poll=null;
 function init(){
   if(KEY){
-    $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden'); refresh();
+    $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden');
+    loadShops();          // k162: ดึงรายชื่อร้าน + วาดตัวสลับร้าน
+    refresh();
     if(_poll) clearInterval(_poll);
     _poll=setInterval(refresh,15000);
     document.addEventListener('click',function once(){ try{ _actx=_actx||new (window.AudioContext||window.webkitAudioContext)(); if(_actx.state==='suspended')_actx.resume(); }catch(e){} document.removeEventListener('click',once); });

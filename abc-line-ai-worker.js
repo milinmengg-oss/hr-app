@@ -17,11 +17,38 @@ const SHOPS = {
   v20: { name: "ABC (ร้าน V20)", tokenEnv: "LINE_TOKEN_V20", secretEnv: "LINE_SECRET_V20" },
   // v1: { name: "ABC (ร้าน V1)", tokenEnv: "LINE_TOKEN_V1", secretEnv: "LINE_SECRET_V1" },
 };
+// 🏪🏪 k162 — เพิ่มร้านใหม่โดย "ตั้ง env อย่างเดียว" ไม่ต้องแก้โค้ด/ดีพลอยใหม่
+//   เดิม: ร้านใหม่ต้องมาเติมใน SHOPS ด้านบนทุกครั้ง → ลืมง่าย + ต้องดีพลอยทุกร้าน
+//   ใหม่: ตั้ง LINE_TOKEN_V21 + LINE_SECRET_V21 ใน Cloudflare แล้วร้าน v21 ใช้ได้เลย
+//   ⛔ ห้ามลบ SHOPS ด้านบนทิ้ง — v20 ต้องมีชื่อร้านของตัวเองและต้องทำงานเหมือนเดิมเป๊ะ
+//   ⚠️ ชื่อร้านต้องเป็น a-z0-9 เท่านั้น (ใช้เป็นทั้ง path เว็บฮุคและคำนำหน้าคีย์ใน KV)
+function shopOf(env, shopId) {
+  const id = String(shopId || "").toLowerCase();
+  if (!/^[a-z0-9]+$/.test(id)) return null;
+  if (SHOPS[id]) return SHOPS[id];
+  const ID = id.toUpperCase();
+  if (env["LINE_TOKEN_" + ID] && env["LINE_SECRET_" + ID])
+    return { name: "ABC (ร้าน " + ID + ")", tokenEnv: "LINE_TOKEN_" + ID, secretEnv: "LINE_SECRET_" + ID };
+  return null;
+}
+// รายชื่อร้านที่ "ตั้งค่าครบแล้ว" — หลังบ้านใช้ทำตัวสลับร้าน
+function shopList(env) {
+  const out = {};
+  for (const k in SHOPS) if (env[SHOPS[k].tokenEnv] && env[SHOPS[k].secretEnv]) out[k] = SHOPS[k];
+  for (const k in env) {
+    const m = /^LINE_TOKEN_([A-Z0-9]+)$/.exec(k);
+    if (!m) continue;
+    const id = m[1].toLowerCase();
+    if (out[id] || !env["LINE_SECRET_" + m[1]]) continue;
+    out[id] = { name: (SHOPS[id] && SHOPS[id].name) || "ABC (ร้าน " + m[1] + ")", tokenEnv: k, secretEnv: "LINE_SECRET_" + m[1] };
+  }
+  return out;
+}
 
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-04-k160-orderflow";
+const BUILD = "2026-08-04-k162-multishop";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2339,7 +2366,7 @@ export default {
       // กันแอดมินวางผิดช่อง: เลขพัสดุจริงยาว 9-20 ตัว เป็นตัวเลข/ตัวอักษรอังกฤษเท่านั้น
       if (!/^[A-Z0-9-]{9,20}$/.test(no)) return J({ ผล: "❌ เลขพัสดุไม่ถูกต้อง (ต้องยาว 9-20 ตัว เป็นตัวเลข/ตัวอักษรอังกฤษ) — ที่กรอกมา: " + no }, 400);
       if (c !== "flash" && c !== "kerry") return J({ ผล: "❌ ต้องเลือกขนส่ง: c=flash หรือ c=kerry" }, 400);
-      const sh = SHOPS[shop]; const TK = sh && env[sh.tokenEnv];
+      const sh = shopOf(env, shop); const TK = sh && env[sh.tokenEnv];   // k162: รองรับร้านจาก env
       if (!TK) return J({ ผล: "ไม่รู้จักร้าน " + shop }, 400);
       try {
         const rec = { no, c, t: Date.now() };
@@ -2367,6 +2394,30 @@ export default {
         return J({ ผล: "ส่งเลขพัสดุ " + no + " ให้ลูกค้าแล้ว ✅", build: BUILD });
       } catch (e) { return J({ ผล: "พลาด: " + String(e).slice(0, 120) }, 500); }
     }
+    // 🏪 k162: รายชื่อร้าน + ความพร้อมของแต่ละร้าน (หลังบ้านใช้ทำตัวสลับร้าน)
+    //   บอกให้ชัดว่าร้านไหน "ยังตั้งค่าไม่ครบ" ก่อนเปิดจริง จะได้ไม่เปิดร้านที่รับเงินไม่ได้
+    if (url0.pathname === "/ctl/shops") {
+      if (!OKEY()) return DENY();
+      const list = shopList(env);
+      const out = [];
+      for (const id in list) {
+        let slip = null;
+        try { slip = await slipCfgOf(env, id); } catch (e) {}
+        let pay = "";
+        try { pay = await payOf(env, id); } catch (e) {}
+        const ready = !!slip && !!pay;
+        out.push({
+          ร้าน: id,
+          ชื่อ: list[id].name,
+          เว็บฮุค: "/w/" + id,
+          ข้อมูลโอน: pay ? "ตั้งแล้ว ✅" : "⛔ ยังไม่ได้ตั้ง (การ์ดเลขบัญชีจะไม่ออก)",
+          ตรวจสลิป: slip ? ("ตั้งแล้ว ✅ (สาขา " + slip.branch + " · จาก " + slip.src + ")") : "⛔ ยังไม่ได้ตั้ง (ตรวจสลิปอัตโนมัติไม่ได้)",
+          พร้อมเปิด: ready ? "พร้อม ✅" : "⛔ ยังไม่พร้อม",
+        });
+      }
+      return new Response(JSON.stringify({ ร้านทั้งหมด: out.length, ร้าน: out, build: BUILD }, null, 1),
+        { headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" } });
+    }
     if (url0.pathname === "/expfee") {
       if (!OKEY()) return DENY();
       const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
@@ -2374,7 +2425,7 @@ export default {
       const fee = Math.round(+(url0.searchParams.get("fee") || 0));
       const J = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" } });
       if (!uid || !(fee >= 0)) return J({ ผล: "ต้องมี uid และ fee" }, 400);
-      const sh = SHOPS[shop]; const TK = sh && env[sh.tokenEnv];
+      const sh = shopOf(env, shop); const TK = sh && env[sh.tokenEnv];   // k162: รองรับร้านจาก env
       if (!TK) return J({ ผล: "ไม่รู้จักร้าน " + shop }, 400);
       try {
         let ex = {}; try { const v = await env.CONV.get("exp:" + shop + ":" + uid); if (v) ex = JSON.parse(v); } catch (e) {}
@@ -2984,7 +3035,7 @@ export default {
     const url = url0;
     const m = url.pathname.match(/\/w\/([a-z0-9]+)/i);
     const shopId = (m ? m[1] : "v20").toLowerCase();
-    const shop = SHOPS[shopId];
+    const shop = shopOf(env, shopId);   // k162: รองรับร้านที่ตั้งผ่าน env โดยไม่ต้องแก้โค้ด
     if (!shop) return new Response("unknown shop", { status: 404 });
 
     const TOKEN = env[shop.tokenEnv];
