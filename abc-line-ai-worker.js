@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-04-k158-memroot";
+const BUILD = "2026-08-04-k159-slipshop";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -4210,8 +4210,13 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         let customerMsg = "ได้รับสลิปแล้วค่ะ 🙏🏻 รอทีมงานตรวจสอบและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕";
         let slipPassed = false;
         try {
-          const sok = await checkSlip(env, TOKEN, ev.message.id);
-          if (sok) {
+          const sok = await checkSlip(env, TOKEN, ev.message.id, shopId);
+          // 🏦 k159: ร้านนี้ยังไม่ได้ตั้งค่า SlipOK → ตรวจไม่ได้ ⛔ ห้ามยืมบัญชีร้านอื่นมาตรวจ
+          //   ต้องบอกทีมงานให้ชัดว่า "ยังไม่ได้ตั้งค่า" ไม่ใช่ปล่อยให้ดูเหมือนสลิปมีปัญหาธรรมดา
+          if (sok && sok.noConfig) {
+            statusLine = "⛔ ร้านนี้ยังไม่ได้ตั้งค่า SlipOK (" + shopId + ") — ตรวจสลิปอัตโนมัติไม่ได้ ทีมงานเช็คเงินเข้าบัญชีเอง";
+            customerMsg = "ได้รับสลิปแล้วนะคะ 🙏🏻 รอทีมงานตรวจสอบและยืนยันการชำระให้อีกครั้งค่ะ 💕";
+          } else if (sok) {
             const d = sok.data || {};
             if (sok.httpOk && sok.success && d.success) {
               const slipAmt = Math.round((+d.amount || 0) * 100) / 100;
@@ -5705,9 +5710,43 @@ async function followUpUnpaid(env) {
 }
 
 // ตรวจสลิปโอนเงินกับ SlipOK — ส่งรูปสลิปไปเช็ค (ยอด/บัญชีปลายทาง/ปลอม/ซ้ำ)
-async function checkSlip(env, token, messageId) {
+// 🏦🏦 k159 — ตรวจสลิป "แยกตามร้าน" (ตัวบล็อกใหญ่สุดก่อนเปิด 5 ร้าน)
+//   ปัญหาเดิม: 5 ร้าน 5 บัญชี แต่ checkSlip ใช้ env.SLIPOK_KEY / env.SLIPOK_BRANCH ก้อนเดียวทั้งระบบ
+//   → ลูกค้าโอนเข้าบัญชีร้าน B แต่ระบบเอาไปตรวจกับสาขาของร้าน A
+//   → ผลที่เป็นไปได้ 2 ทาง ร้ายทั้งคู่:
+//      (1) ตรวจไม่ผ่านทุกใบ = ทุกออเดอร์ของ 4 ร้านเด้งเข้าคิวคนจริงหมด
+//      (2) ตรวจ "ผ่าน" ทั้งที่เงินไม่ได้เข้าบัญชีร้านนั้น = ส่งของฟรี
+//   ใช้แพทเทิร์นเดียวกับ payOf (k116): KV ก่อน → env รายร้าน → ค่ากลาง
+//   ⛔ ค่ากลางใช้ได้เฉพาะร้านเดิมที่ตั้งไว้เท่านั้น (SLIPOK_DEFAULT_SHOP, ปริยาย v20)
+//      ร้านใหม่ที่ยังไม่ตั้งค่า **ห้ามยืมสาขาของร้านอื่นมาตรวจเด็ดขาด** — ให้ตรวจไม่ได้ไปเลย
+//      ดีกว่าตรวจผิดบัญชีแล้วบอกลูกค้าว่าจ่ายแล้ว (เงินจริงไหลผ่าน ห้ามเดา)
+const SLIPC = new Map();
+async function slipCfgOf(env, shopId) {
+  const ck = "slipok:" + shopId;
+  const c = SLIPC.get(ck);
+  if (c && Date.now() - c.t < 60000) return c.v;
+  const SID = String(shopId || "").toUpperCase();
+  let v = null;
   try {
-    if (!env.SLIPOK_KEY || !env.SLIPOK_BRANCH) return null;
+    if (env.CONV) {
+      const raw = await env.CONV.get(ck);
+      if (raw) { const j = JSON.parse(raw); if (j && j.key && j.branch) v = { key: j.key, branch: String(j.branch), src: "KV" }; }
+    }
+  } catch (e) {}
+  if (!v && env["SLIPOK_KEY_" + SID] && env["SLIPOK_BRANCH_" + SID])
+    v = { key: env["SLIPOK_KEY_" + SID], branch: String(env["SLIPOK_BRANCH_" + SID]), src: "ENV_SHOP" };
+  const _def = String(env.SLIPOK_DEFAULT_SHOP || "v20").toLowerCase();
+  if (!v && String(shopId || "").toLowerCase() === _def && env.SLIPOK_KEY && env.SLIPOK_BRANCH)
+    v = { key: env.SLIPOK_KEY, branch: String(env.SLIPOK_BRANCH), src: "ENV_GLOBAL" };
+  // ⚠️ แคชเฉพาะตอน "ตั้งค่าแล้ว" — ถ้ายังไม่ได้ตั้งค่าห้ามแคช
+  //   ไม่งั้นแอดมินเพิ่งตั้งค่าร้านใหม่เสร็จ ยังตรวจสลิปไม่ได้อีก 60 วิ (ช่วงเปิดร้านคือช่วงที่พลาดไม่ได้)
+  if (v) SLIPC.set(ck, { v, t: Date.now() });
+  return v;
+}
+async function checkSlip(env, token, messageId, shopId) {
+  try {
+    const cfg = await slipCfgOf(env, shopId);
+    if (!cfg) { console.log("SLIPOK_NO_CONFIG shop=" + shopId); return { noConfig: true, shopId }; }
     const r = await fetch("https://api-data.line.me/v2/bot/message/" + messageId + "/content", { headers: { Authorization: "Bearer " + token } });
     if (!r.ok) return null;
     const buf = await r.arrayBuffer();
@@ -5716,13 +5755,14 @@ async function checkSlip(env, token, messageId) {
     const fd = new FormData();
     fd.append("files", new Blob([buf], { type: ct }), "slip." + ext);
     fd.append("log", "true"); // เก็บไว้ตรวจสลิปซ้ำ + เช็คบัญชีที่ผูกไว้
-    const sr = await fetch("https://api.slipok.com/api/line/apikey/" + env.SLIPOK_BRANCH, {
+    const sr = await fetch("https://api.slipok.com/api/line/apikey/" + cfg.branch, {
       method: "POST",
-      headers: { "x-authorization": env.SLIPOK_KEY },
+      headers: { "x-authorization": cfg.key },
       body: fd,
       signal: AbortSignal.timeout(12000),
     });
     let j = {}; try { j = await sr.json(); } catch (e) {}
+    console.log("SLIPOK_CHECK shop=" + shopId + " branch=" + cfg.branch + " src=" + cfg.src + " ok=" + sr.ok);
     return { httpOk: sr.ok, status: sr.status, ...j };
   } catch (e) { console.log("SLIPOK_ERR " + String(e).slice(0, 160)); return null; }
 }

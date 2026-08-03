@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1751,6 +1751,44 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k159: ตรวจสลิปแยกตามร้าน — ⛔ ห้ามยืมบัญชีร้านอื่นมาตรวจ ═══
+//   5 ร้าน 5 บัญชี แต่เดิมตรวจกับสาขาเดียวทั้งระบบ = เงินจริงไหลผ่านจุดนี้ทุกออเดอร์
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const baseEnv = { SLIPOK_KEY: 'globalkey', SLIPOK_BRANCH: '111' };
+
+  // ร้านเดิม (v20 = ร้านหลักปริยาย) ต้องยังตรวจสลิปได้เหมือนเดิม — ห้ามพังของที่ใช้อยู่จริง
+  const c20 = await slipCfgOf({ ...baseEnv }, 'v20');
+  t(263, 'ร้านเดิม v20 ยังตรวจสลิปได้ตามเดิม (ไม่ถอยหลัง)', c20 !== null && !!c20.branch, 'ร้านเดิมพัง = ของที่ใช้อยู่หยุดทำงาน');
+
+  const c16 = await slipCfgOf({ ...baseEnv }, 'v16');
+  t(264, '⛔ ร้านใหม่ที่ยังไม่ตั้งค่า ห้ามยืมสาขาร้านอื่น', c16 === null, 'ยืมสาขา ' + (c16 && c16.branch) + ' มาตรวจ = ตรวจผิดบัญชี');
+
+  const c16b = await slipCfgOf({ ...baseEnv, SLIPOK_KEY_V16: 'k16', SLIPOK_BRANCH_V16: '222' }, 'v16');
+  t(265, 'ร้านใหม่ตั้งค่าเองแล้ว → ใช้สาขาตัวเอง', c16b && c16b.branch === '222' && c16b.key === 'k16', 'ได้ ' + JSON.stringify(c16b));
+
+  const c17 = await slipCfgOf({ ...baseEnv, SLIPOK_KEY_V17: 'k17', SLIPOK_BRANCH_V17: '333' }, 'v17');
+  t(266, 'คนละร้านต้องได้คนละสาขา ห้ามปนกัน', c17 && c17.branch === '333' && c16b && c16b.branch === '222', 'สาขาปนกันระหว่างร้าน');
+  // ⚠️ ยังไม่ได้ตั้งค่า = ห้ามแคชคำตอบ "ไม่มี" ไว้ (แอดมินตั้งค่าเสร็จต้องใช้ได้ทันที ไม่ต้องรอ 60 วิ)
+  t(266.5, 'ตั้งค่าร้านใหม่เสร็จ → ใช้ได้ทันที ไม่ต้องรอแคชหมดอายุ', c16 === null && c16b !== null, 'แคช "ยังไม่ตั้งค่า" ค้าง = เปิดร้านแล้วตรวจสลิปไม่ได้');
+
+  // ตั้งค่าผ่านหลังบ้าน (KV) ต้องชนะค่าใน env — ให้แก้ได้โดยไม่ต้องดีพลอยใหม่
+  const kv = new Map([['slipok:v18', JSON.stringify({ key: 'kvkey', branch: '444' })]]);
+  const c18 = await slipCfgOf({ ...baseEnv, CONV: { get: async k => kv.get(k) || null }, SLIPOK_KEY_V18: 'envk', SLIPOK_BRANCH_V18: '999' }, 'v18');
+  t(267, 'ตั้งค่าจากหลังบ้าน (KV) ชนะค่าใน env', c18 && c18.branch === '444', 'ได้ ' + JSON.stringify(c18));
+
+  // เปลี่ยนร้านหลักได้ (เผื่อ v20 เป็นร้านเทส ร้านจริงคือร้านใหม่)
+  const cDef = await slipCfgOf({ ...baseEnv, SLIPOK_DEFAULT_SHOP: 'v19' }, 'v19');
+  const cDef21 = await slipCfgOf({ ...baseEnv, SLIPOK_DEFAULT_SHOP: 'v19' }, 'v21');
+  t(268, 'ย้ายร้านหลักได้ + ร้านที่ไม่ใช่ร้านหลักไม่ได้ค่ากลาง', cDef && cDef.branch === '111' && cDef21 === null, 'ย้ายร้านหลักไม่ได้');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[สลิปแยกร้าน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[สลิปแยกร้าน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k158: ตอบอะไรออกไป ต้องถูกจดความจำเสมอ (แก้รากบั๊กความจำทั้งตระกูล) ═══
 //   เดิม: ตอบลูกค้าได้ ~71 ทาง แต่จดความจำแค่ 3 ทาง → ทางลัดทั้งหมด "ตอบแล้วจบ ไม่จด"
 //   → เทิร์นถัดไป AI ไม่รู้ว่าเพิ่งพูดอะไร = ต้นเหตุร่วมของ k69 · k150 · k155 · k157
