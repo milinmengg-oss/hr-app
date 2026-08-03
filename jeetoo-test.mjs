@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1730,6 +1730,57 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k154: ลูกค้าบอกข้อมูลครบแล้ว ห้ามถามซ้ำ / ห้ามลืม ═══
+//   เคสจริง 3/8 23.10 (JW): "เอาบูสพอดจ้ะ" → ตอบ "ESKO BAR SWITCH หมดชั่วคราว" (รุ่นจาก 3 เทิร์นก่อน)
+//   เคสจริง 3/8 22.50 (m): "เอามาโบ องุ่นว่าน" → ตอบลิสต์กลิ่นแล้วถามกลิ่นซ้ำ → ลูกค้าเงียบหาย = ออเดอร์หลุด
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const tag = h => /ห้ามลิสต์กลิ่นซ้ำ/.test(h) ? (/ออกบล็อกทวนคำสั่งซื้อได้เลย/.test(h) ? 'การ์ด' : 'ถามจำนวน')
+    : (/กลิ่นนี้หมด/.test(h) ? 'บอกหมด' : (/ลิสต์กลิ่นไม่เกิน 10/.test(h) ? 'ลิสต์กลิ่น' : '-'));
+  const lock = h => (h.match(/ระบุกลิ่นมาแล้ว = \*\*(.+?)\*\*/) || [])[1] || '';
+
+  // ── ตัวจับรุ่นต้องทนคำสะกดเพี้ยน (ด/ต · ไม้ไต่คู้) ──
+  t(223, 'เคสจริง "เอาบูสพอดจ้ะ" (ด.เด็ก) → RELX BOOST POD', _MODEL_IN('เอาบูสพอดจ้ะ') === 'RELX BOOST POD', 'ได้ ' + (_MODEL_IN('เอาบูสพอดจ้ะ') || '(ไม่เจอ)'));
+  t(224, 'เคสจริง "เอารีแล็คบูสพอด" (มีไม้ไต่คู้) → RELX BOOST POD', _MODEL_IN('เอารีแล็คบูสพอด') === 'RELX BOOST POD', 'ได้ ' + (_MODEL_IN('เอารีแล็คบูสพอด') || '(ไม่เจอ)'));
+  t(225, 'สะกดถูกแบบเดิม "บูสพอต" ต้องยังใช้ได้', _MODEL_IN('บูสพอต') === 'RELX BOOST POD', 'ของเดิมพัง');
+  t(226, 'k152 ไม่ถอยหลัง: "หัวมาโบ" ยังต้องได้ M SWITCH', _MODEL_IN('หัวมาโบ 15K ค่ะ') === 'M SWITCH', 'ทับกฎ k152');
+  t(227, 'k126 ไม่ถอยหลัง: "อินฟี่ 20เค" ยังต้องได้ INFY 20K', _MODEL_IN('อินฟี่ 20เค เหลือกลิ่นไหน') === 'INFY 20K', 'ได้ ' + _MODEL_IN('อินฟี่ 20เค เหลือกลิ่นไหน'));
+  t(228, 'foldTH ไม่ทำลายข้อความปกติ', foldTH('เอาแตงโม 2 แท่ง').includes('แตงโม'), 'ข้อความเพี้ยน');
+
+  // ── ลูกค้าบอกกลิ่นแล้ว ห้ามลิสต์กลิ่นซ้ำ ──
+  const h1 = flavorHint('เอามาโบ องุ่นว่าน', stockmap, 1);
+  t(229, 'เคสจริง "เอามาโบ องุ่นว่าน" → ล็อกกลิ่นได้ ไม่ลิสต์ซ้ำ', tag(h1) === 'ถามจำนวน', 'ได้ ' + tag(h1));
+  t(230, 'เคสจริง: ล็อกถูกกลิ่น (องุ่นว่านหางจระเข้ ไม่ใช่ องุ่น)', lock(h1) === 'MARBO 9K | องุ่นว่านหางจระเข้', 'ได้ ' + lock(h1));
+  t(231, 'เคสจริง: สั่งให้ถามแค่จำนวน ไม่ถามกลิ่นซ้ำ', /รับกี่ชิ้นดีคะ/.test(h1) && /ห้ามถามว่า 'รับกลิ่นไหนดีคะ'/.test(h1), 'ยังถามกลิ่นซ้ำได้');
+
+  const h2 = flavorHint('เอามาโบ องุ่นว่าน 3 แท่ง', stockmap, 1);
+  t(232, 'ครบ รุ่น+กลิ่น+จำนวน → บอกให้ออกการ์ดเลย', tag(h2) === 'การ์ด' && /\(3\)/.test(h2), 'ได้ ' + tag(h2));
+
+  // ⚠️ ตัวเลขในชื่อรุ่นห้ามถูกอ่านเป็นจำนวนสั่งซื้อ (เก็บเงินเกิน)
+  const h3 = flavorHint('มาโบ9k เอาเบอร์รี่ชมพู', stockmap, 1);
+  t(233, '"มาโบ9k เอาเบอร์รี่ชมพู" ห้ามอ่าน 9 เป็นจำนวน', tag(h3) === 'ถามจำนวน', 'ได้ ' + tag(h3) + ' = ออกการ์ด 9 ชิ้นทั้งที่ไม่ได้สั่ง');
+  const h4 = flavorHint('STAR 2,500 แตงโม', stockmap, 1);
+  t(234, '"STAR 2,500 แตงโม" ห้ามอ่าน 2,500 เป็นจำนวน', tag(h4) === 'ถามจำนวน', 'ได้ ' + tag(h4));
+
+  // ⚠️ กำกวมต้องถามต่อ (ห้ามเดา — เงินลูกค้าไหลผ่านจริง)
+  const h5 = flavorHint('เอามาโบ องุ่น', stockmap, 1);
+  t(235, '"องุ่น" ลอยๆ ตรงหลายกลิ่น → ต้องลิสต์ให้เลือก ห้ามเดา', tag(h5) === 'ลิสต์กลิ่น', 'เดากลิ่นเอง: ' + lock(h5));
+  const h6 = flavorHint('มาโบ9k มีกลิ่นไรบ้าง', stockmap, 1);
+  t(236, 'ถามเฉยๆ ไม่ได้บอกกลิ่น → ลิสต์กลิ่นตามเดิม', tag(h6) === 'ลิสต์กลิ่น', 'ได้ ' + tag(h6));
+
+  // ⚠️ บทเรียน k146: ด่านต้องไม่พาไปออกการ์ดของที่หมด
+  const smOut = {}; for (const k in stockmap) smOut[k] = stockmap[k];
+  smOut['MARBO 9K - องุ่นว่านหางจระเข้'] = 0;
+  const h7 = flavorHint('เอามาโบ องุ่นว่าน 3 แท่ง', smOut, 1);
+  t(237, 'กลิ่นที่ล็อกได้แต่ของหมด → ห้ามออกการ์ด ต้องบอกหมด', tag(h7) === 'บอกหมด', 'ได้ ' + tag(h7));
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ฟังลูกค้า]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ฟังลูกค้า]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k153: จีทูต้องรู้ว่าตอนนี้กี่โมง — ห้ามรับปากว่า "ยังทันรอบวันนี้" ตอนเลยรอบไปแล้ว ═══
 //   เคสจริง 3/8 23.14 (ลูกค้า B🦋A · ยืนยันด้วยแคปหน้าจอ LINE ว่าส่งถึงลูกค้าจริง):
 //   "หลัง 20.45 รอบส่งออก 10.30 วันถัดไปค่ะ **ตอนนี้ยังพอมีเวลาเหลืออยู่**" = ขัดกันเองในข้อความเดียว

@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k153-clockfix";
+const BUILD = "2026-08-04-k154-listenfix";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -252,6 +252,21 @@ const FLAVORS = {"ABC LEGO 20K":{"p":299,"f":["ดับเบิ้ลมิ้
 //   แล้วระบบไปหยิบรุ่นเก่าจากบทสนทนามาบอกว่า "M SWITCH หมดชั่วคราว" = ตอบผิดรุ่นทั้งดุ้น
 //   แก้: ตัดวรรณยุกต์/ไม้ไต่คู้/การันต์ ก่อนเทียบชื่อรุ่นทุกครั้ง
 function deTone(s) { return String(s || "").replace(/[\u0E48-\u0E4E]/g, ""); }
+// \uD83D\uDD24\uD83D\uDD24 k154 (\u0E40\u0E04\u0E2A\u0E08\u0E23\u0E34\u0E07 3/8 23.10 \u2014 \u0E25\u0E39\u0E01\u0E04\u0E49\u0E32 JW): "\u0E40\u0E2D\u0E32\u0E1A\u0E39\u0E2A\u0E1E\u0E2D\u0E14\u0E08\u0E49\u0E30" \u2192 \u0E23\u0E30\u0E1A\u0E1A\u0E08\u0E31\u0E1A\u0E23\u0E38\u0E48\u0E19\u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E40\u0E25\u0E22
+//   \u2192 carryModel \u0E44\u0E1B\u0E2B\u0E22\u0E34\u0E1A\u0E23\u0E38\u0E48\u0E19\u0E40\u0E01\u0E48\u0E32 (ESKO BAR SWITCH \u0E08\u0E32\u0E01 3 \u0E40\u0E17\u0E34\u0E23\u0E4C\u0E19\u0E01\u0E48\u0E2D\u0E19) \u0E21\u0E32\u0E15\u0E2D\u0E1A\u0E27\u0E48\u0E32 "\u0E2B\u0E21\u0E14\u0E0A\u0E31\u0E48\u0E27\u0E04\u0E23\u0E32\u0E27"
+//   \u0E17\u0E31\u0E49\u0E07\u0E17\u0E35\u0E48\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E40\u0E1E\u0E34\u0E48\u0E07\u0E1E\u0E34\u0E21\u0E1E\u0E4C\u0E0A\u0E37\u0E48\u0E2D\u0E23\u0E38\u0E48\u0E19\u0E0A\u0E31\u0E14\u0E46 = \u0E40\u0E2B\u0E21\u0E37\u0E2D\u0E19\u0E1A\u0E2D\u0E17\u0E44\u0E21\u0E48\u0E1F\u0E31\u0E07 \u0E41\u0E25\u0E49\u0E27\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E15\u0E49\u0E2D\u0E07\u0E1E\u0E34\u0E21\u0E1E\u0E4C\u0E0B\u0E49\u0E33\u0E2D\u0E35\u0E01\u0E23\u0E2D\u0E1A
+//   \u0E15\u0E49\u0E19\u0E40\u0E2B\u0E15\u0E38: \u0E41\u0E1E\u0E17\u0E40\u0E17\u0E34\u0E23\u0E4C\u0E19\u0E40\u0E02\u0E35\u0E22\u0E19\u0E44\u0E27\u0E49\u0E27\u0E48\u0E32 "\u0E1A\u0E39\u0E2A\u0E1E\u0E2D\u0E15" (\u0E15.\u0E40\u0E15\u0E48\u0E32) \u0E41\u0E15\u0E48\u0E04\u0E19\u0E44\u0E17\u0E22\u0E1E\u0E34\u0E21\u0E1E\u0E4C "\u0E1E\u0E2D\u0E14" (\u0E14.\u0E40\u0E14\u0E47\u0E01) \u0E1E\u0E2D\u0E46 \u0E01\u0E31\u0E19
+//     \u0E41\u0E25\u0E30 "\u0E23\u0E35\u0E41\u0E25\u0E47\u0E04" (\u0E21\u0E35\u0E44\u0E21\u0E49\u0E44\u0E15\u0E48\u0E04\u0E39\u0E49) \u2014 deTone \u0E40\u0E14\u0E34\u0E21\u0E15\u0E31\u0E14\u0E41\u0E04\u0E48\u0E27\u0E23\u0E23\u0E13\u0E22\u0E38\u0E01\u0E15\u0E4C \u0E48-\u0E4E \u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E15\u0E31\u0E14 \u0E47 (\u0E47)
+//   \u0E1A\u0E17\u0E40\u0E23\u0E35\u0E22\u0E19\u0E40\u0E14\u0E34\u0E21\u0E43\u0E19\u0E2A\u0E21\u0E2D\u0E07\u0E08\u0E35\u0E17\u0E39: "\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E2A\u0E30\u0E01\u0E14\u0E40\u0E1E\u0E35\u0E49\u0E22\u0E19\u0E15\u0E25\u0E2D\u0E14 \u2014 \u0E40\u0E17\u0E35\u0E22\u0E1A\u0E15\u0E23\u0E07\u0E15\u0E31\u0E27\u0E2D\u0E22\u0E48\u0E32\u0E07\u0E40\u0E14\u0E35\u0E22\u0E27\u0E44\u0E21\u0E48\u0E1E\u0E2D"
+//   \u0E41\u0E01\u0E49\u0E40\u0E1B\u0E47\u0E19 "\u0E01\u0E0E" \u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E44\u0E25\u0E48\u0E41\u0E01\u0E49\u0E17\u0E35\u0E25\u0E30\u0E41\u0E1E\u0E17\u0E40\u0E17\u0E34\u0E23\u0E4C\u0E19 (\u0E1A\u0E23\u0E23\u0E17\u0E31\u0E14 281 \u0E40\u0E04\u0E22\u0E41\u0E01\u0E49\u0E21\u0E37\u0E2D\u0E40\u0E1B\u0E47\u0E19 \u0E1E\u0E2D[\u0E14\u0E15] \u0E44\u0E1B\u0E41\u0E25\u0E49\u0E27\u0E23\u0E2D\u0E1A\u0E19\u0E36\u0E07 \u0E41\u0E15\u0E48\u0E1A\u0E23\u0E23\u0E17\u0E31\u0E14 280 \u0E15\u0E01\u0E2B\u0E25\u0E48\u0E19):
+//     \u2192 \u0E1B\u0E23\u0E31\u0E1A "\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E02\u0E32\u0E40\u0E02\u0E49\u0E32" \u0E43\u0E2B\u0E49\u0E40\u0E1B\u0E47\u0E19\u0E23\u0E39\u0E1B\u0E21\u0E32\u0E15\u0E23\u0E10\u0E32\u0E19\u0E01\u0E48\u0E2D\u0E19\u0E08\u0E31\u0E1A \u0E17\u0E38\u0E01\u0E41\u0E1E\u0E17\u0E40\u0E17\u0E34\u0E23\u0E4C\u0E19\u0E44\u0E14\u0E49\u0E1B\u0E23\u0E30\u0E42\u0E22\u0E0A\u0E19\u0E4C\u0E1E\u0E23\u0E49\u0E2D\u0E21\u0E01\u0E31\u0E19\u0E2B\u0E21\u0E14
+//   \u26A0\uFE0F \u0E43\u0E0A\u0E49\u0E40\u0E1B\u0E47\u0E19 "\u0E15\u0E31\u0E27\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E40\u0E1E\u0E34\u0E48\u0E21" \u0E40\u0E17\u0E48\u0E32\u0E19\u0E31\u0E49\u0E19 (\u0E40\u0E17\u0E35\u0E22\u0E1A\u0E40\u0E1E\u0E34\u0E48\u0E21\u0E08\u0E32\u0E01\u0E02\u0E2D\u0E07\u0E40\u0E14\u0E34\u0E21 \u0E44\u0E21\u0E48\u0E44\u0E14\u0E49\u0E41\u0E17\u0E19\u0E17\u0E35\u0E48) \u2192 \u0E40\u0E1E\u0E34\u0E48\u0E21\u0E42\u0E2D\u0E01\u0E32\u0E2A\u0E08\u0E31\u0E1A\u0E44\u0E14\u0E49 \u0E44\u0E21\u0E48\u0E21\u0E35\u0E17\u0E32\u0E07\u0E17\u0E33\u0E43\u0E2B\u0E49\u0E17\u0E35\u0E48\u0E40\u0E04\u0E22\u0E08\u0E31\u0E1A\u0E44\u0E14\u0E49\u0E2B\u0E32\u0E22\u0E44\u0E1B
+function foldTH(s) {
+  return String(s || "")
+    .replace(/[\u0E47-\u0E4E]/g, "")     // \u0E27\u0E23\u0E23\u0E13\u0E22\u0E38\u0E01\u0E15\u0E4C + \u0E44\u0E21\u0E49\u0E44\u0E15\u0E48\u0E04\u0E39\u0E49 (\u0E47) + \u0E01\u0E32\u0E23\u0E31\u0E19\u0E15\u0E4C \u2192 \u0E23\u0E35\u0E41\u0E25\u0E47\u0E04 = \u0E23\u0E35\u0E41\u0E25\u0E04
+    .replace(/\u0E1E\s*\u0E2D\s*[\u0E14\u0E17\u0E15]/g, "\u0E1E\u0E2D\u0E15")   // \u0E1E\u0E2D\u0E14 / \u0E1E\u0E2D\u0E17 / \u0E1E\u0E47\u0E2D\u0E14 \u2192 \u0E1E\u0E2D\u0E15
+    .replace(/\u0E23\u0E35\u0E41\u0E25[\u0E01\u0E04]/g, "\u0E23\u0E35\u0E41\u0E25\u0E04");      // \u0E23\u0E35\u0E41\u0E25\u0E01 \u2192 \u0E23\u0E35\u0E41\u0E25\u0E04
+}
 const TH_MODEL = [
   // 📦 k135 (เคสจริง 3/8 18.08): "สั่งชุดKit เอกโคบาร์กลิ่นสตอเบอรี่ 10แท่ง" = บอกครบทั้งรุ่น+กลิ่น+จำนวน
   //   แต่ระบบตอบ "ร้านเรามีชุด KIT ... คุณลูกค้าหมายถึงรุ่นไหนคะ" แล้วขอรุ่น/กลิ่น/จำนวนใหม่หมด
@@ -344,7 +359,11 @@ const _K2 = (s) => String(s || "").replace(/(\d+)\s*(เค|ค่ะ?K)/gi, "$1
 const _MODEL_IN = (s) => {
   const raw = String(s || ""), nosp = raw.replace(/\s+/g, "");
   const rk = _K2(raw), nk = _K2(nosp);
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(rk) || re.test(nk)) return key;
+  // k154: เดิม _MODEL_IN เทียบแค่ 4 แบบ (ดิบ/ตัดวรรค/แปลงเค) — ไม่เคยตัดวรรณยุกต์เลย
+  //   ทั้งที่ flavorHint เทียบ 8 แบบ (มี deTone ด้วย) = สองที่ใช้เกณฑ์คนละอย่าง จับได้ไม่เท่ากัน
+  //   เพิ่มแบบ "ปรับรูปมาตรฐาน" เข้าไปให้ครบ ตัวจับรุ่นทั้งระบบจะทนคำสะกดเพี้ยนเท่ากัน
+  const fr = foldTH(raw), fn = foldTH(nosp), fk = _K2(fr), fkn = _K2(fn);
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(rk) || re.test(nk) || re.test(fr) || re.test(fn) || re.test(fk) || re.test(fkn)) return key;
   const tn = normTH(raw);
   for (const k of FLAVOR_KEYS) if (normTH(k).length >= 4 && tn.indexOf(normTH(k)) !== -1) return k;
   return "";
@@ -834,7 +853,8 @@ function flavorHint(text, sm, buf){
   const raw = String(text || ""), nosp = raw.replace(/\s+/g, "");
   const dt = deTone(raw), dtn = deTone(nosp);   // k117: ตัดวรรณยุกต์ก่อนเทียบ
   const kk = _K2(raw), kkn = _K2(nosp), kkd = _K2(dt), kkdn = _K2(dtn);   // k126: "20เค" → "20K"
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(dt) || re.test(dtn) || re.test(kk) || re.test(kkn) || re.test(kkd) || re.test(kkdn)) add(key);
+  const fd = foldTH(raw), fdn = foldTH(nosp), fdk = _K2(fd), fdkn = _K2(fdn);   // k154: พอด→พอต · รีแล็ค→รีแลค
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(dt) || re.test(dtn) || re.test(kk) || re.test(kkn) || re.test(kkd) || re.test(kkdn) || re.test(fd) || re.test(fdn) || re.test(fdk) || re.test(fdkn)) add(key);
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
   _hintModels = hits.slice();   // k16: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
   if (!hits.length) return "";
@@ -875,6 +895,61 @@ function flavorHint(text, sm, buf){
       }
     }
     if (guess.length) out += "\n✍️ ลูกค้าน่าจะพิมพ์ชื่อกลิ่นแบบย่อ — น่าจะหมายถึง: " + guess.slice(0, 4).join(" | ") + "\n   ⛔ ห้ามตีความเป็นกลิ่นสั้นๆ ที่ไม่มีในรุ่นนั้น แล้วตอบว่าหมด ให้ทวนชื่อเต็มกับลูกค้าก่อน";
+  } catch (e) {}
+  // 🧾🧾 k154 (เคสจริง 3/8 22.50 — ลูกค้า m · ออเดอร์หลุดเงียบๆ):
+  //   ลูกค้า: "เอามาโบ องุ่นว่าน" (บอกครบทั้งรุ่นและกลิ่น = ตั้งใจซื้อชัดเจน)
+  //   บอท: "มีค่ะ 💕 MARBO 9K (350 บาท) มีกลิ่นดังนี้นะคะ - เบอร์รี่ชมพู - หมากฝรั่งแตงโม
+  //         - องุ่นว่านหางจระเข้ ... บอกแนวที่ชอบได้เลยค่ะ" = ถามกลิ่นซ้ำทั้งที่ลูกค้าเพิ่งบอกไป
+  //   ลูกค้าเงียบหายไปเลย = เสียออเดอร์โดยไม่มีใครรู้ (ไม่ถูกนับใน /quality ด้วย)
+  //   ต้นเหตุ: บรรทัด "⚡ ตอบให้สั้น: ลิสต์กลิ่น...บอกแนวที่ชอบได้เลย" ยิงทุกครั้งที่จับรุ่นได้
+  //     ไม่เคยดูเลยว่า "ลูกค้าบอกกลิ่นมาแล้วหรือยัง" → AI ทำตามคำสั่ง = ลิสต์กลิ่นซ้ำ
+  //   กฎใหม่: ถ้าลูกค้าระบุกลิ่นมาแล้วและชี้ได้ชัดกลิ่นเดียว → ห้ามลิสต์กลิ่นซ้ำ ให้เดินหน้าต่อ
+  //   ⚠️ ต้องชี้ได้ "กลิ่นเดียว" เท่านั้น — "องุ่น" ลอยๆ ตรงกับ องุ่น/องุ่นลิ้นจี่/องุ่นเคียวโฮ = กำกวม ต้องถามต่อ
+  //   ⚠️ บทเรียน k146 (ด่านกันมั่วกลายเป็นตัวสร้างความมั่วเอง): ถ้ากลิ่นที่ชี้ได้ "หมด" ห้ามพาไปออกการ์ด
+  try {
+    // ให้ "คะแนน" ตามความยาวที่ตรงกันจริง แล้วเอาตัวที่ตรงยาวที่สุด
+    //   เหตุที่ต้องให้คะแนน ไม่ใช่แค่เจอ/ไม่เจอ: "องุ่นว่าน" ไปตรงหัว 4 ตัว ("องุ่") ของ
+    //   องุ่นลิ้นจี่ · องุ่นเคียวโฮ ด้วย → ถ้านับแค่ "เจอ" จะกลายเป็นกำกวมทั้งที่ลูกค้าพิมพ์ชัดมาก
+    //   ตรง 9 ตัว (องุ่นว่าน) ย่อมชนะตรง 4 ตัว (องุ่) — ยาวกว่า = เจาะจงกว่า
+    const tn2 = normTH(text);
+    let lockModel = "", lockFlavor = "", lockScore = 0, ambiguous = false;
+    for (const k of hits) {
+      const v = FLAVORS[k]; if (!v || !v.f.length) continue;
+      for (const f of v.f) {
+        const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+        const nb = normTH(bare);
+        if (nb.length < 3) continue;
+        let score = 0;
+        if (tn2.indexOf(nb) !== -1) score = nb.length;                     // พิมพ์ชื่อกลิ่นเต็ม
+        else for (let L = Math.min(nb.length - 1, 14); L >= 4; L--) {      // พิมพ์ย่อแบบตัดท้าย
+          if (tn2.indexOf(nb.slice(0, L)) !== -1) { score = L; break; }
+        }
+        if (!score) continue;
+        if (score > lockScore) { lockScore = score; lockModel = k; lockFlavor = bare; ambiguous = false; }
+        else if (score === lockScore && bare !== lockFlavor) ambiguous = true;   // ตรงยาวเท่ากันหลายกลิ่น = ต้องถามต่อ
+      }
+    }
+    if (lockFlavor && !ambiguous) {
+      const v = FLAVORS[lockModel];
+      const full = (v.f || []).filter(f => String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim() === lockFlavor);
+      const inStock = full.some(f => { const q = qtyOf(lockModel, f); return q === null || q > B; });
+      if (inStock) {
+        // ⚠️ ต้องตัดตัวเลขที่เป็น "ส่วนหนึ่งของชื่อรุ่น" ทิ้งก่อน ไม่งั้น "มาโบ9k เอาเบอร์รี่"
+        //   จะอ่าน 9 เป็นจำนวนสั่งซื้อ → ออกการ์ด 9 ชิ้นทั้งที่ลูกค้าไม่เคยบอกจำนวน (เก็บเงินเกิน)
+        const _tq = String(text || "").replace(/\d+\s*(k|เค)/gi, " ").replace(/\d[\d,]{2,}/g, " ");
+        const qm = _tq.match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)?/);
+        const qty = qm ? parseInt(qm[1], 10) : 0;
+        out += "\n\n🧾 [ลูกค้าระบุกลิ่นมาแล้ว = **" + lockModel + " | " + lockFlavor + "** (มีของ)]"
+             + "\n⛔⛔ ห้ามลิสต์กลิ่นซ้ำ และห้ามถามว่า 'รับกลิ่นไหนดีคะ' อีก — ลูกค้าบอกไปแล้ว ถามซ้ำ = ลูกค้าหนี"
+             + (qty > 0 && qty <= 200
+                 ? "\n✅ ลูกค้าบอกจำนวนมาด้วย (" + qty + ") = ครบ 3 อย่าง → **ออกบล็อกทวนคำสั่งซื้อได้เลย**"
+                 : "\n✅ ยังขาดแค่ 'จำนวน' → ถามสั้นๆ ว่า \"รับกี่ชิ้นดีคะ 💕\" อย่างเดียว ห้ามถามอย่างอื่น");
+      } else {
+        out += "\n\n🧾 [ลูกค้าระบุกลิ่น **" + lockModel + " | " + lockFlavor + "** แต่กลิ่นนี้หมด]"
+             + "\n✅ บอกตรงๆ ว่ากลิ่นนี้หมดชั่วคราว แล้วเสนอกลิ่นใกล้เคียงในรุ่นเดียวกันที่ยังมีของ ⛔ ห้ามออกบล็อกทวนคำสั่งซื้อ";
+      }
+      return out;   // ไม่ต้องต่อบรรทัด "ลิสต์กลิ่น" ด้านล่าง
+    }
   } catch (e) {}
   out += "\n⚡ ตอบให้สั้น: ลิสต์กลิ่นไม่เกิน 10 กลิ่น แล้วปิดท้ายว่า 'ยังมีกลิ่นอื่นอีกนะคะ บอกแนวที่ชอบได้เลยค่ะ 💕' ห้ามไล่ครบทุกกลิ่น (ลูกค้าอ่านไม่ไหว + ตอบช้า)";
   return out;
