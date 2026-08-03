@@ -112,6 +112,34 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
 #stockfile{width:100%;background:#222;border:1.5px solid #333;border-radius:10px;padding:10px;color:#cfcfcf;font-family:inherit;font-size:12.5px;}
 #stpre{margin-top:10px;color:#bdfb00;}
 .cbar{width:100%;background:#141414;border:1px solid #2b2b2b;border-radius:12px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;color:#cfcfcf;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;margin-top:10px;}
+
+/* ═══ k142: มือถือก่อน — แถบล่างสลับแท็บ + toast ยืนยันผล + ป้ายเคสด่วน ═══ */
+body{padding-bottom:96px!important;}          /* เว้นที่ให้แถบล่าง ไม่ให้ทับปุ่มสุดท้าย */
+.tabs{display:none!important;}                 /* แท็บบนไม่ต้องแล้ว ย้ายลงล่าง */
+.navbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;
+  background:#141414;border-top:1px solid #2b2b2b;padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+.navbtn{flex:1;background:transparent;border:0;color:#8a8a8a;font-family:inherit;
+  font-size:11px;font-weight:700;padding:8px 2px 6px;border-radius:12px;cursor:pointer;position:relative;line-height:1.25;}
+.navbtn i{display:block;font-style:normal;font-size:21px;margin-bottom:3px;}
+.navbtn.on{color:#bdfb00;background:#1e1e1e;}
+.navbtn .bdg{position:absolute;top:2px;right:calc(50% - 24px);min-width:19px;height:19px;line-height:19px;
+  background:#ff3b3b;color:#fff;border-radius:19px;font-size:11px;font-weight:800;padding:0 5px;
+  box-shadow:0 0 0 2px #141414;}
+.navbtn .bdg.hide{display:none;}
+/* 🚨 แถบสรุปเคสด่วน — ปักไว้บนสุด กดแล้วเด้งไปที่เคสเลย */
+.urgbar{position:sticky;top:0;z-index:40;background:#c62828;color:#fff;border-radius:12px;
+  padding:11px 13px;margin:0 0 12px;font-size:13.5px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:9px;box-shadow:0 4px 14px rgba(198,40,40,.35);}
+.urgbar .blink{animation:pulse 1.1s ease-in-out infinite;font-size:16px;}
+.urgbar.hide{display:none;}
+/* ✅ toast — บอกให้ชัดว่ากดแล้วสำเร็จหรือพลาด */
+#toast{position:fixed;left:50%;bottom:104px;transform:translateX(-50%) translateY(14px);z-index:90;
+  background:#1c3b1c;border:1.5px solid #2e7d32;color:#d8ffd8;padding:12px 18px;border-radius:14px;
+  font-size:13.5px;font-weight:700;max-width:88vw;text-align:center;opacity:0;pointer-events:none;
+  transition:opacity .18s,transform .18s;box-shadow:0 8px 26px rgba(0,0,0,.5);}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.bad{background:#3a1414;border-color:#c62828;color:#ffd6d6;}
+
 </style>
 </head>
 <body>
@@ -135,6 +163,7 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
 
       <!-- ═══ แท็บ 1: งานวันนี้ ═══ -->
       <div id="p1">
+        <div class="urgbar hide" id="urgbar" onclick="jumpUrgent()"><span class="blink">🚨</span><span id="urgtext">มีเคสด่วนรอ</span></div>
         <div class="qhead">📦 ออเดอร์รอลง XSelly <span id="ocount"></span></div>
         <div id="orders"></div>
         <div class="qhead">📋 แชทที่รอแอดมินดูแล <span id="qcount"></span></div>
@@ -215,9 +244,38 @@ function bakeoff(){
   window.open(W+'/bakeoff?key='+encodeURIComponent(KEY)+'&m='+encodeURIComponent(m),'_blank');
 }
 
+
+// ═══ k142 ═══
+// เจ้าของร้านบอกว่าติด 2 เรื่อง: (1) กดปุ่มแล้วไม่รู้ว่าสำเร็จไหม (2) หาเคสด่วนไม่เจอ/ตกหล่น
+let _tt=null;
+function toast(msg,bad){                       // (1) ทุกการกดต้องมีผลตอบกลับที่เห็นชัด
+  const el=document.getElementById('toast'); if(!el) return;
+  el.textContent=msg; el.className='show'+(bad?' bad':'');
+  clearTimeout(_tt); _tt=setTimeout(function(){ el.className=''; }, bad?4200:2400);
+}
+function syncNav(n){                            // แถบล่างต้องไฮไลต์ตรงกับหน้าที่เปิดอยู่
+  [1,2,3].forEach(function(i){ const b=document.getElementById('n'+i); if(b) b.classList.toggle('on',i===n); });
+}
+function markUrgent(){                          // (2) เคสด่วนต้องเห็นตั้งแต่ยังไม่เลื่อนจอ
+  const urg=document.querySelectorAll('.qcard.urgent, .ocard.bad');
+  const n=urg.length;
+  const bar=document.getElementById('urgbar'), bd=document.getElementById('bd1'), tx=document.getElementById('urgtext');
+  if(bar) bar.classList.toggle('hide', n===0);
+  if(tx)  tx.textContent='มีเคสด่วนรออยู่ '+n+' เคส — กดเพื่อไปดู';
+  if(bd){ bd.textContent=n>99?'99+':n; bd.classList.toggle('hide', n===0); }
+  if(n>0 && document.title.indexOf('(')!==0) document.title='('+n+') จีทู — แผงควบคุม';
+  if(n===0) document.title='จีทู — แผงควบคุม';
+}
+function jumpUrgent(){
+  const el=document.querySelector('.qcard.urgent, .ocard.bad');
+  if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); el.style.outline='3px solid #ff5d5d';
+          setTimeout(function(){ el.style.outline=''; },1800); }
+}
+
 function go(n){
   TAB=n;
-  [1,2,3].forEach(function(i){ $('t'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); });
+  [1,2,3].forEach(function(i){ const tb=$('t'+i); if(tb) tb.classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); });
+  syncNav(n); window.scrollTo(0,0);
   if(n===2) loadChats();
   if(n===3){ loadHealth(); loadNotice(); }
 }
@@ -284,6 +342,7 @@ async function loadQueue(data){
         +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
         +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เสร็จ</button></div></div>';
     }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
+    markUrgent();
     return list.length;
   }catch(e){ return 0; }
 }
@@ -292,15 +351,15 @@ async function loadQueue(data){
 async function sendExpFee(uid,btn){
   const inp=document.getElementById('ef_'+uid.replace(/[^a-zA-Z0-9]/g,''));
   const fee=parseInt(String(inp&&inp.value||'').replace(/[^0-9]/g,''),10);
-  if(!(fee>0)){ alert('กรอกค่าส่งเป็นตัวเลขก่อนนะคะ (ตามแอปแกร็บเป๊ะๆ)'); if(inp)inp.focus(); return; }
+  if(!(fee>0)){ toast('กรอกค่าส่งเป็นตัวเลขก่อนนะคะ (ตามแอปแกร็บเป๊ะๆ)'); if(inp)inp.focus(); return; }
   if(!confirm('ส่งค่าส่งด่วน '+fee+' บาท ให้ลูกค้า?\n\nระบบจะคิดยอดรวมใหม่และส่งการ์ดยืนยันให้อัตโนมัติค่ะ')) return;
   btn.disabled=true; btn.textContent='กำลังส่ง...';
   try{
     const r=await (await fetch(q('/expfee?uid='+encodeURIComponent(uid)+'&fee='+fee))).json();
     btn.textContent='ส่งแล้ว ✅';
-    alert(r['ผล']||'ส่งแล้ว'+(r['ยอดรวมใหม่']?('\nยอดรวมใหม่ '+r['ยอดรวมใหม่']+' บาท'):''));
+    toast(r['ผล']||'ส่งแล้ว'+(r['ยอดรวมใหม่']?('\nยอดรวมใหม่ '+r['ยอดรวมใหม่']+' บาท'):''));
     loadQueue(); refresh();
-  }catch(e){ btn.disabled=false; btn.textContent='ส่งให้ลูกค้า'; alert('ส่งไม่สำเร็จ ลองใหม่นะคะ'); }
+  }catch(e){ btn.disabled=false; btn.textContent='ส่งให้ลูกค้า'; toast('ส่งไม่สำเร็จ ลองใหม่นะคะ',1); }
 }
 function markDone2(uid,el){
   const card=el&&el.closest?el.closest('.qcard'):null;
@@ -320,7 +379,7 @@ function ackBad(id){
 function orderDone2(uid,el){
   const card=el&&el.closest?el.closest('.ocard'):null;
   if(card&&card.classList.contains('bad')&&!card.classList.contains('ok')){
-    alert('⛔ ออเดอร์นี้สลิปมีปัญหา\n\nต้องกดปุ่ม "ฉันเช็คยอดเงินเข้าแล้ว" ก่อนถึงจะลงออเดอร์ได้ค่ะ');
+    toast('⛔ ออเดอร์นี้สลิปมีปัญหา\n\nต้องกดปุ่ม "ฉันเช็คยอดเงินเข้าแล้ว" ก่อนถึงจะลงออเดอร์ได้ค่ะ');
     return;
   }
   orderDone(uid);
@@ -355,6 +414,7 @@ async function loadOrders(data){
         +'<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
         +'<button class="odone" onclick="orderDone2(\''+it.uid+'\',this)">✅ ลงแล้ว</button></div></div>';
     }).join('') : '<div class="qempty">ยังไม่มีออเดอร์รอลง</div>';
+    markUrgent();
     return o.length;
   }catch(e){ return 0; }
 }
@@ -442,8 +502,8 @@ async function savePay(){
   if(!v && !confirm('ล้างค่า = กลับไปใช้บัญชีตั้งต้นใน Cloudflare — ยืนยัน?')) return;
   try{
     const r=await (await fetch(q('/ctl/payinfo'),{method:'POST',body:v})).json();
-    if(r.error){ alert(r.error); $('msg').textContent=r.error; return; }
-    alert('✅ บันทึกเลขบัญชีสำเร็จ — การ์ดโอนเงินหลังจากนี้ใช้บัญชีใหม่ทันที');
+    if(r.error){ toast(r.error,1); $('msg').textContent=r.error; return; }
+    toast('✅ บันทึกเลขบัญชีสำเร็จ — การ์ดโอนเงินหลังจากนี้ใช้บัญชีใหม่ทันที');
     $('msg').textContent='✅ บันทึกเลขบัญชีแล้ว — มีผลทันที';
     loadNotice();
   }catch(e){ $('msg').textContent='บันทึกไม่สำเร็จ: '+e.message; }
@@ -539,5 +599,11 @@ function init(){
 }
 init();
 </script>
+<div class="navbar" id="navbar">
+  <button class="navbtn on" id="n1" onclick="go(1)"><i>📦</i>งานวันนี้<span class="bdg hide" id="bd1">0</span></button>
+  <button class="navbtn" id="n2" onclick="go(2)"><i>💬</i>แชท</button>
+  <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
+</div>
+<div id="toast"></div>
 </body>
 </html>
