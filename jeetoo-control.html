@@ -474,14 +474,30 @@ async function showConv(uid,name){
   }catch(e){ $('convbody').innerHTML='<div class="qempty">โหลดไม่ได้</div>'; }
 }
 function closeConv(){ $('convbox').classList.add('hidden'); }
+/* ⚡ k161 (แอดมินแจ้ง 4 ส.ค.): กด "ปิดจีทู" แล้วรอ 5-10 วิกว่าสถานะจะเปลี่ยน
+   ต้นเหตุ (ตระกูลเดียวกับ k94/k114): กดแล้วหน้าจอไป "อ่านค่าใหม่จากเซิร์ฟเวอร์" ทันที
+     แต่ Cloudflare KV อ่านค่าที่เพิ่งเขียนได้ช้า → ได้สถานะเก่ากลับมา ปุ่มเลยยังไม่เปลี่ยน
+     ซ้ำร้ายยิง 3 คำขอรวด (loadChats + loadQueue + refresh) ยิ่งหน่วง
+   แก้: เปลี่ยนหน้าจอทันทีจากฝั่งเบราว์เซอร์ (เรารู้อยู่แล้วว่ากดอะไรไป) แล้วค่อยไปเทียบกับ
+     เซิร์ฟเวอร์ทีหลังแบบเงียบๆ · ถ้าคำสั่งพลาดค่อยย้อนปุ่มกลับ + บอกให้กดใหม่ */
+function setMuted(uid,val,reason){
+  for(var i=0;i<CHATS.length;i++) if(CHATS[i].uid===uid){ CHATS[i].muted=val; if(val) CHATS[i].reason=reason||CHATS[i].reason||'แอดมินคุมอยู่'; break; }
+  renderChats();
+}
 async function mute1(uid,btn){
   if(btn) btn.textContent='⏸…';
-  try{ await fetch(q('/ctl/mute1?uid='+encodeURIComponent(uid)),{method:'POST'});
-    $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
+  setMuted(uid,true);                                  // ⚡ เปลี่ยนทันที ไม่รอเซิร์ฟเวอร์
+  $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว';
+  try{ await fetch(q('/ctl/mute1?uid='+encodeURIComponent(uid)),{method:'POST'}); }
+  catch(e){ setMuted(uid,false); $('msg').textContent='⚠️ ปิดไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
+  loadQueue(); setTimeout(function(){ loadChats(); refresh(); },1500);   // เทียบกับเซิร์ฟเวอร์ทีหลัง
 }
 async function unmute1(uid){
-  try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'});
-    $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว'; loadChats(); loadQueue(); refresh(); }catch(e){}
+  setMuted(uid,false);                                 // ⚡ เปลี่ยนทันที
+  $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว';
+  try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); }
+  catch(e){ setMuted(uid,true); $('msg').textContent='⚠️ ทำรายการไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
+  loadQueue(); setTimeout(function(){ loadChats(); refresh(); },1500);
 }
 
 /* ═══ แท็บ 3: ประกาศ + สุขภาพ + สต็อก ═══ */

@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1751,6 +1751,56 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k160: สั่งของพร้อมบอก "ส่งแกรป" ในข้อความเดียว → ออเดอร์ต้องไม่หาย ═══
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  // ── ตัวแยกว่า "ข้อความนี้เป็นการสั่งของ" หรือแค่ถาม ──
+  t(269.1, 'เคสจริง "เอามาโบ องุ่น 1 แท่ง ส่งแกรป" = การสั่งของ', looksLikeOrderText('เอามาโบ องุ่น 1 แท่ง ส่งแกรป') === true, 'ทางลัดกินออเดอร์ทิ้ง');
+  t(269.2, '"เอามาโบ องุ่น 2 ชิ้น ส่งด่วน" = การสั่งของ', looksLikeOrderText('เอามาโบ องุ่น 2 ชิ้น ส่งด่วน') === true, 'ทางลัดกินออเดอร์ทิ้ง');
+  t(269.3, '"ส่งแกรปมั้ย" = แค่ถาม ต้องใช้ทางลัดตามเดิม', looksLikeOrderText('ส่งแกรปมั้ย') === false, 'ไปรบกวนทางลัดที่ทำงานถูกอยู่แล้ว');
+  t(269.4, '"ดึกๆส่งแกร็บมั้ย" (k83) ต้องไม่ถือเป็นการสั่งของ', looksLikeOrderText('ดึกๆส่งแกร็บมั้ย') === false, 'ทับ k83');
+  t(269.5, '⚠️ "เอามาโบ9k ส่งแกรป" ไม่มีจำนวน → ไม่ใช่การสั่งของ', looksLikeOrderText('เอามาโบ9k ส่งแกรป') === false, 'อ่านเลขรุ่น 9 เป็นจำนวน');
+  t(269.6, '"เอาส่งด่วน" เฉยๆ = ไม่ใช่การสั่งของ', looksLikeOrderText('เอาส่งด่วน') === false, 'ทางลัดโดนข้าม');
+
+  // ── โฟลว์จริง: สั่ง + แกรป ในข้อความเดียว ต้องบันทึกออเดอร์ไว้ ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    const uid = 'K160a'; sent = []; aiReply = 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'เอามาโบ องุ่น 1 แท่ง ส่งแกรป', id: '1' } }, env, 'TOKEN', 'v20');
+    const o = store.get('ord:v20:' + uid);
+    const oj = o ? JSON.parse(o) : null;
+    t(269.7, 'เคสจริง: สั่ง+แกรป ข้อความเดียว → ออเดอร์ต้องถูกบันทึก', !!oj && oj.status === 'รอโอน 💰' && Array.isArray(oj.items) && oj.items.length > 0, 'ออเดอร์หาย = แอดมินกรอกค่าส่งแล้วไม่มีการ์ด ลูกค้าต้องสั่งใหม่');
+    t(269.8, 'เคสจริง: ต้องยังไม่มียอดรวม (ค่าส่งด่วนยังไม่รู้)', !!oj && /ค่าส่งด่วน \(รอทีมงานเช็ค\)/.test(oj.block) && !/รวมยอดชำระ/.test(oj.block), 'ออกยอดพัสดุตัดหน้า = ลูกค้าโอนผิด');
+  }
+  // ── ⚠️ ห้ามทับด่านต่างจังหวัด (k64) — ตอนแก้รอบแรกเผลอทำพัง ต้องมีเทสกันไว้ ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    const uid = 'K160b'; sent = []; aiReply = 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'อยู่เชียงใหม่ เอามาโบ องุ่น 1 แท่ง ส่งแกรป', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(269.9, '⚠️ ต่างจังหวัด + สั่ง + แกรป → ต้องปฏิเสธส่งด่วน ห้ามขอหมุด', /เฉพาะ กทม/.test(txt) && !/แชร์โลเคชั่น|ปักหมุด/.test(txt), 'รับปากส่งด่วนไปต่างจังหวัด: ' + txt.slice(0, 60));
+  }
+  // ── เปลี่ยนใจจากพัสดุเป็นแกรปหลังการ์ดออกแล้ว → ต้องล้างยอดพัสดุทิ้ง ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    const uid = 'K160c'; sent = []; aiReply = 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'เอามาโบ องุ่น 1 แท่ง', id: '1' } }, env, 'TOKEN', 'v20');
+    const before = JSON.parse(store.get('ord:v20:' + uid) || '{}');
+    sent = []; aiReply = 'รับทราบค่ะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ขอส่งแกรปแทน', id: '2' } }, env, 'TOKEN', 'v20');
+    const after = JSON.parse(store.get('ord:v20:' + uid) || '{}');
+    t(269.95, 'เปลี่ยนใจเป็นแกรป → ล้างยอดพัสดุ (กันโอนผิดยอด)',
+      /รวมยอดชำระ 390/.test(before.block || '') && !/รวมยอดชำระ/.test(after.block || ''),
+      'ยอดพัสดุค้าง → "ยืนยัน" ส่งการ์ดเลขบัญชียอดผิด: ' + String(after.block || '').replace(/\n/g, ' · ').slice(0, 80));
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ออเดอร์แกรป]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ออเดอร์แกรป]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k159: ตรวจสลิปแยกตามร้าน — ⛔ ห้ามยืมบัญชีร้านอื่นมาตรวจ ═══
 //   5 ร้าน 5 บัญชี แต่เดิมตรวจกับสาขาเดียวทั้งระบบ = เงินจริงไหลผ่านจุดนี้ทุกออเดอร์
 {
