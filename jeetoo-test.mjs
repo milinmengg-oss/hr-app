@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -696,7 +696,7 @@ async function memTests() {
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'K106b' }, message: { type: 'text', text: 'มีโปรอะไรบ้าง', id: '2' } }, env, 'TOKEN', 'v20');
     const t2 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     T.push({ n: 128, name: 'k106 ถามโปรตอนคุย IQOS → ตอบโปรไส้บุหรี่ 2 ชิ้น / ไม่มีบริบท → ลิสต์รวม',
-      ok: /2 ชิ้น/.test(t1) && /IQOS/.test(t1) && !aiCalled && /หัวน้ำยา — ครบ 10 หัว/.test(t2),
+      ok: /2 ชิ้น/.test(t1) && /IQOS/.test(t1) && !aiCalled && /หัวพอตเล็ก — ครบ 10 หัว/.test(t2),
       why: 't1=' + t1.slice(0, 70) });
   }
 
@@ -985,6 +985,60 @@ async function memTests() {
     const t141 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     T.push({ n: 162, name: 'k141 ถามแบรนด์ RELX → ห้ามตอบเป็นเรื่อง MARBO ล้วนๆ ต้องลิสต์รุ่น RELX จริง',
       ok: !/MARBO/.test(t141) && /RELX/.test(t141), why: t141.slice(0, 80).replace(/\n/g, ' | ') });
+  }
+  {
+    // ── k152 (เจ้าของร้านยืนยัน 3 ส.ค. 22.55 — ศัพท์ร้าน): "หัวมาโบ" = M SWITCH (บิ๊กพอต) เสมอ
+    //    เคสจริง 22.55: ลูกค้า "มีหัวมาโบมั้ยคะ" → บอทตอบ "MARBO 9K (350 บาท)" = พอตทั้งแท่ง ไม่ใช่หัว
+    //    ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน
+    const head = [['มีหัวมาโบมั้ยคะ', 'M SWITCH'], ['หัวมาโบ', 'M SWITCH'], ['หัวมาร์โบ', 'M SWITCH']];
+    const bad152 = head.filter(([t2, w]) => _MODEL_IN(t2) !== w);
+    T.push({ n: 180, name: 'k152 "หัวมาโบ" ต้องได้ M SWITCH (บิ๊กพอต) ไม่ใช่ MARBO 9K',
+      ok: !bad152.length, why: bad152.map(([t2]) => t2 + ' → "' + _MODEL_IN(t2) + '"').join(' · ') });
+
+    // ต้องไม่ทับกฎเดิม: "มาโบ" ลอยๆ ยังเป็น MARBO 9K · "มาโบซีโร่" ยังเป็นหัวพอต MARBO ZERO
+    const keep = [['มาโบ 9', 'MARBO 9K'], ['เอามาโบ องุ่นว่าน', 'MARBO 9K'], ['มาโบซีโร่', 'หัวพอต MARBO ZERO']];
+    const bad152b = keep.filter(([t2, w]) => _MODEL_IN(t2) !== w);
+    T.push({ n: 181, name: 'k152 กฎเดิมต้องไม่พัง ("มาโบ 9"=MARBO 9K · "มาโบซีโร่"=หัวพอต MARBO ZERO)',
+      ok: !bad152b.length, why: bad152b.map(([t2, w]) => t2 + ' → ได้ "' + _MODEL_IN(t2) + '" ควรเป็น ' + w).join(' · ') });
+  }
+  {
+    // ── k150 (เคสจริง 3/8 22.50): ลูกค้า "สตา" → บอทตอบ STAR 2,500 มีของ
+    //    ลูกค้าถามต่อ "เหลือกลิ่นไหน" → บอทตอบ "INFY PLUS หมดชั่วคราว" (คนละรุ่น เก่ากว่า 3 เทิร์น)
+    //    ลูกค้า "เอาองุ่นว่าน 1" (สั่งของแล้ว) → ยังตอบ INFY PLUS อีก = ออเดอร์หลุดคาแชท
+    const h150 = [
+      { role: 'user', content: 'ชาจี อินฟี่' },
+      { role: 'assistant', content: 'ขออภัยค่ะ หัวพอต INFY PLUS หมดชั่วคราวทุกกลิ่นเลยนะคะ' },
+      { role: 'user', content: 'สตา' },
+      { role: 'assistant', content: 'รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ 💕\n\nมี 12 กลิ่น ราคา 150 บาท รับกลิ่นไหนดีคะ' },
+    ];
+    const g150 = carryModel('เหลือกลิ่นไหน', h150).trim();
+    T.push({ n: 176, name: 'k150 ถามต่อ "เหลือกลิ่นไหน" → ต้องจำ STAR 2,500 ที่คุยค้างอยู่ ไม่ย้อนไป INFY',
+      ok: g150 === 'STAR 2,500', why: 'ได้ "' + g150 + '"' });
+
+    // k73 ต้องยังทำงาน: บอทเพิ่งบอกว่าหมด → ห้ามแบกรุ่นนั้นมาใช้ต่อ
+    const h150b = [
+      { role: 'user', content: 'มาโบ 9k' },
+      { role: 'assistant', content: 'MARBO 9K มีกลิ่นที่พร้อมส่งค่ะ - เยลลี่ - องุ่นว่านหางจระเข้' },
+      { role: 'user', content: 'เอสโก้' },
+      { role: 'assistant', content: 'ขออภัยค่ะ ESKO BAR 20K หมดชั่วคราวทุกกลิ่นเลยนะคะ' },
+    ];
+    const g150b = carryModel('เหลือกลิ่นไหน', h150b).trim();
+    T.push({ n: 177, name: 'k150/k73 บอทเพิ่งบอกว่ารุ่นนั้นหมด → ห้ามหยิบรุ่นนั้นมาตอบต่อ',
+      ok: g150b !== 'ESKO BAR 20K', why: 'ได้ "' + g150b + '"' });
+  }
+  {
+    // ── k151 (เจ้าของร้านยืนยัน 3 ส.ค.): โปร "ครบ 1,000 บาท ส่งฟรี" **ไม่มีจริง**
+    //    แต่ข้อความโปรที่ส่งหาลูกค้าโฆษณาไว้ 3 จุด (เคสจริง 22.52 ลูกค้าถาม "มีโปรไร" แล้วได้ข้อความนี้)
+    const srcs = [PROMO_MSG];
+    const bad = srcs.filter(x => /1[,.]?000\s*บาท/.test(String(x)));
+    T.push({ n: 178, name: 'k151 ข้อความโปรตายตัว ห้ามมีโปร "ครบ 1,000 บาท ส่งฟรี" ที่ไม่มีจริง',
+      ok: !bad.length, why: bad.length ? 'ยังมีอยู่: ' + String(bad[0]).slice(0, 80) : '' });
+
+    // ต้องยังบอกโปรจำนวนชิ้นที่มีจริงครบ
+    const need = ['4 แท่ง', '4 ชิ้น', '10 หัว', '2 ชิ้น'];
+    const missP = need.filter(x => String(PROMO_MSG).indexOf(x) === -1);
+    T.push({ n: 179, name: 'k151 โปรจำนวนชิ้นที่มีจริง (4 แท่ง / 4 ชิ้น / 10 หัว / 2 ชิ้น) ต้องยังอยู่ครบ',
+      ok: !missP.length, why: missP.length ? 'หายไป: ' + missP.join(', ') : '' });
   }
   {
     // ── k144 (เคสจริง 3/8): "โอเครวมยอดให้เลย" → ระบบอ่านว่าอยู่ "จังหวัดเลย" = นอกเขตส่งด่วน
