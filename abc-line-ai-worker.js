@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k130-sharedstock";
+const BUILD = "2026-08-03-k131-multixselly";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2603,15 +2603,29 @@ export default {
       if (request.method !== "POST") return new Response("ok", { status: 200 });
       const rawBody = await request.text();
       // ตรวจลายเซ็น HMAC-SHA256 ตาม doc (ใช้ api key จาก XSelly = secret XSELLY_API_KEY)
-      if (env.XSELLY_API_KEY) {
-        try {
-          const sig = (request.headers.get("X-XSelly-Signature") || "").toLowerCase();
-          const enc2 = new TextEncoder();
-          const k = await crypto.subtle.importKey("raw", enc2.encode(env.XSELLY_API_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-          const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc2.encode(rawBody)));
-          const hex = Array.from(mac).map(b => b.toString(16).padStart(2, "0")).join("");
-          if (hex !== sig) { console.log("XSELLY_SIG_FAIL got=" + sig.slice(0, 16)); return new Response("bad signature", { status: 401 }); }
-        } catch (e) { console.log("XSELLY_SIG_ERR " + String(e).slice(0, 120)); }
+      // 🔑 k131 (เจ้าของร้านแจ้ง 3/8): **แอดมินแต่ละคนมีไอดี XSelly ของตัวเอง**
+      //   แต่ละไอดี = คีย์ API คนละตัว → เดิมโค้ดตรวจลายเซ็นกับคีย์เดียว
+      //   ผลคือ webhook จากแอดมินคนอื่นจะโดนตีกลับ 401 = สต็อกที่เขาตัดไป ระบบไม่รู้เรื่อง
+      //   → บอทยังคิดว่ามีของ แล้วขายซ้ำ = ต้องคืนเงินลูกค้า
+      //   แก้: รับได้หลายคีย์ ใส่ที่ Cloudflare เป็น XSELLY_API_KEY, XSELLY_API_KEY_2 ... _6
+      {
+        const keys = [env.XSELLY_API_KEY, env.XSELLY_API_KEY_2, env.XSELLY_API_KEY_3,
+                      env.XSELLY_API_KEY_4, env.XSELLY_API_KEY_5, env.XSELLY_API_KEY_6].filter(Boolean);
+        if (keys.length) {
+          try {
+            const sig = (request.headers.get("X-XSelly-Signature") || "").toLowerCase();
+            const enc2 = new TextEncoder();
+            let pass = false, which = 0;
+            for (let i = 0; i < keys.length; i++) {
+              const k = await crypto.subtle.importKey("raw", enc2.encode(keys[i]), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+              const mac = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc2.encode(rawBody)));
+              const hex = Array.from(mac).map(b => b.toString(16).padStart(2, "0")).join("");
+              if (hex === sig) { pass = true; which = i + 1; break; }
+            }
+            if (!pass) { console.log("XSELLY_SIG_FAIL got=" + sig.slice(0, 16) + " tried=" + keys.length + " keys"); return new Response("bad signature", { status: 401 }); }
+            console.log("XSELLY_SIG_OK key#" + which);
+          } catch (e) { console.log("XSELLY_SIG_ERR " + String(e).slice(0, 120)); }
+        }
       }
       // ตอบ 200 ทันที (doc: ต้องตอบใน 1 วิ และไม่มี retry) แล้วค่อยประมวลผลเบื้องหลัง
       ctx.waitUntil((async () => {
