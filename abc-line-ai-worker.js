@@ -21,7 +21,7 @@ const SHOPS = {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-03-k121-dsv4flash";
+const BUILD = "2026-08-03-k123-legoguard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -342,6 +342,65 @@ function legoHint(text, sm, buf) {
   out += "\n⛔ ห้ามบอกจำนวนสต็อกเป็นตัวเลขชิ้น (จำนวน 'กลิ่น' บอกได้)";
   out += "\n💡 ทั้ง 3 ตัวเป็นหัว Big Pod ครบ 4 ชิ้นส่งฟรี · ตอบสั้นๆ เป็นกันเอง ไม่ต้องพิมพ์เป็นรายงาน";
   return out;
+}
+
+// 🧱 k123 (เคสจริง 3/8 13.53): ลูกค้าพิมพ์ "เอาเลโก้องุ่น1" → ระบบตอบ "รุ่น ELFBAR 15K กลิ่นองุ่นหมด"
+//   ELFBAR ไม่ใช่หัวเลโก้เลย = คนละตระกูลสินค้า → ลูกค้าสับสน ไม่ได้ของที่ขอ
+//   ต้นเหตุ: k48 ถอด "เลโก้" ลอยๆ ออกจาก TH_MODEL (ถูกแล้ว เพราะเลโก้ = 3 ยี่ห้อ)
+//     ผลข้างเคียงคือ ด่านกันตอบผิดรุ่น (k117) ไม่ทำงาน เพราะมองว่าลูกค้า "ไม่ได้เอ่ยรุ่น"
+//     legoHint ส่งข้อเท็จจริง 3 ยี่ห้อให้ AI แล้ว แต่ AI ไม่เชื่อฟัง → ต้องมีด่านบังคับ ไม่ใช่แค่บอก
+//   กฎ: ลูกค้าพูด "เลโก้/หัวเติม" โดยไม่ระบุยี่ห้อ → คำตอบห้ามเอ่ยรุ่นนอกตระกูล 3 ยี่ห้อนี้
+//        ถ้าเอ่ย = เขียนคำตอบใหม่จากข้อเท็จจริงจริง (โค้ดเขียนเอง ไม่ให้ AI แต่ง)
+let _LEGO_CTX = null;   // เก็บบริบทรอบล่าสุดไว้ให้ด่านขาออกใช้ซ้ำ ไม่ต้องอ่าน KV อีกรอบ
+const LEGO_ASK_RE = /เลโก้|เลโก|lego|หัวเติม|หัวแบบเติม|เติมน้ำยาเอง|หัวรีฟิล|refill/i;
+function legoGuard(reply) {
+  try {
+    const ctx = _LEGO_CTX;
+    if (!ctx || Date.now() - ctx.t > 120000) return reply;
+    const s = String(ctx.txt || "");
+    if (!LEGO_ASK_RE.test(s)) return reply;
+    if (/abc|เอบีซี|relx|รีแลค|boost|บูส|clear|คลีย/i.test(s)) return reply;  // ระบุยี่ห้อแล้ว = ไม่กำกวม
+    const r = String(reply || "");
+    // รุ่นนอกตระกูลที่ห้ามโผล่ (ยกเว้นชื่อเครื่องที่ใช้คู่กับหัวเลโก้ ซึ่งพูดได้)
+    const OUT = [];
+    for (const m in FLAVORS) {
+      if (/^เครื่อง|^ไส้บุหรี่|POUCH|FREEBASE|SALTNIC/i.test(m)) continue;
+      if (LEGO3.some(([lm]) => lm === m)) continue;
+      if (r.indexOf(m) !== -1) OUT.push(m);
+    }
+    if (!OUT.length) return reply;
+    console.log("LEGO_GUARD ตอบนอกตระกูล: " + OUT.join(",") + " | ถาม: " + s.slice(0, 60));
+    // เขียนใหม่จากข้อเท็จจริงจริง — ใช้กลิ่นที่ลูกค้าเอ่ย (ถ้ามี)
+    const sm = ctx.sm || {}, B = typeof ctx.buf === "number" ? ctx.buf : 1;
+    const have = (m, f) => { let q = null; try { q = findStockForItem(sm, m, f); } catch (e) {} return q === null || q > B; };
+    const nt = normTH(s);
+    let pick = "", pickLen = 0;
+    for (const [m] of LEGO3) for (const f of ((FLAVORS[m] && FLAVORS[m].f) || [])) {
+      const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+      const nb = normTH(bare);
+      if (nb.length >= 3 && nt.indexOf(nb) !== -1 && nb.length > pickLen) { pick = bare; pickLen = nb.length; }
+    }
+    let out = pick
+      ? "หัวเติมน้ำยาเอง (หัวเลโก้) กลิ่น" + pick + " ร้านมี 3 ยี่ห้อค่ะ 💕\n"
+      : "หัวเติมน้ำยาเอง (หัวเลโก้) ร้านมี 3 ยี่ห้อค่ะ 💕\n";
+    let anyOk = false;
+    for (const [m, p] of LEGO3) {
+      const fl = (FLAVORS[m] && FLAVORS[m].f) || [];
+      if (pick) {
+        const match = fl.filter(f => normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "")) === normTH(pick));
+        if (!match.length) { out += "\n• " + m + " " + p + " บาท — ไม่มีกลิ่นนี้"; continue; }
+        const ok = match.filter(f => have(m, f));
+        if (ok.length) { anyOk = true; out += "\n• " + m + " " + p + " บาท — ✅ มีค่ะ (" + ok.join(" / ") + ")"; }
+        else out += "\n• " + m + " " + p + " บาท — ❌ หมดชั่วคราว";
+      } else {
+        const n = fl.filter(f => have(m, f)).length;
+        if (n) anyOk = true;
+        out += "\n• " + m + " " + p + " บาท — " + (n ? "✅ มีของ " + n + " กลิ่น" : "❌ หมดชั่วคราว");
+      }
+    }
+    out += anyOk ? "\n\nรับตัวไหนดีคะ 💕" : "\n\nรับกลิ่นอื่นแทนไหมคะ บอกแนวที่ชอบมาได้เลยค่ะ 💕";
+    return out;
+  } catch (e) { return reply; }
 }
 
 // 🔎 k67: ค้นย้อนกลับ "กลิ่น → รุ่นไหนมีบ้าง"
@@ -1921,14 +1980,39 @@ export default {
     if (url0.pathname === "/quality") {
       if (!OKEY()) return DENY();
       const shop = (url0.searchParams.get("shop") || "v20").toLowerCase();
+      const pct = o => (o && o.n ? (Math.round((1 - o.bad / o.n) * 1000) / 10) + "%" : "-");
       const days = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date(Date.now() + 7 * 3600 * 1000 - i * 86400000).toISOString().slice(0, 10);
         let q = null; try { const v = await env.CONV.get("qc:" + shop + ":" + d); if (v) q = JSON.parse(v); } catch (e) {}
-        if (q) days.push({ วันที่: d, ตอบทั้งหมด: q.n, กันความมั่วไว้: q.bad, ราคาผิด: q.price, เรียกประเภทผิด: q.device, แบรนด์ไม่รู้จัก: q.model,
-          ความแม่น: q.n ? (Math.round((1 - q.bad / q.n) * 1000) / 10) + "%" : "-" });
+        if (!q) continue;
+        // k122: แยกให้เห็นว่าในวันนั้นโมเดลไหนตอบไปกี่ข้อความ แม่นกี่ % (วันที่สลับโมเดลจะมี 2 บรรทัด)
+        const split = {};
+        for (const m in (q.by || {})) {
+          const b = q.by[m];
+          split[m] = { ตอบ: b.n, กันไว้: b.bad, ความแม่น: pct(b) };
+        }
+        days.push({ วันที่: d, ตอบทั้งหมด: q.n, กันความมั่วไว้: q.bad, ราคาผิด: q.price, เรียกประเภทผิด: q.device, แบรนด์ไม่รู้จัก: q.model,
+          ความแม่น: pct(q), แยกตามโมเดล: Object.keys(split).length ? split : "— ยังไม่มีข้อมูลแยก (ก่อนบิลด์ k122) —" });
       }
-      return new Response(JSON.stringify({ ร้าน: shop, build: BUILD, รายวัน: days }, null, 1),
+      // k122: ยอดสะสมรายโมเดล — ตัวเลขนี้ "ไม่ปนกัน" ใช้เทียบ Qwen vs DeepSeek V4 ได้ตรงๆ
+      const byModel = {};
+      try {
+        const ls = await env.CONV.list({ prefix: "qcm:" + shop + ":", limit: 30 });
+        for (const k of ls.keys) {
+          const name = k.name.split(":").slice(2).join(":");
+          let mq = null; try { const v = await env.CONV.get(k.name); if (v) mq = JSON.parse(v); } catch (e) {}
+          if (mq) byModel[name] = { เริ่มนับ: mq.since || "-", ล่าสุด: mq.last || "-", ตอบทั้งหมด: mq.n, กันความมั่วไว้: mq.bad,
+            ราคาผิด: mq.price, เรียกประเภทผิด: mq.device, แบรนด์ไม่รู้จัก: mq.model, ความแม่น: pct(mq) };
+        }
+      } catch (e) {}
+      return new Response(JSON.stringify({
+        ร้าน: shop, build: BUILD,
+        โมเดลที่ใช้อยู่: MODEL_OVERRIDE || MODELS[0],
+        สะสมรายโมเดล: Object.keys(byModel).length ? byModel : "— เริ่มนับตั้งแต่บิลด์ k122 —",
+        หมายเหตุ: "ตัวเลขก่อน k122 เป็นยอดรวมทุกโมเดลปนกัน · ยอด 'สะสมรายโมเดล' เริ่มนับใหม่ที่ 0 ตั้งแต่ k122 จึงเทียบกันได้ตรงๆ",
+        รายวัน: days,
+      }, null, 1),
         { headers: { "content-type": "application/json; charset=utf-8", "access-control-allow-origin": "*" } });
     }
     if (url0.pathname === "/setmodel") {
@@ -2571,16 +2655,45 @@ function factGate(reply) {
   return { text: out, hit, fixed: hit.price + hit.device + hit.model };
 }
 // 📊 นับสถิติรายวัน (ดูได้ที่ /quality) — เก็บ 7 วัน
+// 🆕 k122 (เจ้าของร้านสั่ง 3/8): "อย่าเอาตอนเทส Qwen มารวมกับตอนเปลี่ยนเป็น DeepSeek V4"
+//   → ทุกครั้งที่นับ ต้องติดป้ายว่าโมเดลไหนเป็นคนตอบ แล้วเก็บแยกเป็น 3 ชั้น:
+//     1) qc:<ร้าน>:<วัน>          = ยอดรวมรายวัน (ของเดิม ไม่พัง)
+//     2) qc:<ร้าน>:<วัน>.by[โมเดล] = แยกรายโมเดลในวันเดียวกัน (วันที่สลับโมเดลกลางวันก็ยังอ่านออก)
+//     3) qcm:<ร้าน>:<โมเดล>       = ยอดสะสมตั้งแต่เริ่มใช้โมเดลนั้น + วันเวลาที่เริ่มนับ
+//   ⚠️ ยอดสะสมของ DeepSeek V4 เริ่มนับที่ 0 ตั้งแต่บิลด์นี้ = ตัวเลขสะอาด ไม่มี Qwen ปน
+function shortModel(m) {
+  const s = String(m || "").toLowerCase();
+  if (!s) return "ไม่ทราบ";
+  return s.split("/").pop().replace(/:free$/, "");  // "deepseek/deepseek-v4-flash" → "deepseek-v4-flash"
+}
 async function bumpQuality(env, shopId, hit, fixed) {
   try {
     if (!env.CONV) return;
     const d = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 10);
+    // โมเดลที่ตอบจริงรอบนี้ (askAI บันทึกไว้ที่ _lastUsage) — ไม่ใช่โมเดลที่ "ตั้งใจจะใช้"
+    // สำคัญ: ถ้าตัวหลักล่มแล้วตกไปตัวสำรอง ต้องนับเข้าตัวสำรอง ไม่ใช่ตัวหลัก
+    let mdl = "ไม่ทราบ";
+    try { if (_lastUsage && _lastUsage.model && Date.now() - (_lastUsage.t || 0) < 120000) mdl = shortModel(_lastUsage.model); } catch (e) {}
+
     const key = "qc:" + shopId + ":" + d;
-    let q = { n: 0, price: 0, device: 0, model: 0, bad: 0 };
+    let q = { n: 0, price: 0, device: 0, model: 0, bad: 0, by: {} };
     try { const v = await env.CONV.get(key); if (v) q = JSON.parse(v); } catch (e) {}
+    if (!q.by) q.by = {};
     q.n++; q.price += hit.price; q.device += hit.device; q.model += hit.model;
     if (fixed) q.bad++;
+    const b = q.by[mdl] || (q.by[mdl] = { n: 0, price: 0, device: 0, model: 0, bad: 0 });
+    b.n++; b.price += hit.price; b.device += hit.device; b.model += hit.model;
+    if (fixed) b.bad++;
     await env.CONV.put(key, JSON.stringify(q), { expirationTtl: 604800 });
+
+    // ยอดสะสมรายโมเดล — เก็บ 90 วัน ใช้ตอบคำถาม "โมเดลนี้แม่นกี่ %" โดยไม่ปนโมเดลก่อนหน้า
+    const mkey = "qcm:" + shopId + ":" + mdl;
+    let mq = { n: 0, price: 0, device: 0, model: 0, bad: 0, since: new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ") };
+    try { const v = await env.CONV.get(mkey); if (v) mq = JSON.parse(v); } catch (e) {}
+    mq.n++; mq.price += hit.price; mq.device += hit.device; mq.model += hit.model;
+    if (fixed) mq.bad++;
+    mq.last = new Date(Date.now() + 7 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+    await env.CONV.put(mkey, JSON.stringify(mq), { expirationTtl: 7776000 });
   } catch (e) {}
 }
 
@@ -3793,6 +3906,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
             const carried = carryModel(textH, history);
             const tForHint = textH + carried;
+            _LEGO_CTX = { txt: tForHint, sm: smForHint, buf: bufForHint, t: Date.now() };   // k123: เก็บไว้ให้ด่านขาออกตรวจ
             let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint) + typoHint(textH, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             return h;
@@ -4200,6 +4314,7 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     }
     // 🛡️ k91: ด่านตรวจข้อเท็จจริง — ตรวจ/แก้ ราคา · ประเภทสินค้า · แบรนด์ที่ไม่มีจริง แล้วนับสถิติ
     try {
+      reply = legoGuard(reply);          // k123: ถามหัวเลโก้ ห้ามตอบรุ่นนอกตระกูล
       const _fg = factGate(reply);
       reply = listify(_fg.text);
       await bumpQuality(env, shopId, _fg.hit, _fg.fixed);
