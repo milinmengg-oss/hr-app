@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1136,8 +1136,12 @@ async function memTests() {
     store.set('stockbuffer', '1');
     const uid = 'K143b';
     sent = []; aiCalled = false;
-    aiReply = 'แนะนำ MARBO 9K (350 บาท) พอตใช้แล้วทิ้งขายดีสุดค่ะ 💕 สนใจกลิ่นไหนดีคะ';
-    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'พอตแบบสูบแล้วทิ้ง ตัวไหนขายดีสุด', id: '1' } }, env, 'TOKEN', 'v20');
+    // k164: เดิมเทสนี้ถามว่า "ตัวไหนขายดีสุด" แล้วคาดหวังให้บอทตอบชื่อรุ่น
+    //   แต่ระบบไม่มีข้อมูลยอดขายเลย = ตอบชื่อรุ่นคือการเดา (เคสจริง 4/8 ลูกค้า PHUNG)
+    //   เจตนาเดิมของ k143b คือ "ตอบให้ถูกหมวดสินค้า" ไม่ใช่เรื่องอันดับขายดี
+    //   → เปลี่ยนคำถามให้ตรงเจตนาเดิม โดยไม่ขัดกับกฎห้ามเดายอดขาย (k164)
+    aiReply = 'แนะนำ MARBO 9K (350 บาท) เป็นพอตใช้แล้วทิ้งค่ะ 💕 สนใจกลิ่นไหนดีคะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'พอตแบบสูบแล้วทิ้ง มีรุ่นไหนแนะนำบ้าง', id: '1' } }, env, 'TOKEN', 'v20');
     const t143b = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     T.push({ n: 164, name: 'k143b ถามพอตใช้แล้วทิ้ง แล้ว AI ตอบถูกหมวดอยู่แล้ว → ด่านต้องไม่แตะคำตอบ',
       ok: /MARBO 9K/.test(t143b), why: t143b.slice(0, 80).replace(/\n/g, ' | ') });
@@ -1751,6 +1755,54 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k164: ขายดีที่สุด · สี vs กลิ่น · บ่นค่าส่งแพง ═══
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+
+  // ── 🏆 "ขายดีที่สุด" — ระบบไม่มีข้อมูลยอดขายเลย ห้ามเดา ──
+  const b1 = bestSellerGate('รุ่นที่ขายดีที่สุดตอนนี้คือ RELX DIVA 30K ค่ะ 💕 ราคา 490 บาท', 'อันไหนขายดีที่สุดในร้าน');
+  t(301, 'เคสจริง: ตอบชื่อรุ่นว่าขายดีที่สุด → ต้องบล็อก', b1.blocked === true, 'แนะนำของด้วยข้อมูลที่กุขึ้น');
+  t(302, 'เคสจริง: คำตอบใหม่ต้องไม่มีชื่อรุ่นที่เดามา', !/RELX DIVA/.test(b1.reply), 'ยังหลุดชื่อรุ่นไปหาลูกค้า');
+  t(303, 'เคสจริง: ต้องชวนคุยต่อ (ถามงบ/แนวที่ชอบ)', /งบ|แนวกลิ่น/.test(b1.reply), 'ตอบปฏิเสธเฉยๆ = เสียโอกาสขาย');
+  t(304, 'ตอบตามจริงว่าไม่มีข้อมูล → ต้องผ่าน', bestSellerGate('แอดมินไม่มีข้อมูลจัดอันดับยอดขายค่ะ', 'อันไหนขายดี').blocked === false, 'บล็อกคำตอบที่ซื่อสัตย์');
+  t(305, '"อะไรแพงที่สุด" (คนละคำถาม) ห้ามโดนแตะ', bestSellerGate('RELX DIVA 30K ราคา 490 บาทค่ะ', 'อะไรแพงที่สุด').blocked === false, 'ไปยุ่งคำถามที่ตอบได้จริง');
+  t(306, 'ถามขายดีแต่บอทไม่ได้ระบุรุ่น → ไม่ต้องแตะ', bestSellerGate('บอกแนวที่ชอบมาได้เลยค่ะ', 'อันไหนขายดี').blocked === false, 'บล็อกทั้งที่ไม่ได้เดา');
+
+  // ── 🎨 เครื่องมี "สี" ไม่ใช่ "กลิ่น" ──
+  t(307, 'เคสจริง: เครื่อง M ZERO PRO → ต้องเรียกว่า "สี"', unitWord('เครื่อง M ZERO PRO') === 'สี', 'บอกลูกค้าว่า "กลิ่นแนวที่ชอบ" กับเครื่อง = งง');
+  t(308, 'เครื่อง IQOS → "สี"', unitWord('เครื่อง IQOS ILUMA I ONE') === 'สี', 'ได้ ' + unitWord('เครื่อง IQOS ILUMA I ONE'));
+  t(309, 'พอตใช้แล้วทิ้ง → ยังเป็น "กลิ่น" เหมือนเดิม', unitWord('MARBO 9K') === 'กลิ่น', 'ไปเปลี่ยนคำของสินค้าที่ใช้กลิ่นจริง');
+  t(310, 'หัวพอต → ยังเป็น "กลิ่น"', unitWord('หัวพอต RELX INFINITY') === 'กลิ่น', 'ได้ ' + unitWord('หัวพอต RELX INFINITY'));
+
+  // ── 💸 ลูกค้าบ่นค่าส่งด่วนแพง → ต้องเสนอพัสดุ ไม่ใช่ถามชื่อรุ่น ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    const uid = 'K164';
+    store.set('exp:v20:' + uid, JSON.stringify({ fee: 280, km: 22, t: Date.now() }));
+    sent = []; aiReply = 'รบกวนพิมพ์ชื่อรุ่นหรือส่งรูปสินค้ามาให้หน่อยนะคะ 🙏🏻';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ไม่เอาแพง', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(311, 'เคสจริง "ไม่เอาแพง" → ต้องเสนอพัสดุ 40 บาท', /40 บาท/.test(txt) && /พัสดุ/.test(txt), 'ตอบไม่ตรงที่ลูกค้าบ่น: ' + txt.slice(0, 60));
+    t(312, 'เคสจริง: ห้ามถามชื่อรุ่นในจังหวะนี้', !/พิมพ์ชื่อรุ่น|ส่งรูปสินค้า/.test(txt), 'ยังถามชื่อรุ่นตอนลูกค้ากำลังจะหนี');
+    t(313, 'เคสจริง: ต้องบอกค่าส่งด่วนจริง (280) ให้เทียบ', /280/.test(txt), 'ลูกค้าเทียบไม่ได้ว่าคุ้มไหม');
+  }
+  // ⚠️ ยังไม่เคยแจ้งค่าส่งด่วน → ห้ามเด้งข้อความนี้ (ลูกค้าอาจบ่นราคาสินค้า ไม่ใช่ค่าส่ง)
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    const uid = 'K164b';
+    sent = []; aiReply = 'รับทราบค่ะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'แพงจัง', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(314, '⚠️ ยังไม่เคยแจ้งค่าส่งด่วน → ห้ามพูดเรื่องเปลี่ยนเป็นพัสดุ', !/ส่งด่วนตามหมุดคือ/.test(txt), 'เด้งข้อความค่าส่งทั้งที่ไม่เคยคุยเรื่องนี้');
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ตอบให้ตรง]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ตอบให้ตรง]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k163: กุโปร · กลิ่นข้ามรุ่น · ขออภัยนำหน้าข่าวดี · ไม่เอาแล้ว≠ขอเงินคืน ═══
 //   จากการขุด log 4 ส.ค. (ลูกค้า PHUNG + ออยออย)
 {
