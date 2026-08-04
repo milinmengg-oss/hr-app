@@ -2968,6 +2968,56 @@ for (const t of stT) {
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
+// ═══ [ตอบซ้ำ] k180 — แยกให้ออกว่า "ใครเป็นคนซ้ำ" (469-476) ═══
+const dpT = [];
+{
+  const AI = 'RELX BOOST POD กลิ่นที่มีพร้อมส่งค่ะ 💕\n- กล้วย 3%\n- น้ำแร่ 3%';
+  // ⚠️ ด่านนี้ต้องทดสอบแบบ "คนเดิมคุยต่อเนื่อง" — run() ใช้ uid ใหม่ทุกครั้ง จึงต้องมีตัวช่วยแยก
+  const คุยต่อ = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return { out: o.join('\n') };
+  };
+  store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+  // ── ลูกค้าถามเรื่องเดิมซ้ำ = คำตอบเดิมถูกต้องแล้ว ห้ามโทษตัวเอง ห้ามโยนเข้าคิวคน ──
+  const Q = 'Relx boost pod มีกลิ่นอะไรบ้างที่มีของ';
+  const r1 = await คุยต่อ('Udup1', Q, AI), r2 = await คุยต่อ('Udup1', Q, AI), r3 = await คุยต่อ('Udup1', Q, AI);
+  dpT.push({ n: 469, name: "⚠️ เคสจริง Hunter: ลูกค้าถามเรื่องเดิม 3 รอบ → ห้ามตอบว่า 'ตอบไม่ตรงคำถาม'",
+    ok: !/ตอบไม่ตรงคำถาม/.test(r2.out) && !/ตอบไม่ตรงคำถาม/.test(r3.out), why: r2.out.slice(0, 120) });
+  dpT.push({ n: 470, name: "⚠️ ลูกค้าถามเรื่องเดิมซ้ำ → ห้ามโยนเข้าคิวคนจริง (เปลืองคนเฝ้า)",
+    ok: !/ส่งต่อให้ทีมงานคนจริง|ตอบวนอยู่ที่เดิม/.test(r3.out), why: r3.out.slice(0, 120) });
+  dpT.push({ n: 471, name: "ลูกค้าถามเรื่องเดิมซ้ำ → ต้องยังได้คำตอบเดิมอยู่ (ไม่ใช่เงียบ)",
+    ok: /BOOST POD|กล้วย/.test(r2.out) && /BOOST POD|กล้วย/.test(r3.out), why: r3.out.slice(0, 120) });
+  dpT.push({ n: 472, name: "ตอบซ้ำรอบ 2 ขึ้นไป ต้องบอกให้ชัดว่ายืนยันอีกครั้ง (ไม่ใช่ก๊อปเป๊ะเงียบๆ)",
+    ok: /ยืนยันอีกครั้ง/.test(r3.out), why: r3.out.slice(0, 80) });
+  // ── บอทตันจริง (ลูกค้าถามเรื่องใหม่ แต่ได้คำตอบเดิม) = ต้องยังทำงานเหมือนเดิม ──
+  const ตัน = 'กลิ่นนี้เป็นแนวหอมๆ ละมุนๆ ค่ะ 💕';
+  const s1 = await คุยต่อ('Udup2', 'ยาสูบคลาสสิคกลิ่นเป็นยังไงครับ', ตัน);
+  const s2 = await คุยต่อ('Udup2', 'แล้วมะเฟืองกลิ่นเป็นยังไงครับ', ตัน);
+  const s3 = await คุยต่อ('Udup2', 'แล้วกล้วยล่ะครับ', ตัน);
+  dpT.push({ n: 473, name: "⚠️ บอทตันจริง (ลูกค้าถามเรื่องใหม่ แต่ตอบเดิม) → ด่านต้องยังจับได้",
+    ok: /ตอบไม่ตรงคำถาม|ตอบวนอยู่ที่เดิม/.test(s2.out + s3.out), why: (s2.out + ' || ' + s3.out).slice(0, 160) });
+  dpT.push({ n: 474, name: "⚠️ บอทตันจริง 3 รอบ → ยังต้องส่งต่อคนจริงเหมือนเดิม",
+    ok: /ส่งต่อให้ทีมงานคนจริง|ตอบวนอยู่ที่เดิม/.test(s3.out), why: s3.out.slice(0, 140) });
+  // ── คำถามต่างกัน คำตอบต่างกัน = ปกติ ห้ามแตะ ──
+  const n1 = await คุยต่อ('Udup3', 'MARBO 9K ราคาเท่าไหร่', 'MARBO 9K ราคา 350 บาทค่ะ');
+  const n2 = await คุยต่อ('Udup3', 'ส่งกี่วันถึง', 'พัสดุ 2-3 วันค่ะ');
+  dpT.push({ n: 475, name: "คุยปกติ (คำถามต่าง คำตอบต่าง) → ห้ามมีข้อความยืนยัน/ขออภัยโผล่มา",
+    ok: !/ยืนยันอีกครั้ง|ตอบไม่ตรงคำถาม/.test(n1.out + n2.out), why: (n1.out + ' || ' + n2.out).slice(0, 140) });
+  // ถามเรื่องเดิม แต่คำตอบต่างกัน (สต็อกเปลี่ยน) = ไม่ใช่การตอบซ้ำ ห้ามขึ้นข้อความยืนยัน
+  const v1 = await คุยต่อ('Udup4', 'ยาสูบคลาสสิคกลิ่นเป็นยังไง', 'แนวยาสูบหอมๆ ไม่หวานค่ะ');
+  const v2 = await คุยต่อ('Udup4', 'ยาสูบคลาสสิคกลิ่นเป็นยังไง', 'แนวยาสูบเข้มๆ ละมุน สูบเพลินค่ะ');
+  dpT.push({ n: 476, name: "ถามเรื่องเดิมซ้ำ แต่คำตอบเปลี่ยนไป → ห้ามขึ้นข้อความยืนยันอีกครั้ง",
+    ok: !/ยืนยันอีกครั้ง/.test(v2.out), why: v2.out.slice(0, 120) });
+}
+for (const t of dpT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ตอบซ้ำ]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ตอบซ้ำ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
 //   → ขึ้น "ผ่าน 204/110" คือตัวหารน้อยกว่าตัวผ่าน อ่านแล้วนึกว่าเทสพัง
 //   นับจากของจริงแทน: ผ่าน + ไม่ผ่าน = จำนวนเทสทั้งหมดเสมอ ไม่ต้องแก้มืออีก
