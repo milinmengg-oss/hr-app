@@ -1758,6 +1758,59 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k167: แจ้งเตือนเข้ามือถือแอดมิน ═══
+//   เคสที่ส่งต่อคนต้องเด้งเข้าไลน์แอดมินทันที ไม่ใช่นั่งค้างในคิวจนกว่าจะมีคนเปิดหลังบ้านดู
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const pushed = () => sent.filter(b => b.to).flatMap(b => b.messages || []).map(m => String(m.text || '')).join('\n');
+
+  // ── แอดมินสมัครรับแจ้งเตือน ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    sent = []; aiReply = 'สวัสดีค่ะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'ADMIN1' }, message: { type: 'text', text: '#แจ้งเตือน', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    const list = JSON.parse(store.get('alert:v20') || '[]');
+    t(329, 'แอดมินพิมพ์ #แจ้งเตือน → สมัครสำเร็จ', list.indexOf('ADMIN1') !== -1 && /เปิดแจ้งเตือน/.test(txt), 'สมัครไม่ติด · list=' + JSON.stringify(list));
+
+    // ── ลูกค้ามีเคส → ต้องเด้งเข้าไลน์แอดมิน ──
+    sent = []; aiReply = 'รับทราบค่ะ';
+    store.set('ord:v20:CUST1', JSON.stringify({ name: 'ลูกค้าเทส', block: 'รวมยอดชำระ 190', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 190', uid: 'CUST1' }));
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'CUST1' }, message: { type: 'text', text: 'คืนยอดค่ะ', id: '2' } }, env, 'TOKEN', 'v20');
+    const p = pushed();
+    t(330, 'ลูกค้าขอเงินคืน → เด้งแจ้งเตือนเข้าไลน์แอดมิน', /มีเคสรอแอดมิน/.test(p), 'ไม่มีแจ้งเตือนออกไปเลย · push=' + p.slice(0, 60));
+    t(331, 'แจ้งเตือนต้องบอกว่าเคสอะไร + ลิงก์หลังบ้าน', /คืนยอด|เงินคืน/.test(p) && /jeetoo-control/.test(p), 'แจ้งเตือนไม่มีข้อมูลพอให้ตัดสินใจ');
+
+    // ⚠️ กันสแปม: เคสเดิมคนเดิมภายใน 10 นาที ต้องไม่ส่งซ้ำ
+    sent = [];
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'CUST1' }, message: { type: 'text', text: 'คืนยอดค่ะ', id: '3' } }, env, 'TOKEN', 'v20');
+    t(332, '⚠️ เคสเดิมคนเดิม → ห้ามเด้งซ้ำภายใน 10 นาที', !/มีเคสรอแอดมิน/.test(pushed()), 'แจ้งเตือนสแปมจนแอดมินปิดทิ้ง');
+  }
+  // ── ยังไม่มีใครสมัคร → ต้องไม่พัง ไม่ค้าง ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    store.set('ord:v20:CUST2', JSON.stringify({ name: 'เทส', block: 'รวมยอดชำระ 190', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 190', uid: 'CUST2' }));
+    sent = []; aiReply = 'รับทราบค่ะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'CUST2' }, message: { type: 'text', text: 'คืนยอดค่ะ', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(333, 'ยังไม่มีใครสมัครแจ้งเตือน → ลูกค้าต้องยังได้คำตอบตามปกติ', /ทีมงาน/.test(txt) && store.has('mute:v20:CUST2'), 'ไม่มีคนสมัครแล้วระบบพัง');
+  }
+  // ── ปิดแจ้งเตือน ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    store.set('alert:v20', JSON.stringify(['ADMIN9']));
+    sent = []; aiReply = 'ok';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'ADMIN9' }, message: { type: 'text', text: '#ปิดแจ้งเตือน', id: '1' } }, env, 'TOKEN', 'v20');
+    t(334, 'พิมพ์ #ปิดแจ้งเตือน → ถอดออกจากรายชื่อ', JSON.parse(store.get('alert:v20') || '[]').indexOf('ADMIN9') === -1, 'ปิดไม่ได้');
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[แจ้งเตือน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[แจ้งเตือน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k165: "ขอเงินคืน/ยกเลิก" ต้องจับได้ทุกลำดับคำ ═══
 //   เคสจริง 4/8 01.19 (JW · บั๊กเงินหนักสุดของวัน): จ่ายจริง 190 บาท → "ไม่รับแล้ว" → "คืนยอดค่ะ"
 //   → บอทตอบ "เดี๋ยวระบบสรุปยอดและแจ้งข้อมูลการชำระเงินให้ค่ะ" = ชวนจ่ายเพิ่ม + ไม่ส่งต่อคนเลย

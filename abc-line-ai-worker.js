@@ -28,7 +28,9 @@ function shopOf(env, shopId) {
   if (SHOPS[id]) return SHOPS[id];
   const ID = id.toUpperCase();
   if (env["LINE_TOKEN_" + ID] && env["LINE_SECRET_" + ID])
-    return { name: "ABC (ร้าน " + ID + ")", tokenEnv: "LINE_TOKEN_" + ID, secretEnv: "LINE_SECRET_" + ID };
+    // k167: ตั้งชื่อร้านที่โชว์เองได้ด้วย env SHOP_NAME_<ID> (เช่น SHOP_NAME_ABCEASY = "ABC EASY")
+    //   ไม่ตั้งก็ใช้ชื่อปริยาย — มีไว้ให้แอดมินเห็นชื่อร้านจริงในหลังบ้านและในข้อความแจ้งเตือน
+    return { name: env["SHOP_NAME_" + ID] || ("ABC (ร้าน " + ID + ")"), tokenEnv: "LINE_TOKEN_" + ID, secretEnv: "LINE_SECRET_" + ID };
   return null;
 }
 // รายชื่อร้านที่ "ตั้งค่าครบแล้ว" — หลังบ้านใช้ทำตัวสลับร้าน
@@ -40,7 +42,7 @@ function shopList(env) {
     if (!m) continue;
     const id = m[1].toLowerCase();
     if (out[id] || !env["LINE_SECRET_" + m[1]]) continue;
-    out[id] = { name: (SHOPS[id] && SHOPS[id].name) || "ABC (ร้าน " + m[1] + ")", tokenEnv: k, secretEnv: "LINE_SECRET_" + m[1] };
+    out[id] = { name: env["SHOP_NAME_" + m[1]] || (SHOPS[id] && SHOPS[id].name) || ("ABC (ร้าน " + m[1] + ")"), tokenEnv: k, secretEnv: "LINE_SECRET_" + m[1] };   // k167
   }
   return out;
 }
@@ -48,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-04-k166-cleanup";
+const BUILD = "2026-08-04-k167-alert";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -92,6 +94,44 @@ const TURN = new Map();
 // 🆘 k147: เกณฑ์ "ขอเงินคืน / ลูกค้าโกรธ" — ใช้ร่วมกันทั้งด่าน k127 (ขาเข้า) และด่านกันตัดเคสทิ้ง (ขาออก)
 //   เดิมเขียนแยกกัน 2 ที่ แล้วฝั่งขาออกครอบคลุมแคบกว่า → เคสเงินคืนหลุดไปเจอลิงก์เมนู
 //   k147b: เพิ่ม "โอนคืน" (เดิมบังคับต้องมีคำว่าเงิน/ตังค์คั่น → "โอนคืน" หลุด)
+// 🔔🔔 k167 — แจ้งเตือนเข้ามือถือแอดมิน (ตัวบล็อกก่อนเปิด 5 ร้าน ข้อ 2)
+//   ปัญหา: เคสที่ถูกส่งต่อคน (ขอเงินคืน · ลูกค้าโกรธ · สลิปมีปัญหา · ระบบสะดุด)
+//     จะนั่งค้างในคิวจนกว่าจะมีคนเปิดหลังบ้านดู — คืนเปิดร้านคือคืนที่พลาดไม่ได้
+//   ทำไมไม่ใช้ LINE Notify: ปิดบริการไปแล้ว → ใช้ LINE OA ของร้าน push หาแอดมินโดยตรง (ฟรี ไม่ต้องต่อของนอก)
+//   วิธีสมัคร: แอดมินแอดร้านเป็นเพื่อน แล้วพิมพ์ "#แจ้งเตือน" ในแชท → ระบบจำ userId ไว้
+//     ⛔ ไม่ใช้วิธีเอา userId ไปกรอกในหลังบ้าน เพราะแอดมินหา userId ตัวเองไม่ได้
+//   ⚠️ กันสแปม: เคสเดิมของลูกค้าคนเดิม ไม่ส่งซ้ำภายใน 10 นาที
+const ALERTED = new Map();   // "<shop>:<uid ลูกค้า>" → เวลาที่แจ้งไปล่าสุด
+async function alertAdmins(env, token, shopId, entry) {
+  try {
+    if (!env.CONV) return;
+    const _k = shopId + ":" + (entry.uid || "");
+    const _last = ALERTED.get(_k);
+    if (_last && Date.now() - _last < 600000) return;   // เคสเดิมคนเดิม → เงียบไว้ 10 นาที
+    let list = [];
+    try { list = JSON.parse((await env.CONV.get("alert:" + shopId)) || "[]"); } catch (e) {}
+    if (!Array.isArray(list) || !list.length) return;
+    ALERTED.set(_k, Date.now());
+    const t = thTime();
+    const body = "🔔 มีเคสรอแอดมิน — " + (SHOPS[shopId] ? SHOPS[shopId].name : "ร้าน " + String(shopId).toUpperCase())
+      + "\n\n👤 " + (entry.name || "ลูกค้า (ไม่ทราบชื่อ)")
+      + "\n⚠️ " + (entry.reason || "เคสปัญหา")
+      + (entry.msg ? "\n💬 \"" + String(entry.msg).slice(0, 80) + "\"" : "")
+      + "\n🕐 " + t.hhmm + " น."
+      + "\n\nเปิดหลังบ้าน 👇\nhttps://milinmengg-oss.github.io/hr-app/jeetoo-control.html";
+    for (const to of list.slice(0, 10)) {
+      if (to === entry.uid) continue;   // ไม่ส่งหาตัวลูกค้าเอง (เผื่อแอดมินเทสในแชทตัวเอง)
+      try {
+        await fetch("https://api.line.me/v2/bot/message/push", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+          body: JSON.stringify({ to, messages: [{ type: "text", text: body }] }),
+        });
+      } catch (e) {}
+    }
+    console.log("K167_ALERT_SENT shop=" + shopId + " to=" + list.length + " reason=" + String(entry.reason || "").slice(0, 40));
+  } catch (e) { console.log("K167_ALERT_SKIP " + String(e).slice(0, 60)); }
+}
 // 🧹 k166: ลบ RX_MONEYBACK ทิ้งแล้ว — ถูกแทนที่ด้วย refundIntent() ทั้งระบบ (ดูด้านล่าง)
 //   เหตุผลที่ลบ ไม่ใช่แค่ย้าย: กฎเก่าผูกกับ "ลำดับคำ" ซึ่งใช้กับภาษาไทยไม่ได้
 //   ถ้าปล่อยไว้จะมีคนหยิบไปใช้ซ้ำแล้วบั๊กเดิมกลับมาอีก (เกิดมาแล้ว 2 ครั้ง: k147b → k165)
@@ -3439,6 +3479,31 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         }
       }
     }
+    // 🔔 k167: แอดมินสมัคร/ยกเลิกรับแจ้งเตือนเข้ามือถือ (พิมพ์ในแชทของร้านเอง)
+    //   ต้องอยู่ก่อนทางลัดอื่นทั้งหมด และก่อนด่านมิ้วต์ ไม่งั้นพิมพ์ตอนแชทถูกมิ้วต์จะไม่ทำงาน
+    if (mtype === "text" && /^#\s*(แจ้งเตือน|ปิดแจ้งเตือน|เช็คแจ้งเตือน)\s*$/.test(String(ev.message.text || "").trim())) {
+      const _cmd = String(ev.message.text || "").replace(/[#\s]/g, "");
+      try {
+        let list = [];
+        try { list = JSON.parse((await env.CONV.get("alert:" + shopId)) || "[]"); } catch (e) {}
+        if (!Array.isArray(list)) list = [];
+        if (_cmd === "แจ้งเตือน") {
+          if (list.indexOf(userId) === -1) list.push(userId);
+          await env.CONV.put("alert:" + shopId, JSON.stringify(list.slice(-10)));
+          await lineReply(TOKEN, replyToken, "เปิดแจ้งเตือนให้เรียบร้อยแล้วค่ะ 🔔\n\nต่อจากนี้ถ้ามีเคสที่ต้องให้คนดูแล (ขอเงินคืน · ลูกค้าไม่พอใจ · สลิปมีปัญหา · ระบบสะดุด) ระบบจะเด้งเข้าไลน์นี้ทันทีนะคะ\n\nตอนนี้มีคนรับแจ้งเตือน " + list.length + " คน\n(พิมพ์ #ปิดแจ้งเตือน เพื่อยกเลิก)", userId);
+          console.log("K167_ALERT_SUBSCRIBE shop=" + shopId + " total=" + list.length);
+        } else if (_cmd === "ปิดแจ้งเตือน") {
+          list = list.filter(x => x !== userId);
+          await env.CONV.put("alert:" + shopId, JSON.stringify(list));
+          await lineReply(TOKEN, replyToken, "ปิดแจ้งเตือนให้แล้วค่ะ 🔕\nพิมพ์ #แจ้งเตือน เมื่อไหร่ก็เปิดกลับได้นะคะ", userId);
+        } else {
+          await lineReply(TOKEN, replyToken, "สถานะแจ้งเตือนของร้านนี้ค่ะ 🔔\n• คนที่รับแจ้งเตือนอยู่: " + list.length + " คน\n• ไลน์นี้: " + (list.indexOf(userId) !== -1 ? "เปิดอยู่ ✅" : "ยังไม่ได้เปิด ❌") + "\n\n#แจ้งเตือน = เปิด · #ปิดแจ้งเตือน = ปิด", userId);
+        }
+      } catch (e) {
+        await lineReply(TOKEN, replyToken, "ตั้งค่าแจ้งเตือนไม่สำเร็จค่ะ 🙏🏻 รบกวนลองใหม่อีกครั้งนะคะ", userId);
+      }
+      return;
+    }
     // 💬 k47: โชว์ "..." เฉพาะตอนที่ต้องรอจริง
     // k28 เดิมสั่งขึ้นทุกข้อความ รวมทางลัดที่ตอบใน 0.1 วิ → จุดโผล่แวบเดียวแล้วดับ ดูเหมือนระบบสะดุด
     // ตอนนี้ย้ายไปสั่งตรงจุดก่อนเรียก AI (ทางที่ใช้เวลา 2-3 วิ) ส่วนทางลัดตอบทันที ไม่ต้องขึ้นจุดเลย
@@ -3454,6 +3519,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         MUTED.set(wakeKey(shopId, userId), { t: Date.now(), reason: entry.reason });   // k114: เงียบทันที ไม่รอแคช KV
         UNMUTED.delete(wakeKey(shopId, userId));
         await env.CONV.put(muteKey, JSON.stringify(entry), { expirationTtl: 3600 });
+        await alertAdmins(env, TOKEN, shopId, entry);   // 🔔 k167: เด้งเข้ามือถือแอดมินทันที
       } catch (e) {}
     };
 
