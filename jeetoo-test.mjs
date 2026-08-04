@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -799,8 +799,11 @@ async function memTests() {
     sent = [];
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ขอยกเลิกออเดอร์', id: '1' } }, env, 'TOKEN', 'v20');
     const t1 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    // k165: ตอนนี้ด่านเงินคืนรับเคสนี้ก่อน (ครอบคำได้กว้างกว่า k108 เดิม)
+    //   สิ่งที่ต้องกันคือ "พฤติกรรม" — เข้าคิวคน + ออเดอร์ยังอยู่ + ไม่ปิดเรื่องเอง
+    //   ไม่ผูกกับข้อความเป๊ะๆ อีก (บทเรียนเดียวกับเทส 105 และ 164)
     T.push({ n: 131, name: 'k108 ยกเลิก (โอนแล้ว ✅) → ส่งแอดมิน + ออเดอร์ยังอยู่ (รอคนตัดสิน)',
-      ok: /(?:แอดมิน|ทีมงาน)เช็คออเดอร์/.test(t1) && store.has('mute:v20:' + uid) && store.has('ord:v20:' + uid),
+      ok: /(?:แอดมิน|ทีมงาน)/.test(t1) && store.has('mute:v20:' + uid) && store.has('ord:v20:' + uid),
       why: t1.slice(0, 50) + ' mute=' + store.has('mute:v20:' + uid) });
   }
 
@@ -1755,6 +1758,38 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k165: "ขอเงินคืน/ยกเลิก" ต้องจับได้ทุกลำดับคำ ═══
+//   เคสจริง 4/8 01.19 (JW · บั๊กเงินหนักสุดของวัน): จ่ายจริง 190 บาท → "ไม่รับแล้ว" → "คืนยอดค่ะ"
+//   → บอทตอบ "เดี๋ยวระบบสรุปยอดและแจ้งข้อมูลการชำระเงินให้ค่ะ" = ชวนจ่ายเพิ่ม + ไม่ส่งต่อคนเลย
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+
+  // ── คำที่พูดถึงเงินตรงๆ → ส่งต่อคนเสมอ แม้ยังไม่มีออเดอร์ ──
+  t(315, 'เคสจริง "คืนยอดค่ะ" → ต้องส่งต่อคน', refundIntent('คืนยอดค่ะ', true) === true, 'ลูกค้าจ่ายแล้วขอคืน แต่ระบบเงียบ = เรื่องใหญ่');
+  t(316, '⚠️ "คืนยอด" (สลับลำดับคำ) ต้องจับได้เท่ากับ "ขอยอดคืน"', refundIntent('คืนยอด', false) === refundIntent('ขอยอดคืน', false) && refundIntent('คืนยอด', false) === true, 'กฎยังผูกกับลำดับคำ = ภาษาไทยสลับได้ จับไม่ครบ');
+  t(317, 'ของเดิมไม่ถอยหลัง: "คืนเงิน" ยังจับได้', refundIntent('คืนเงิน', false) === true, 'ทำของเดิมพัง');
+  t(318, 'ของเดิมไม่ถอยหลัง: "โอนคืน" (k147b) ยังจับได้', refundIntent('โอนคืน', false) === true, 'ทำ k147b พัง');
+  t(319, '⚠️ k108 ไม่ถอยหลัง: "ยกเลิกออเดอร์" ตอนยังไม่จ่าย → ยกเลิกได้เลย ไม่ต้องเรียกคน', refundIntent('ยกเลิกออเดอร์', false) === false, 'ยกเลิกก่อนโอนแล้วโดนเข้าคิวคน = ลูกค้ารอเก้อ');
+  t(319.5, '"ยกเลิกออเดอร์" ตอนจ่ายแล้ว → ต้องเรียกคน', refundIntent('ยกเลิกออเดอร์', true) === true, 'เงินอยู่กับร้านแล้วแต่ไม่มีคนดู');
+
+  // ── คำอ้อม → ต้องมีออเดอร์อยู่จริงก่อน (กฎ k163 ต้องคงอยู่) ──
+  t(320, 'เคสจริง "ไม่รับแล้ว" + จ่ายเงินแล้ว → ส่งต่อคน', refundIntent('ไม่รับแล้ว', true) === true, 'ลูกค้าจ่ายแล้วบอกไม่รับ แต่ระบบไม่เรียกคน');
+  t(321, 'k163 ไม่ถอยหลัง: "ไม่เอาแล้ว" + ยังไม่จ่าย → ไม่ใช่ขอเงินคืน', refundIntent('ไม่เอาแล้ว', false) === false, 'เคสด่วนปลอมกลับมา');
+  t(322, '"ไม่เอาแล้ว" + จ่ายเงินแล้ว → ส่งต่อคน', refundIntent('ไม่เอาแล้ว', true) === true, 'พลาดเคสจริง');
+
+  // ── ⚠️ ห้ามจับข้อความปกติ (ไม่งั้นลูกค้าโดนตัดบทเข้าคิวคนทั้งที่กำลังจะซื้อ) ──
+  t(323, '"ยอดรวมเท่าไหร่" (ถามยอด) ห้ามจับ', refundIntent('ยอดรวมเท่าไหร่', true) === false, 'ลูกค้าถามยอดแล้วโดนเข้าคิวคืนเงิน');
+  t(324, '"ไม่เอากลิ่นนี้" (เปลี่ยนกลิ่น) ห้ามจับ', refundIntent('ไม่เอากลิ่นนี้', true) === false, 'เปลี่ยนกลิ่นแล้วโดนเข้าคิวคืนเงิน');
+  t(325, '"เอาเบอร์รีชมพูค่ะ" (สั่งของ) ห้ามจับ', refundIntent('เอาเบอร์รีชมพูค่ะ', true) === false, 'สั่งของแล้วโดนเข้าคิวคืนเงิน');
+  t(326, '"ขอดูยอด" ห้ามจับ', refundIntent('ขอดูยอด', true) === false, 'ขอดูยอดแล้วโดนเข้าคิวคืนเงิน');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[เงินคืน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[เงินคืน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k164: ขายดีที่สุด · สี vs กลิ่น · บ่นค่าส่งแพง ═══
 {
   const T = [];
