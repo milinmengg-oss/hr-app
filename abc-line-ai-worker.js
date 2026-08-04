@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k175-mathsoldout";
+const BUILD = "2026-08-05-k176-pricegate";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -518,7 +518,9 @@ function crossFlavorGate(reply, model) {
 //   ⚠️ "-" นำหน้าบรรทัดคือหัวข้อย่อย ไม่ใช่ลบ · และชื่อสีมีขีดกลาง (สีเทา-เหลือง) ห้ามอ่านเป็นลบ
 const RX_MATHOP = /[+−÷*/]|\d\s*[-xX×✕]\s*\d|คูณ|หาร/;
 function priceMathCheck(line) {
-  const ln0 = String(line).replace(/^\s*[-•●–]\s+/, "");     // ตัดหัวข้อย่อยนำหน้าทิ้งก่อน (ไม่ใช่เครื่องหมายลบ)
+  // ตัด "เครื่องหมายหัวข้อ" นำหน้าทิ้งก่อน — ไม่ใช่เครื่องหมายลบ และไม่ใช่ตัวตั้งในการคำนวณ
+  //   ⚠️ เลขข้อ "1." "2)" ถ้าไม่ตัดจะถูกอ่านเป็นตัวเลขในโจทย์ → บรรทัดดีๆ ในลิสต์โดนตัดทิ้งหมด
+  const ln0 = String(line).replace(/^\s*(?:[-•●–✅⛔]|\d{1,2}[.)]|[1-9]\u20e3|[①-⑨])\s*/, "");
   const eq = ln0.search(/[=＝]/);
   if (eq === -1) return { kind: "ไม่เกี่ยว" };
   const rawLeft = ln0.slice(0, eq), right = ln0.slice(eq + 1);
@@ -566,11 +568,67 @@ function mathGate(reply) {
       bad.push(r.kind === "ผิด" ? ("คิดได้ " + r.ควรเป็น + " แต่พิมพ์ " + r.พิมพ์ว่า) : ("ตรวจไม่ได้: " + ln.trim().slice(0, 60)));
     }
     if (!bad.length) return { blocked: false, reply: src };
+    // k176: ตัดบรรทัดออกแล้วเลขข้อจะเพี้ยน (ลูกค้าเห็นขึ้นต้นด้วย "2." ทั้งที่ไม่มีข้อ 1) → เรียงใหม่
+    let _no = 0;
+    for (let i = 0; i < keep.length; i++) {
+      keep[i] = keep[i].replace(/^(\s*)(?:\d+[.)]|[1-9]\u20e3|[①-⑨])(\s)/, (m, sp, sp2) => sp + (++_no) + "." + sp2);
+    }
     let out = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
     const เนื้อ = out.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length;
     out = (เนื้อ >= 8 ? out + "\n\n" : "")
       + "ยอดรวมเดี๋ยวแอดมินสรุปให้ในการ์ดยืนยันนะคะ 🧾 บอกรุ่น กลิ่น และจำนวนที่ต้องการมาได้เลยค่ะ 💕";
     return { blocked: true, reply: out, said: bad.join(" · ") };
+  } catch (e) { return { blocked: false, reply: String(reply || "") }; }
+}
+// 💵💵 k176 — ② ราคาทุกตัวที่ส่งออก ต้องตรงกับตารางราคาจริงเท่านั้น
+//   ต้นเหตุ (Root Cause): ราคาทั้งร้านถูกฝังอยู่ใน "คำสั่ง AI" ด้วย (ให้ AI ตอบคำถามราคาได้)
+//     → AI อ่านแล้วพูดต่อ = มีโอกาสจำสลับรุ่น/เติมเลขเอง และไม่มีด่านไหนเทียบกับตารางราคาเลย
+//     k175 ปิดเฉพาะ "การคำนวณ" แต่ "ราคาตัวเดียวลอยๆ" ยังหลุดได้ (เช่น MARBO 9K = 400 บาท)
+//   กฎ: บรรทัดไหนเอ่ยชื่อรุ่น + ประกาศราคา ต้องเป็นราคาที่มีอยู่จริงในตารางของรุ่นนั้น
+//   ⚠️ ต้องยอมรับ "ราคาในตระกูลเดียวกัน" ด้วย — M SWITCH 350 · ชุด KIT 499 · เครื่อง 250 · โคลน 200
+//      ไม่งั้นด่านจะไปแก้ราคาชุด KIT ที่ถูกอยู่แล้วให้กลายเป็นราคาหัว = สร้างบั๊กเงินขึ้นมาเอง
+//   ⚠️ ไม่แตะบรรทัดที่เป็นยอดรวม/ค่าส่ง/งบลูกค้า/โปร — คนละเรื่องกับราคาต่อชิ้น
+const RX_NOT_UNITPRICE = /รวม|ยอด|ทั้งหมด|ค่าส่ง|งบ|ไม่เกิน|ประมาณ|เริ่มต้น|ครบ|โปร|ส่งฟรี|มัดจำ|ขั้นต่ำ|ทั้งสิ้น/;
+function priceFamilyOf(name) {
+  const out = [];
+  const p = findPrice(name); if (p && p.price) out.push(p.price);
+  if (FLAVORS[name] && FLAVORS[name].p) out.push(FLAVORS[name].p);
+  // ราคาของทุกรายการที่ชื่อ "มีรุ่นนี้อยู่ข้างใน" (ชุด KIT · เครื่อง · โคลน)
+  for (const k in PRICE) if (k !== name && k.indexOf(name) !== -1 && PRICE[k]) out.push(PRICE[k]);
+  for (const k in FLAVORS) if (k !== name && k.indexOf(name) !== -1 && FLAVORS[k].p) out.push(FLAVORS[k].p);
+  return [...new Set(out)];
+}
+function priceGate(reply) {
+  try {
+    const src = String(reply || "");
+    if (src.indexOf("บาท") === -1) return { blocked: false, reply: src };
+    const lines = src.split("\n");
+    const fixes = [];
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      if (ln.indexOf("บาท") === -1) continue;
+      if (/[=＝]/.test(ln)) continue;              // มีการคำนวณ = งานของ mathGate (k175)
+      if (RX_NOT_UNITPRICE.test(ln)) continue;     // ยอดรวม/ค่าส่ง/งบ ไม่ใช่ราคาต่อชิ้น
+      const found = [];
+      let scan = ln;
+      for (const nm of MODEL_NAMES_LONGFIRST) {
+        if (nm.length >= 4 && scan.indexOf(nm) !== -1) { found.push(nm); scan = scan.split(nm).join(" "); }
+      }
+      if (found.length !== 1) continue;            // ไม่มีรุ่น หรือมีหลายรุ่น = ตัดสินไม่ได้ ไม่แตะ
+      const ok = priceFamilyOf(found[0]);
+      if (!ok.length) continue;
+      const ตรง = findPrice(found[0]);
+      const ถูกต้อง = (ตรง && ตรง.price) || (FLAVORS[found[0]] && FLAVORS[found[0]].p) || null;
+      if (!ถูกต้อง) continue;
+      lines[i] = ln.replace(/([\d,]{2,6})(\s*บาท)/g, (all, num, tail) => {
+        const v = parseInt(String(num).replace(/,/g, ""), 10);
+        if (!isFinite(v) || ok.indexOf(v) !== -1) return all;      // ตรงกับราคาในตระกูล = ผ่าน
+        fixes.push(found[0] + " " + v + "→" + ถูกต้อง);
+        return ถูกต้อง + tail;
+      });
+    }
+    if (!fixes.length) return { blocked: false, reply: src };
+    return { blocked: true, reply: lines.join("\n"), said: fixes.join(" · ") };
   } catch (e) { return { blocked: false, reply: String(reply || "") }; }
 }
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
@@ -3827,7 +3885,11 @@ function evalAutoCheck(conv, sm, buf, soldOut) {
     if (/เหลือ\s*\d+\s*(ชิ้น|แท่ง|หัว|อัน)|มีอยู่\s*\d+\s*(ชิ้น|แท่ง)/.test(rep)) add("major", "บอกจำนวนสต็อก (ห้าม)", rep);
     if (/เหลือน้อย|จำนวนจำกัด|ใกล้หมด|รีบก่อนหมด/.test(rep)) add("minor", "ใบ้ระดับสต็อก (ห้าม)", rep);
     if (/ส่วนลด|ลดให้|ลดราคา|ลดพิเศษ|discount/.test(rep) && !/ไม่มีส่วนลด|ไม่สามารถลด|ลดไม่ได้/.test(rep)) add("critical", "เสนอส่วนลดเอง (ร้านไม่มีนโยบายลดราคา)", rep);
-    if (/ปลายทาง|\bCOD\b/i.test(rep) && !/ไม่มี[^\n]{0,25}ปลายทาง|ไม่รับ[^\n]{0,25}ปลายทาง|ไม่สามารถ[^\n]{0,25}ปลายทาง|ยังไม่มี[^\n]{0,25}ปลายทาง/.test(rep)) add("critical", "พูดถึงเก็บเงินปลายทางแบบทำได้ (ร้านไม่มี)", rep);
+    // k176: เดิมเช็คว่า "ไม่มีคำปฏิเสธ" = เขียนกฎเป็นลิสต์คำที่เคยเห็น → ตอบถูกแต่โดนจับผิด
+    //   เคสจริง: "จึงขอปิดบริการเก็บเงินปลายทางนะคะ" (ถูกต้อง) แต่ไม่มีคำว่า ไม่มี/ไม่รับ → โดนหาว่าผิด
+    //   กฎใหม่: จับเฉพาะประโยคที่ "ยืนยันว่าเก็บปลายทางได้" เท่านั้น
+    if (/(?:ได้|รับ|มีบริการ|บริการ)\s*(?:ค่ะ|นะคะ|ครับ)?\s*(?:เก็บ)?เงินปลายทาง|เก็บเงินปลายทาง(?:ได้|ค่ะ)|ปลายทางได้(?:ค่ะ|นะคะ|เลย)/.test(rep)
+        && !/ไม่|ปิดบริการ|งดบริการ|ยกเลิกบริการ/.test(rep)) add("critical", "ยืนยันว่าเก็บเงินปลายทางได้ (ร้านไม่มี)", rep);
     if (!/หมด|รอของ|ของเข้า/.test(rep)) {
       const pushed = soldOut.filter(mm => {
         let j = rep.indexOf(mm);
@@ -3898,15 +3960,25 @@ async function evalJudge(env, c, conv, truth, flags) {
     + "\n\n[ผลตรวจอัตโนมัติจากโค้ด — ถือว่าเป็นความจริง ไม่ต้องตรวจซ้ำ แต่ให้นำไปหักคะแนนด้วย]\n"
     + (flags.length ? flags.map(f => "• [" + f.ระดับ + "] " + f.เรื่อง).join("\n") : "(โค้ดไม่พบปัญหา)")
     + "\n\n[บทสนทนาที่ต้องตรวจ]\n" + script + "\n\nตอบเป็น JSON ตามโครงที่กำหนด:";
-  let raw = "";
-  try { raw = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sys }, { role: "user", content: u }]); } catch (e) { raw = ""; }
-  raw = String(raw || "").replace(/```json|```/g, "").trim();
-  let j = null;
-  try { j = JSON.parse(raw); } catch (e) {
-    const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
-    if (a !== -1 && b > a) { try { j = JSON.parse(raw.slice(a, b + 1)); } catch (e2) {} }
+  // k176: จากผลรันจริง กรรมการตอบไม่เป็น JSON ~21% → เคสดีๆ ได้ 0 คะแนน วัดผลไม่ได้
+  //   ให้ลองใหม่ 1 ครั้งพร้อมย้ำรูปแบบ ก่อนจะตัดสินว่าพัง (ยังคงกฎเดิม: พังจริง = ไม่ผ่าน ห้ามปล่อย)
+  const อ่าน = (raw) => {
+    const t = String(raw || "").replace(/```json|```/g, "").trim();
+    try { return JSON.parse(t); } catch (e) {}
+    const a = t.indexOf("{"), b = t.lastIndexOf("}");
+    if (a !== -1 && b > a) { try { return JSON.parse(t.slice(a, b + 1)); } catch (e2) {} }
+    return null;
+  };
+  for (let ครั้ง = 0; ครั้ง < 2; ครั้ง++) {
+    let raw = "";
+    const msgs = [{ role: "system", content: sys }, { role: "user", content: u }];
+    if (ครั้ง) msgs.push({ role: "user", content: "⛔ รอบที่แล้วตอบมาไม่ใช่ JSON ที่อ่านได้ ตอบใหม่เป็น JSON ล้วนบรรทัดเดียว ห้ามมีข้อความอื่น ห้ามใส่ ```" });
+    try { raw = await askAI(env.OPENROUTER_KEY, msgs); } catch (e) { raw = ""; }
+    const j = อ่าน(raw);
+    if (j && typeof j === "object") return j;
+    console.log("K176_JUDGE_RETRY ครั้งที่ " + (ครั้ง + 1));
   }
-  return j;
+  return null;
 }
 
 // ── คิดคะแนนรวมและตัดสินผ่าน/ตก ด้วยโค้ด (ไม่ปล่อยให้กรรมการตัดสินเรื่องเงินคนเดียว) ──
@@ -6343,6 +6415,11 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       try {
         const _gm = mathGate(reply);
         if (_gm.blocked) { console.log("K175_PRICE_MATH_BLOCKED " + _gm.said); reply = _gm.reply; }
+      } catch (e) {}
+      // 💵 k176: ราคาต่อชิ้นทุกตัว ต้องตรงกับตารางราคาจริง (ไม่ปล่อยให้ AI จำเอง)
+      try {
+        const _gpz = priceGate(reply);
+        if (_gpz.blocked) { console.log("K176_PRICE_FIXED " + _gpz.said); reply = _gpz.reply; }
       } catch (e) {}
     } catch (e) {}
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)

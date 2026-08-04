@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2770,6 +2770,71 @@ const mgT = [];
 for (const t of mgT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[คิดเงิน]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[คิดเงิน]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [ราคา] k176 ② — ราคาทุกตัวต้องตรงตารางราคาจริง (426-445) ═══
+const pgT = [];
+{
+  const B = (s) => priceGate(s).blocked;
+  const R = (s) => priceGate(s).reply;
+  // ── ราคาผิด ต้องถูกแก้ให้ตรงตาราง ──
+  pgT.push({ n: 426, name: "MARBO 9K พิมพ์ 400 บาท (จริง 350) → แก้เป็น 350",
+    ok: B("MARBO 9K ราคา 400 บาทค่ะ") && R("MARBO 9K ราคา 400 บาทค่ะ").indexOf("350 บาท") !== -1, why: R("MARBO 9K ราคา 400 บาทค่ะ") });
+  pgT.push({ n: 427, name: "ELFBAR SWAP 25K พิมพ์ 475 บาท (จริง 379) → แก้เป็น 379",
+    ok: R("หัว ELFBAR SWAP 25K ราคา 475 บาทค่ะ").indexOf("379 บาท") !== -1, why: R("หัว ELFBAR SWAP 25K ราคา 475 บาทค่ะ") });
+  pgT.push({ n: 428, name: "RELX ULTRA พิมพ์ 200 บาท (จริง 120) → แก้เป็น 120",
+    ok: R("หัวพอต RELX ULTRA 200 บาท").indexOf("120 บาท") !== -1, why: R("หัวพอต RELX ULTRA 200 บาท") });
+  // ── ราคาถูกอยู่แล้ว ห้ามแตะ ──
+  const ถูก = ["MARBO 9K ราคา 350 บาทค่ะ 💕", "ELFBAR SWAP 25K 379 บาท", "INFY 12K 350 บาท", "STAR 2,500 ราคา 150 บาท",
+               "เครื่อง RELX INFINITY 2+ 990 บาท", "หัวพอต MARBO ZERO 140 บาท"];
+  pgT.push({ n: 429, name: "ราคาที่ถูกอยู่แล้ว 6 แบบ ต้องไม่โดนแตะเลย",
+    ok: ถูก.every(x => !B(x) && R(x) === x), why: JSON.stringify(ถูก.filter(x => B(x)).map(x => [x, R(x)])) });
+  // ── ⚠️ ราคาในตระกูลเดียวกัน ห้ามไปแก้ (จุดที่อันตรายที่สุด) ──
+  const ตระกูล = [
+    "ชุด KIT ของ M SWITCH ราคา 499 บาทค่ะ",      // M SWITCH 15K (KIT) = 499
+    "เครื่อง M SWITCH 15K 250 บาท",               // เครื่อง = 250
+    "หัว M SWITCH 350 บาท",                        // หัว = 350
+    "ชุด KIT ของ VAZER RELOAD 15K 450 บาท",       // KIT = 450
+    "ชุด KIT ของ KS QUIK PRO 15K 499 บาท",        // KIT = 499
+  ];
+  pgT.push({ n: 430, name: "⚠️ ราคาในตระกูลเดียวกัน (ชุด KIT · เครื่อง · หัว) ห้ามโดนแก้ทับกัน",
+    ok: ตระกูล.every(x => !B(x)), why: JSON.stringify(ตระกูล.filter(x => B(x)).map(x => [x, R(x)])) });
+  pgT.push({ n: 431, name: "priceFamilyOf: M SWITCH ต้องรวมราคาหัว 350 · ชุด KIT 499 · เครื่อง 250 ไว้ครบ",
+    ok: (()=>{ const f = priceFamilyOf("M SWITCH"); return f.indexOf(350)!==-1 && f.indexOf(499)!==-1 && f.indexOf(250)!==-1; })(),
+    why: JSON.stringify(priceFamilyOf("M SWITCH")) });
+  // ── ยอดรวม / ค่าส่ง / งบ ไม่ใช่ราคาต่อชิ้น ห้ามแตะ ──
+  const ไม่ใช่ราคาต่อชิ้น = [
+    "MARBO 9K 2 อัน รวมยอดชำระ 740 บาท",
+    "ค่าส่งพัสดุ 40 บาทค่ะ",
+    "งบไม่เกิน 1000 บาท แนะนำ MARBO 9K ค่ะ",
+    "ซื้อ MARBO 9K ครบ 4 อัน ส่งฟรี ยอดรวม 1400 บาท",
+    "ยอดทั้งสิ้น 728 บาทค่ะ",
+  ];
+  pgT.push({ n: 432, name: "⚠️ ยอดรวม/ค่าส่ง/งบลูกค้า/โปร ต้องไม่โดนด่านราคาต่อชิ้นแตะ",
+    ok: ไม่ใช่ราคาต่อชิ้น.every(x => !B(x)), why: JSON.stringify(ไม่ใช่ราคาต่อชิ้น.filter(x => B(x)).map(x => [x, R(x)])) });
+  // ── บรรทัดที่มีการคำนวณ = งานของ k175 ไม่ใช่ของด่านนี้ ──
+  pgT.push({ n: 433, name: "บรรทัดที่มีเครื่องหมาย = เป็นงานของด่านคำนวณ ด่านราคาไม่แตะ",
+    ok: !B("M SWITCH 350 + ค่าส่ง 40 = 390 บาท"), why: R("M SWITCH 350 + ค่าส่ง 40 = 390 บาท") });
+  // ── หลายรุ่นในบรรทัดเดียว = ตัดสินไม่ได้ ห้ามเดา ──
+  pgT.push({ n: 434, name: "เอ่ยหลายรุ่นในบรรทัดเดียว = ตัดสินไม่ได้ ห้ามเดาแก้",
+    ok: !B("MARBO 9K กับ INFY 12K ราคา 350 บาทเท่ากันค่ะ"), why: R("MARBO 9K กับ INFY 12K ราคา 350 บาทเท่ากันค่ะ") });
+  // ── ข้อความไม่มีราคา ไม่มีรุ่น ต้องไม่โดนแตะ ──
+  pgT.push({ n: 435, name: "ข้อความทั่วไปไม่มีราคา ต้องไม่โดนแตะ",
+    ok: !B("รับกลิ่นไหนดีคะ 💕") && !B("ขอบคุณค่ะ 🙏🏻"), why: "" });
+  // ── หลายบรรทัด: แก้เฉพาะบรรทัดที่ผิด ──
+  const ผสม = "MARBO 9K ราคา 400 บาท\nINFY 12K ราคา 350 บาท\nรับรุ่นไหนดีคะ";
+  pgT.push({ n: 436, name: "หลายบรรทัด: แก้เฉพาะบรรทัดที่ราคาผิด บรรทัดถูกต้องอยู่ครบ",
+    ok: R(ผสม).indexOf("MARBO 9K ราคา 350 บาท") !== -1 && R(ผสม).indexOf("INFY 12K ราคา 350 บาท") !== -1 && R(ผสม).indexOf("รับรุ่นไหนดีคะ") !== -1,
+    why: R(ผสม) });
+  // ── ผลข้างเคียง k175: ตัดบรรทัดแล้วต้องเรียงเลขข้อใหม่ ──
+  const ลิสต์ = "แนะนำ 2 ตัวเลือกค่ะ\n1. ชุด A 349 + 379 = 379 บาท\n2. ชุด B 250 + 350 = 600 บาท";
+  pgT.push({ n: 437, name: "k176: ตัดบรรทัดที่คิดเลขผิดแล้ว ต้องเรียงเลขข้อใหม่ (ห้ามเหลือ '2.' ลอยๆ)",
+    ok: (()=>{ const r = mathGate(ลิสต์).reply; return r.indexOf("1. ชุด B") !== -1 && r.indexOf("2. ชุด B") === -1; })(),
+    why: mathGate(ลิสต์).reply });
+}
+for (const t of pgT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ราคา]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ราคา]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
