@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2835,6 +2835,56 @@ const pgT = [];
 for (const t of pgT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ราคา]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ราคา]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [หัวมาโบ] k177 ③ — กฎเจาะจงชนะกฎกว้าง ฝั่งขาออก (438-450) ═══
+const smT = [];
+{
+  const G = (u, r) => specificModelGate(u, r);
+  const ผิด = '"หัวมาโบ" มีหลายรุ่นนะคะ\n- M SWITCH 350 บาท\n- MARBO ZERO 140 บาท\n- MARBO 9K 350 บาท';
+  smT.push({ n: 438, name: "เคสจริง: ถามหัวมาโบ แล้วตอบว่ามีหลายรุ่น → ต้องบล็อก",
+    ok: G("มีหัวมาโบไหมครับ", ผิด).blocked, why: JSON.stringify(G("มีหัวมาโบไหมครับ", ผิด)) });
+  smT.push({ n: 439, name: "บล็อกแล้วต้องรู้ว่ารุ่นที่ถูกคือ M SWITCH และตัวที่ต้องตัดคือ MARBO",
+    ok: (()=>{ const g = G("มีหัวมาโบไหมครับ", ผิด); return g.win === "M SWITCH" && g.drop.length > 0 && g.drop.every(x => /MARBO/.test(x)); })(),
+    why: JSON.stringify(G("มีหัวมาโบไหมครับ", ผิด)) });
+  const สำนวน = ["หัวมาโบ", "มีหัวมาโบไหม", "หัวมาโบมีไหมคะ", "หัวมาโบราคาเท่าไหร่", "อยากได้หัวมาโบ 2 หัว", "หัวมาร์โบมีมั้ย"];
+  smT.push({ n: 440, name: "ครอบทุกสำนวนที่ลูกค้าพูด 6 แบบ (ไม่ใช่แก้เฉพาะประโยคเดียว)",
+    ok: สำนวน.every(u => G(u, ผิด).blocked), why: JSON.stringify(สำนวน.filter(u => !G(u, ผิด).blocked)) });
+  // ── ตอบถูกอยู่แล้ว ห้ามบล็อก ──
+  const ถูก = "หัวมาโบ = M SWITCH (350 บาท) ค่ะ 💕 รับกลิ่นไหนดีคะ";
+  smT.push({ n: 441, name: "ตอบถูกอยู่แล้ว (พูดถึงแต่ M SWITCH) ต้องไม่โดนบล็อก",
+    ok: !G("มีหัวมาโบไหมครับ", ถูก).blocked, why: JSON.stringify(G("มีหัวมาโบไหมครับ", ถูก)) });
+  // ── ⚠️ ลูกค้าพิมพ์ชื่อรุ่นมาเอง = เขาถามถึงรุ่นนั้นจริง ห้ามบล็อก ──
+  smT.push({ n: 442, name: "⚠️ ลูกค้าพิมพ์ MARBO 9K มาเอง → ตอบเรื่อง MARBO 9K ได้ ห้ามบล็อก",
+    ok: !G("MARBO 9K ราคาเท่าไหร่", "MARBO 9K ราคา 350 บาทค่ะ").blocked, why: JSON.stringify(G("MARBO 9K ราคาเท่าไหร่", "MARBO 9K ราคา 350 บาทค่ะ")) });
+  smT.push({ n: 443, name: "⚠️ ลูกค้าถาม MARBO ZERO ตรงๆ → ห้ามบล็อก",
+    ok: !G("หัวพอต MARBO ZERO องุ่นมีไหม", "MARBO ZERO องุ่น 3% มีของค่ะ 140 บาท").blocked, why: JSON.stringify(G("หัวพอต MARBO ZERO องุ่นมีไหม", "MARBO ZERO องุ่น 3% มีของค่ะ 140 บาท")) });
+  smT.push({ n: 444, name: "⚠️ ถามแบรนด์มาโบทั้งแบรนด์ → ลิสต์ได้ตามปกติ ห้ามบล็อก",
+    ok: !G("แบรนด์มาโบมีอะไรบ้าง", "แบรนด์ MARBO มี MARBO 9K · MARBO 10K · MARBO ZERO ค่ะ").blocked,
+    why: JSON.stringify(G("แบรนด์มาโบมีอะไรบ้าง", "แบรนด์ MARBO มี MARBO 9K · MARBO 10K · MARBO ZERO ค่ะ")) });
+  // ── ⚠️ ลูกค้าเอ่ยหลายรุ่นคนละช่วงข้อความ = ตอบครบได้ ห้ามบล็อก ──
+  smT.push({ n: 445, name: "⚠️ ลูกค้าถาม 2 รุ่นคนละช่วงข้อความ → ตอบครบทั้งคู่ได้",
+    ok: !G("หัวมาโบกับ INFY 12K ราคาเท่าไหร่", "M SWITCH 350 บาท · INFY 12K 350 บาทค่ะ").blocked,
+    why: JSON.stringify(G("หัวมาโบกับ INFY 12K ราคาเท่าไหร่", "M SWITCH 350 บาท · INFY 12K 350 บาทค่ะ")) });
+  // ── ครอบตระกูลอื่นด้วย ไม่ใช่แค่มาโบ ──
+  smT.push({ n: 446, name: "ครอบตระกูลอื่น: ถามชุด KIT ของ M SWITCH แล้วตอบเป็นหัวเปล่า → บล็อก",
+    ok: (()=>{ const g = G("ชุด KIT M SWITCH ราคาเท่าไหร่", "M SWITCH ราคา 350 บาทค่ะ"); return g.blocked ? g.win === "M SWITCH 15K (KIT)" : true; })(),
+    why: JSON.stringify(G("ชุด KIT M SWITCH ราคาเท่าไหร่", "M SWITCH ราคา 350 บาทค่ะ")) });
+  // ── ข้อความทั่วไป ห้ามแตะ ──
+  smT.push({ n: 447, name: "ข้อความทั่วไปที่ไม่มีชื่อรุ่น ต้องไม่โดนแตะ",
+    ok: !G("สวัสดีครับ", "สวัสดีค่ะ 💕").blocked && !G("ส่งกี่วันถึง", "พัสดุ 2-3 วันค่ะ").blocked, why: "" });
+  smT.push({ n: 448, name: "คำตอบว่างหรือคำถามว่าง ต้องไม่ระเบิด",
+    ok: !G("", "").blocked && !G("หัวมาโบ", "").blocked && !G("", ผิด).blocked, why: "" });
+  // ── ตัวแปลชื่อสินค้ายังตัดสินถูกเหมือนเดิม (กัน k171 ถอยหลัง) ──
+  smT.push({ n: 449, name: "ตัวแปลชื่อสินค้ายังตอบ M SWITCH เหมือนเดิม (k171 ไม่ถอยหลัง)",
+    ok: _MODEL_IN("หัวมาโบ") === "M SWITCH" && _MODEL_IN("มีหัวมาโบไหมครับ") === "M SWITCH", why: _MODEL_IN("มีหัวมาโบไหมครับ") });
+  smT.push({ n: 450, name: "ข้อมูลที่ส่งให้ AI ยังมีแต่ M SWITCH ไม่มี MARBO ปน",
+    ok: (()=>{ const h = flavorHint("มีหัวมาโบไหมครับ", stockmap, 3); return h.indexOf("M SWITCH") !== -1 && h.indexOf("MARBO") === -1; })(),
+    why: flavorHint("มีหัวมาโบไหมครับ", stockmap, 3).slice(0, 200) });
+}
+for (const t of smT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส

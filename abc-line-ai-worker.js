@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k176-pricegate";
+const BUILD = "2026-08-05-k177-headmarbo2";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -631,6 +631,39 @@ function priceGate(reply) {
     return { blocked: true, reply: lines.join("\n"), said: fixes.join(" · ") };
   } catch (e) { return { blocked: false, reply: String(reply || "") }; }
 }
+// 🎯🎯 k177 — ③ กฎเจาะจงต้องชนะกฎกว้าง "ฝั่งขาออก" ด้วย
+//   ต้นเหตุ (Root Cause): k171 ปิดรูฝั่ง Product Resolver ไปแล้ว — ยืนยันด้วยการรันโค้ดจริง
+//     "หัวมาโบ" ทุกสำนวน → _MODEL_IN = M SWITCH · flavorHint = M SWITCH อย่างเดียว · brandHint = ว่าง
+//     แต่ AI ยัง **หยิบ MARBO ZERO / MARBO 9K มาเองจากแคตตาล็อกที่อยู่ในคำสั่ง**
+//     → resolver ตัดสินถูกแล้ว แต่ไม่มีอะไรบังคับให้ AI เชื่อ (บทเรียนเดิม k148 · k153 · k169 · k175)
+//   กฎ: คำถามลูกค้าเข้ากฎเจาะจงข้อไหน คำตอบห้ามเอ่ยรุ่นที่กฎนั้นตัดทิ้งไปแล้ว
+//     = บังคับใช้คำตัดสินของ Product Resolver ไม่ใช่ไปเพิ่มข้อความในคำสั่ง AI
+//   ครอบทั้งตระกูล ไม่ใช่แค่มาโบ (ESKO KIT vs ESKO · หัวพอต X vs X ฯลฯ)
+//   ⚠️ ถ้าลูกค้าพิมพ์ชื่อรุ่นที่ถูกตัดมาเอง = ไม่บล็อก (เขาถามถึงรุ่นนั้นจริง)
+function specificModelGate(userText, reply) {
+  try {
+    const t = String(userText || ""), rep = String(reply || "");
+    if (!t || !rep) return { blocked: false };
+    const hits = [];
+    for (const [re, key] of TH_MODEL) {
+      const r = new RegExp(re.source, re.flags.replace("g", ""));
+      const m = r.exec(t);
+      if (m) hits.push({ key, start: m.index, end: m.index + m[0].length, text: m[0] });
+    }
+    if (hits.length < 2) return { blocked: false };
+    const win = hits[0];                                   // TH_MODEL เรียงจากเจาะจงไปกว้าง ตัวแรก = เจาะจงสุด
+    const drop = [];
+    for (let i = 1; i < hits.length; i++) {
+      const h = hits[i];
+      if (h.key === win.key) continue;
+      if (h.start < win.end && win.start < h.end           // จับข้อความช่วงเดียวกัน = พูดถึงของสิ่งเดียวกัน
+          && t.indexOf(h.key) === -1                       // ลูกค้าไม่ได้พิมพ์ชื่อรุ่นนี้มาเอง
+          && rep.indexOf(h.key) !== -1) drop.push(h.key);
+    }
+    if (!drop.length) return { blocked: false };
+    return { blocked: true, win: win.key, said: win.text, drop: [...new Set(drop)] };
+  } catch (e) { return { blocked: false }; }
+}
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
 //   เคสจริง: "ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ" · "ขออภัยค่ะ รุ่น RELX SPARTA มีของค่ะ"
 //   ลูกค้าอ่านครึ่งประโยคแรกแล้วเข้าใจว่าไม่มีของ = เสียโอกาสขายฟรีๆ
@@ -754,7 +787,7 @@ const TH_MODEL = [
   //   ⚠️ ต้องมาก่อนตัวจับแบบไม่มี KIT เพราะ "ชุด KIT" ต้องได้ราคาชุด (499) ไม่ใช่ราคาหัว (350)
   [/(เอสโค|เอสโก|เอกโค|เอคโค|เอโค|esko|eskoo?)[^\n]{0,12}(kit|คิท|คิต|ชุด)|(kit|คิท|คิต|ชุด)[^\n]{0,12}(เอสโค|เอสโก|เอกโค|เอคโค|เอโค|esko)/i, "ESKO BAR SWITCH 20K (KIT)"],
   [/(ks|เคเอส)[^\n]{0,14}(kit|คิท|คิต|ชุด)|(kit|คิท|คิต|ชุด)[^\n]{0,14}(ks\s*quik|เคเอส)/i, "KS QUIK PRO 15K (KIT)"],
-  [/(m\s*switch|เอ็ม\s*สวิ[ชซ]|มาโบ\s*สวิ[ชซ])[^\n]{0,12}(kit|คิท|คิต|ชุด)|(kit|คิท|คิต|ชุด)[^\n]{0,12}(m\s*switch|เอ็ม\s*สวิ[ชซ])/i, "M SWITCH 15K (KIT)"],
+  [/(m\s*switch|เอ็ม\s*สวิ[ชซ]|มา(?:ร์)?โบ\s*สวิ[ชซ])[^\n]{0,12}(kit|คิท|คิต|ชุด)|(kit|คิท|คิต|ชุด)[^\n]{0,12}(m\s*switch|เอ็ม\s*สวิ[ชซ])/i, "M SWITCH 15K (KIT)"],
   [/(vazer|เวเซอร์|เวเซ่อ)[^\n]{0,12}(kit|คิท|คิต|ชุด)|(kit|คิท|คิต|ชุด)[^\n]{0,12}(vazer|เวเซอร์)/i, "VAZER RELOAD 15K (KIT)"],
   [/เอลบา\s*ส?ว?อ?[ฟป]|สวอ[ฟป]|elf\s*bar\s*swap|elfbar\s*swap/i, "ELFBAR SWAP 25K"],
   [/เครื่อง\s*เอลบา|joinone|จอยวัน/i, "เครื่อง ELFBAR JOINONE"],
@@ -766,12 +799,12 @@ const TH_MODEL = [
   //   → ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน (อาการเดียวกับ k143 แต่คนละทาง)
   //   ต้องมาก่อนกฎ "มาโบ" ทั้งหมด ไม่งั้นโดนกฎล่างจับไปเป็น MARBO 9K ก่อน
   [/หัว\s*(มาโบ|มาร์โบ|marbo)/i, "M SWITCH"],
-  [/มาโบ\s*สวิ[ชซต]|เอ็?ม\s*สวิ[ชซต]|m\s*swi[ct]?ch/i, "M SWITCH"],
+  [/มา(?:ร์)?โบ\s*สวิ[ชซต]|เอ็?ม\s*สวิ[ชซต]|m\s*swi[ct]?ch/i, "M SWITCH"],
   [/เอสโค่|เอสโก้|เอกโค|เอคโค|เอโคบาร์|esko\s*bar\s*switch|esko\s*swi/i, "ESKO BAR SWITCH 20K"],
   [/เอสโค่\s*บาร์|esko\s*bar\s*20/i, "ESKO BAR 20K"],
-  [/มาโบ\s*ซีโร่|มาโบ\s*เซโร่|marbo\s*zero|เอ็?ม\s*ซีโร่/i, "หัวพอต MARBO ZERO"],
-  [/มาโบ\s*9|marbo\s*9|มาโบเก้า/i, "MARBO 9K"],
-  [/มาโบ\s*10|marbo\s*10/i, "MARBO 10K"],
+  [/มา(?:ร์)?โบ\s*ซีโร่|มา(?:ร์)?โบ\s*เซโร่|marbo\s*zero|เอ็?ม\s*ซีโร่/i, "หัวพอต MARBO ZERO"],
+  [/มา(?:ร์)?โบ\s*9|marbo\s*9|มา(?:ร์)?โบเก้า/i, "MARBO 9K"],
+  [/มา(?:ร์)?โบ\s*10|marbo\s*10/i, "MARBO 10K"],
   [/บูสพอต|บูสท์|boost\s*pod|รีแลค\s*บูส/i, "RELX BOOST POD"],
   [/พอตคลีย|พอ[ดต]\s*เคลีย(ร์)?|พ็อ[ดต]\s*เคลีย(ร์)?|เคลียร?18|pod\s*clear|รีแลค\s*คลีย|รีแล็?ค\s*เคลีย/i, "RELX POD CLEAR 18K"],
   [/รีแลค\s*อินฟิ|relx\s*infinity|อินฟินิตี้/i, "หัวพอต RELX INFINITY"],
@@ -817,7 +850,7 @@ const TH_MODEL = [
   [/หยดสูบ|น้ำยาหยด|แบบหยด|น้ำยาขวด|ขวดหยด/i, "SALTNIC MARBO 30ML"],
   [/หยดสูบ|น้ำยาหยด|แบบหยด|น้ำยาขวด|ขวดหยด/i, "FREEBASE MARBO 30ML"],
   [/เอ็?ม\s*ซีโร่\s*โปร|m\s*zero\s*pro/i, "เครื่อง M ZERO PRO"],
-  [/มาโบ|marbo/i, "MARBO 9K"],   // ท้ายสุด: พูด "มาโบ" ลอยๆ = MARBO 9K (ตัวขายดี)
+  [/มา(?:ร์)?โบ|marbo/i, "MARBO 9K"],   // ท้ายสุด: พูด "มาโบ" ลอยๆ = MARBO 9K (ตัวขายดี)
   [/เอ็?ม\s*ซีโร่\s*นาโน|m\s*zero\s*nano/i, "เครื่อง M ZERO NANO"],
   [/ครีเอเตอร์|creator/i, "เครื่อง RELX CREATOR 20K"],
   [/เอสเซนเชียล|essential/i, "เครื่อง RELX ESSENTIAL 2"],
@@ -1750,7 +1783,7 @@ const ALIAS = [
    "ชุดพร้อมสูบ = ชุด KIT (เครื่อง+หัว) ร้านมี 4 รุ่น: ESKO BAR SWITCH 20K (KIT) 499 · KS QUIK PRO 15K (KIT) 499 · M SWITCH 15K (KIT) 499 · VAZER RELOAD 15K (KIT) 450 — ⛔ ตอบให้ครบทุกรุ่นที่มีของ ห้ามตอบแค่รุ่นเดียว"],
   [/เอลบา\s*ส?ว?อ?ฟ|เอลบาร์\s*สวอ?ป?|สวอฟ|สวอป|elf\s*bar\s*swap|elfbar\s*swap|\bswap\b/i, "ELFBAR SWAP 25K (หัว Big Pod ของค่าย ELFBAR ราคา 350)"],
   [/เอลบา|เอลบาร์|เอลฟ์?บาร์?|elf\s*bar|elfbar|joinone|จอยวัน/i, "ค่าย ELFBAR — ร้านมี: หัว ELFBAR SWAP 25K (350) + เครื่อง ELFBAR JOINONE (349, เครื่องมีแต่ 'สี' ไม่มีกลิ่น) ⛔ ไม่ใช่ MARBO"],
-  [/มาโบ\s*สวิ[ชซ]|มาโบ\s*สวิต|เอ็ม\s*สวิ[ชซ]|m\s*swi[ct]?ch|m\s*swich/i, "M SWITCH (หัว 350 / เครื่อง M SWITCH 15K = 250 / KIT 499) — ไม่ใช่ MARBO 9K"],
+  [/มา(?:ร์)?โบ\s*สวิ[ชซ]|มา(?:ร์)?โบ\s*สวิต|เอ็ม\s*สวิ[ชซ]|m\s*swi[ct]?ch|m\s*swich/i, "M SWITCH (หัว 350 / เครื่อง M SWITCH 15K = 250 / KIT 499) — ไม่ใช่ MARBO 9K"],
   [/เอสโค่|เอสโก้|esko/i, "ESKO BAR SWITCH (หัว 350 / KIT เครื่อง+หัว 499 — ไม่มีเครื่องเปล่าแยก)"],
   [/(abc|เอบีซี)[^\n]{0,25}(หัว|big\s*pod|bigpod|บิ๊กพอต|เครื่อง)|(หัว|big\s*pod|bigpod|บิ๊กพอต|เครื่อง)[^\n]{0,25}(abc|เอบีซี)/i,
    "หัว Big Pod ของ ABC มี 2 ตัว และ ⛔ ABC ไม่ได้ผลิตเครื่องเอง ไม่มี 'เครื่อง ABC':\n" +
@@ -1762,7 +1795,7 @@ const ALIAS = [
   [/เครื่อง\s*abc|เครื่องเอบีซี/i, "⛔ ร้านไม่มี 'เครื่อง ABC' เพราะ ABC ผลิตแต่หัวน้ำยา ไม่ได้ผลิตเครื่อง → หัว ABC TANK ใช้กับเครื่อง M SWITCH · หัว ABC LEGO ใช้กับเครื่อง BOOST POD (เลโก้)"],
   [/หัวเล็ก|หัวพอตเล็ก|พอตหัวเล็ก|หัวน้ำยาเล็ก|หัวเปลี่ยนเล็ก/i, "หัวพอตเล็ก (ไม่ใช่เครื่อง ไม่ใช่ Big Pod) = หัวพอต RELX INFINITY 140 / หัวพอต MARBO ZERO 140 / หัวพอต INFY PLUS 140 / หัวพอต RELX ULTRA 120 / หัวพอต RELX LARGE 140 — โปรส่งฟรีต้องครบ 10 หัว"],
   [/หัวใหญ่|บิ๊กพอต|big\s*pod|หัวน้ำยาใหญ่/i, "หัวน้ำยาใหญ่ Big Pod = ELFBAR SWAP 25K 379 / ESKO BAR SWITCH 20K 350 / M SWITCH 350 / KS QUIK PRO 15K 350 / RELX BOOST POD 350 / RELX POD CLEAR 18K 390 / VAZER RELOAD 15K 330 / ABC LEGO 20K 299 / ABC TANK 22K 320 — โปรส่งฟรีต้องครบ 4 ชิ้น"],
-  [/มาโบ\s*ซีโร่|มาโบ\s*เซโร่|marbo\s*zero|เอ็ม\s*ซีโร่|m\s*zero/i, "MARBO ZERO (หัวเล็ก 140) / เครื่อง M ZERO PRO 890 / M ZERO NANO 690"],
+  [/มา(?:ร์)?โบ\s*ซีโร่|มา(?:ร์)?โบ\s*เซโร่|marbo\s*zero|เอ็ม\s*ซีโร่|m\s*zero/i, "MARBO ZERO (หัวเล็ก 140) / เครื่อง M ZERO PRO 890 / M ZERO NANO 690"],
   [/รีแลค|รีแล็ก|relx/i, "RELX (ค่าย) — หัวเล็ก RELX INFINITY 140 / Big Pod RELX POD CLEAR 390, BOOST POD 350 / เครื่อง INFINITY 2+ 990, ESSENTIAL 2 490, CREATOR 20K 250"],
   [/เวเซอร์|วาเซอร์|vazer/i, "VAZER RELOAD 15K (หัว) / เครื่อง VAZER RELOAD 220"],
   [/ดูอั?ล\s*สแมช|dual\s*smash/i, "DUAL SMASH 20K (หัว) / เครื่อง DUAL SMASH 200"],
@@ -6314,6 +6347,25 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         reply = _have.length
           ? (_mk + " (" + (FLAVORS[_mk].p || "-") + " บาท) กลิ่นที่มีพร้อมส่งค่ะ 💕\n" + _have.slice(0, 12).map(f => "- " + f).join("\n") + (_have.length > 12 ? "\n(และอีก " + (_have.length - 12) + " กลิ่นค่ะ)" : "") + "\n\nรับกลิ่นไหนดีคะ ✨")
           : ("ขออภัยค่ะ 🙏🏻 ตอนนี้ " + _mk + " หมดชั่วคราวทุกกลิ่นค่ะ\nสนใจรุ่นใกล้เคียงไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕");
+      }
+    } catch (e) {}
+    // 🎯 k177: กฎเจาะจงชนะกฎกว้าง (ฝั่งขาออก) — บังคับใช้คำตัดสินของ Product Resolver
+    try {
+      const _sg = specificModelGate(String(msgText || ""), reply);
+      if (_sg.blocked) {
+        console.log("K177_SPECIFIC_MODEL_BLOCKED said=" + _sg.said + " win=" + _sg.win + " drop=" + _sg.drop.join(","));
+        const _w = _sg.win;
+        const _have = [];
+        for (const f of ((FLAVORS[_w] && FLAVORS[_w].f) || [])) {
+          const q = findStockForItem(smForQR || {}, _w, f);
+          if (q === null || q > (bufForQR || 1) || stockOtherStrength(smForQR || {}, _w, f) > (bufForQR || 1)) _have.push(f);
+        }
+        const _pp = (findPrice(_w) && findPrice(_w).price) || (FLAVORS[_w] && FLAVORS[_w].p) || "";
+        reply = "\"" + _sg.said + "\" ที่ร้านหมายถึง " + _w + (_pp ? " (" + _pp + " บาท)" : "") + " ค่ะ 💕\n\n"
+          + (_have.length
+              ? ("กลิ่นที่มีพร้อมส่งค่ะ\n" + _have.slice(0, 12).map(f => "- " + f).join("\n")
+                 + (_have.length > 12 ? "\n(และอีก " + (_have.length - 12) + " กลิ่นค่ะ)" : "") + "\n\nรับกลิ่นไหนดีคะ ✨")
+              : ("ขออภัยด้วยนะคะ 🙏🏻 ตอนนี้ " + _w + " หมดชั่วคราวทุกกลิ่นค่ะ\nสนใจรุ่นใกล้เคียงไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕"));
       }
     } catch (e) {}
     // 🏆 k164: ตอบ "ขายดีที่สุด" ทั้งที่ไม่มีข้อมูลยอดขาย
