@@ -1784,6 +1784,19 @@ for (const t of await memTests()) {
   t(325, '"เอาเบอร์รีชมพูค่ะ" (สั่งของ) ห้ามจับ', refundIntent('เอาเบอร์รีชมพูค่ะ', true) === false, 'สั่งของแล้วโดนเข้าคิวคืนเงิน');
   t(326, '"ขอดูยอด" ห้ามจับ', refundIntent('ขอดูยอด', true) === false, 'ขอดูยอดแล้วโดนเข้าคิวคืนเงิน');
 
+  // ── 🧹 k166: ด่าน k147 (เก็บการส่งต่อคน) เคยใช้กฎเก่าที่ผูกกับลำดับคำ → บั๊กเดิมยังอยู่ครึ่งหนึ่ง ──
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K166';
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: 'รวมยอดชำระ 190', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 190', uid }));
+    sent = []; aiReply = 'เดี๋ยวทีมงานหลังการขายเข้ามาดูแลให้นะคะ 🙏🏻';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'คืนยอดค่ะ', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(327, 'เคสจริง JW: จ่ายแล้ว + "คืนยอด" → ต้องเข้าคิวคน ไม่โดนตัดทิ้ง',
+      store.has('mute:v20:' + uid) && !/cutt\.ly\/menu4/.test(txt),
+      'ถูกตัดเป็น "ไม่ใช่ปัญหาจริง" + ยิงลิงก์เมนู = ลูกค้าจ่ายเงินแล้วโดนเมิน · out=' + txt.slice(0, 60));
+  }
+
   for (const x of T) {
     if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[เงินคืน]${RESET} ${x.name}`); }
     else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[เงินคืน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
