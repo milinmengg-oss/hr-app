@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k174-corsdeny";
+const BUILD = "2026-08-05-k175-mathsoldout";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -502,6 +502,77 @@ function crossFlavorGate(reply, model) {
     return { reply, blocked: true, said: m[1].trim(), model };
   } catch (e) { return { reply, blocked: false }; }
 }
+// 🧮🧮 k175 — ① ด่านบังคับ: AI ห้ามคิดเลขเงินเอง (Critical)
+//   เคสจริงจากสนามซ้อม 5 ส.ค.:
+//     "ชุด ELFBAR JOINONE (เครื่อง 349) + หัว ELFBAR SWAP 25K (379) = 379 บาท"
+//     349+379 = 728 → บอกลูกค้าถูกไป 349 บาท · ลูกค้าโอนตามนี้ = ร้านขาดทุนทุกออเดอร์ที่เข้าเส้นนี้
+//   ต้นเหตุ (Root Cause): โค้ดคิดเงินแทน AI ได้เฉพาะ "ตอนออกการ์ดทวนรายการ" (computeOrder)
+//     แต่ตอนคุยเรื่องราคาก่อนสั่ง ไม่มีด่านไหนแตะเลย → AI คิดเองล้วนๆ
+//     ในคำสั่ง AI เขียนห้ามคิดเลขไว้แล้ว แต่คำสั่งเป็นแค่คำขอ (บทเรียนเดิม k148 · k153 · k169)
+//   กฎ: ทุกข้อความขาออก ถ้ามีการคำนวณราคา ต้องคำนวณซ้ำด้วยโค้ดก่อนเสมอ
+//     ตรวจไม่ผ่าน = ไม่ส่งประโยคนั้น (ตัดทิ้ง แล้วให้ระบบสรุปยอดในการ์ดแทน)
+//     ตรวจไม่ได้ (อ่านโจทย์ไม่ชัด) = ไม่ส่งเหมือนกัน — ห้ามเดาแล้วแก้ตัวเลขให้ลูกค้า
+//   ⚠️ ต้องไม่หลงเลขที่ไม่ใช่ราคา: ชื่อรุ่น (STAR 2,500 · MARBO 9K · INFY 12K) · 3% · 30ML · 6MG
+//     จึงลบ "ชื่อรุ่นทั้งหมดจากตารางราคา" ออกจากบรรทัดก่อน แล้วค่อยอ่านตัวเลข
+//   ⚠️ "x" เป็นตัวคูณเฉพาะตอนอยู่ระหว่างตัวเลข — "องุ่น x1" ในการ์ดออเดอร์คือจำนวน ไม่ใช่การคูณ
+//   ⚠️ "-" นำหน้าบรรทัดคือหัวข้อย่อย ไม่ใช่ลบ · และชื่อสีมีขีดกลาง (สีเทา-เหลือง) ห้ามอ่านเป็นลบ
+const RX_MATHOP = /[+−÷*/]|\d\s*[-xX×✕]\s*\d|คูณ|หาร/;
+function priceMathCheck(line) {
+  const ln0 = String(line).replace(/^\s*[-•●–]\s+/, "");     // ตัดหัวข้อย่อยนำหน้าทิ้งก่อน (ไม่ใช่เครื่องหมายลบ)
+  const eq = ln0.search(/[=＝]/);
+  if (eq === -1) return { kind: "ไม่เกี่ยว" };
+  const rawLeft = ln0.slice(0, eq), right = ln0.slice(eq + 1);
+  if (!RX_MATHOP.test(rawLeft)) return { kind: "ไม่เกี่ยว" };          // ไม่มีการคำนวณ = ไม่ใช่งานของด่านนี้
+  const shownM = right.match(/^\s*\**\s*([\d,]{2,7})/);
+  if (!shownM) return { kind: "ไม่เกี่ยว" };
+  const shown = parseInt(shownM[1].replace(/,/g, ""), 10);
+  if (!isFinite(shown)) return { kind: "ไม่เกี่ยว" };
+  // ลบชื่อรุ่น + หน่วยที่ไม่ใช่ราคา ออกก่อน (ยาวก่อนสั้น กัน "ABC LEGO" กิน "ABC LEGO 20K")
+  let L = rawLeft;
+  for (const nm of MODEL_NAMES_LONGFIRST) if (nm.length >= 4 && L.indexOf(nm) !== -1) L = L.split(nm).join(" ");
+  L = L.replace(/\d[\d,\.]*\s*(?:[kK]\b|%|ml\b|ML\b|มล|mg\b|MG\b|บาท\/|\/ชิ้น)/g, " ");
+  L = L.replace(/(\d)\s*[xX×✕]\s*(\d)/g, "$1*$2");          // 350 x 2 = คูณ (แต่ "องุ่น x1" ไม่ใช่)
+  const tok = L.match(/[\d,]+|[+\-−×÷*/]|คูณ|หาร/g) || [];
+  const nums = [], ops = [];
+  for (const t of tok) {
+    if (/^[\d,]+$/.test(t)) { const v = parseInt(t.replace(/,/g, ""), 10); if (!isFinite(v)) return { kind: "ตรวจไม่ได้" }; nums.push(v); }
+    else ops.push(t === "คูณ" ? "*" : t === "หาร" ? "/" : t === "−" ? "-" : t === "×" ? "*" : t === "÷" ? "/" : t);
+  }
+  // ไม่มีตัวเลขให้คิดเลย = ไม่ใช่การคำนวณ (เช่น "เครื่อง RELX CREATOR - สีเทา-เหลือง = 250")
+  //   ⚠️ ห้ามบล็อกกรณีนี้ ไม่งั้นจะไปกินข้อความดีๆ ที่ชื่อสินค้ามีขีดกลาง
+  if (!nums.length) return { kind: "ไม่เกี่ยว" };
+  if (nums.length < 2 || ops.length !== nums.length - 1) return { kind: "ตรวจไม่ได้" };
+  // คิดตามลำดับคณิตศาสตร์ (คูณหารก่อน)
+  const n2 = [nums[0]], o2 = [];
+  for (let i = 0; i < ops.length; i++) {
+    const v = nums[i + 1];
+    if (ops[i] === "*") n2[n2.length - 1] = n2[n2.length - 1] * v;
+    else if (ops[i] === "/") { if (!v) return { kind: "ตรวจไม่ได้" }; n2[n2.length - 1] = n2[n2.length - 1] / v; }
+    else { o2.push(ops[i]); n2.push(v); }
+  }
+  let sum = n2[0];
+  for (let i = 0; i < o2.length; i++) sum = o2[i] === "-" ? sum - n2[i + 1] : sum + n2[i + 1];
+  if (Math.abs(sum - shown) < 0.5) return { kind: "ถูก" };
+  return { kind: "ผิด", ควรเป็น: Math.round(sum), พิมพ์ว่า: shown };
+}
+function mathGate(reply) {
+  try {
+    const src = String(reply || "");
+    if (!/[=＝]/.test(src) || !RX_MATHOP.test(src)) return { blocked: false, reply: src };
+    const keep = [], bad = [];
+    for (const ln of src.split("\n")) {
+      const r = priceMathCheck(ln);
+      if (r.kind === "ไม่เกี่ยว" || r.kind === "ถูก") { keep.push(ln); continue; }
+      bad.push(r.kind === "ผิด" ? ("คิดได้ " + r.ควรเป็น + " แต่พิมพ์ " + r.พิมพ์ว่า) : ("ตรวจไม่ได้: " + ln.trim().slice(0, 60)));
+    }
+    if (!bad.length) return { blocked: false, reply: src };
+    let out = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    const เนื้อ = out.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length;
+    out = (เนื้อ >= 8 ? out + "\n\n" : "")
+      + "ยอดรวมเดี๋ยวแอดมินสรุปให้ในการ์ดยืนยันนะคะ 🧾 บอกรุ่น กลิ่น และจำนวนที่ต้องการมาได้เลยค่ะ 💕";
+    return { blocked: true, reply: out, said: bad.join(" · ") };
+  } catch (e) { return { blocked: false, reply: String(reply || "") }; }
+}
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
 //   เคสจริง: "ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ" · "ขออภัยค่ะ รุ่น RELX SPARTA มีของค่ะ"
 //   ลูกค้าอ่านครึ่งประโยคแรกแล้วเข้าใจว่าไม่มีของ = เสียโอกาสขายฟรีๆ
@@ -573,6 +644,9 @@ const LIQUID_MSG = "น้ำยาบุหรี่ไฟฟ้ามี 2 แ
   + "• ชอบควันเยอะ เล่นเครื่องใหญ่ → FREEBASE\n\n"
   + "สนใจแบบไหน บอกแอดมินได้เลยค่ะ เดี๋ยวเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕";
 const MENU_MSG = "เมนูสินค้า\nต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕\nhttps://cutt.ly/menu4";
+// k175: รายชื่อรุ่นทั้งหมด เรียงยาวก่อนสั้น — ใช้ลบชื่อรุ่นออกจากบรรทัดก่อนอ่านตัวเลขราคา
+//   (ชื่อรุ่นมีตัวเลขปนอยู่เยอะ: STAR 2,500 · MARBO 9K · INFY 12K → ถ้าไม่ลบก่อนจะอ่านเป็นราคา)
+let MODEL_NAMES_LONGFIRST = [];
 // 💵 ตารางราคาต่อชิ้น (บาท) — โค้ดคิดเงินเอง ไม่ให้ AI คิด (กันบวกเลขผิด)
 const PRICE = {
   "RELX DIVA 30K": 490, "LANA IRIS 24K": 410, "CARNIVAL 20K": 399, "ESKO BAR 20K": 399,
@@ -1714,6 +1788,7 @@ function catOf(key) {
   return "disp"; // พอตใช้แล้วทิ้ง → 4 แท่งส่งฟรี
 }
 function cloneTier(n) { return n >= 1000 ? 190 : n >= 500 ? 200 : n >= 300 ? 210 : n >= 200 ? 220 : n >= 100 ? 230 : n >= 50 ? 240 : n >= 20 ? 250 : 290; }
+MODEL_NAMES_LONGFIRST = [...new Set([...Object.keys(PRICE), ...Object.keys(FLAVORS)])].sort((a, b) => b.length - a.length);
 // แยกรายการจากบล็อก "ทวนคำสั่งซื้อ" (รูปแบบบรรทัด: รุ่น | กลิ่น | จำนวน)
 function parseItems(reply) {
   const items = [];
@@ -6263,6 +6338,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       const _fg = factGate(reply);
       reply = listify(_fg.text);
       await bumpQuality(env, shopId, _fg.hit, _fg.fixed);
+      // 🧮 k175 (ด่านสุดท้ายก่อนส่ง): ห้ามให้ตัวเลขราคาที่ AI คิดเองหลุดออกไป
+      //   วางไว้ท้ายสุดโดยตั้งใจ — ด่านก่อนหน้าเขียนข้อความใหม่ได้ ต้องตรวจของที่จะส่งจริงเท่านั้น
+      try {
+        const _gm = mathGate(reply);
+        if (_gm.blocked) { console.log("K175_PRICE_MATH_BLOCKED " + _gm.said); reply = _gm.reply; }
+      } catch (e) {}
     } catch (e) {}
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
     const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(msgText || "").trim());

@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2701,6 +2701,75 @@ const rpT = [];
 for (const t of rpT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[เล่นซ้ำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[เล่นซ้ำ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [คิดเงิน] k175 ① — AI ห้ามคิดเลขราคาเอง (406-425) ═══
+const mgT = [];
+{
+  const B = (s) => mathGate(s).blocked;
+  const R = (s) => mathGate(s).reply;
+  // ── เคสจริงที่ทำให้ต้องมีด่านนี้ ──
+  const เคสจริง = "ชุด ELFBAR JOINONE (เครื่อง 349) + หัว ELFBAR SWAP 25K (379) = 379 บาท";
+  mgT.push({ n: 406, name: "เคสจริง: 349+379 พิมพ์ว่า 379 → ต้องไม่ส่งประโยคนั้นออกไป",
+    ok: B(เคสจริง) && R(เคสจริง).indexOf("= 379") === -1, why: R(เคสจริง) });
+  mgT.push({ n: 407, name: "เคสจริง: ตัดแล้วต้องบอกลูกค้าว่ายอดรวมจะสรุปในการ์ด (ไม่ใช่เงียบหาย)",
+    ok: /การ์ด/.test(R(เคสจริง)), why: R(เคสจริง) });
+  mgT.push({ n: 408, name: "ห้ามเดาแก้ตัวเลขให้ลูกค้า — ตัดทิ้งอย่างเดียว ห้ามพิมพ์ 728 แทน",
+    ok: R(เคสจริง).indexOf("728") === -1, why: R(เคสจริง) });
+  // ── บวกถูกต้อง = ต้องผ่านฉลุย (กันด่านนี้ไปตัดของดี) ──
+  mgT.push({ n: 409, name: "บวกถูก 350+40=390 → ปล่อยผ่าน", ok: !B("ยอดสินค้า 350 + ค่าส่ง 40 = 390 บาทค่ะ"), why: R("ยอดสินค้า 350 + ค่าส่ง 40 = 390 บาทค่ะ") });
+  mgT.push({ n: 410, name: "คูณถูก 350 x 2 = 700 → ปล่อยผ่าน", ok: !B("MARBO 9K 350 x 2 = 700 บาทค่ะ"), why: R("MARBO 9K 350 x 2 = 700 บาทค่ะ") });
+  mgT.push({ n: 411, name: "คูณบวกผสม 350 x 2 + 40 = 740 → ปล่อยผ่าน (คิดคูณก่อนบวก)", ok: !B("350 x 2 + 40 = 740 บาท"), why: R("350 x 2 + 40 = 740 บาท") });
+  mgT.push({ n: 412, name: "ลบถูก 728 - 40 = 688 → ปล่อยผ่าน", ok: !B("728 - 40 = 688 บาท"), why: R("728 - 40 = 688 บาท") });
+  mgT.push({ n: 413, name: "คูณผิด 350 x 2 = 650 → บล็อก", ok: B("350 x 2 = 650 บาท"), why: R("350 x 2 = 650 บาท") });
+  mgT.push({ n: 414, name: "ลบผิด 728 - 40 = 700 → บล็อก", ok: B("728 - 40 = 700 บาท"), why: R("728 - 40 = 700 บาท") });
+  // ── ชื่อรุ่นที่มีตัวเลขปน ห้ามอ่านเป็นราคา ──
+  mgT.push({ n: 415, name: "STAR 2,500 (ชื่อรุ่นมีเลข) 150 + 40 = 190 → ปล่อยผ่าน ไม่หลงอ่าน 2500 เป็นราคา",
+    ok: !B("STAR 2,500 ราคา 150 + ค่าส่ง 40 = 190 บาท"), why: R("STAR 2,500 ราคา 150 + ค่าส่ง 40 = 190 บาท") });
+  mgT.push({ n: 416, name: "MARBO 9K 350 + INFY 12K 350 = 700 → ปล่อยผ่าน (ไม่หลง 9K/12K)",
+    ok: !B("MARBO 9K 350 + INFY 12K 350 = 700 บาท"), why: R("MARBO 9K 350 + INFY 12K 350 = 700 บาท") });
+  mgT.push({ n: 417, name: "ELFBAR SWAP 25K 379 + ABC LEGO 20K 299 = 678 → ปล่อยผ่าน",
+    ok: !B("ELFBAR SWAP 25K 379 + ABC LEGO 20K 299 = 678 บาท"), why: R("ELFBAR SWAP 25K 379 + ABC LEGO 20K 299 = 678 บาท") });
+  mgT.push({ n: 418, name: "ความแรง 3% / 5% ห้ามอ่านเป็นราคา", ok: !B("องุ่น 3% 350 + แตงโม 5% 350 = 700 บาท"), why: R("องุ่น 3% 350 + แตงโม 5% 350 = 700 บาท") });
+  mgT.push({ n: 419, name: "ขวด 30ML ห้ามอ่านเป็นราคา", ok: !B("SALTNIC MARBO 30ML 270 + FREEBASE MARBO 30ML 170 = 440 บาท"), why: R("SALTNIC MARBO 30ML 270 + FREEBASE MARBO 30ML 170 = 440 บาท") });
+  // ── ข้อความปกติต้องไม่โดนแตะเลย ──
+  const ปกติ = [
+    "MARBO 9K ราคา 350 บาทค่ะ 💕",
+    "ค่าส่งพัสดุ 40 บาท ครบ 4 ชิ้นส่งฟรีค่ะ",
+    "รบกวนแจ้งรุ่นและกลิ่นที่ต้องการด้วยนะคะ 🙏🏻",
+    "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1",
+    "รอบส่งด่วนรอบสุดท้าย 20.45 น. ค่ะ",
+  ];
+  mgT.push({ n: 420, name: "ข้อความปกติ 5 แบบ ต้องไม่โดนด่านนี้แตะเลย",
+    ok: ปกติ.every(x => !B(x) && R(x) === x), why: JSON.stringify(ปกติ.filter(x => B(x))) });
+  // ── ตรวจไม่ได้ = ห้ามส่ง (ตามกฎข้อ 4) ──
+  const มั่ว = "MARBO 9K 350 + ค่าส่ง = 500 บาท";
+  mgT.push({ n: 421, name: "มีตัวเลขแต่อ่านโจทย์ไม่ครบ = ตรวจไม่ได้ → ห้ามส่ง",
+    ok: B(มั่ว) && R(มั่ว).indexOf("= 500") === -1, why: R(มั่ว) });
+  // ⚠️ กันด่านนี้ไปกินข้อความดีๆ — 2 เคสนี้เคยเกือบพลาด
+  const การ์ดจริง = "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n- MARBO 9K องุ่น x1 = 350\n- ค่าส่ง = 40";
+  mgT.push({ n: 421.1, name: "⚠️ บรรทัดในการ์ดออเดอร์จริง (- รุ่น กลิ่น x1 = 350) ต้องไม่โดนตัด",
+    ok: !B(การ์ดจริง) && R(การ์ดจริง) === การ์ดจริง, why: R(การ์ดจริง) });
+  const ชื่อสี = "เครื่อง RELX CREATOR 20K - สีเทา-เหลือง = 250 บาทค่ะ";
+  mgT.push({ n: 421.2, name: "⚠️ ชื่อสีที่มีขีดกลาง (สีเทา-เหลือง) ห้ามอ่านเป็นเครื่องหมายลบ",
+    ok: !B(ชื่อสี) && R(ชื่อสี) === ชื่อสี, why: R(ชื่อสี) });
+  // ── หลายบรรทัด: ตัดเฉพาะบรรทัดที่ผิด เก็บบรรทัดดีไว้ ──
+  const ผสม = "MARBO 9K ราคา 350 บาทค่ะ\n349 + 379 = 379 บาท\nสนใจกลิ่นไหนคะ";
+  mgT.push({ n: 422, name: "หลายบรรทัด: ตัดเฉพาะบรรทัดที่คิดเลขผิด บรรทัดดีต้องอยู่ครบ",
+    ok: B(ผสม) && R(ผสม).indexOf("MARBO 9K ราคา 350") !== -1 && R(ผสม).indexOf("สนใจกลิ่นไหนคะ") !== -1 && R(ผสม).indexOf("= 379") === -1,
+    why: R(ผสม) });
+  // ── priceMathCheck ตรงๆ ──
+  mgT.push({ n: 423, name: "priceMathCheck: บอกได้ว่าควรเป็นเท่าไหร่ (ไว้เขียน log ให้คนตามได้)",
+    ok: (()=>{ const r = priceMathCheck("349 + 379 = 379 บาท"); return r.kind === "ผิด" && r["ควรเป็น"] === 728 && r["พิมพ์ว่า"] === 379; })(),
+    why: JSON.stringify(priceMathCheck("349 + 379 = 379 บาท")) });
+  mgT.push({ n: 424, name: "priceMathCheck: ประโยคไม่มีการคำนวณ = ไม่ใช่งานของด่านนี้",
+    ok: priceMathCheck("MARBO 9K ราคา 350 บาทค่ะ").kind === "ไม่เกี่ยว", why: JSON.stringify(priceMathCheck("MARBO 9K ราคา 350 บาทค่ะ")) });
+  mgT.push({ n: 425, name: "ยอดรวมที่ไม่มีการคำนวณ (รวมยอดชำระ 390) ต้องไม่โดนแตะ",
+    ok: !B("ยอดสินค้า 350\nค่าส่ง 40\nรวมยอดชำระ 390"), why: R("ยอดสินค้า 350\nค่าส่ง 40\nรวมยอดชำระ 390") });
+}
+for (const t of mgT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[คิดเงิน]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[คิดเงิน]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
