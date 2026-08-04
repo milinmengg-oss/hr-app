@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1751,6 +1751,42 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k163: กุโปร · กลิ่นข้ามรุ่น · ขออภัยนำหน้าข่าวดี · ไม่เอาแล้ว≠ขอเงินคืน ═══
+//   จากการขุด log 4 ส.ค. (ลูกค้า PHUNG + ออยออย)
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+
+  // ── 🎁 กุโปรส่งฟรี (เสียเงินตรงๆ) ──
+  const p1 = fakePromoGate('ขออภัยค่ะ รุ่นนี้หมดชั่วคราวนะคะ 🙏🏻\n\nแต่ตอนนี้มีโปรล่าสุด พอตใช้แล้วทิ้ง 1 แท่งส่งฟรี ค่ะ 🎉');
+  t(287, 'เคสจริง: บอทกุโปร "1 แท่งส่งฟรี" → ต้องบล็อก', p1.blocked && !/1\s*แท่งส่งฟรี/.test(p1.reply), 'ลูกค้าสั่ง 1 แท่งแล้วมาทวงสิทธิ์ = ร้านขาดทุนค่าส่ง');
+  t(288, 'เคสจริง: ต้องบอกเงื่อนไขจริงแทน (ครบ 4 แท่ง)', /ครบ 4 แท่ง/.test(p1.reply), 'ตัดทิ้งเฉยๆ ลูกค้าไม่รู้ของจริง');
+  t(289, 'โปรจริง "ครบ 4 แท่ง" ต้องผ่าน', fakePromoGate('ซื้อครบ 4 แท่ง ส่งฟรีค่ะ').blocked === false, 'บล็อกโปรจริง = เสียโอกาสขาย');
+  t(290, 'โปรจริง "ครบ 10 หัว" ต้องผ่าน', fakePromoGate('หัวพอตเล็ก ครบ 10 หัว ส่งฟรีค่ะ').blocked === false, 'บล็อกโปรจริง');
+  t(291, 'โปรจริง "ครบ 2 ชิ้น" (IQOS) ต้องผ่าน', fakePromoGate('ไส้บุหรี่ IQOS ครบ 2 ชิ้น ส่งฟรีค่ะ').blocked === false, 'บล็อกโปรจริง');
+  t(292, 'กุเลขอื่น (3 แท่ง) ต้องบล็อกด้วย', fakePromoGate('ครบ 3 แท่งส่งฟรีค่ะ').blocked === true, 'กันได้แค่เลขที่เคยเจอ');
+  t(293, 'ข้อความที่ไม่พูดถึงโปร ห้ามโดนแตะ', fakePromoGate('MARBO 9K 350 บาทค่ะ').blocked === false, 'ไปยุ่งข้อความปกติ');
+
+  // ── 🍇 กลิ่นข้ามรุ่น (k16 กรองเฉพาะบรรทัดลิสต์ ประโยคปกติหลุด) ──
+  const realCase = 'ขออภัยนะคะ 🙏🏻 INFY 12K กลิ่นแตงโมลิ้นจี่ หมดชั่วคราวค่ะ\n\nรุ่นนี้ตอนนี้มีของเฉพาะกลิ่นมิ้นต์ฟรีซ 5% ค่ะ';
+  t(294, 'เคสจริง: INFY 12K ไม่มีกลิ่น "มิ้นต์ฟรีซ 5%" → ต้องบล็อก', crossFlavorGate(realCase, 'INFY 12K').blocked === true, 'กลิ่นจากรุ่นก่อนหน้าค้างมาปน = ลูกค้าสั่งแล้วได้ของผิด');
+  t(295, 'กลิ่นที่มีจริงในรุ่นนั้น ต้องผ่าน', crossFlavorGate('รุ่นนี้ตอนนี้มีของเฉพาะกลิ่นมิ้นต์ฟรีซ 5% ค่ะ', 'หัวพอต RELX INFINITY').blocked === false, 'บล็อกคำตอบที่ถูก');
+  // ⚠️ บทเรียนตอนทำด่านนี้: INFY 12K มีกลิ่น "มิ้นต์" จริง ซึ่งเป็นคำนำหน้าของ "มิ้นต์ฟรีซ 5%"
+  //    ถ้าเทียบสองทางจะนับว่าถูก ทั้งที่ผิด — ต้องเทียบทางเดียวเท่านั้น
+  t(296, '⚠️ กลิ่นจริงที่เป็นคำนำหน้า ("มิ้นต์") ห้ามทำให้ของปลอมผ่าน', crossFlavorGate('มีของเฉพาะกลิ่นมิ้นต์ฟรีซ 5% ค่ะ', 'INFY 12K').blocked === true, 'เทียบสองทาง = ของปลอมหลุด');
+  t(297, 'ประโยคบอกว่าหมด ห้ามโดนแตะ', crossFlavorGate('INFY 12K กลิ่นแตงโมลิ้นจี่ หมดชั่วคราวค่ะ', 'INFY 12K').blocked === false, 'ไปยุ่งประโยคที่ถูก');
+  t(298, 'ไม่รู้ว่ากำลังคุยรุ่นไหน → ไม่ตัดสิน', crossFlavorGate(realCase, '').blocked === false, 'เดาทั้งที่ไม่รู้รุ่น');
+
+  // ── 🙇 "ขออภัย" นำหน้าข่าวดี ──
+  t(299, 'เคสจริง: "ขออภัยค่ะ STAR 2,500 ยังมีของ" → ตัดคำขออภัยออก', !/^ขออภัย/.test(fixSorryGoodNews('ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ 💕')) && /ยังมีของ/.test(fixSorryGoodNews('ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ 💕')), 'ลูกค้าอ่านครึ่งแรกแล้วนึกว่าไม่มีของ');
+  t(300, 'ข่าวร้ายจริง ต้องคงคำขออภัยไว้', /^ขออภัย/.test(fixSorryGoodNews('ขออภัยค่ะ รุ่นนี้หมดชั่วคราวค่ะ')), 'ตัดคำขอโทษตอนที่ควรขอโทษ');
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[กันมั่ว]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[กันมั่ว]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k162: เปิดหลายร้าน — เพิ่มร้านด้วย env + หลังบ้านสลับร้านได้ ═══
 {
   const T = [];
