@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, evalAutoCheck2 } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2924,6 +2924,48 @@ const qaT = [];
 for (const t of qaT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[QA]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[QA]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [ความแรง] k179 — กลิ่นเดียวหลายความแรง ห้ามเดาให้ลูกค้า (457-468) ═══
+const stT = [];
+{
+  const การ์ด = (m2, f) => "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n" + m2 + " | " + f + " | 1";
+  // ── เคสจริงลูกค้า "m" ──
+  const g1 = strengthAskGate('โคล่า 1', การ์ด('RELX DIVA 30K', 'โคล่า 3%'));
+  stT.push({ n: 457, name: "⚠️ เคสจริง: DIVA มีโคล่า 3%/5% ลูกค้าพิมพ์ 'โคล่า 1' → ต้องถามความแรงก่อน",
+    ok: g1.blocked && g1.opts.length === 2, why: JSON.stringify(g1) });
+  stT.push({ n: 458, name: "ถามแล้วต้องบอกตัวเลือกครบทั้ง 3% และ 5%",
+    ok: g1.opts.join(',').indexOf('3%') !== -1 && g1.opts.join(',').indexOf('5%') !== -1, why: JSON.stringify(g1.opts) });
+  // ── ลูกค้าระบุความแรงมาแล้ว = ห้ามถามซ้ำ ──
+  stT.push({ n: 459, name: "ลูกค้าพิมพ์ 'โคล่า 5% 1 อัน' มาแล้ว → ห้ามถามซ้ำ",
+    ok: !strengthAskGate('โคล่า 5% 1 อัน', การ์ด('RELX DIVA 30K', 'โคล่า 5%')).blocked, why: '' });
+  stT.push({ n: 460, name: "ลูกค้าพิมพ์หน่วย mg (นิโคตินเพ้า) → ห้ามถามซ้ำ",
+    ok: !strengthAskGate('COLA 6mg 1 กระปุก', การ์ด('NICOTINE POUCH - ZAR POUCH', 'COLA (6MG)')).blocked, why: '' });
+  // ── กลิ่นที่มีความแรงเดียว = ไม่ต้องถาม (ห้ามกวนลูกค้า) ──
+  stT.push({ n: 461, name: "⚠️ MARBO 9K องุ่น มีความแรงเดียว → ห้ามถาม (กวนลูกค้าโดยไม่จำเป็น)",
+    ok: !strengthAskGate('องุ่น 1', การ์ด('MARBO 9K', 'องุ่น')).blocked, why: JSON.stringify(strengthAskGate('องุ่น 1', การ์ด('MARBO 9K', 'องุ่น'))) });
+  stT.push({ n: 462, name: "⚠️ รุ่นที่ไม่มีระบบความแรงเลย (SONIC 8K) → ห้ามถาม",
+    ok: !strengthAskGate('โคล่า 1', การ์ด('SONIC 8K', 'โคล่า')).blocked, why: '' });
+  stT.push({ n: 463, name: "⚠️ เครื่อง/สี ไม่มีความแรง → ห้ามถาม",
+    ok: !strengthAskGate('สีดำ 1', การ์ด('เครื่อง M ZERO PRO', 'สีดำ')).blocked, why: '' });
+  // ── ข้อความที่ไม่ใช่การ์ด ห้ามแตะ ──
+  stT.push({ n: 464, name: "ข้อความธรรมดาที่ไม่มีบล็อกทวนรายการ → ห้ามแตะ",
+    ok: !strengthAskGate('โคล่า 1', 'รับกลิ่นไหนดีคะ 💕').blocked, why: '' });
+  // ── strengthChoices ตรงกับฐานข้อมูลจริง ──
+  stT.push({ n: 465, name: "strengthChoices: DIVA โคล่า → เจอ 2 ความแรงจากฐานข้อมูลจริง",
+    ok: strengthChoices('RELX DIVA 30K', 'โคล่า').length === 2, why: JSON.stringify(strengthChoices('RELX DIVA 30K', 'โคล่า')) });
+  stT.push({ n: 466, name: "strengthChoices: MARBO 9K องุ่น → ไม่มีความแรงให้เลือก",
+    ok: strengthChoices('MARBO 9K', 'องุ่น').length === 0, why: JSON.stringify(strengthChoices('MARBO 9K', 'องุ่น')) });
+  stT.push({ n: 467, name: "strengthChoices: MARBO ZERO องุ่น → 3% กับ 5% (ตรงกับข้อสอบ bakeoff)",
+    ok: strengthChoices('หัวพอต MARBO ZERO', 'องุ่น').length === 2, why: JSON.stringify(strengthChoices('หัวพอต MARBO ZERO', 'องุ่น')) });
+  // ── หลายรายการในการ์ดเดียว ถ้ามีอันไหนกำกวมต้องถาม ──
+  const หลาย = "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1\nRELX DIVA 30K | โคล่า 3% | 1";
+  stT.push({ n: 468, name: "การ์ดหลายรายการ: มีอันเดียวที่กำกวมก็ต้องถาม",
+    ok: strengthAskGate('องุ่น 1 โคล่า 1', หลาย).blocked, why: JSON.stringify(strengthAskGate('องุ่น 1 โคล่า 1', หลาย)) });
+}
+for (const t of stT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส

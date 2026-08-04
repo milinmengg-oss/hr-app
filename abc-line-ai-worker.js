@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k178-ruleconflict";
+const BUILD = "2026-08-05-k179-strength";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -677,6 +677,42 @@ function isLongerModelAt(text, pos, name) {
     }
   } catch (e) {}
   return false;
+}
+// 🧪🧪 k179 (QA · เคสจริงลูกค้า "m" 5 ส.ค.) — กลิ่นเดียวกันแต่มีหลายความแรง ห้ามเลือกให้เอง
+//   เคสจริง: บอทลิสต์ RELX DIVA 30K ให้ดู ซึ่งมีทั้ง "โคล่า 3%" และ "โคล่า 5%"
+//     ลูกค้าพิมพ์แค่ "โคล่า 1" → บอท **เลือก 3% ให้เอง** แล้วลงออเดอร์เลย
+//     → ลูกค้าอาจได้ของผิดความแรง = ต้องเปลี่ยนของ/คืนเงิน และเสียความเชื่อใจ
+//   ต้นเหตุ: ไม่มีด่านไหนเช็คว่า "กลิ่นที่ลูกค้าพูดกำกวมหรือเปล่า" ก่อนลงออเดอร์
+//     (มีแต่ strOf ที่ใช้จับคู่สต็อก — ไม่ได้ห้ามเดา)
+//   กฎ: ลูกค้าไม่ได้ระบุความแรง + รุ่นนั้นมีกลิ่นนั้นมากกว่า 1 ความแรง = ห้ามลงออเดอร์ ต้องถามก่อน
+//   ⚠️ ถ้ากลิ่นนั้นมีความแรงเดียว = ไม่ต้องถาม (ไม่กวนลูกค้าโดยไม่จำเป็น)
+const RX_STRENGTH = /(\d+(?:\.\d+)?)\s*(?:%|mg)/i;
+function strengthChoices(model, flavor) {
+  try {
+    const fl = (FLAVORS[model] && FLAVORS[model].f) || [];
+    if (!fl.length) return [];
+    const base = (x) => String(x).replace(RX_STRENGTH, "").replace(/\s+/g, " ").trim().toLowerCase();
+    const want = base(flavor);
+    if (!want) return [];
+    const hits = fl.filter(f => base(f) === want && RX_STRENGTH.test(f));
+    return [...new Set(hits.map(f => (f.match(RX_STRENGTH) || [])[0]))];
+  } catch (e) { return []; }
+}
+function strengthAskGate(userText, reply) {
+  try {
+    const rep = String(reply || ""), cust = String(userText || "");
+    if (RX_STRENGTH.test(cust)) return { blocked: false };     // ลูกค้าระบุความแรงมาแล้ว
+    const items = parseItems(rep);
+    if (!items.length) return { blocked: false };
+    for (const it of items) {
+      if (!it.flavor) continue;
+      const p = findPrice(it.model);
+      const key = (p && p.key) || it.model;
+      const opts = strengthChoices(key, it.flavor);
+      if (opts.length >= 2) return { blocked: true, model: key, flavor: String(it.flavor).replace(RX_STRENGTH, "").trim(), opts };
+    }
+    return { blocked: false };
+  } catch (e) { return { blocked: false }; }
 }
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
 //   เคสจริง: "ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ" · "ขออภัยค่ะ รุ่น RELX SPARTA มีของค่ะ"
@@ -6541,6 +6577,18 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       }
       return;
     }
+    // 🧪 k179: กลิ่นกำกวม (มีหลายความแรง) → ถามก่อน ห้ามเดาแล้วลงออเดอร์
+    try {
+      const _sa = strengthAskGate(String(msgText || ""), reply);
+      if (_sa.blocked) {
+        console.log("K179_STRENGTH_ASK model=" + _sa.model + " flavor=" + _sa.flavor + " opts=" + _sa.opts.join(","));
+        await lineReply(TOKEN, replyToken,
+          _sa.model + " กลิ่น" + _sa.flavor + " มี " + _sa.opts.length + " ความแรงค่ะ 💕\n"
+          + _sa.opts.map(o => "- " + o).join("\n")
+          + "\n\nรับความแรงไหนดีคะ ✨", userId);
+        return;
+      }
+    } catch (e) {}
     if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
       let items = parseItems(reply);
       // 🛒 k125 (เคสจริง 3/8 14.16 — เจ้าของร้านชี้): ลูกค้าพิมพ์ "ตังแท้ก้ได้ครับ" (ตอบเรื่องแท้/โคลน)
