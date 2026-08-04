@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2631,6 +2631,76 @@ const arenaT = [];
 for (const t of arenaT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[สนามซ้อม]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[สนามซ้อม]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [เล่นซ้ำ] k173 — เก็บเคสที่ตกแล้วเล่นซ้ำ พิสูจน์ว่า Patch แก้ได้จริง (392-405) ═══
+const rpT = [];
+{
+  const เก็บ = {};
+  const envเก็บ = { CONV: { get: async (k) => เก็บ[k] ?? null, put: async (k, v) => { เก็บ[k] = v; }, delete: async (k) => { delete เก็บ[k]; } } };
+  const เคส = { id: 99, ชื่อ: "เคสทดสอบการเก็บ", หมวด: "ทดสอบ" };
+  const ผลตก = {
+    ผล: "FAIL", คะแนนรวม: 62,
+    คะแนน: { accuracy: 70, policy_compliance: 60, order_accuracy: 55, escalation: 90, naturalness: 80 },
+    เหตุผลที่ตก: ["ความถูกต้องของออเดอร์ 55 (ต่ำกว่า 90)"],
+    โค้ดจับได้: [{ ระดับ: "critical", เรื่อง: "ยอดรวมในการ์ดไม่ตรงกับที่โค้ดคิดได้: การ์ด 350 · ควรเป็น 390", หลักฐาน: "..." }],
+    กรรมการจับได้: [{ severity: "critical", turn: 2, what: "ยอดผิด", evidence: "รวม 350" }],
+    กรรมการว่า: { overall: 62, verdict: "FAIL" }, ข้อเสนอแก้ไข: "บังคับให้โค้ดคิดยอดแทน AI",
+    บทสนทนา: [{ who: "ลูกค้า", text: "เอา MARBO 9K องุ่น 1 อัน" }, { who: "จีทู", text: "รวมยอดชำระ 350 บาท" },
+               { who: "ลูกค้า", text: "350 หรือ 390 คะ" }, { who: "จีทู", text: "ดูยอดในการ์ดนะคะ" }],
+  };
+  const tid = await evalSaveFail(envเก็บ, เคส, ผลตก, { ข้อความ: "[ความจริง] MARBO 9K = 350 บาท", หมดเกลี้ยง: ["ABC LEGO 20K"] });
+  const rec = JSON.parse(เก็บ["evalfail:99"] || "null");
+
+  rpT.push({ n: 392, name: "เคสที่ตกถูกเก็บไว้อัตโนมัติ (ไม่ต้องกดเอง)", ok: !!rec && !!tid, why: "ไม่ได้เก็บ" });
+  rpT.push({ n: 393, name: "เก็บครบ 7 อย่างตามที่สั่ง: Test ID · ข้อความลูกค้า · คำตอบจีทู · ผลกรรมการ · ความรู้ตอนนั้น · เวอร์ชันคำสั่ง · commit",
+    ok: !!(rec && rec.testId && rec.ข้อความลูกค้า.length === 2 && rec.คำตอบจีทู.length === 2
+        && rec.ผลกรรมการ && rec.ผลกรรมการ.คะแนน && rec.ความรู้ตอนนั้น && rec.promptVer && rec.commit && rec.build),
+    why: rec ? `ขาด: ${["testId","ข้อความลูกค้า","คำตอบจีทู","ผลกรรมการ","ความรู้ตอนนั้น","promptVer","commit","build"].filter(k=>!rec[k]).join(", ")}` : "ไม่มี record" });
+  rpT.push({ n: 394, name: "เก็บข้อความลูกค้าไว้ครบทุกคำ (ไว้เล่นซ้ำแบบเป๊ะ)",
+    ok: rec.ข้อความลูกค้า[0] === "เอา MARBO 9K องุ่น 1 อัน" && rec.ข้อความลูกค้า[1] === "350 หรือ 390 คะ", why: JSON.stringify(rec.ข้อความลูกค้า) });
+  const idx = JSON.parse(เก็บ["evalfails"] || "[]");
+  rpT.push({ n: 395, name: "มีสารบัญเคสที่ตก ให้หน้าเว็บดึงไปโชว์ปุ่มเล่นซ้ำได้", ok: idx.length === 1 && idx[0].เคส === 99, why: JSON.stringify(idx) });
+  await evalSaveFail(envเก็บ, เคส, { ...ผลตก, คะแนนรวม: 70 }, { ข้อความ: "x", หมดเกลี้ยง: [] });
+  rpT.push({ n: 396, name: "ตกซ้ำเคสเดิม = ทับของเก่า ไม่บวมเป็นรายการซ้ำ",
+    ok: JSON.parse(เก็บ["evalfails"]).length === 1, why: `มี ${JSON.parse(เก็บ["evalfails"]).length} รายการ` });
+  rpT.push({ n: 397, name: "เล่นซ้ำเคสที่ไม่เคยเก็บไว้ = บอกว่าไม่มี ไม่ใช่พังเงียบ",
+    ok: (await evalReplay({ CONV: { get: async () => null } }, 1234)) === null, why: "ควรได้ null" });
+  rpT.push({ n: 398, name: "ลายเซ็นคำสั่ง AI เปลี่ยนเองเมื่อคำสั่งเปลี่ยน (ไม่ต้องพึ่งคนจำอัปเดต)",
+    ok: /^p[0-9a-z]+\.\d+$/.test(promptVer()), why: promptVer() });
+
+  // ── เทียบผลเก่า/ใหม่ ──
+  const เก่า = { ผลกรรมการ: { ผล: "FAIL", คะแนนรวม: 62, คะแนน: { accuracy: 70, policy_compliance: 60, order_accuracy: 55, escalation: 90, naturalness: 80 } },
+    โค้ดจับได้: [{ ระดับ: "critical", เรื่อง: "ยอดรวมในการ์ดไม่ตรงกับที่โค้ดคิดได้: การ์ด 350 · ควรเป็น 390" }] };
+  const เต็ม = { accuracy: 100, policy_compliance: 100, order_accuracy: 100, escalation: 100, naturalness: 100 };
+  const หาย = evalCompare(เก่า, { ผล: "PASS", คะแนนรวม: 100, คะแนน: เต็ม, โค้ดจับได้: [] });
+  rpT.push({ n: 399, name: "แก้แล้วผ่าน = ขึ้น FIXED และบอกว่าปัญหาเดิมหายไปข้อไหน",
+    ok: หาย.ป้าย === "FIXED" && หาย.แก้ได้แล้ว.length === 1 && หาย.คะแนนต่าง === 38, why: JSON.stringify(หาย.ป้าย) });
+  const ยัง = evalCompare(เก่า, { ผล: "FAIL", คะแนนรวม: 62, คะแนน: เก่า.ผลกรรมการ.คะแนน, โค้ดจับได้: เก่า.โค้ดจับได้ });
+  rpT.push({ n: 400, name: "แก้ไม่ตรงจุด = ขึ้น ยังไม่หาย (ห้ามบอกว่าดีขึ้นทั้งที่เท่าเดิม)",
+    ok: ยัง.ป้าย === "STILL_FAILING" && ยัง.ยังอยู่.length === 1, why: ยัง.ป้าย });
+  const ถอย = evalCompare(เก่า, { ผล: "FAIL", คะแนนรวม: 88, คะแนน: { ...เต็ม, policy_compliance: 80 },
+    โค้ดจับได้: [{ ระดับ: "critical", เรื่อง: "เสนอส่วนลดเอง (ร้านไม่มีนโยบายลดราคา)" }] });
+  rpT.push({ n: 401, name: "⚠️ คะแนนรวมสูงขึ้นแต่มีของใหม่พัง = ต้องขึ้น REGRESSION (ห้ามฉลองก่อน)",
+    ok: ถอย.ป้าย === "REGRESSION" && ถอย.โผล่ใหม่.length === 1 && ถอย.คะแนนต่าง > 0, why: `${ถอย.ป้าย} ต่าง ${ถอย.คะแนนต่าง}` });
+  const ตกแรง = evalCompare(เก่า, { ผล: "PASS", คะแนนรวม: 90, คะแนน: { ...เต็ม, escalation: 60 }, โค้ดจับได้: [] });
+  rpT.push({ n: 402, name: "⚠️ ผ่านแล้วแต่มีหัวข้อคะแนนร่วง 10+ = REGRESSION",
+    ok: ตกแรง.ป้าย === "REGRESSION" && ตกแรง.คะแนนตกแรง.length === 1, why: `${ตกแรง.ป้าย} ${JSON.stringify(ตกแรง.คะแนนตกแรง)}` });
+  const สอง = { ...เก่า, โค้ดจับได้: [เก่า.โค้ดจับได้[0], { ระดับ: "major", เรื่อง: "ตอบข้อความเดิมซ้ำเป๊ะ" }] };
+  const ดีขึ้น = evalCompare(สอง, { ผล: "FAIL", คะแนนรวม: 78, คะแนน: { ...เต็ม, order_accuracy: 85 },
+    โค้ดจับได้: [{ ระดับ: "major", เรื่อง: "ตอบข้อความเดิมซ้ำเป๊ะ" }] });
+  rpT.push({ n: 403, name: "แก้ได้บางส่วน = ขึ้น ดีขึ้นแต่ยังไม่ผ่าน พร้อมบอกว่าเหลืออะไร",
+    ok: ดีขึ้น.ป้าย === "BETTER" && ดีขึ้น.แก้ได้แล้ว.length === 1 && ดีขึ้น.ยังอยู่.length === 1, why: ดีขึ้น.ป้าย });
+  rpT.push({ n: 404, name: "ตารางเทียบคะแนนครบทั้ง 5 หัวข้อ พร้อมส่วนต่าง",
+    ok: หาย.เทียบคะแนน.length === 5 && หาย.เทียบคะแนน.every(x => x.หัวข้อ && x.ต่าง !== undefined), why: JSON.stringify(หาย.เทียบคะแนน) });
+  const ไม่มีคะแนนเก่า = evalCompare({ ผลกรรมการ: { ผล: "JUDGE_ERROR", คะแนนรวม: 0, คะแนน: null }, โค้ดจับได้: [] },
+    { ผล: "PASS", คะแนนรวม: 95, คะแนน: เต็ม, โค้ดจับได้: [] });
+  rpT.push({ n: 405, name: "รอบเก่ากรรมการพัง (ไม่มีคะแนน) = เทียบได้โดยไม่ระเบิด",
+    ok: ไม่มีคะแนนเก่า.ป้าย === "FIXED" && ไม่มีคะแนนเก่า.เทียบคะแนน.every(x => x.ต่าง === null), why: JSON.stringify(ไม่มีคะแนนเก่า.ป้าย) });
+}
+for (const t of rpT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[เล่นซ้ำ]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[เล่นซ้ำ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส

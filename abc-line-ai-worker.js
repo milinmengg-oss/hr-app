@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k172-evalarena";
+const BUILD = "2026-08-05-k173-replay";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2662,8 +2662,30 @@ export default {
     if (url0.pathname === "/eval") {
       if (!OKEY()) return DENY();
       const J = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "content-type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
+      // k173 — ตั้ง commit hash ให้ระบบจำ (โค้ดอ่าน git ของตัวเองไม่ได้ จึงต้องบอกมันตอนดีพลอย)
+      if (url0.searchParams.get("setcommit")) {
+        const v = String(url0.searchParams.get("setcommit")).trim().slice(0, 40);
+        if (env.CONV) await env.CONV.put("evalcommit", v);
+        return J({ ok: true, commit: v, build: BUILD, promptVer: promptVer() });
+      }
+      // k173 — รายชื่อเคสที่เคยตกไว้ (พร้อมเล่นซ้ำ)
+      if (url0.searchParams.get("fails")) {
+        let idx = [];
+        try { idx = JSON.parse((env.CONV && await env.CONV.get("evalfails")) || "[]"); } catch (e) {}
+        return J({ build: BUILD, promptVer: promptVer(), commit: await evalCommit(env),
+          จำนวน: Array.isArray(idx) ? idx.length : 0, เคสที่ตกไว้: Array.isArray(idx) ? idx : [] });
+      }
+      // k173 — เล่นซ้ำเคสที่ตก ด้วยข้อความลูกค้าเดิมเป๊ะ 100% แล้วเทียบผลเก่า/ใหม่
+      if (url0.searchParams.get("replay")) {
+        const rid = parseInt(url0.searchParams.get("replay"), 10);
+        try {
+          const r = await evalReplay(env, rid);
+          if (!r) return J({ error: "ไม่พบเคสที่ตกของเคส " + rid + " (อาจหมดอายุ 30 วัน หรือยังไม่เคยตก)" }, 404);
+          return J({ build: BUILD, ...r });
+        } catch (e) { return J({ error: "เล่นซ้ำไม่สำเร็จ: " + String(e).slice(0, 200) }, 500); }
+      }
       if (url0.searchParams.get("list")) {
-        return J({ build: BUILD, สนามซ้อม: "เปิด", จำนวนเคส: EVAL_CASES.length,
+        return J({ build: BUILD, promptVer: promptVer(), commit: await evalCommit(env), สนามซ้อม: "เปิด", จำนวนเคส: EVAL_CASES.length,
           เกณฑ์ผ่าน: "ออเดอร์ ≥90 และ กฎร้าน ≥90 และ ไม่มีข้อผิดร้ายแรง และ คะแนนรวม ≥80",
           ความปลอดภัย: ["ไม่สร้างออเดอร์จริง", "ไม่ส่งเลขบัญชีจริง (ใช้บัญชีทดสอบ)", "ไม่ตัดสต็อก", "ไม่ส่งข้อความออกไปหาใคร", "ไม่แก้โค้ดและไม่ดีพลอยเอง"],
           เคส: EVAL_CASES.map(c => ({ id: c.id, หมวด: c.หมวด, ชื่อ: c.ชื่อ, ตา: c.ตา })) });
@@ -3831,28 +3853,38 @@ function evalScore(j, flags) {
     กรรมการว่า: { overall: n(j.overall), verdict: String(j.verdict || "").toUpperCase() === "PASS" ? "PASS" : "FAIL" } };
 }
 
-// ── รันเคสเดียวจบครบวง: ลูกค้าจำลอง → จีทูตัวจริง (ในสนามซ้อม) → กรรมการ ──
-async function evalRunCase(env, c) {
+// ═══════ k173 — เก็บเคสที่ตก แล้วเล่นซ้ำได้ (Replay) ═══════
+//   เป้าหมาย: พิสูจน์ว่า Patch แก้ปัญหาได้จริง ไม่ใช่แค่ "รันใหม่แล้วบังเอิญผ่าน"
+//   ⛔ ตอนเล่นซ้ำ **ห้ามสร้างคำถามใหม่ ห้ามสุ่ม** — ใช้ข้อความลูกค้าเดิมเป๊ะทุกตัวอักษร
+const EVALFAIL_TTL = 60 * 60 * 24 * 30;    // เก็บเคสที่ตกไว้ 30 วัน
+// ลายเซ็นของคำสั่ง AI ปัจจุบัน — แก้คำสั่งเมื่อไหร่ เลขนี้เปลี่ยนเอง (ไม่ต้องพึ่งคนจำอัปเดต)
+function promptVer() {
+  let h = 5381; const s = SYSTEM_PROMPT;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return "p" + h.toString(36) + "." + s.length;
+}
+// commit hash ตั้งเองจากหลังบ้าน (/eval?setcommit=xxxxxxx) เพราะโค้ดอ่าน git ของตัวเองไม่ได้
+async function evalCommit(env) { try { return (env.CONV && await env.CONV.get("evalcommit")) || "(ยังไม่ได้ตั้ง)"; } catch (e) { return "(อ่านไม่ได้)"; } }
+
+// ── ตัวขับบทสนทนา: ใช้ร่วมกันทั้ง "รันปกติ" และ "เล่นซ้ำ" เพื่อให้เดินเส้นทางเดียวกันเป๊ะ ──
+//   ต่างกันแค่ที่มาของข้อความลูกค้า: รันปกติ = AI คิดเอง · เล่นซ้ำ = ดึงของเดิมมาใช้
+async function evalConverse(env, ถามข้อถัดไป, จำนวนตา) {
   const nonce = EVAL_TOKEN_PREFIX + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   const box = { sent: [] };
   EVALBOX.set(nonce, box);
   const TOKEN = "Bearer-less-" + nonce;      // โทเคนปลอมประจำรอบ — lfetch เห็นแล้วจะดักไว้ ไม่ยิงออกจริง
   const eenv = evalEnv(env);
   const uid = "EVALSIMUSER" + nonce.slice(-8);
-  const shop = "evalsim";
   const conv = [];
-  const t0 = Date.now();
-  let sm = {}, buf = 3;
-  try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) {}
   try {
-    for (let t = 0; t < Math.max(2, Math.min(6, c.ตา || 4)); t++) {
-      const ask = await evalCustomer(env, c, conv);
+    for (let t = 0; t < จำนวนตา; t++) {
+      const ask = await ถามข้อถัดไป(conv, t);
       if (!ask) break;
       conv.push({ who: "ลูกค้า", text: ask });
       box.sent.length = 0;
       try {
         await handleEvent({ type: "message", replyToken: "EVALRT" + t + nonce.slice(-4), source: { type: "user", userId: uid },
-          message: { type: "text", id: "EVALMSG" + t, text: ask } }, eenv, TOKEN, shop);
+          message: { type: "text", id: "EVALMSG" + t, text: ask } }, eenv, TOKEN, "evalsim");
       } catch (e) { box.sent.push({ ทาง: "ERROR", เนื้อหา: { messages: [{ type: "text", text: "__ระบบพัง__ " + String(e).slice(0, 120) }] } }); }
       const said = [];
       for (const s of box.sent) {
@@ -3866,17 +3898,127 @@ async function evalRunCase(env, c) {
       conv.push({ who: "จีทู", text: said.join("\n") || "(ไม่ตอบอะไรเลย)" });
     }
   } finally { EVALBOX.delete(nonce); }
+  return conv;
+}
+
+// ── ตรวจ + ให้คะแนนบทสนทนาที่ได้มา (ใช้ร่วมกันทั้งรันปกติและเล่นซ้ำ) ──
+async function evalGrade(env, c, conv, t0) {
+  let sm = {}, buf = 3;
+  try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) {}
   const truth = evalTruth(conv.map(x => x.text).join("\n"), sm, buf);
   const flags = evalAutoCheck(conv, sm, buf, truth.หมดเกลี้ยง);
   const j = await evalJudge(env, c, conv, truth.ข้อความ, flags);
   const sc = evalScore(j, flags);
   return {
-    เคส: c.id, หมวด: c.หมวด, ชื่อ: c.ชื่อ, จำนวนตา: conv.filter(x => x.who === "ลูกค้า").length,
-    วินาที: Math.round((Date.now() - t0) / 100) / 10,
-    ผล: sc.verdict, คะแนนรวม: sc.overall, คะแนน: sc.คะแนน, เหตุผลที่ตก: sc.เหตุผลที่ตก, กรรมการว่า: sc.กรรมการว่า,
-    โค้ดจับได้: flags, กรรมการจับได้: (j && j.violations) || [], ตรวจไม่ได้: (j && j.unverifiable) || [],
-    ข้อเสนอแก้ไข: (j && j.recommendation) || "", บทสนทนา: conv,
+    ผลลัพธ์: {
+      เคส: c.id, หมวด: c.หมวด, ชื่อ: c.ชื่อ, จำนวนตา: conv.filter(x => x.who === "ลูกค้า").length,
+      วินาที: Math.round((Date.now() - t0) / 100) / 10,
+      ผล: sc.verdict, คะแนนรวม: sc.overall, คะแนน: sc.คะแนน, เหตุผลที่ตก: sc.เหตุผลที่ตก, กรรมการว่า: sc.กรรมการว่า,
+      โค้ดจับได้: flags, กรรมการจับได้: (j && j.violations) || [], ตรวจไม่ได้: (j && j.unverifiable) || [],
+      ข้อเสนอแก้ไข: (j && j.recommendation) || "", บทสนทนา: conv,
+    }, ความรู้: truth,
   };
+}
+
+// ── บันทึกเคสที่ตก พร้อมของแวดล้อมทั้งหมด เพื่อให้เล่นซ้ำแล้วเทียบกันได้อย่างเป็นธรรม ──
+async function evalSaveFail(env, c, r, truth) {
+  try {
+    if (!env.CONV) return null;
+    const rec = {
+      testId: "case" + c.id + "-" + Date.now().toString(36),
+      เคส: c.id, ชื่อ: c.ชื่อ, หมวด: c.หมวด,
+      เมื่อ: new Date(Date.now() + 7 * 3600 * 1000).toISOString().replace("T", " ").slice(0, 16) + " น.",
+      build: BUILD, promptVer: promptVer(), commit: await evalCommit(env),
+      ข้อความลูกค้า: r.บทสนทนา.filter(x => x.who === "ลูกค้า").map(x => x.text),
+      คำตอบจีทู: r.บทสนทนา.filter(x => x.who === "จีทู").map(x => x.text),
+      บทสนทนา: r.บทสนทนา,
+      ผลกรรมการ: { ผล: r.ผล, คะแนนรวม: r.คะแนนรวม, คะแนน: r.คะแนน, เหตุผลที่ตก: r.เหตุผลที่ตก,
+                   กรรมการจับได้: r.กรรมการจับได้, กรรมการว่า: r.กรรมการว่า, ข้อเสนอแก้ไข: r.ข้อเสนอแก้ไข },
+      โค้ดจับได้: r.โค้ดจับได้,
+      ความรู้ตอนนั้น: truth.ข้อความ,
+      ลายเซ็นสต็อก: (truth.หมดเกลี้ยง || []).slice().sort().join("|"),
+    };
+    await env.CONV.put("evalfail:" + c.id, JSON.stringify(rec), { expirationTtl: EVALFAIL_TTL });
+    let idx = [];
+    try { idx = JSON.parse((await env.CONV.get("evalfails")) || "[]"); } catch (e) {}
+    if (!Array.isArray(idx)) idx = [];
+    idx = idx.filter(x => x && x.เคส !== c.id);
+    idx.unshift({ เคส: c.id, ชื่อ: c.ชื่อ, หมวด: c.หมวด, เมื่อ: rec.เมื่อ, build: BUILD, testId: rec.testId,
+                  คะแนนรวม: r.คะแนนรวม, เหตุผลที่ตก: r.เหตุผลที่ตก });
+    await env.CONV.put("evalfails", JSON.stringify(idx.slice(0, 40)), { expirationTtl: EVALFAIL_TTL });
+    return rec.testId;
+  } catch (e) { console.log("K173_SAVEFAIL " + String(e).slice(0, 70)); return null; }
+}
+
+// ── เทียบผลเก่ากับผลใหม่: หายจริงไหม · ยังอยู่ไหม · มีของใหม่พังไหม (Regression) ──
+function evalCompare(เก่า, ใหม่) {
+  const kk = (f) => String(f.ระดับ) + "|" + String(f.เรื่อง).split(":")[0].trim();
+  const oldF = new Map((เก่า.โค้ดจับได้ || []).map(f => [kk(f), f]));
+  const newF = new Map((ใหม่.โค้ดจับได้ || []).map(f => [kk(f), f]));
+  const แก้ได้แล้ว = [...oldF.values()].filter(f => !newF.has(kk(f))).map(f => f.เรื่อง);
+  const ยังอยู่ = [...newF.values()].filter(f => oldF.has(kk(f))).map(f => f.เรื่อง);
+  const โผล่ใหม่ = [...newF.values()].filter(f => !oldF.has(kk(f)));
+  const so = (เก่า.ผลกรรมการ && เก่า.ผลกรรมการ.คะแนน) || {}, sn = ใหม่.คะแนน || {};
+  const dims = [["accuracy", "ข้อเท็จจริง"], ["policy_compliance", "กฎร้าน"], ["order_accuracy", "ออเดอร์"], ["escalation", "ส่งต่อคน"], ["naturalness", "เป็นธรรมชาติ"]];
+  const เทียบคะแนน = []; const ตกแรง = [];
+  for (const [d, th] of dims) {
+    const a = (so && so[d] != null) ? so[d] : null, b = (sn && sn[d] != null) ? sn[d] : null;
+    const t = (a === null || b === null) ? null : b - a;
+    เทียบคะแนน.push({ หัวข้อ: th, เก่า: a, ใหม่: b, ต่าง: t });
+    if (t !== null && t <= -10) ตกแรง.push(th + " " + a + "→" + b);
+  }
+  const รวมเก่า = (เก่า.ผลกรรมการ && เก่า.ผลกรรมการ.คะแนนรวม) || 0, รวมใหม่ = ใหม่.คะแนนรวม || 0;
+  const ถอยหลัง = โผล่ใหม่.some(f => f.ระดับ !== "minor") || ตกแรง.length > 0;
+  let สรุป, ป้าย;
+  if (ถอยหลัง) { สรุป = "ถอยหลัง — มีของใหม่พัง"; ป้าย = "REGRESSION"; }
+  else if (ใหม่.ผล === "PASS") { สรุป = "หายแล้ว — เคสนี้ผ่านแล้ว"; ป้าย = "FIXED"; }
+  else if (ยังอยู่.length < oldF.size || รวมใหม่ > รวมเก่า) { สรุป = "ดีขึ้นแต่ยังไม่ผ่าน"; ป้าย = "BETTER"; }
+  else { สรุป = "ยังไม่หาย"; ป้าย = "STILL_FAILING"; }
+  return {
+    ป้าย, สรุป,
+    ผลเก่า: (เก่า.ผลกรรมการ && เก่า.ผลกรรมการ.ผล) || "?", ผลใหม่: ใหม่.ผล,
+    คะแนนรวมเก่า: รวมเก่า, คะแนนรวมใหม่: รวมใหม่, คะแนนต่าง: รวมใหม่ - รวมเก่า,
+    เทียบคะแนน, แก้ได้แล้ว, ยังอยู่, โผล่ใหม่: โผล่ใหม่.map(f => "[" + f.ระดับ + "] " + f.เรื่อง), คะแนนตกแรง: ตกแรง,
+    เหตุผลที่ตกเก่า: (เก่า.ผลกรรมการ && เก่า.ผลกรรมการ.เหตุผลที่ตก) || [], เหตุผลที่ตกใหม่: ใหม่.เหตุผลที่ตก || [],
+  };
+}
+
+// ── เล่นซ้ำ: ข้อความลูกค้าเดิมเป๊ะ 100% รันกับโค้ด/คำสั่งเวอร์ชันปัจจุบัน ──
+async function evalReplay(env, id) {
+  let rec = null;
+  try { rec = JSON.parse((await env.CONV.get("evalfail:" + id)) || "null"); } catch (e) {}
+  if (!rec || !Array.isArray(rec.ข้อความลูกค้า) || !rec.ข้อความลูกค้า.length) return null;
+  const c = EVAL_CASES.find(x => x.id === rec.เคส)
+    || { id: rec.เคส, ชื่อ: rec.ชื่อ, หมวด: rec.หมวด, ต้องได้: "(เคสนี้ถูกลบออกจากชุดแล้ว)", ห้าม: "" };
+  const t0 = Date.now();
+  const เดิม = rec.ข้อความลูกค้า;
+  // ⛔ ตรงนี้คือหัวใจ: ดึงข้อความเดิมมาใช้ตรงๆ ไม่เรียก AI ลูกค้าจำลอง ไม่มีการสุ่มใดๆ
+  const conv = await evalConverse(env, (_c, i) => เดิม[i] || "", เดิม.length);
+  const g = await evalGrade(env, c, conv, t0);
+  const cmp = evalCompare(rec, g.ผลลัพธ์);
+  const ลายเซ็นใหม่ = (g.ความรู้.หมดเกลี้ยง || []).slice().sort().join("|");
+  const ความรู้เปลี่ยน = ลายเซ็นใหม่ !== (rec.ลายเซ็นสต็อก || "");
+  return {
+    testId: rec.testId, เคส: rec.เคส, ชื่อ: rec.ชื่อ, หมวด: rec.หมวด,
+    ข้อความลูกค้าที่ใช้ซ้ำ: เดิม,
+    ตอนนั้น: { เมื่อ: rec.เมื่อ, build: rec.build, promptVer: rec.promptVer, commit: rec.commit },
+    ตอนนี้: { build: BUILD, promptVer: promptVer(), commit: await evalCommit(env) },
+    คำสั่งเปลี่ยนไหม: rec.promptVer !== promptVer(),
+    บิลด์เปลี่ยนไหม: rec.build !== BUILD,
+    ความรู้เปลี่ยนไหม: ความรู้เปลี่ยน,
+    เตือน: ความรู้เปลี่ยน ? "⚠️ สต็อกเปลี่ยนไปจากรอบก่อน ผลที่ดีขึ้นอาจมาจากของกลับมามีสต็อก ไม่ใช่จาก Patch — ดูช่อง 'แก้ได้แล้ว' ประกอบ" : "",
+    เทียบผล: cmp, ผลใหม่: g.ผลลัพธ์, บทสนทนาเก่า: rec.บทสนทนา,
+  };
+}
+// ── รันเคสเดียวจบครบวง: ลูกค้าจำลอง → จีทูตัวจริง (ในสนามซ้อม) → กรรมการ ──
+//   ถ้าตก จะเก็บบทสนทนา + ของแวดล้อมไว้ให้เล่นซ้ำได้ (k173)
+async function evalRunCase(env, c) {
+  const t0 = Date.now();
+  const conv = await evalConverse(env, (cv) => evalCustomer(env, c, cv), Math.max(2, Math.min(6, c.ตา || 4)));
+  const g = await evalGrade(env, c, conv, t0);
+  const r = g.ผลลัพธ์;
+  if (r.ผล !== "PASS") r.เก็บไว้เล่นซ้ำ = await evalSaveFail(env, c, r, g.ความรู้);
+  return r;
 }
 async function handleEvent(ev, env, TOKEN, shopId) {
   const _uid = (ev && ev.source && ev.source.userId) || "";

@@ -47,6 +47,17 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
 .rec{background:#1a1f17;border:1px solid #2f3a26;border-radius:12px;padding:11px 13px;margin-top:9px;font-size:12.5px;line-height:1.75;color:#d7e7c4;}
 .rec b{color:#bdfb00;}
 .warnbox{background:#2a1414;border:1px solid #7a2020;border-radius:14px;padding:12px 14px;font-size:12.5px;color:#ffc9c9;line-height:1.8;margin-top:12px;}
+.rp{background:#1c1c1c;border:1px solid #333;border-left:4px solid #7a6bff;border-radius:12px;padding:11px 13px;margin-top:9px;}
+.rpbtn{background:#2c2350;border:1.5px solid #4b3fa8;color:#c7bcff;border-radius:10px;padding:8px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;margin-top:8px;}
+.rpbtn:disabled{opacity:.5;cursor:default;}
+.tag{display:inline-block;border-radius:20px;padding:3px 11px;font-size:11.5px;font-weight:800;}
+.tag.fixed{background:#1c3b1c;color:#9be29b;} .tag.reg{background:#5a1a1a;color:#ffb0b0;}
+.tag.better{background:#3b3418;color:#ffd98a;} .tag.still{background:#332;color:#c9c9a0;background:#332b1a;}
+.cmp{width:100%;border-collapse:collapse;margin-top:9px;font-size:12px;}
+.cmp td,.cmp th{padding:6px 5px;border-bottom:1px solid #282828;text-align:center;}
+.cmp th{color:#8a8a8a;font-weight:600;font-size:11px;}
+.cmp td:first-child,.cmp th:first-child{text-align:left;color:#ccc;}
+.meta{font-size:11px;color:#7a7a7a;margin-top:7px;line-height:1.7;}
 </style>
 </head>
 <body>
@@ -71,6 +82,7 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
       • <b>ไม่แก้โค้ดและไม่ดีพลอยเอง</b> — ได้แค่เสนอ รอพี่อนุมัติ
     </div>
     <button id="go" class="bigbtn" onclick="runAll()">▶ รันทั้งชุด 20 เคส</button>
+    <div id="ver" class="meta" style="text-align:center"></div>
     <div class="bar"><i id="prog"></i></div>
     <div id="msg"></div>
     <div class="tot hidden" id="tot">
@@ -88,6 +100,13 @@ input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padd
   <div id="rows"></div>
 </div>
 
+<div id="fails" class="card hidden">
+  <div class="dh" style="margin-top:0">🔁 เคสที่เคยตกไว้ — กดเล่นซ้ำเพื่อพิสูจน์ว่า Patch แก้ได้จริง</div>
+  <div class="warnbox">เล่นซ้ำ = ใช้ <b>ข้อความลูกค้าเดิมเป๊ะทุกตัวอักษร</b> ไม่สร้างคำถามใหม่ ไม่สุ่ม<br>รันกับโค้ด+คำสั่งเวอร์ชันล่าสุด แล้วเทียบให้ดูว่าปัญหาเดิมหายไหม และมีอะไรพังใหม่ไหม</div>
+  <button class="sub" onclick="replayAll()" id="rpall">🔁 เล่นซ้ำทุกเคสที่ตกไว้</button>
+  <div id="faillist"></div>
+</div>
+
 <div id="recs" class="card hidden">
   <div class="dh" style="margin-top:0">📝 ข้อเสนอแก้ไข — รอพี่อนุมัติ</div>
   <div class="warnbox">ระบบนี้ <b>ไม่แก้ Prompt · ไม่แก้ Knowledge · ไม่ดีพลอย</b> ให้เองเด็ดขาด<br>รายการข้างล่างคือข้อเสนอเฉยๆ พี่อ่านแล้วบอกว่าจะเอาข้อไหน ค่อยลงมือแก้</div>
@@ -103,7 +122,7 @@ let RESULTS=[];
 const $=(id)=>document.getElementById(id);
 
 function init(){
-  if(KEY){ $('login').classList.add('hidden'); $('main').classList.remove('hidden'); }
+  if(KEY){ $('login').classList.add('hidden'); $('main').classList.remove('hidden'); loadFails(); }
   else { $('login').classList.remove('hidden'); $('main').classList.add('hidden'); }
 }
 function saveKey(){
@@ -142,7 +161,78 @@ async function runAll(){
   $('prog').style.width='100%';
   $('msg').textContent='ซ้อมครบ '+cases.length+' เคสแล้ว';
   $('go').disabled=false;
-  paint(); paintRecs();
+  paint(); paintRecs(); loadFails();
+}
+
+/* ═══ เล่นซ้ำเคสที่ตก ═══ */
+let FAILS=[];
+async function loadFails(){
+  try{
+    const d=await q('/eval?fails=1');
+    $('ver').textContent='บิลด์ '+d.build+' · คำสั่ง '+d.promptVer+' · commit '+d.commit;
+    FAILS=d['เคสที่ตกไว้']||[];
+  }catch(e){ return; }
+  if(!FAILS.length){ $('fails').classList.add('hidden'); return; }
+  $('fails').classList.remove('hidden');
+  $('faillist').innerHTML='';
+  FAILS.forEach(f=>{
+    const d=document.createElement('div');
+    d.className='rp'; d.id='rp'+f['เคส'];
+    d.innerHTML='<div class="rtop"><b>'+esc(f['ชื่อ'])+'</b><span class="rscore r">'+(f['คะแนนรวม']||0)+'</span></div>'
+      +'<div class="rcat">'+esc(f['หมวด'])+' · ตกเมื่อ '+esc(f['เมื่อ'])+' · บิลด์ '+esc(f.build)+'</div>'
+      +'<div class="rwhy">⛔ '+(f['เหตุผลที่ตก']||[]).map(esc).join('<br>⛔ ')+'</div>'
+      +'<button class="rpbtn" onclick="replayOne('+f['เคส']+')">🔁 เล่นซ้ำเคสนี้</button>'
+      +'<div class="rpout"></div>';
+    $('faillist').appendChild(d);
+  });
+}
+
+async function replayOne(id){
+  const host=$('rp'+id); if(!host) return;
+  const btn=host.querySelector('.rpbtn'); const out=host.querySelector('.rpout');
+  btn.disabled=true; btn.textContent='⏳ กำลังเล่นซ้ำด้วยข้อความเดิม...';
+  let r;
+  try{ r=await q('/eval?replay='+id); }
+  catch(e){ out.innerHTML='<div class="rwhy">เล่นซ้ำไม่สำเร็จ: '+esc(e.message)+'</div>'; btn.disabled=false; btn.textContent='🔁 ลองใหม่'; return; }
+  btn.disabled=false; btn.textContent='🔁 เล่นซ้ำอีกครั้ง';
+  if(r.error){ out.innerHTML='<div class="rwhy">'+esc(r.error)+'</div>'; return; }
+  out.innerHTML=cmpHtml(r);
+  return r;
+}
+
+async function replayAll(){
+  $('rpall').disabled=true;
+  for(const f of FAILS){ $('msg').textContent='เล่นซ้ำเคส '+f['เคส']+' — '+f['ชื่อ']; await replayOne(f['เคส']); }
+  $('msg').textContent='เล่นซ้ำครบทุกเคสแล้ว';
+  $('rpall').disabled=false;
+}
+
+function cmpHtml(r){
+  const c=r['เทียบผล'];
+  const cls={FIXED:'fixed',REGRESSION:'reg',BETTER:'better',STILL_FAILING:'still'}[c['ป้าย']]||'still';
+  const dt=(v)=> v===null?'–':(v>0?'<span class="g">+'+v+'</span>':(v<0?'<span class="r">'+v+'</span>':'<span style="color:#777">0</span>'));
+  let h='<div style="margin-top:11px;border-top:1px solid #303030;padding-top:11px">';
+  h+='<span class="tag '+cls+'">'+esc(c['สรุป'])+'</span> ';
+  h+='<span style="font-size:12.5px;color:#aaa"> คะแนนรวม '+c['คะแนนรวมเก่า']+' → <b>'+c['คะแนนรวมใหม่']+'</b> ('+dt(c['คะแนนต่าง'])+')</span>';
+  if(r['เตือน']) h+='<div class="warnbox" style="margin-top:9px">'+esc(r['เตือน'])+'</div>';
+  h+='<table class="cmp"><tr><th>หัวข้อ</th><th>เดิม</th><th>ใหม่</th><th>ต่าง</th></tr>'
+    +c['เทียบคะแนน'].map(x=>'<tr><td>'+esc(x['หัวข้อ'])+'</td><td>'+(x['เก่า']==null?'–':x['เก่า'])+'</td><td>'+(x['ใหม่']==null?'–':x['ใหม่'])+'</td><td>'+dt(x['ต่าง'])+'</td></tr>').join('')
+    +'</table>';
+  if((c['แก้ได้แล้ว']||[]).length) h+='<div class="dh">✅ ปัญหาเดิมที่หายไปแล้ว</div><div class="fl" style="color:#9be29b">'+c['แก้ได้แล้ว'].map(esc).join('<br>')+'</div>';
+  if((c['ยังอยู่']||[]).length) h+='<div class="dh">⚠️ ปัญหาเดิมที่ยังอยู่</div><div class="fl">'+c['ยังอยู่'].map(esc).join('<br>')+'</div>';
+  if((c['โผล่ใหม่']||[]).length) h+='<div class="dh" style="color:#ff5d5d">🚨 ของใหม่ที่พัง (Regression)</div><div class="fl" style="color:#ff9a9a">'+c['โผล่ใหม่'].map(esc).join('<br>')+'</div>';
+  if((c['คะแนนตกแรง']||[]).length) h+='<div class="dh" style="color:#ff5d5d">🚨 คะแนนร่วงแรง</div><div class="fl" style="color:#ff9a9a">'+c['คะแนนตกแรง'].map(esc).join('<br>')+'</div>';
+  h+='<div class="meta">ตอนนั้น: บิลด์ '+esc(r['ตอนนั้น'].build)+' · คำสั่ง '+esc(r['ตอนนั้น'].promptVer)+' · commit '+esc(r['ตอนนั้น'].commit)+'<br>'
+    +'ตอนนี้: บิลด์ '+esc(r['ตอนนี้'].build)+' · คำสั่ง '+esc(r['ตอนนี้'].promptVer)+' · commit '+esc(r['ตอนนี้'].commit)+'<br>'
+    +'คำสั่ง AI เปลี่ยน: '+(r['คำสั่งเปลี่ยนไหม']?'เปลี่ยน':'ไม่เปลี่ยน')+' · บิลด์เปลี่ยน: '+(r['บิลด์เปลี่ยนไหม']?'เปลี่ยน':'ไม่เปลี่ยน')+'</div>';
+  h+='<div class="dh">ข้อความลูกค้าที่ใช้ซ้ำ (เหมือนเดิมทุกตัวอักษร)</div><div class="chat">'
+    +(r['ข้อความลูกค้าที่ใช้ซ้ำ']||[]).map(x=>'<div class="cu">🙋 '+esc(x)+'</div>').join('')+'</div>';
+  h+='<div class="dh">จีทูตอบใหม่ว่าอย่างไร</div><div class="chat">'
+    +(r['ผลใหม่']['บทสนทนา']||[]).map(x=>x.who==='ลูกค้า'?'<div class="cu">🙋 '+esc(x.text)+'</div>':'<div class="cb">🤖 '+esc(x.text)+'</div>').join('')+'</div>';
+  h+='<div class="dh">คำตอบเดิมตอนที่ตก (ไว้เทียบ)</div><div class="chat" style="max-height:200px">'
+    +(r['บทสนทนาเก่า']||[]).map(x=>x.who==='ลูกค้า'?'<div class="cu">🙋 '+esc(x.text)+'</div>':'<div class="cb">🤖 '+esc(x.text)+'</div>').join('')+'</div>';
+  h+='</div>';
+  return h;
 }
 
 function esc(s){ return String(s==null?'':s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m])); }
