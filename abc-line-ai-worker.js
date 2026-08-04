@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k186-brainlite";
+const BUILD = "2026-08-05-k187-remember";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -756,14 +756,24 @@ function convBrain(ordObj, text, hist, expObj) {
   }
   // ── knownFields: สิ่งที่ลูกค้าให้มาแล้ว (ข้อความนี้ + ออเดอร์ที่ค้าง) ──
   const known = {};
-  try { known.product = _MODEL_IN(t) || (ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].model) || ""; } catch (e) { known.product = ""; }
+  // k187: ข้อความล่าสุดชนะเสมอ — ถ้าเทิร์นนี้ไม่ได้บอก ค่อยย้อนดูที่ลูกค้าเคยบอกไว้ (ไม่เกิน 6 เทิร์น)
+  const _ผ่านมา = (Array.isArray(hist) ? hist : []).filter(h => h && h.role === "user" && typeof h.content === "string").slice(-6).reverse().map(h => h.content);
+  try {
+    known.product = _MODEL_IN(t) || "";
+    if (!known.product) for (const h of _ผ่านมา) { const m2 = _MODEL_IN(h); if (m2) { known.product = m2; break; } }
+    if (!known.product) known.product = (ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].model) || "";
+  } catch (e) { known.product = ""; }
   try {
     known.flavor = carryFlavor(t, hist || []) || (ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].flavor) || "";
-    if (!known.flavor) {   // หาชื่อกลิ่นจริงในข้อความ — วิธีเดียวกับที่ looksLikeOrderText ใช้อยู่แล้ว
-      const tn = normTH(t);
-      for (const f of ((FLAVORS[known.product] && FLAVORS[known.product].f) || [])) {
-        const nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim());
-        if (nb.length >= 3 && tn.indexOf(nb) !== -1) { known.flavor = f; break; }
+    if (!known.flavor) {   // หาชื่อกลิ่นจริง — วิธีเดียวกับที่ looksLikeOrderText ใช้อยู่แล้ว · ข้อความนี้ก่อน แล้วค่อยย้อนหลัง
+      const _fl = (FLAVORS[known.product] && FLAVORS[known.product].f) || [];
+      for (const src of [t, ..._ผ่านมา]) {
+        const tn = normTH(src);
+        for (const f of _fl) {
+          const nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim());
+          if (nb.length >= 3 && tn.indexOf(nb) !== -1) { known.flavor = f; break; }
+        }
+        if (known.flavor) break;
       }
     }
   } catch (e) { known.flavor = ""; }
@@ -5229,7 +5239,11 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         // 🧠 k186 จุดที่ 1: ถ้าลูกค้าบอกครบแล้ว ห้ามถามซ้ำ — ปล่อยไหลไปออกการ์ดตามปกติ
         if (!reissued) {
           let _bz = null;
-          try { const _ovz = env.CONV && await env.CONV.get("ord:" + shopId + ":" + userId); _bz = convBrain(_ovz ? JSON.parse(_ovz) : null, t, [], null); } catch (e) {}
+          try {
+            const _ovz = env.CONV && await env.CONV.get("ord:" + shopId + ":" + userId);
+            let _hz = []; try { _hz = JSON.parse((env.CONV && await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]"); } catch (e2) {}
+            _bz = convBrain(_ovz ? JSON.parse(_ovz) : null, t, Array.isArray(_hz) ? _hz : [], null);
+          } catch (e) {}
           if (_bz && _bz.ครบ) { console.log("K186_NO_REASK missing=0"); }
           else {
             await lineReply(TOKEN, replyToken, "รับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับภายใน 2-3 วันค่ะ 📦 (ซื้อครบโปรส่งฟรีได้ด้วยนะคะ) รับกลิ่นไหน กี่ชิ้นดีคะ 💕", userId);
