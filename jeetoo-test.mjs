@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1758,6 +1758,39 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k171: "หัวมาโบ" = M SWITCH เท่านั้น — กฎเจาะจงต้องชนะกฎกว้าง ═══
+//   เจ้าของร้านชี้ 5 ส.ค. (เคสจริง ลูกค้า Dn): "หัวมาโบ" → บอทตอบ "มี 2 รุ่น" แล้วลิสต์ MARBO 9K
+//   MARBO 9K เป็นพอตทั้งแท่ง ไม่ใช่หัว → ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const mdlsIn = h => (h.match(/• ([^(\n]+?)\s*\(/g) || []).map(x => x.replace(/[•(]/g, '').trim());
+
+  // ── กฎ k152 ต้องชนะกฎกว้างเสมอ ──
+  for (const [n, ask] of [[359, 'หัวมาโบ'], [360, 'หัวมาโบมีไหม'], [361, 'เอาหัวมาโบ']]) {
+    t(n, '"' + ask + '" → จับได้ M SWITCH', _MODEL_IN(ask) === 'M SWITCH', 'ได้ ' + _MODEL_IN(ask));
+    const h = flavorHint(ask, stockmap, 1);
+    const ms = mdlsIn(h);
+    t(n + 0.5, '"' + ask + '" → ข้อมูลที่ส่งให้ AI ต้องมีรุ่นเดียว (ไม่ปน MARBO 9K)', ms.length === 1 && ms[0] === 'M SWITCH', 'ส่งให้ AI: ' + ms.join(' + ') + ' = AI ตอบ "มี 2 รุ่น"');
+  }
+  t(362, '"หัวมาโบมีไหม" → ห้ามยัดลิสต์แบรนด์ MARBO ทั้งชุด', brandHint('หัวมาโบมีไหม', stockmap, 1) === '', 'AI เห็นทั้งแบรนด์แล้วตอบผิดหมวด');
+
+  // ── ⚠️ ถามระดับแบรนด์จริงๆ ต้องยังได้ลิสต์เหมือนเดิม (ห้ามถอยหลัง) ──
+  t(363, '⚠️ "แบรนด์มาโบมีอะไรบ้าง" → ต้องยังได้ลิสต์แบรนด์', brandHint('แบรนด์มาโบมีอะไรบ้าง', stockmap, 1) !== '', 'ถามทั้งแบรนด์แล้วไม่ได้ข้อมูลเลย');
+  t(364, '⚠️ "มีอะไรพร้อมส่งบ้าง" → ต้องยังได้ลิสต์', brandHint('มีอะไรพร้อมส่งบ้าง', stockmap, 1) !== '', 'คำถามแรกของลูกค้าจากแอดพัง');
+
+  // ── ⚠️ ลูกค้าเอ่ยหลายรุ่นจริง ต้องยังเก็บครบ (กฎช่วงข้อความห้ามตัดผิด) ──
+  {
+    const ms = mdlsIn(flavorHint('มาโบ 9k กับ อินฟี่ 20เค', stockmap, 1));
+    t(365, '⚠️ เอ่ย 2 รุ่นคนละที่ → ต้องเก็บครบทั้ง 2', ms.length >= 2, 'ได้ ' + ms.join(' + '));
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k170: ออเดอร์ต้องจบได้ — พิมพ์ชื่อกลิ่นแบบย่อ + เปลี่ยนกลิ่นก่อนจ่าย ═══
 //   เจอตอนไล่โฟลว์จริง 5 ส.ค. (ไม่ได้มาจาก log — มาจากการรันโฟลว์ทั้งเส้น)
 {

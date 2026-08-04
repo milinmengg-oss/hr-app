@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k170-shortname";
+const BUILD = "2026-08-05-k171-headmarbo";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -1219,7 +1219,30 @@ function flavorHint(text, sm, buf){
   const dt = deTone(raw), dtn = deTone(nosp);   // k117: ตัดวรรณยุกต์ก่อนเทียบ
   const kk = _K2(raw), kkn = _K2(nosp), kkd = _K2(dt), kkdn = _K2(dtn);   // k126: "20เค" → "20K"
   const fd = foldTH(raw), fdn = foldTH(nosp), fdk = _K2(fd), fdkn = _K2(fdn);   // k154: พอด→พอต · รีแล็ค→รีแลค
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(dt) || re.test(dtn) || re.test(kk) || re.test(kkn) || re.test(kkd) || re.test(kkdn) || re.test(fd) || re.test(fdn) || re.test(fdk) || re.test(fdkn)) add(key);
+  // 🎯🎯 k171 (เจ้าของร้านชี้ 5 ส.ค. — เคสจริง ลูกค้า Dn): ลูกค้าพิมพ์ "หัวมาโบ"
+  //   → บอทตอบ "หัวมาโบมี 2 รุ่นนะคะ" แล้วลิสต์ MARBO 9K (ซึ่งเป็นพอตทั้งแท่ง ไม่ใช่หัว)
+  //   ต้นเหตุ: คำเดียวกันโดนจับ 2 แพทเทิร์น
+  //     /หัว\s*(มาโบ|marbo)/ → M SWITCH   ← กฎ k152 ที่เจาะจงกว่า (วางไว้ก่อนโดยตั้งใจ)
+  //     /มาโบ|marbo/         → MARBO 9K   ← กฎกว้าง ที่ตั้งใจให้เป็นตัวสำรอง
+  //   _MODEL_IN เอาตัวแรก (ถูก) แต่ flavorHint เก็บทั้งคู่ → ส่งข้อมูล 2 รุ่นให้ AI = AI ตอบผิดหมวด
+  //   กฎใหม่: ถ้าแพทเทิร์นหลังไปจับ "ข้อความช่วงเดียวกัน" กับแพทเทิร์นที่จับไปแล้ว
+  //     = มันพูดถึงของสิ่งเดียวกัน → เอาตัวที่เจาะจงกว่า (ตัวแรก) เท่านั้น
+  //   ⛔ ยังเก็บหลายรุ่นได้เหมือนเดิม ถ้าลูกค้าเอ่ยหลายรุ่นจริง (คนละช่วงข้อความ)
+  const _spans = [];                      // ช่วงข้อความที่ถูกจับไปแล้ว [เริ่ม, จบ]
+  const _overlap = (a, b) => a[0] < b[1] && b[0] < a[1];
+  for (const [re, key] of TH_MODEL) {
+    const cands = [raw, nosp, dt, dtn, kk, kkn, kkd, kkdn, fd, fdn, fdk, fdkn];
+    let hitOn = null, m = null;
+    for (const c of cands) { const r = new RegExp(re.source, re.flags.replace("g", "")); const mm = r.exec(c); if (mm) { hitOn = c; m = mm; break; } }
+    if (!m) continue;
+    // เทียบช่วงเฉพาะตอนจับจากข้อความดิบ (ตัวแปรอื่นตำแหน่งเพี้ยนเพราะถูกแปลงแล้ว)
+    if (hitOn === raw) {
+      const span = [m.index, m.index + m[0].length];
+      if (_spans.some(s => _overlap(s, span))) continue;   // ช่วงเดียวกัน → ตัวเจาะจงกว่าเอาไปแล้ว
+      _spans.push(span);
+    }
+    add(key);
+  }
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
   _hintModels = hits.slice();   // k16: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
   if (!hits.length) return "";
@@ -1402,6 +1425,19 @@ function brandHint(text, sm, buf) {
   //   เพิ่ม: ถ้าเอ่ยชื่อแบรนด์มา + ถามว่ามีของไหม ก็ต้องแนบสต็อกให้เหมือนกัน
   const _askStock = /มีของ|มีมั้ย|มีไห?ม|ยังมี|เหลือ|พร้อมส่ง|ของหมด|หมดยัง|สต็อก/i.test(s);
   const _namedBrand = BRAND_TH.some(([re]) => re.test(s));
+  // 🎯 k171: ถ้าลูกค้าระบุ "รุ่น" เจาะจงกว่าชื่อแบรนด์ ห้ามยัดลิสต์ทั้งแบรนด์เข้าไป
+  //   เคสจริง "หัวมาโบมีไหม" → ระบุชัดว่า M SWITCH แต่ด่านนี้ยัดลิสต์แบรนด์ MARBO ทั้งชุด
+  //   (MARBO 9K · MARBO 10K · MARBO ZERO) → AI เห็นเยอะแล้วตอบผิดหมวดว่า "หัวมาโบมี 2 รุ่น"
+  //   ⚠️ ห้ามข้ามทุกครั้งที่จับรุ่นได้ — "แบรนด์มาโบมีอะไรบ้าง" ก็จับรุ่นได้ (กฎกว้าง) แต่ลูกค้าถามทั้งแบรนด์จริงๆ
+  //   เกณฑ์: ข้อความที่ตรงกับ "กฎรุ่น" ต้องยาวกว่าคำแบรนด์เปล่าๆ ถึงจะนับว่าเจาะจงกว่า
+  //     "หัวมาโบ" (7 ตัว) > "มาโบ" (4 ตัว) → เจาะจง → ข้าม brandHint
+  //     "มาโบ"    (4 ตัว) = "มาโบ" (4 ตัว) → ระดับแบรนด์ → ลิสต์แบรนด์ตามเดิม
+  try {
+    let _mLen = 0, _bLen = 0;
+    for (const [re] of TH_MODEL) { const m = new RegExp(re.source, re.flags.replace("g", "")).exec(s); if (m) { _mLen = m[0].length; break; } }
+    for (const [re] of BRAND_TH) { const m = new RegExp(re.source, re.flags.replace("g", "")).exec(s); if (m && m[0].length > _bLen) _bLen = m[0].length; }
+    if (_mLen > _bLen) return "";
+  } catch (e) {}
   if (!sm || !(BROAD_RE.test(s) || (_namedBrand && _askStock))) return "";
   const B = (typeof buf === "number") ? buf : 1;
   const AV = availByModel(sm, B);
