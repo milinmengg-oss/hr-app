@@ -1758,6 +1758,59 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k169: ส่งการ์ดเลขบัญชีตาม "เจตนา" ไม่ใช่ตามคำที่ตรงลิสต์ ═══
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const BLOCK = '📦 ออเดอร์ (รอโอน)\n- MARBO 9K เยลลี่ x1 = 350\nยอดสินค้า 350\nค่าส่งด่วน 159\nรวมยอดชำระ 509\nที่อยู่: -';
+  const setup = (uid, o) => { store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); if (o) store.set('ord:v20:' + uid, JSON.stringify(o)); };
+  const flexOut = () => sent.flatMap(b => b.messages || []).filter(m => m.type === 'flex').map(m => String(m.altText || '')).join('|');
+  const textOut = () => sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+  const say = async (uid, text, ai) => { sent = []; aiReply = ai; await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text, id: String(Math.random()) } }, env, 'TOKEN', 'v20'); };
+
+  // ── มีออเดอร์รอโอน + AI อ่านเจตนาออก → ต้องส่งการ์ดเลขบัญชี ──
+  for (const [n, phrase] of [[345, 'เอาบัญชีหน่อย'], [346, 'จะโอนแล้วค่ะ'], [347, 'พร้อมโอนละ ส่งบัญชีมาที']]) {
+    const uid = 'K169_' + n;
+    setup(uid, { name: 'เทส', block: BLOCK, items: [], t: Date.now(), status: 'รอโอน 💰', uid });
+    await say(uid, phrase, '[PAYINFO]');
+    t(n, 'เจตนาจะโอน "' + phrase + '" → ต้องส่งการ์ดเลขบัญชี', /เลขบัญชี/.test(flexOut()), 'ไม่ส่งการ์ด · flex=' + flexOut() + ' txt=' + textOut().slice(0, 40));
+  }
+  // ── ⛔ ไม่มีออเดอร์ → ห้ามส่งการ์ด และห้ามให้แท็กหลุดถึงลูกค้า ──
+  {
+    const uid = 'K169_NOORD';
+    setup(uid, null);
+    await say(uid, 'ขอเลขบัญชีหน่อย', '[PAYINFO]');
+    t(348, '⛔ ไม่มีออเดอร์ → ห้ามส่งการ์ดเลขบัญชี', !/เลขบัญชี/.test(flexOut()), 'ส่งการ์ดทั้งที่ไม่มีออเดอร์');
+    t(349, '⛔ แท็ก [PAYINFO] ห้ามหลุดถึงลูกค้า', !/PAYINFO/.test(textOut()), 'ลูกค้าเห็นแท็กดิบ: ' + textOut().slice(0, 40));
+  }
+  // ── ⛔ ยังไม่รู้ยอด (รอค่าส่งด่วน) → ห้ามส่งการ์ด (ลูกค้าจะโอนผิดยอด) ──
+  {
+    const uid = 'K169_WAIT';
+    setup(uid, { name: 'เทส', block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K เยลลี่ x1 = 350\nยอดสินค้า 350\nค่าส่งด่วน (รอทีมงานเช็ค)\nที่อยู่: -', items: [], t: Date.now(), status: 'รอโอน 💰', uid });
+    await say(uid, 'จะโอนแล้วค่ะ', '[PAYINFO]');
+    t(350, '⛔ ยังไม่รู้ค่าส่งด่วน → ห้ามส่งการ์ด (กันโอนผิดยอด)', !/เลขบัญชี/.test(flexOut()), 'ส่งการ์ดทั้งที่ยอดยังไม่สรุป');
+  }
+  // ── ⛔ ออเดอร์จ่ายแล้ว → ห้ามส่งการ์ดซ้ำ ──
+  {
+    const uid = 'K169_PAID';
+    setup(uid, { name: 'เทส', block: BLOCK, items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 509', uid });
+    await say(uid, 'จะโอนแล้วค่ะ', '[PAYINFO]');
+    t(351, '⛔ จ่ายแล้ว → ห้ามส่งการ์ดเลขบัญชีซ้ำ', !/เลขบัญชี/.test(flexOut()), 'ชวนลูกค้าจ่ายซ้ำ');
+  }
+  // ── ของเดิมไม่ถอยหลัง: พิมพ์ "ยืนยัน" ยังต้องได้การ์ดเหมือนเดิม ──
+  {
+    const uid = 'K169_OLD';
+    setup(uid, { name: 'เทส', block: BLOCK, items: [], t: Date.now(), status: 'รอโอน 💰', uid });
+    await say(uid, 'ยืนยัน', 'รับทราบค่ะ');
+    t(352, 'ทางเดิม (พิมพ์ "ยืนยัน") ต้องยังได้การ์ดเลขบัญชี', /เลขบัญชี/.test(flexOut()), 'ทำทางเดิมพัง · flex=' + flexOut());
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[เจตนาโอน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[เจตนาโอน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k168: "ยอดที่ต้องโอน" ต้องมาจากที่เดียว และครบเสมอ ═══
 //   เคสจริง 5 ส.ค. (LALITA): ออเดอร์ 350 + ค่าส่งด่วน 159 = 509
 //   ลูกค้าถามยอด 3 รอบ บอทไม่บอกตัวเลขเลย · แล้วทวนรายการโชว์ 350 = ลูกค้าโอนขาด 159

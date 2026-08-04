@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k168-totalfix";
+const BUILD = "2026-08-05-k169-payintent";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -94,6 +94,33 @@ const TURN = new Map();
 // 🆘 k147: เกณฑ์ "ขอเงินคืน / ลูกค้าโกรธ" — ใช้ร่วมกันทั้งด่าน k127 (ขาเข้า) และด่านกันตัดเคสทิ้ง (ขาออก)
 //   เดิมเขียนแยกกัน 2 ที่ แล้วฝั่งขาออกครอบคลุมแคบกว่า → เคสเงินคืนหลุดไปเจอลิงก์เมนู
 //   k147b: เพิ่ม "โอนคืน" (เดิมบังคับต้องมีคำว่าเงิน/ตังค์คั่น → "โอนคืน" หลุด)
+// 💳💳 k169 — ส่งการ์ดเลขบัญชีตาม "เจตนา" ของลูกค้า ไม่ใช่ตามคำที่ตรงลิสต์
+//   เดิม: การ์ดเลขบัญชีออกก็ต่อเมื่อข้อความตรงลิสต์คำ (ยืนยัน · ขอเลขบัญชี · โอนเข้าบัญชีไหน ...)
+//     → คนไทยพูดได้อีกร้อยแบบ ("เอาบัญชีหน่อย" · "จะโอนแล้วค่ะ" · "พร้อมโอนละ" · "ส่งบัญชีมาที")
+//     → ไล่เติมคำไม่มีวันจบ (บทเรียนเดียวกับ k165 ที่เพิ่งลบ RX_MONEYBACK ทิ้ง)
+//   วิธีที่เลือก: ให้ AI เป็นคนอ่าน "เจตนา" แล้วปล่อยแท็ก [PAYINFO] ออกมา · โค้ดเป็นคนส่งการ์ด
+//     ⚠️ ไม่ใช่กลไกใหม่ — เป็นแพทเทิร์นเดียวกับ [SLIP] ที่ระบบใช้กับ vision อยู่แล้ว
+//   ⛔ AI ไม่มีสิทธิ์แตะตัวเลข: มันบอกได้แค่ "ลูกค้าจะโอน" · ยอด/เลขบัญชีมาจากออเดอร์จริงเสมอ
+//      (คงกฎ k15 ไว้ครบ — AI ยังห้ามพิมพ์เลขบัญชีหรือยอดเงินเอง)
+async function sendPayInfo(env, token, replyToken, userId, shopId, ordObj) {
+  try {
+    const o = ordTotal(ordObj);
+    if (o.total === null) return false;              // ยังไม่รู้ยอด (รอค่าส่งด่วน) → ห้ามส่ง
+    const pay = await payOf(env, shopId);
+    if (!pay) return false;
+    const acctNo = (pay.match(/\d[\d\- ]{5,}\d/) || [""])[0].replace(/\s/g, "");
+    const pl = pay.split("\n").map(s => s.trim()).filter(Boolean);
+    const bankName = (pl.find(l => /ธนาคาร|bank|kbank|กสิกร|กรุง|ไทยพาณิชย์|scb|ktb|bbl|ออมสิน|ทหารไทย|ttb|uob|ยูโอบี/i.test(l)) || pl[0] || "").replace(/เลข.*/, "").trim();
+    const owner = (pl.find(l => /ชื่อ|นาย|นาง|น\.ส|หจก|บจก|บริษัท|ร้าน/.test(l) && l.indexOf(acctNo) === -1) || pl[pl.length - 1] || "").replace(/ชื่อบัญชี|ชื่อ\s*:?/, "").trim();
+    await lineFlex(token, replyToken, "สรุปรายการสั่งซื้อ + เลขบัญชี", payFlex(String(o.total), [bankName, acctNo, owner], acctNo), userId, {
+      items: [
+        { type: "action", action: { type: "cameraRoll", label: "🧾 ส่งสลิปจากอัลบั้ม" } },
+        { type: "action", action: { type: "camera", label: "📷 ถ่ายสลิป" } },
+      ],
+    });
+    return true;
+  } catch (e) { console.log("K169_PAYINFO_FAIL " + String(e).slice(0, 60)); return false; }
+}
 // 💰💰💰 k168 — "ยอดที่ต้องโอน" ต้องมาจากที่เดียว และต้องครบเสมอ
 //   เคสจริง 5 ส.ค. (ลูกค้า LALITA · บั๊กเงิน):
 //     ออเดอร์จริง = MARBO 9K เยลลี่ 350 + ค่าส่งด่วน 159 = **509 บาท**
@@ -3722,23 +3749,8 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                 "\n\n• ถ้าต้องการรายการนี้ พิมพ์ \"ยืนยันรายการเดิม\" ได้เลยค่ะ\n• ถ้าต้องการสั่งใหม่ พิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยนะคะ 💕", userId);
               return;
             }
-            const b = JSON.parse(ok).block || "";
-            const total = (b.match(/(?:รวมยอดชำระ|ยอดรวม)[:\s]*([\d,]+)/) || ["", ""])[1];
-            const pay = await payOf(env, shopId);   // k116
-            if (total && pay) {
-              const acctNo = (pay.match(/\d[\d\- ]{5,}\d/) || [""])[0].replace(/\s/g, "");
-              const pl = pay.split("\n").map(s => s.trim()).filter(Boolean);
-              const bankName = (pl.find(l => /ธนาคาร|bank|kbank|กสิกร|กรุง|ไทยพาณิชย์|scb|ktb|bbl|ออมสิน|ทหารไทย|ttb|uob|ยูโอบี/i.test(l)) || pl[0] || "").replace(/เลข.*/, "").trim();
-              const owner = (pl.find(l => /ชื่อ|นาย|นาง|น\.ส|หจก|บจก|บริษัท|ร้าน/.test(l) && l.indexOf(acctNo) === -1) || pl[pl.length - 1] || "").replace(/ชื่อบัญชี|ชื่อ\s*:?/, "").trim();
-              // k13: แนบปุ่มส่งสลิปใต้การ์ดเลขบัญชี — กดแล้วเปิดอัลบั้ม/กล้องทันที
-              await lineFlex(TOKEN, replyToken, "สรุปรายการสั่งซื้อ + เลขบัญชี", payFlex(total, [bankName, acctNo, owner], acctNo), userId, {
-                items: [
-                  { type: "action", action: { type: "cameraRoll", label: "🧾 ส่งสลิปจากอัลบั้ม" } },
-                  { type: "action", action: { type: "camera", label: "📷 ถ่ายสลิป" } },
-                ],
-              });
-              return;
-            }
+            // k169: ใช้ตัวกลางตัวเดียวกับทางเจตนา (เดิมโค้ดชุดนี้ซ้ำอยู่ 2 ที่)
+            if (await sendPayInfo(env, TOKEN, replyToken, userId, shopId, JSON.parse(ok))) return;
           }
         } catch (e) {}
         // ถ้าไม่มีออเดอร์ค้าง ให้ปล่อยผ่านไปให้ AI ตอบปกติ
@@ -4500,7 +4512,28 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         : "☀️ ยังอยู่ในช่วงรอบส่งด่วนของวัน (รอบสุดท้ายชำระก่อน 20.45 น.)\n" +
           "✅ ตอบเรื่องรอบส่งได้ตามกฎปกติ แต่ยังห้ามรับปากว่า 'ได้รับแน่นอน' (ใช้ 'มีโอกาสได้รับภายในวันนี้')") +
       "\n⛔ ถ้าลูกค้าถามถึงเวลาใดๆ ('ตอนนี้', 'ดึกแล้ว', 'กี่โมง', 'คืนนี้') ให้ยึดเวลาข้างบนนี้เท่านั้น";
-    const sysFull = sysPrompt + NO_GUESS_RULE + timeNote + noticeNote + outNote + custNote;
+    // 💳 k169: บอก AI ให้อ่าน "เจตนาจะโอนเงิน" ได้ — ใส่เฉพาะตอนมีออเดอร์รอชำระจริงเท่านั้น
+    //   ⛔ ไม่มีออเดอร์ = ไม่ใส่คำสั่งนี้เลย → AI ปล่อยแท็กนี้ไม่ได้ = สร้างออเดอร์ใหม่ไม่ได้
+    //   ⛔ AI ยังห้ามพิมพ์เลขบัญชี/ยอดเงินเอง (กฎ k15 คงเดิมทุกตัวอักษร) — มันบอกได้แค่ "ลูกค้าจะโอน"
+    let payIntentNote = "";
+    try {
+      if (env.CONV) {
+        const _po = await env.CONV.get("ord:" + shopId + ":" + userId);
+        if (_po) {
+          const _pj = JSON.parse(_po);
+          if (_pj && /รอโอน/.test(String(_pj.status || "")) && ordTotal(_pj).total !== null) {
+            payIntentNote = "\n\n# 💳 ตอนนี้ลูกค้ามีออเดอร์ที่ \"รอชำระเงิน\" ค้างอยู่\n"
+              + "ถ้าอ่านแล้วเข้าใจว่า **ลูกค้าต้องการข้อมูลสำหรับโอนเงิน หรือกำลังจะโอน** — ไม่ว่าจะพูดด้วยรูปประโยคแบบไหน\n"
+              + "(เช่น ขอเลขบัญชี · โอนยังไง · จะโอนแล้ว · เอาบัญชีหน่อย · พร้อมโอนละ · ส่งบัญชีมาที · โอนได้เลยไหม ฯลฯ)\n"
+              + "→ ให้ตอบกลับมาเป็นคำเดียวว่า **[PAYINFO]** ห้ามพิมพ์อย่างอื่นเลยแม้แต่ตัวเดียว\n"
+              + "ระบบจะส่งการ์ดเลขบัญชี + ยอดจริงให้ลูกค้าเอง\n"
+              + "⛔ ห้ามพิมพ์เลขบัญชี ชื่อบัญชี หรือยอดเงินเองเด็ดขาด\n"
+              + "⛔ ถ้าลูกค้าถามเรื่องอื่น (ถามสินค้า/ถามของ/ทักทาย) ห้ามใช้ [PAYINFO]";
+          }
+        }
+      }
+    } catch (e) {}
+    const sysFull = sysPrompt + NO_GUESS_RULE + timeNote + payIntentNote + noticeNote + outNote + custNote;
 
     let reply, userForHistory;
     let smForQR = null, bufForQR = 1;   // สต็อกสำหรับสร้างปุ่ม Quick Reply
@@ -5496,6 +5529,32 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         }
       }
     } catch (e) {}
+    // 💳 k169: AI อ่านเจตนาได้ว่าลูกค้าจะโอนเงิน → โค้ดตรวจออเดอร์จริงแล้วส่งการ์ดเลขบัญชี
+    //   ต้องอยู่ก่อนด่านอื่นทั้งหมด ไม่งั้นแท็กจะโดนด่านอื่นตัด/แก้ก่อน
+    //   ⛔ เงื่อนไขครบทุกข้อถึงจะส่ง: มีออเดอร์ · สถานะรอโอน · มียอดรวมแล้ว
+    //      ถ้าไม่ครบ = ตัดแท็กทิ้งแล้วปล่อยไหลไปทางปกติ (ห้ามสร้างออเดอร์ใหม่ ห้ามคิดยอดใหม่)
+    if (reply.indexOf("[PAYINFO]") !== -1) {
+      let _sent = false;
+      try {
+        if (env.CONV) {
+          const _po = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (_po) {
+            const _pj = JSON.parse(_po);
+            if (_pj && /รอโอน/.test(String(_pj.status || ""))) {
+              _sent = await sendPayInfo(env, TOKEN, replyToken, userId, shopId, _pj);
+              if (_sent) console.log("K169_PAYINFO_BY_INTENT total=" + ordTotal(_pj).total);
+            }
+          }
+        }
+      } catch (e) {}
+      if (_sent) return;
+      // ส่งไม่ได้ (ไม่มีออเดอร์ / ยังไม่รู้ยอด) → ลบแท็กทิ้ง อย่าให้หลุดไปหาลูกค้า
+      console.log("K169_PAYINFO_TAG_DROPPED");
+      reply = reply.replace(/\[PAYINFO\]/g, "").trim();
+      if (reply.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length < 12) {
+        reply = "รบกวนแจ้ง รุ่น + กลิ่น + จำนวน ที่ต้องการอีกครั้งนะคะ 🙏🏻 เดี๋ยวแอดมินสรุปยอดให้ทันทีค่ะ 💕";
+      }
+    }
     // 🚫 k151: ห้าม AI พูดถึงโปร "ครบ 1,000 บาท ส่งฟรี" ที่ไม่มีจริง (เจ้าของร้านยืนยันแล้วว่าไม่มี)
     try {
       if (/1[,.]?000\s*บาท[^\n]{0,20}(ส่งฟรี|ฟรีค่าส่ง)|ส่งฟรี[^\n]{0,20}1[,.]?000\s*บาท/.test(reply)) {
