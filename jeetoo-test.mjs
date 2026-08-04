@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -949,9 +949,14 @@ async function memTests() {
     store.delete('mute:v20:' + uid);   // จำลองแคช KV ยังไม่เห็นมิ้วต์
     sent = []; aiCalled = false;
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ได้มั้ยครับ', id: '2' } }, env, 'TOKEN', 'v20');
-    T.push({ n: 140, name: 'k114 มิ้วต์ใหม่เงียบทันที (ความจำในเครื่องชนะแคช KV)',
-      ok: muted1 && sent.length === 0 && !aiCalled,
-      why: 'muted1=' + muted1 + ' sent=' + sent.length + ' ai=' + aiCalled });
+    // k185 (GR-G): เจตนาเดิมของเทสนี้คือ "ห้ามบอทตอบตามปกติตอนแคช KV ยังไม่เห็นมิ้วต์"
+    //   ไม่ใช่ "ห้ามส่งอะไรเลย" — ตอนนี้ส่งข้อความรับทราบได้ 1 ครั้ง แล้วเงียบให้ทีมงาน
+    //   สิ่งที่ยังต้องคุ้มครอง: ห้ามเรียก AI · ห้ามมีข้อมูลสินค้า/ราคา/ยอด/เลขบัญชี/ชื่อรุ่น
+    const txt140 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    const สะอาด140 = !/\d{2,}|บาท|บัญชี|MARBO|INFY|RELX|ESKO|ELFBAR|กลิ่น/.test(txt140);
+    T.push({ n: 140, name: 'k114 มิ้วต์ใหม่ → ไม่เรียก AI + ส่งได้แค่ข้อความรับทราบ (ความจำในเครื่องชนะแคช KV)',
+      ok: muted1 && !aiCalled && sent.length <= 1 && (sent.length === 0 || (/ทีมงานกำลังดูแลอยู่/.test(txt140) && สะอาด140)),
+      why: 'muted1=' + muted1 + ' sent=' + sent.length + ' ai=' + aiCalled + ' txt=' + txt140.slice(0, 60) });
   }
 
   // ── k116: แอดมินแก้เลขบัญชีจากหลังบ้าน → การ์ดโอนเงินใช้บัญชีใหม่ทันที / ล้าง = กลับค่า Cloudflare ──
@@ -1479,7 +1484,13 @@ async function memTests() {
     store.set('mute:v20:' + uid, JSON.stringify({ name: 'เทส', reason: 'ขอยกเลิกออเดอร์ ⚠️', msg: '', t: Date.now(), uid }));
     sent = []; aiCalled = false;
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'สวัสดี', id: '1' } }, env, 'TOKEN', 'v20');
-    T.push({ n: 116, name: 'k86 มิ้วต์เคสปัญหา → ยังเงียบให้แอดมินดูแล', ok: sent.length === 0 && !aiCalled, why: 'sent=' + sent.length });
+    // k185 (GR-G): เจตนาเดิมคือ "ห้ามบอทขายของต่อ/ตอบคำถามหลังส่งต่อคน"
+    //   ไม่ใช่ "ห้ามส่งอะไรเลย" — ตอนนี้ส่งข้อความรับทราบได้ 1 ครั้ง แล้วเงียบให้ทีมงานดูแล
+    const txt116 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    const สะอาด116 = !/\d{2,}|บาท|บัญชี|MARBO|INFY|RELX|ESKO|ELFBAR|กลิ่น|สนใจรุ่นไหน|รับกี่ชิ้น/.test(txt116);
+    T.push({ n: 116, name: 'k86 มิ้วต์เคสปัญหา → ไม่ขายของ ไม่ตอบคำถาม ส่งได้แค่ข้อความรับทราบ',
+      ok: !aiCalled && sent.length <= 1 && (sent.length === 0 || (/ทีมงานกำลังดูแลอยู่/.test(txt116) && สะอาด116)),
+      why: 'sent=' + sent.length + ' ai=' + aiCalled + ' txt=' + txt116.slice(0, 60) });
   }
 
   // ── k84 (เคสจริง 2/8): จ่ายแล้ว + ระบบถามที่เดิม + ลูกค้าตอบ "โอเค" → ต้องปิดออเดอร์ ไม่ใช่การ์ดเลขบัญชีซ้ำ ──
@@ -3210,6 +3221,67 @@ const imT = [];
 for (const t of imT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[อ่านรูปที่วง]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[อ่านรูปที่วง]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [GR-G ส่งต่อคนแล้วเงียบ] k185 — ตอบรับครั้งเดียว แล้วเงียบให้ทีมงาน (527-532) ═══
+const ggT = [];
+{
+  const คุย = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return o.join('\n');
+  };
+  const ตั้งต้น = () => { store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1'); };
+  const ACK = /ทีมงานกำลังดูแลอยู่/;
+
+  // ── ส่งต่อคนแล้วส่งข้อความมาอีก 5 ครั้ง ──
+  ตั้งต้น();
+  const u = 'Ug1';
+  const t0 = await คุย(u, 'ขอคุยกับคนหน่อยค่ะ', 'รับทราบค่ะ');
+  const ต่อ = [];
+  for (let i = 0; i < 5; i++) ต่อ.push(await คุย(u, 'ตอบด้วยครับ ' + i, 'รับทราบค่ะ'));
+  ggT.push({ n: 527, name: '⚠️ ส่งต่อคนแล้วส่งมาอีก 5 ข้อความ → ต้องได้ข้อความรับทราบ 1 ครั้งเท่านั้น',
+    ok: ต่อ.filter(x => ACK.test(x)).length === 1, why: 'ได้ ' + ต่อ.filter(x => ACK.test(x)).length + ' ครั้ง' });
+  ggT.push({ n: 528, name: '⚠️ ข้อความที่ 2-5 ต้องเงียบสนิท (ห้ามแทรกคนที่กำลังคุย)',
+    ok: ต่อ.slice(1).every(x => x.trim() === ''), why: JSON.stringify(ต่อ.slice(1).map(x => x.slice(0, 40))) });
+  ggT.push({ n: 529, name: '⛔ ข้อความรับทราบต้องไม่มีราคา/ยอด/เลขบัญชี/ชื่อรุ่น',
+    ok: !/\d{2,}|บาท|บัญชี|MARBO|INFY|RELX/.test(ต่อ[0]), why: ต่อ[0].slice(0, 90) });
+
+  // ── #เปิดบอท ต้องยังปลดล็อกได้เหมือนเดิม ──
+  ตั้งต้น();
+  const u2 = 'Ug2';
+  await คุย(u2, 'ขอคุยกับคนหน่อยค่ะ', 'รับทราบค่ะ');
+  await คุย(u2, 'ตอบด้วย', 'รับทราบค่ะ');
+  const ปลด = await คุย(u2, '#เปิดบอท', 'รับทราบค่ะ');
+  ggT.push({ n: 530, name: '⚠️ #เปิดบอท ต้องยังปลดล็อกได้ (ไม่ถอยหลัง)', ok: /แอดมินกลับมาดูแลต่อแล้ว/.test(ปลด), why: ปลด.slice(0, 90) });
+
+  // ── เคสรอเช็คค่าส่งด่วน ต้องไม่ได้ข้อความรับทราบ (บอทคุยต่อได้ตามเดิม k86) ──
+  ตั้งต้น();
+  const u3 = 'Ug3';
+  await คุย(u3, 'ค่าส่งด่วนเท่าไหร่ อยู่ลาดพร้าว', 'รบกวนปักหมุดด้วยนะคะ');
+  store.set('mute:v20:' + u3, JSON.stringify({ uid: u3, reason: 'เช็คค่าส่งด่วนจากแอป 🛵 (~5 กม.)', t: Date.now() }));
+  const ขายต่อ = await คุย(u3, 'MARBO 9K ราคาเท่าไหร่', 'MARBO 9K ราคา 350 บาทค่ะ');
+  ggT.push({ n: 531, name: '⚠️ เคสรอค่าส่งด่วน → บอทต้องขายต่อได้ปกติ ห้ามขึ้นข้อความรับทราบ',
+    ok: !ACK.test(ขายต่อ) && ขายต่อ.trim() !== '', why: ขายต่อ.slice(0, 90) });
+
+  // ── ครบ 30 นาทีแล้วตอบรับได้อีกครั้ง ──
+  ตั้งต้น();
+  const u4 = 'Ug4';
+  await คุย(u4, 'ขอคุยกับคนหน่อยค่ะ', 'รับทราบค่ะ');
+  const a1 = await คุย(u4, 'ตอบด้วย', 'รับทราบค่ะ');
+  for (const k of [...MUTEACK.keys()]) MUTEACK.set(k, Date.now() - 1900000);   // แกล้งย้อนเวลาไป 31 นาที
+  MUTED.set('v20:' + u4, { t: Date.now(), reason: 'ขอคุยแอดมิน' });
+  store.set('mute:v20:' + u4, JSON.stringify({ uid: u4, reason: 'ขอคุยแอดมิน', t: Date.now() }));
+  const a2 = await คุย(u4, 'ยังอยู่ไหมครับ', 'รับทราบค่ะ');
+  ggT.push({ n: 532, name: 'ครบ 30 นาทีแล้ว → ตอบรับได้อีก 1 ครั้ง (ไม่เงียบยาว 12 ชม.)',
+    ok: ACK.test(a1) && ACK.test(a2), why: 'ครั้งแรก=' + ACK.test(a1) + ' ครั้งสอง=' + ACK.test(a2) });
+}
+for (const t of ggT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[GR-G]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[GR-G]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
