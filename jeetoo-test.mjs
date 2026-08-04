@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -3135,6 +3135,55 @@ const gdT = [];
 for (const t of gdT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[GR-D]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[GR-D]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [GR-E ถามยอด] k183 — กติกาเดียวทั้ง 2 จุด (501-516) ═══
+const geT = [];
+{
+  const คุยต่อ = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return o.join('\n');
+  };
+  const สั่งก่อน = async (uid) => {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+    await คุยต่อ(uid, 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุ', 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 2');
+  };
+  // ── ทุกสำนวนถามยอด ต้องได้ตัวเลข 740 ──
+  const สำนวน = ['ต้องโอนกี่บาท','รวมเท่าไหร่','เท่าไหร่คะ','ทั้งหมดเท่าไหร่','สรุปยอดเท่าไหร่','กี่บาทคะ','ยอดเท่าไหร่','จ่ายเท่าไหร่','คิดเงินเท่าไหร่','โอนเท่าไหร่ครับ'];
+  let n = 501;
+  for (const q of สำนวน) {
+    const u = 'Ut' + n; await สั่งก่อน(u);
+    const r = await คุยต่อ(u, q, 'ยอดตามการ์ดค่ะ');
+    geT.push({ n, name: '⚠️ ถามยอด: "' + q + '" → ต้องได้ตัวเลข 740', ok: /740/.test(r), why: r.slice(0, 110) });
+    n++;
+  }
+  // ── ⚠️ ห้ามตอบยอดออเดอร์เมื่อลูกค้าถามเรื่องอื่น ──
+  const u2 = 'Utx1'; await สั่งก่อน(u2);
+  const r1 = await คุยต่อ(u2, 'ค่าส่งเท่าไหร่', 'ค่าส่งพัสดุ 40 บาทค่ะ');
+  geT.push({ n: 511, name: '⚠️ "ค่าส่งเท่าไหร่" → ห้ามตอบยอดรวมออเดอร์', ok: !/ยอดที่ต้องโอน/.test(r1), why: r1.slice(0, 110) });
+  const u3 = 'Utx2'; await สั่งก่อน(u3);
+  const r2 = await คุยต่อ(u3, 'INFY 20K เท่าไหร่', 'INFY 20K ราคา 399 บาทค่ะ');
+  geT.push({ n: 512, name: '⚠️ "INFY 20K เท่าไหร่" (ถามราคาสินค้า) → ห้ามตอบยอดรวมออเดอร์', ok: !/ยอดที่ต้องโอน/.test(r2), why: r2.slice(0, 110) });
+  // ── ไม่มีออเดอร์ = ห้ามตอบยอด ──
+  store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1');
+  const r3 = await คุยต่อ('Utx3', 'เท่าไหร่คะ', 'รบกวนแจ้งรุ่นที่สนใจด้วยนะคะ');
+  geT.push({ n: 513, name: '⚠️ ยังไม่มีออเดอร์ + ถามยอด → ห้ามตอบตัวเลขมั่ว', ok: !/ยอดที่ต้องโอน/.test(r3), why: r3.slice(0, 110) });
+  // ── askTotalIntent ตรงๆ ──
+  geT.push({ n: 514, name: 'askTotalIntent: สำนวนถามยอดต้องเป็น true ทั้งหมด',
+    ok: สำนวน.every(q => askTotalIntent(q)), why: JSON.stringify(สำนวน.filter(q => !askTotalIntent(q))) });
+  const ไม่ใช่ = ['ค่าส่งเท่าไหร่','ส่งด่วนเท่าไหร่','MARBO 9K เท่าไหร่','INFY 20K กี่บาท','สวัสดีค่ะ','มีกลิ่นอะไรบ้าง'];
+  geT.push({ n: 515, name: '⚠️ askTotalIntent: คำถามที่ไม่ใช่ยอดออเดอร์ ต้องเป็น false ทั้งหมด',
+    ok: ไม่ใช่.every(q => !askTotalIntent(q)), why: JSON.stringify(ไม่ใช่.filter(q => askTotalIntent(q))) });
+  geT.push({ n: 516, name: 'askTotalIntent: "350 หรือ 509 คะ" (เคส LALITA) ต้องจับได้',
+    ok: askTotalIntent('350 หรือ 509 คะ'), why: '' });
+}
+for (const t of geT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[GR-E]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[GR-E]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
