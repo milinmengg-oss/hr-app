@@ -670,8 +670,8 @@ async function memTests() {
     const uid = 'K88';
     store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: '📦 ออเดอร์ (รอโอน)\n- KS Quik 6K สับปะรด x1 = 280\nยอดสินค้า 280\nค่าส่ง 40\nรวมยอดชำระ 320\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 320 (รอที่อยู่)', uid }));
     sent = []; aiCalled = false;
-    aiReply = '📦 สรุปออเดอร์\nสินค้า: SALTNIC MARBO 30ML x1 (กลิ่น: เงิน)\nราคาสินค้า: 270\nค่าส่ง: 40\nยอดรวม: 310\nชื่อผู้รับ: จิรธัช\nเบอร์: 0845446161\nที่อยู่: 222/28 เพชรเกษม กรุงเทพ 10160\nชำระ: โอน';
-    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'จิรธัช 0845446161 222/28 เพชรเกษม กรุงเทพ 10160', id: '1' } }, env, 'TOKEN', 'v20');
+    aiReply = '📦 สรุปออเดอร์\nสินค้า: SALTNIC MARBO 30ML x1 (กลิ่น: เงิน)\nราคาสินค้า: 270\nค่าส่ง: 40\nยอดรวม: 310\nชื่อผู้รับ: สมชาย\nเบอร์: 0800000001\nที่อยู่: 1/1 ถนนทดสอบ กรุงเทพ 10000\nชำระ: โอน';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'สมชาย 0800000001 1/1 ถนนทดสอบ กรุงเทพ 10000', id: '1' } }, env, 'TOKEN', 'v20');
     const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     T.push({ n: 117, name: 'k88 ใบสรุปต้องใช้ยอดจริงจากระบบ (320) ไม่ใช่เลขที่ AI คิดเอง (310)',
       ok: /ยอดรวม:\s*320/.test(txt) && !/ยอดรวม:\s*310/.test(txt) && /KS Quik 6K/.test(txt),
@@ -766,9 +766,12 @@ async function memTests() {
     const flex = sent.flatMap(b => b.messages || []).filter(m => m.type === 'flex');
     const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     const all = JSON.stringify(sent);
+    // k188: เดิมเช็ค flex.length === 1 — ตอนนี้ระบบส่ง "การ์ดยืนยัน + การ์ดเลขบัญชี" คู่กันเสมอ
+    //   เจตนาเดิมคือ "การ์ดยืนยันต้องออก ไม่ถูกด่านขวาง" → เช็คจาก altText ตรงๆ แม่นกว่านับใบ
+    const cf129 = flex.filter(m => /ยืนยันรายการ/.test(String(m.altText || '')));
     T.push({ n: 129, name: 'k107 แอดมินกรอกค่าส่งแล้ว+สั่งของทันที (แคช KV ค้าง) → การ์ดออกเลย ยอดรวมค่าส่งด่วน ไม่พูดรอเช็ค',
-      ok: flex.length === 1 && !/กำลังเช็คค่าส่งด่วน/.test(txt) && /450/.test(all),
-      why: 'flex=' + flex.length + ' รอเช็ค=' + /กำลังเช็คค่าส่งด่วน/.test(txt) + ' 450=' + /450/.test(all) + ' txt=' + txt.slice(0, 50) });
+      ok: cf129.length === 1 && !/กำลังเช็คค่าส่งด่วน/.test(txt) && /450/.test(all),
+      why: 'การ์ดยืนยัน=' + cf129.length + ' (flexรวม=' + flex.length + ') รอเช็ค=' + /กำลังเช็คค่าส่งด่วน/.test(txt) + ' 450=' + /450/.test(all) + ' txt=' + txt.slice(0, 50) });
   }
 
   // ── k108 (เคสจริง 2/8 20.47 น.): ยกเลิกออเดอร์ยังไม่โอน → ยกเลิกทันที ไม่เงียบ + ล้างค่าส่งจำไว้ ──
@@ -846,7 +849,7 @@ async function memTests() {
     const uid = 'K110';
     store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K สตรอว์เบอร์รี่กีวี่ x1 = 350\nรวมยอดชำระ 1205\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)', items: [], t: Date.now(), status: 'รอโอน 💰', uid }));
     store.set('exp:v20:' + uid, JSON.stringify({ fee: 155, km: 5, lat: 13.7, lng: 100.5, t: Date.now() }));
-    store.set('cust:v20:' + uid, JSON.stringify({ name: 'สุธีมนต์', tel: '0830217378', addr: 'ห้องพักสมบูรณ์ บ้านค่าย ระยอง' }));
+    store.set('cust:v20:' + uid, JSON.stringify({ name: 'สมหญิง', tel: '0800000002', addr: 'หอพักตัวอย่าง อ.ทดสอบ ระยอง' }));
     globalThis.__slipok = { success: true, data: { success: true, amount: 1205, receiver: { displayName: 'ร้าน ABC' } } };
     sent = []; aiCalled = false;
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'image', id: '99' } }, env, 'TOKEN', 'v20');
@@ -892,14 +895,14 @@ async function memTests() {
     store = new Map();
     store.set('stockmap', JSON.stringify(stockmap));
     const uid = 'K113';
-    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เม้ง', block: 'รวมยอดชำระ 473\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 ตรงออเดอร์ (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'มานี', block: 'รวมยอดชำระ 473\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 ตรงออเดอร์ (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
     store.set('exp:v20:' + uid, JSON.stringify({ fee: 123, km: 8, lat: 13.88, lng: 100.56, t: Date.now() }));
     sent = []; aiCalled = false;
-    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ชื่อเม้ง เบอร์ 0959564971', id: '1' } }, env, 'TOKEN', 'v20');
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ชื่อมานี เบอร์ 0800000003', id: '1' } }, env, 'TOKEN', 'v20');
     const t1 = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
     const oj = JSON.parse(store.get('ord:v20:' + uid) || '{}');
     T.push({ n: 137, name: 'k113 ส่งด่วนจ่ายแล้ว+ให้ชื่อเบอร์ → ปิดออเดอร์ตามหมุด ไม่ถามที่อยู่ต่อ',
-      ok: !aiCalled && /พร้อมจัดส่ง/.test(oj.status || '') && /0959564971/.test(oj.block || '') && /maps/.test(oj.block || '') && /ไรเดอร์/.test(t1) && !/ที่อยู่จัดส่ง|รหัสไปรษณีย์/.test(t1),
+      ok: !aiCalled && /พร้อมจัดส่ง/.test(oj.status || '') && /0800000003/.test(oj.block || '') && /maps/.test(oj.block || '') && /ไรเดอร์/.test(t1) && !/ที่อยู่จัดส่ง|รหัสไปรษณีย์/.test(t1),
       why: 'ai=' + aiCalled + ' st=' + (oj.status || '').slice(0, 40) + ' t=' + t1.slice(0, 40) });
   }
   {
@@ -907,7 +910,7 @@ async function memTests() {
     store = new Map();
     store.set('stockmap', JSON.stringify(stockmap));
     const uid = 'K113b';
-    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เม้ง', block: 'รวมยอดชำระ 473', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'มานี', block: 'รวมยอดชำระ 473', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
     store.set('exp:v20:' + uid, JSON.stringify({ fee: 123, km: 8, lat: 13.88, lng: 100.56, t: Date.now() }));
     sent = []; aiCalled = false; aiReply = 'รบกวนขอที่อยู่จัดส่งค่ะ 🙏🏻 บ้านเลขที่ / เขต/จังหวัด / รหัสไปรษณีย์ ด้วยค่ะ';
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'ต้องแจ้งอะไรอีกมั้ย', id: '1' } }, env, 'TOKEN', 'v20');
@@ -922,7 +925,7 @@ async function memTests() {
     store = new Map();
     store.set('stockmap', JSON.stringify(stockmap));
     const uid = 'K114';
-    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เม้ง', block: 'รวมยอดชำระ 473', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 ตรงออเดอร์ (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'มานี', block: 'รวมยอดชำระ 473', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 473 ตรงออเดอร์ (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)', uid }));
     store.set('exp:v20:' + uid, JSON.stringify({ fee: 123, km: 8, lat: 13.88, lng: 100.56, t: Date.now() }));
     globalThis.__slipok = { success: false, code: 1012, data: { success: false, code: 1012, message: 'สลิปนี้เคยตรวจสอบแล้ว' } };
     sent = []; aiReply = '[SLIP]';
@@ -1371,8 +1374,10 @@ async function memTests() {
     aiReply = 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n- MARBO 9K | องุ่น | 2';
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'เอา มาโบองุ่น 2 อัน', id: '1' } }, env, 'TOKEN', 'v20');
     const f125b = sent.flatMap(b => b.messages || []).filter(m => m.type === 'flex');
+    // k188: นับเฉพาะ "การ์ดยืนยัน" (ตอนนี้มีการ์ดเลขบัญชีตามมาด้วยเสมอ)
+    const c147 = f125b.filter(m => /ยืนยันรายการ/.test(String(m.altText || '')));
     T.push({ n: 147, name: 'k125 ลูกค้าพิมพ์กลิ่นเอง → การ์ดออกปกติ (ด่านไม่ขวางคนสั่งจริง)',
-      ok: f125b.length === 1, why: 'flex=' + f125b.length });
+      ok: c147.length === 1, why: 'การ์ดยืนยัน=' + c147.length + ' (flexรวม=' + f125b.length + ')' });
   }
   {
     // ── k124: แอดมินกรอกเลขพัสดุ → ลูกค้าได้เลข + ถาม "ของถึงไหน" ทีหลัง ระบบตอบเองได้ ──
@@ -1434,7 +1439,9 @@ async function memTests() {
     sent = []; aiCalled = false; aiReply = 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n- MARBO 9K | องุ่น | 2';
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'เอา มาโบองุ่น 2 อัน', id: '1' } }, env, 'TOKEN', 'v20');
     const flex = sent.flatMap(b => b.messages || []).filter(m => m.type === 'flex');
-    T.push({ n: 125, name: 'k102 สั่งธรรมดา → การ์ดออกปกติ', ok: flex.length === 1, why: 'flex=' + flex.length });
+    // k188: นับเฉพาะ "การ์ดยืนยัน" (ตอนนี้มีการ์ดเลขบัญชีตามมาด้วยเสมอ)
+    const c125 = flex.filter(m => /ยืนยันรายการ/.test(String(m.altText || '')));
+    T.push({ n: 125, name: 'k102 สั่งธรรมดา → การ์ดออกปกติ', ok: c125.length === 1, why: 'การ์ดยืนยัน=' + c125.length + ' (flexรวม=' + flex.length + ')' });
   }
 
   // ── k101 (เคสจริง 2/8): ปักหมุดต่างจังหวัด (พิจิตร ~358 กม.) → ต้องแจ้งนอกเขต ไม่เข้าคิวเช็คราคา ──
@@ -1499,7 +1506,7 @@ async function memTests() {
     store.set('stockmap', JSON.stringify(stockmap));
     const uid = 'K84';
     store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K องุ่น x1 = 350\nยอดสินค้า 350\nค่าส่ง 40\nรวมยอดชำระ 390\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 390 ตรงออเดอร์ (รอที่อยู่จัดส่ง)', uid }));
-    store.set('cust:v20:' + uid, JSON.stringify({ name: 'สุธีมนต์', tel: '0830217378', addr: 'ห้องพักสมบูรณ์ 165 ม 11 บ้านค่าย ระยอง 21120' }));
+    store.set('cust:v20:' + uid, JSON.stringify({ name: 'สมหญิง', tel: '0800000002', addr: 'หอพักตัวอย่าง 1 ม 1 อ.ทดสอบ ระยอง 21120' }));
     store.set('card:v20:' + uid, JSON.stringify({ sig: 'x#390', t: Date.now() }));
     sent = []; aiCalled = false;
     await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: 'โอเค', id: '1' } }, env, 'TOKEN', 'v20');
@@ -3465,6 +3472,109 @@ const hmT = [];
   hmT.push({ n: 550, name: 'ไม่ถอยหลัง: ถามวิธีส่งเฉยๆ → ยังตอบข้อมูลค่าส่งเหมือนเดิม',
     ok: r7.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, '').length >= 8, why: r7.slice(0, 90) });
 }
+// ═══ [ยอด→บัญชี] k188 — แจ้งยอดแล้วส่งข้อมูลชำระเงินทันที (551-560) ═══
+//  หลักฐาน: แชทจริง ABC 2,329,448 ข้อความ · เทียบเฉพาะบทที่ไปถึงขั้นแจ้งยอดเหมือนกัน
+//    A ส่งเลขบัญชีตามภายใน 10 นาที (8,000 บท) → ปิดการขาย 91.7%
+//    B ไม่ส่งตาม (2,498 บท)                    → ปิดการขาย 61.1%
+//    ต่าง +30.5 จุด · z=36.74 · p≈0
+//  ของเดิม: G2 ออกการ์ดยอดแล้ว "รอลูกค้ากดปุ่มยืนยัน" เลขบัญชีถึงจะออก = ขั้นตอนเกินที่ ABC ไม่มี
+const pyT = [];
+{
+  const คุย = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return o.join('\n');
+  };
+  const ตั้งต้น = () => { store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1'); };
+  const การ์ด = (m2, f, q) => `ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n${m2} | ${f} | ${q}`;
+  const มีบัญชี = /เลขบัญชี/;
+  const มียืนยัน = /ยืนยันรายการ/;
+
+  // 1) ⭐ แกนหลัก: สั่งครบ → ต้องได้ทั้งการ์ดยืนยัน "และ" การ์ดเลขบัญชี ในเทิร์นเดียว
+  ตั้งต้น();
+  const p1 = await คุย('P1', 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุธรรมดา', การ์ด('MARBO 9K', 'องุ่น', 2));
+  pyT.push({ n: 551, name: '⭐ สั่งครบ → ส่งการ์ดยอด + การ์ดเลขบัญชีทันที ไม่ต้องรอกดยืนยัน',
+    ok: มียืนยัน.test(p1) && มีบัญชี.test(p1), why: p1.slice(0, 140) });
+
+  // 2) ⚠️ ยอดต้องถูกต้อง — เลขบัญชีที่ส่งต้องมาจาก ordTotal() ตัวเดียวกับออเดอร์
+  {
+    const o2 = String(store.get('ord:v20:P1') || '');
+    const t2 = (o2.match(/รวมยอดชำระ (\d+)/) || [])[1] || '';
+    pyT.push({ n: 552, name: '⚠️ ยอดในออเดอร์ต้องถูกคิดโดยโค้ด (350x2 + ค่าส่ง 40 = 740)',
+      ok: t2 === '740', why: 'ยอดที่เก็บ=' + t2 + ' | ' + o2.slice(0, 90) });
+  }
+
+  // 3) ⚠️ Edge: รอค่าส่งด่วน (ยังไม่รู้ยอด) → ห้ามส่งเลขบัญชีเด็ดขาด
+  ตั้งต้น();
+  const p3 = await คุย('P3', 'เอา MARBO 9K องุ่น 2 อัน ส่งด่วน', การ์ด('MARBO 9K', 'องุ่น', 2));
+  pyT.push({ n: 553, name: '⛔ Edge: ส่งด่วนยังไม่รู้ค่าส่ง → ห้ามส่งเลขบัญชี (ยอดยังไม่นิ่ง)',
+    ok: !มีบัญชี.test(p3), why: p3.slice(0, 140) });
+
+  // 4) ⚠️ Edge: ร้านยังไม่ตั้งเลขบัญชี → ต้องไม่ล้ม ยังออกการ์ดยอดได้ปกติ
+  ตั้งต้น();
+  {
+    const envNoPay = Object.create(env); envNoPay.PAY_V20 = '';
+    sent = []; aiReply = การ์ด('MARBO 9K', 'องุ่น', 2);
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'P4' },
+      message: { type: 'text', text: 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุธรรมดา', id: 'i4' } }, envNoPay, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    const p4 = o.join('\n');
+    pyT.push({ n: 554, name: '⛔ Edge: ร้านไม่ได้ตั้งเลขบัญชี → ไม่ล้ม ยังออกการ์ดยอดปกติ',
+      ok: มียืนยัน.test(p4) && !!store.get('ord:v20:P4'), why: p4.slice(0, 140) });
+  }
+
+  // 5) ⚠️ ไม่ถอยหลัง: กด "ยืนยัน" ต่อ ต้องยังได้เลขบัญชีเหมือนเดิม (ทางเดิมต้องไม่พัง)
+  ตั้งต้น();
+  await คุย('P5', 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุธรรมดา', การ์ด('MARBO 9K', 'องุ่น', 2));
+  const p5 = await คุย('P5', 'ยืนยัน', 'รับทราบค่ะ');
+  pyT.push({ n: 555, name: 'ไม่ถอยหลัง: กดปุ่มยืนยันต่อ → ยังได้การ์ดเลขบัญชีเหมือนเดิม',
+    ok: มีบัญชี.test(p5), why: p5.slice(0, 140) });
+
+  // 6) ⚠️ ไม่ถอยหลัง: ขอเลขบัญชีตรงๆ ยังทำงานเหมือนเดิม
+  ตั้งต้น();
+  await คุย('P6', 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุธรรมดา', การ์ด('MARBO 9K', 'องุ่น', 2));
+  const p6 = await คุย('P6', 'ขอเลขบัญชีหน่อย', 'รับทราบค่ะ');
+  pyT.push({ n: 556, name: 'ไม่ถอยหลัง: พิมพ์ขอเลขบัญชี → ยังได้การ์ดเหมือนเดิม',
+    ok: มีบัญชี.test(p6), why: p6.slice(0, 140) });
+
+  // 7) ⛔ ไม่ถอยหลัง: ถามเฉยๆ ไม่ได้สั่ง → ห้ามมีเลขบัญชีโผล่
+  ตั้งต้น();
+  const p7 = await คุย('P7', 'MARBO 9K มีกลิ่นไหนบ้าง', 'มีองุ่น โคล่า ค่ะ');
+  pyT.push({ n: 557, name: '⛔ ถามเฉยๆ ยังไม่สั่ง → ห้ามส่งเลขบัญชี', ok: !มีบัญชี.test(p7), why: p7.slice(0, 120) });
+
+  // 8) ⛔ ไม่ถอยหลัง: ของหมด → ไม่ออกการ์ด และไม่ส่งเลขบัญชี
+  ตั้งต้น();
+  const p8 = await คุย('P8', 'เอา ABC LEGO 20K มิ้นต์ 1 อัน ส่งพัสดุธรรมดา', 'รุ่นนี้หมดค่ะ');
+  pyT.push({ n: 558, name: '⛔ ของหมด → ไม่ออกการ์ดยอด และไม่ส่งเลขบัญชี',
+    ok: !มีบัญชี.test(p8) && !store.get('ord:v20:P8'), why: p8.slice(0, 120) });
+
+  // 9) ⚠️ ไม่ถอยหลัง: จ่ายแล้ว แล้วพิมพ์ "ยืนยัน" → ห้ามส่งเลขบัญชีซ้ำ (กฎ k84)
+  ตั้งต้น();
+  await คุย('P9', 'เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุธรรมดา', การ์ด('MARBO 9K', 'องุ่น', 2));
+  {
+    const o = JSON.parse(store.get('ord:v20:P9') || '{}');
+    o.status = 'ชำระแล้ว ✅'; store.set('ord:v20:P9', JSON.stringify(o));
+  }
+  const p9 = await คุย('P9', 'ยืนยัน', 'รับทราบค่ะ');
+  pyT.push({ n: 559, name: '⛔ จ่ายแล้วพิมพ์ยืนยัน → ห้ามส่งการ์ดเลขบัญชีซ้ำ (k84)',
+    ok: !มีบัญชี.test(p9), why: p9.slice(0, 120) });
+
+  // 10) ⚠️ สลิปต้องเทียบยอดถูก — ออเดอร์ต้องถูกเก็บก่อนส่งเลขบัญชีเสมอ
+  ตั้งต้น();
+  await คุย('P10', 'เอา MARBO 9K องุ่น 1 อัน ส่งพัสดุธรรมดา', การ์ด('MARBO 9K', 'องุ่น', 1));
+  const o10 = String(store.get('ord:v20:P10') || '');
+  pyT.push({ n: 560, name: '⚠️ ต้องเก็บออเดอร์เข้า KV ก่อนส่งเลขบัญชี (ไม่งั้น SlipOK เทียบยอดไม่ได้)',
+    ok: /รอโอน/.test(o10) && /รวมยอดชำระ 390/.test(o10), why: o10.slice(0, 120) });
+}
+for (const t of pyT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ยอด→บัญชี]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ยอด→บัญชี]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 for (const t of hmT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[คุยเหมือนคน]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[คุยเหมือนคน]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
