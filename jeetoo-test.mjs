@@ -3018,6 +3018,75 @@ for (const t of dpT) {
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ตอบซ้ำ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
+// ═══ [ของหมด·ขาย] k181 — ขอโทษเฉพาะที่ลูกค้าถาม + ห้ามตัดของที่มีทิ้ง (477-486) ═══
+const qsT = [];
+{
+  const คุยต่อ = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return o.join('\n');
+  };
+  const sm2 = JSON.parse(JSON.stringify(stockmap));
+  for (const x of (FLAVORS['ABC 8K'].f || [])) sm2['ABC 8K - ' + x] = 0;
+  for (const x of (FLAVORS['RELX POD CLEAR 18K'].f || [])) sm2['RELX POD CLEAR 18K - ' + x] = 0;
+  const เตรียม = () => { store = new Map(); store.set('stockmap', JSON.stringify(sm2)); store.set('stockbuffer', '1'); };
+
+  // ── 1. ลูกค้าไม่ได้ถามถึงรุ่นที่หมด → ห้ามขึ้นคำขอโทษ และห้ามตัดรุ่นที่มีของทิ้ง ──
+  เตรียม();
+  const a1 = await คุยต่อ('Uq1', 'อยากได้พอตสูบทิ้งเย็นๆ',
+    'แนะนำ ABC 8K (250) · RELX POD CLEAR 18K (390) · MARBO 9K (350) ค่ะ มีของพร้อมส่งนะคะ');
+  qsT.push({ n: 477, name: "⚠️ เคสจริง Hunter: ลูกค้าไม่ได้ถามรุ่นที่หมด → ห้ามขึ้นต้นด้วยคำขอโทษ",
+    ok: !/^ขออภัย/.test(a1.trim()), why: a1.slice(0, 140) });
+  qsT.push({ n: 478, name: "⚠️ รุ่นที่มีของอยู่บรรทัดเดียวกับรุ่นที่หมด → ห้ามถูกตัดทิ้งไปด้วย (เสียการขาย)",
+    ok: a1.indexOf('MARBO 9K') !== -1, why: a1.slice(0, 140) });
+  qsT.push({ n: 479, name: "รุ่นที่หมดต้องถูกตัดออกจริง (ห้ามเสนอขาย)",
+    ok: a1.indexOf('ABC 8K') === -1 && a1.indexOf('RELX POD CLEAR 18K') === -1, why: a1.slice(0, 140) });
+
+  // ── 2. ลูกค้าถามถึงรุ่นที่หมดตรงๆ → ต้องขอโทษและบอกว่าหมด ──
+  เตรียม();
+  const a2 = await คุยต่อ('Uq2', 'ABC 8K มีไหม', 'ABC 8K (250 บาท) มีกลิ่นกล้วย โคล่า ค่ะ');
+  qsT.push({ n: 480, name: "ลูกค้าถามรุ่นที่หมดตรงๆ → ต้องบอกว่าหมดชัดเจน",
+    ok: /ABC 8K/.test(a2) && /หมด/.test(a2), why: a2.slice(0, 140) });
+  qsT.push({ n: 481, name: "ลูกค้าถามรุ่นที่หมดตรงๆ → ขอโทษได้ตามปกติ (ไม่ใช่เงียบ)",
+    ok: /ขออภัย/.test(a2), why: a2.slice(0, 140) });
+
+  // ── 3. ห้ามขอโทษเรื่องรุ่นที่ลูกค้าไม่ได้ถาม ──
+  เตรียม();
+  const a3 = await คุยต่อ('Uq3', 'แล้วแต่สูบทิ้งมีไหมครับ',
+    'RELX POD CLEAR 18K หมดค่ะ แต่มี MARBO 9K (350) กับ INFY 20K (399) พร้อมส่งนะคะ');
+  qsT.push({ n: 482, name: "⚠️ ห้ามเอารุ่นที่ลูกค้าไม่ได้ถามมาขึ้นต้นเป็นคำขอโทษ",
+    ok: !/^ขออภัย[^\n]{0,40}RELX POD CLEAR/.test(a3.trim()), why: a3.slice(0, 140) });
+  qsT.push({ n: 483, name: "⚠️ รุ่นที่มีของ 2 รุ่นต้องอยู่ครบ ไม่หายไปกับการกรอง",
+    ok: /MARBO 9K/.test(a3) && /INFY 20K/.test(a3), why: a3.slice(0, 160) });
+
+  // ── 4. บรรทัดที่มีรุ่นหมดรุ่นเดียว = ตัดทั้งบรรทัดเหมือนเดิม ──
+  เตรียม();
+  const a4 = await คุยต่อ('Uq4', 'แนะนำหน่อย',
+    'แนะนำ 2 รุ่นค่ะ\n- ABC 8K (250 บาท)\n- MARBO 9K (350 บาท)');
+  qsT.push({ n: 484, name: "ลิสต์แยกบรรทัด: ตัดเฉพาะบรรทัดรุ่นที่หมด เก็บรุ่นที่มีของไว้",
+    ok: a4.indexOf('ABC 8K') === -1 && a4.indexOf('MARBO 9K') !== -1, why: a4.slice(0, 160) });
+
+  // ── 5. ไม่มีรุ่นหมดเลย = ห้ามแตะคำตอบ ──
+  เตรียม();
+  const a5 = await คุยต่อ('Uq5', 'MARBO 9K ราคาเท่าไหร่', 'MARBO 9K ราคา 350 บาทค่ะ 💕');
+  qsT.push({ n: 485, name: "คำตอบที่ไม่มีรุ่นหมดเลย → ห้ามโดนแตะ",
+    ok: a5.indexOf('350') !== -1 && !/ขออภัย/.test(a5), why: a5.slice(0, 140) });
+
+  // ── 6. ทุกรุ่นในคำตอบหมดหมด = ต้องบอกว่าหมด ไม่ใช่ตอบเปล่า ──
+  เตรียม();
+  const a6 = await คุยต่อ('Uq6', 'อยากได้หัวพอต',
+    'แนะนำ ABC 8K (250) · RELX POD CLEAR 18K (390) ค่ะ');
+  qsT.push({ n: 486, name: "ทุกรุ่นในคำตอบหมดหมด → ต้องยังตอบอะไรบางอย่าง ห้ามส่งข้อความเปล่า",
+    ok: a6.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, '').length >= 8, why: a6.slice(0, 140) });
+}
+for (const t of qsT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ของหมด·ขาย]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ของหมด·ขาย]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
 //   → ขึ้น "ผ่าน 204/110" คือตัวหารน้อยกว่าตัวผ่าน อ่านแล้วนึกว่าเทสพัง
 //   นับจากของจริงแทน: ผ่าน + ไม่ผ่าน = จำนวนเทสทั้งหมดเสมอ ไม่ต้องแก้มืออีก
