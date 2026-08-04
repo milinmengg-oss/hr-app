@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k185b-sysack";
+const BUILD = "2026-08-05-k186-brainlite";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -736,6 +736,44 @@ function askTotalIntent(text) {
   if (RX_NOT_TOTAL.test(t)) return false;                          // ถามค่าส่ง ไม่ใช่ยอดรวม
   try { if (_MODEL_IN(t)) return false; } catch (e) {}             // เอ่ยชื่อรุ่น = ถามราคาสินค้า
   return true;
+}
+// 🧠 k186 — Conversation Brain Lite (ระยะที่ 1): "อ่านของเดิมให้เป็น" ไม่เก็บอะไรใหม่
+//   ปัญหาที่แก้ (วัดจากแชทจริง):
+//     • ถามซ้ำทั้งที่ลูกค้าบอกครบแล้ว — สนามซ้อมเคส 1 ได้ออเดอร์ 0 คะแนน
+//     • ตอบยอดออเดอร์เก่าตอนลูกค้าถามราคาของใหม่ — ลูกค้า 🎦 พิมพ์ว่า "งงจัง"
+//   ⛔ ไม่เพิ่มคีย์ KV · ไม่เปลี่ยนโครงสร้างออเดอร์ · ไม่แตะ logic เงิน/ราคา/สลิป
+//   อ่านจากของเดิมล้วนๆ: ord.status · ord.block · _MODEL_IN · carryFlavor · exp:
+function convBrain(ordObj, text, hist, expObj) {
+  const t = String(text || "");
+  const st = String((ordObj && ordObj.status) || "");
+  const blk = String((ordObj && ordObj.block) || "");
+  // ── currentStep: ขั้นตอนที่บทสนทนาอยู่จริง (อ่านจาก ord.status ที่มีอยู่แล้ว) ──
+  let step = "เลือกของ";
+  if (ordObj && st) {
+    if (/📦 ส่งออกแล้ว|พร้อมจัดส่ง/.test(st)) step = "จบ";
+    else if (/✅/.test(st)) step = /รอลูกค้าแจ้ง/.test(blk) ? "รอที่อยู่" : "จ่ายแล้ว";
+    else step = "รอโอน";
+  }
+  // ── knownFields: สิ่งที่ลูกค้าให้มาแล้ว (ข้อความนี้ + ออเดอร์ที่ค้าง) ──
+  const known = {};
+  try { known.product = _MODEL_IN(t) || (ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].model) || ""; } catch (e) { known.product = ""; }
+  try {
+    known.flavor = carryFlavor(t, hist || []) || (ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].flavor) || "";
+    if (!known.flavor) {   // หาชื่อกลิ่นจริงในข้อความ — วิธีเดียวกับที่ looksLikeOrderText ใช้อยู่แล้ว
+      const tn = normTH(t);
+      for (const f of ((FLAVORS[known.product] && FLAVORS[known.product].f) || [])) {
+        const nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim());
+        if (nb.length >= 3 && tn.indexOf(nb) !== -1) { known.flavor = f; break; }
+      }
+    }
+  } catch (e) { known.flavor = ""; }
+  const q = t.replace(/\d+\s*(k|เค|%|บาท|พัฟ)/gi, " ").match(/\d{1,3}\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)|(?:เอา|ขอ|สั่ง|รับ)[^\n]{0,20}?(\d{1,3})/);
+  known.quantity = q ? String(q[0]) : ((ordObj && ordObj.items && ordObj.items[0] && ordObj.items[0].qty) ? String(ordObj.items[0].qty) : "");
+  known.deliveryType = /ส่งด่วน|แกร?[็ๆ]?[บป]|ไรเดอร์|ตามหมุด/i.test(t) ? "ด่วน"
+    : /พัสดุ|ส่งธรรมดา|ส่งแบบธรรมดา|ลงทะเบียน/.test(t) ? "พัสดุ"
+    : (expObj ? "ด่วน" : (/ค่าส่งด่วน/.test(blk) ? "ด่วน" : (blk ? "พัสดุ" : "")));
+  const missing = ["product", "flavor", "quantity", "deliveryType"].filter(k => !known[k]);
+  return { step, known, missing, ครบ: missing.length === 0 };
 }
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
 //   เคสจริง: "ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ" · "ขออภัยค่ะ รุ่น RELX SPARTA มีของค่ะ"
@@ -4382,7 +4420,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     //   ⛔ ห้ามผ่อนกฎ k15 เพราะจะเปิดช่องให้ AI กุเลขบัญชี → ให้โค้ดตอบแทน (แพทเทิร์นเดียวกับ k148)
     if (mtype === "text" && env.CONV) {
       const _tq = String(ev.message.text || "");
-      const _askTotal = askTotalIntent(_tq);   // k183: ใช้กติกาเดียวกับก้อนสรุปออเดอร์
+      // 🧠 k186 จุดที่ 2: ถามราคาสินค้าพร้อมจำนวน (มาโบ 9k 10 ตัวเท่าไหร่) ≠ ถามยอดออเดอร์
+      //   เคสจริงลูกค้า 🎦: ได้ยอดออเดอร์เก่า (STAR 2,500) ตอบกลับมา จนพิมพ์ว่า "งงจัง"
+      let _askTotal = askTotalIntent(_tq);
+      try {
+        if (_askTotal && /\d{1,3}\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)/.test(String(_tq))) { _askTotal = false; console.log("K186_ASK_PRICE_NOT_TOTAL"); }
+      } catch (e) {}
       if (_askTotal) {
         try {
           const _ov = await env.CONV.get("ord:" + shopId + ":" + userId);
@@ -5183,8 +5226,16 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             }
           }
         } catch (e) {}
-        if (!reissued) await lineReply(TOKEN, replyToken, "รับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับภายใน 2-3 วันค่ะ 📦 (ซื้อครบโปรส่งฟรีได้ด้วยนะคะ) รับกลิ่นไหน กี่ชิ้นดีคะ 💕", userId);
-        return;
+        // 🧠 k186 จุดที่ 1: ถ้าลูกค้าบอกครบแล้ว ห้ามถามซ้ำ — ปล่อยไหลไปออกการ์ดตามปกติ
+        if (!reissued) {
+          let _bz = null;
+          try { const _ovz = env.CONV && await env.CONV.get("ord:" + shopId + ":" + userId); _bz = convBrain(_ovz ? JSON.parse(_ovz) : null, t, [], null); } catch (e) {}
+          if (_bz && _bz.ครบ) { console.log("K186_NO_REASK missing=0"); }
+          else {
+            await lineReply(TOKEN, replyToken, "รับแบบพัสดุปกติ ค่าส่ง 40 บาท ได้รับภายใน 2-3 วันค่ะ 📦 (ซื้อครบโปรส่งฟรีได้ด้วยนะคะ) รับกลิ่นไหน กี่ชิ้นดีคะ 💕", userId);
+            return;
+          }
+        } else return;
       }
       // 📝 k22: "สั่งยังไง" → ส่งวิธีสั่งซื้อแบบตายตัว (ต้องมาก่อนทางลัดการจัดส่ง เพราะมีคำว่า "ยังไง" เหมือนกัน)
       if (/วิธีสั่ง|สั่งยังไง|สั่งซื้อยังไง|สั่งของยังไง|ซื้อยังไง|สั่งไง|ทำยังไงถึงจะสั่ง|ขั้นตอนการสั่ง|สั่งสินค้ายังไง|สั่งยังไงคะ|สั่งยังไงครับ|how.{0,10}order/i.test(t)) {
