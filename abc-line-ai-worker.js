@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k173-replay";
+const BUILD = "2026-08-05-k174-corsdeny";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -2548,7 +2548,7 @@ export default {
     // (URL ของ worker เป็นสาธารณะอยู่แล้ว เพราะเมนูออนไลน์เรียกใช้ ใครเดาชื่อ path ถูกก็เปิดได้)
     const OKEY = () => !!env.XSELLY_KEY && url0.searchParams.get("key") === env.XSELLY_KEY;
     const DENY = () => new Response(JSON.stringify({ error: "หน้านี้เป็นข้อมูลภายในร้าน ต้องใส่ ?key= ถึงจะเปิดได้ค่ะ" }, null, 1),
-      { status: 403, headers: { "Content-Type": "application/json; charset=utf-8" } });
+      { status: 403, headers: { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
     // 🔎 เช็คว่า Cloudflare รันโค้ดเวอร์ชันไหนอยู่ (เปิด /version ในเบราว์เซอร์)
     //    ไม่ใส่ key = เห็นแค่เลข build | ใส่ key = เห็นชื่อโมเดลด้วย (ชื่อโมเดล = ข้อมูลภายใน)
     if (url0.pathname === "/version") {

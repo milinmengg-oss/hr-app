@@ -142,7 +142,10 @@ async function runAll(){
   $('list').classList.remove('hidden'); $('recs').classList.add('hidden'); $('tot').classList.add('hidden');
   let cases;
   try{ cases=(await q('/eval?list=1')).เคส; }
-  catch(e){ $('msg').textContent='เปิดสนามซ้อมไม่ได้: '+e.message; $('go').disabled=false; return; }
+  catch(e){
+    $('msg').innerHTML='เปิดสนามซ้อมไม่ได้: '+esc(e.message)
+      +'<br><span style="color:#9a9a9a;font-size:12px">เช็ค 2 อย่าง: (1) ดีพลอยบิลด์ k173 ขึ้นไปหรือยัง — เปิด /version ดู (2) กด Ctrl+Shift+R รีเฟรชหน้านี้แบบล้างแคช</span>';
+    $('go').disabled=false; return; }
 
   for(let i=0;i<cases.length;i++){
     const c=cases[i];
