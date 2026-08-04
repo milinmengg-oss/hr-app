@@ -3284,6 +3284,64 @@ for (const t of ggT) {
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[GR-G]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
+// ═══ [GR-A เงินคืน] ล็อกเส้นทางเงินคืน — ปิดสถานะ Fixed ตั้งแต่ k166 (533-537) ═══
+//   ⛔ เทสชุดนี้ไม่ได้แก้โค้ดอะไร — เพิ่มไว้กันบั๊กเก่ากลับมา (RX_MONEYBACK เคยรั่ว 2 รอบ)
+const gaT = [];
+{
+  const คุย = async (uid, ask, ai) => {
+    sent = []; aiReply = ai;
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid },
+      message: { type: 'text', text: ask, id: 'i' + Math.random() } }, env, 'TOKEN', 'v20');
+    const o = [];
+    for (const b of sent) for (const x of (b.messages || [])) o.push(x.type === 'text' ? String(x.text) : '[การ์ด] ' + (x.altText || ''));
+    return o.join('\n');
+  };
+  const ตั้งต้น = () => { store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1'); };
+  const สั่งแล้วจ่าย = async (uid) => {
+    await คุย(uid, 'เอา MARBO 9K องุ่น 1 อัน ส่งพัสดุ', 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1');
+    const o = JSON.parse(store.get('ord:v20:' + uid) || '{}');
+    o.status = 'ชำระแล้ว ✅ ยอด 390 ตรงออเดอร์'; store.set('ord:v20:' + uid, JSON.stringify(o));
+  };
+  const ชวนโอน = /แจ้งข้อมูลการชำระเงิน|สรุปยอดและแจ้ง|โอนได้เลย|เลขบัญชี/;
+  const AIผิด = 'รอสักครู่นะคะ 🙏🏻 เดี๋ยวระบบสรุปยอดและแจ้งข้อมูลการชำระเงินให้ทันทีค่ะ 💕';
+
+  // 1) จ่ายแล้ว → "ไม่รับแล้ว" → ห้ามลบออเดอร์ + ต้องส่งต่อคน
+  ตั้งต้น(); const a = 'Ga1'; await สั่งแล้วจ่าย(a);
+  const r1 = await คุย(a, 'ไม่รับแล้ว', 'รับทราบค่ะ ยกเลิกให้แล้วนะคะ');
+  gaT.push({ n: 533, name: '⚠️ จ่ายแล้ว → "ไม่รับแล้ว" → ห้ามลบออเดอร์ทิ้ง + ต้องส่งต่อคน',
+    ok: !!store.get('ord:v20:' + a) && !!store.get('mute:v20:' + a), why: 'ord=' + !!store.get('ord:v20:' + a) + ' mute=' + !!store.get('mute:v20:' + a) + ' | ' + r1.slice(0, 60) });
+
+  // 2) จ่ายแล้ว → "ยกเลิก" → เหมือนกัน
+  ตั้งต้น(); const b = 'Ga2'; await สั่งแล้วจ่าย(b);
+  await คุย(b, 'ยกเลิก', 'รับทราบค่ะ');
+  gaT.push({ n: 534, name: '⚠️ จ่ายแล้ว → "ยกเลิก" → ห้ามลบออเดอร์ทิ้ง + ต้องส่งต่อคน',
+    ok: !!store.get('ord:v20:' + b) && !!store.get('mute:v20:' + b), why: 'ord=' + !!store.get('ord:v20:' + b) + ' mute=' + !!store.get('mute:v20:' + b) });
+
+  // 3) เคสจริง JW: ยังไม่จ่าย → ยกเลิก → "คืนยอดค่ะ" → ห้ามตอบชวนโอน
+  ตั้งต้น(); const c = 'Ga3';
+  await คุย(c, 'เอา MARBO 9K องุ่น 1', 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1');
+  await คุย(c, 'ไม่รับแล้ว', 'รับทราบค่ะ ยกเลิกให้แล้วค่ะ');
+  const r3 = await คุย(c, 'คืนยอดค่ะ', AIผิด);
+  gaT.push({ n: 535, name: '⚠️ เคสจริง JW: ยกเลิกแล้วขอ "คืนยอด" → ต้องส่งต่อคน ห้ามชวนโอนซ้ำ',
+    ok: !!store.get('mute:v20:' + c) && !ชวนโอน.test(r3), why: r3.slice(0, 110) });
+
+  // 4) ไม่มีออเดอร์เลย → "ขอเงินคืน" (ลูกค้าเก่ากลับมา)
+  ตั้งต้น(); const d = 'Ga4';
+  const r4 = await คุย(d, 'ขอเงินคืนค่ะ', AIผิด);
+  gaT.push({ n: 536, name: '⚠️ ไม่มีออเดอร์ในระบบ → "ขอเงินคืน" → ต้องส่งต่อคน ห้ามชวนโอน',
+    ok: !!store.get('mute:v20:' + d) && !ชวนโอน.test(r4), why: r4.slice(0, 110) });
+
+  // 5) เคสจริง JW ตอนท้าย: ทวงเงินคืนพร้อมยอด
+  ตั้งต้น(); const e = 'Ga5';
+  const r5 = await คุย(e, 'ยังไม่ได้ยอดคืนเลยค่ะ 190 บาท', AIผิด);
+  gaT.push({ n: 537, name: '⚠️ เคสจริง JW: "ยังไม่ได้ยอดคืนเลยค่ะ 190 บาท" → ต้องส่งต่อคน',
+    ok: !!store.get('mute:v20:' + e) && !ชวนโอน.test(r5), why: r5.slice(0, 110) });
+}
+for (const t of gaT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[GR-A]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[GR-A]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
 //   → ขึ้น "ผ่าน 204/110" คือตัวหารน้อยกว่าตัวผ่าน อ่านแล้วนึกว่าเทสพัง
 //   นับจากของจริงแทน: ผ่าน + ไม่ผ่าน = จำนวนเทสทั้งหมดเสมอ ไม่ต้องแก้มืออีก
