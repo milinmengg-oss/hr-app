@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -1758,6 +1758,52 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k168: "ยอดที่ต้องโอน" ต้องมาจากที่เดียว และครบเสมอ ═══
+//   เคสจริง 5 ส.ค. (LALITA): ออเดอร์ 350 + ค่าส่งด่วน 159 = 509
+//   ลูกค้าถามยอด 3 รอบ บอทไม่บอกตัวเลขเลย · แล้วทวนรายการโชว์ 350 = ลูกค้าโอนขาด 159
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const EXPRESS = { block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K เยลลี่ x1 = 350\nยอดสินค้า 350\nค่าส่งด่วน 159\nรวมยอดชำระ 509\nที่อยู่: -' };
+  const WAITFEE = { block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K เยลลี่ x1 = 350\nยอดสินค้า 350\nค่าส่งด่วน (รอทีมงานเช็ค)\nที่อยู่: -' };
+  const PARCEL = { block: '📦 ออเดอร์ (รอโอน)\n- MARBO 9K เยลลี่ x1 = 350\nยอดสินค้า 350\nค่าส่ง 40\nรวมยอดชำระ 390\nที่อยู่: -' };
+
+  const m1 = totalMsg(EXPRESS);
+  t(335, 'เคสจริง: ส่งด่วน → ต้องบอก 509 ไม่ใช่ 350', /509/.test(m1) && /ยอดที่ต้องโอน/.test(m1), 'ลูกค้าโอนขาด 159 บาท');
+  t(336, 'เคสจริง: ต้องแยกให้เห็นว่า 350 คือค่าสินค้า ไม่ใช่ยอดโอน', /ค่าสินค้า 350/.test(m1) && /ค่าส่งด่วน 159/.test(m1), 'ลูกค้ายังสับสนว่า 350 คืออะไร');
+  t(337, 'พัสดุปกติ → 390', /390/.test(totalMsg(PARCEL)), 'ได้ ' + totalMsg(PARCEL).slice(0, 40));
+
+  // ⚠️ ยังไม่รู้ค่าส่งด่วน → ห้ามโชว์ตัวเลขที่ลูกค้าจะเข้าใจว่าเป็นยอดโอน
+  const m2 = totalMsg(WAITFEE);
+  t(338, '⚠️ ยังรอค่าส่งด่วน → ต้องบอกว่ายังสรุปไม่ได้', /ยังสรุปไม่ได้|รอทีมงาน/.test(m2), 'โชว์ยอดมั่วตอนยังไม่รู้ค่าส่ง');
+  t(339, '⚠️ ยังรอค่าส่งด่วน → ต้องห้ามลูกค้าโอนก่อน', /รอยอดรวมก่อนโอน/.test(m2), 'ลูกค้าโอน 350 ไปก่อน แล้วต้องโอนซ้ำ');
+  t(340, '⚠️ ยังรอค่าส่งด่วน → ห้ามมีคำว่า "ยอดที่ต้องโอน"', !/ยอดที่ต้องโอนคือ/.test(m2), 'ลูกค้าอ่านแล้วโอนเลข 350 ทันที');
+
+  // ── โฟลว์จริง: ลูกค้าถามยอด → ระบบต้องตอบตัวเลข ──
+  for (const [n, ask] of [[341, 'ต้องโอนยอดไหนคะ'], [342, '350 หรือ 509 คะ'], [343, 'ยอดรวมเท่าไหร่คะ']]) {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    const uid = 'K168_' + n;
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 'เทส', block: EXPRESS.block, items: [], t: Date.now(), status: 'รอโอน 💰', uid }));
+    sent = []; aiReply = 'ยอดรวมในการ์ดคือยอดที่ถูกต้องค่ะ 💕';   // ← คำตอบเดิมที่เลี่ยงไม่บอกตัวเลข
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text: ask, id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(n, 'เคสจริง "' + ask + '" → ต้องตอบ 509 ตรงๆ', /509/.test(txt), 'ยังเลี่ยงไม่บอกตัวเลข: ' + txt.slice(0, 50));
+  }
+  // ⚠️ ไม่มีออเดอร์ค้าง → ห้ามตอบยอดมั่ว ต้องปล่อยให้ทางปกติจัดการ
+  {
+    store = new Map(); store.set('stockmap', JSON.stringify(stockmap));
+    sent = []; aiReply = 'รับทราบค่ะ';
+    await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: 'K168X' }, message: { type: 'text', text: 'ยอดรวมเท่าไหร่คะ', id: '1' } }, env, 'TOKEN', 'v20');
+    const txt = sent.flatMap(b => b.messages || []).filter(m => m.type === 'text').map(m => m.text).join('\n');
+    t(344, '⚠️ ไม่มีออเดอร์ค้าง → ห้ามกุยอดขึ้นมาตอบ', !/ยอดที่ต้องโอนคือ/.test(txt), 'กุยอดทั้งที่ไม่มีออเดอร์');
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ยอดโอน]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ยอดโอน]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k167: แจ้งเตือนเข้ามือถือแอดมิน ═══
 //   เคสที่ส่งต่อคนต้องเด้งเข้าไลน์แอดมินทันที ไม่ใช่นั่งค้างในคิวจนกว่าจะมีคนเปิดหลังบ้านดู
 {
