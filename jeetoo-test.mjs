@@ -1758,6 +1758,51 @@ for (const t of await memTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความจำ]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
 }
+// ═══ k170: ออเดอร์ต้องจบได้ — พิมพ์ชื่อกลิ่นแบบย่อ + เปลี่ยนกลิ่นก่อนจ่าย ═══
+//   เจอตอนไล่โฟลว์จริง 5 ส.ค. (ไม่ได้มาจาก log — มาจากการรันโฟลว์ทั้งเส้น)
+{
+  const T = [];
+  const t = (n, name, ok, why) => T.push({ n, name, ok, why: ok ? '' : why });
+  const card = (m, f, q) => 'ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n' + m + ' | ' + f + ' | ' + q;
+  const say = async (uid, text, ai) => { sent = []; aiReply = ai || 'รับทราบค่ะ'; await handleEvent({ type: 'message', replyToken: 'rt', source: { userId: uid }, message: { type: 'text', text, id: String(Math.random()) } }, env, 'TOKEN', 'v20'); return sent.flatMap(b => b.messages || []).map(m => m.type === 'flex' ? '🧾' + (m.altText || '') : String(m.text || '')).join('\n'); };
+  const ORD = uid => { const v = store.get('ord:v20:' + uid); return v ? JSON.parse(v) : null; };
+  const reset = () => { store = new Map(); store.set('stockmap', JSON.stringify(stockmap)); store.set('stockbuffer', '1'); };
+
+  // ── ✂️ ลูกค้าพิมพ์ชื่อกลิ่นแบบย่อ → k125 เคยบล็อกการ์ด ทำให้ออเดอร์ไม่จบ ──
+  {
+    reset(); const uid = 'K170a';
+    const r = await say(uid, 'เอามาโบ องุ่นว่าน 2 แท่ง', card('MARBO 9K', 'องุ่นว่านหางจระเข้', 2));
+    t(353, 'พิมพ์กลิ่นแบบย่อ "องุ่นว่าน" → ต้องออกการ์ดได้', /ยืนยันรายการ/.test(r), 'ออเดอร์ไม่จบ ลูกค้าโดนถามซ้ำ: ' + r.slice(0, 70));
+    t(354, 'พิมพ์กลิ่นแบบย่อ → ยอดต้องถูก (700+40)', !!ORD(uid) && /รวมยอดชำระ 740/.test(ORD(uid).block), 'ord=' + (ORD(uid) && ORD(uid).block || 'null'));
+  }
+  // ⚠️ เจตนาเดิมของ k125 ต้องยังอยู่: ระบบเลือกกลิ่นให้เองโดยลูกค้าไม่เคยพิมพ์ = ต้องบล็อก
+  {
+    reset(); const uid = 'K170b';
+    const r = await say(uid, 'ตังแท้ก้ได้ครับ', card('MARBO 9K', 'บลูไอซ์', 2));
+    t(355, '⚠️ k125 ไม่ถอยหลัง: ลูกค้าไม่เคยพิมพ์กลิ่น → ต้องบล็อกการ์ด', !/ยืนยันรายการ/.test(r), 'การ์ดกลิ่นที่ลูกค้าไม่เคยสั่งหลุดออกไป = เสียเงินจริง');
+  }
+  // ── 🔄 เปลี่ยนกลิ่นก่อนจ่าย → ต้องเปลี่ยนให้เลย ไม่ใช่เงียบรอคน ──
+  {
+    reset(); const uid = 'K170c';
+    await say(uid, 'เอามาโบ องุ่นว่าน 1', card('MARBO 9K', 'องุ่นว่านหางจระเข้', 1));
+    const r = await say(uid, 'เปลี่ยนเป็นเยลลี่แทน', card('MARBO 9K', 'เยลลี่', 1));
+    t(356, 'ยังไม่จ่าย + เปลี่ยนกลิ่น → ออกการ์ดใหม่', /ยืนยันรายการ/.test(r) && /เยลลี่/.test(ORD(uid).block), 'ord=' + (ORD(uid) && ORD(uid).block || '').replace(/\n/g, ' | '));
+    t(357, 'ยังไม่จ่าย + เปลี่ยนกลิ่น → ห้ามเงียบแชทรอคน', !store.has('mute:v20:' + uid), 'ลูกค้านั่งรอคนที่อาจไม่มา');
+  }
+  // ⚠️ จ่ายแล้ว = เงินอยู่กับร้าน → ต้องให้คนตัดสิน (พฤติกรรมเดิมต้องอยู่)
+  {
+    reset(); const uid = 'K170d';
+    store.set('ord:v20:' + uid, JSON.stringify({ name: 't', block: '📦 ออเดอร์\n- MARBO 9K องุ่นว่านหางจระเข้ x1 = 350\nรวมยอดชำระ 390', items: [], t: Date.now(), status: 'ชำระแล้ว ✅ ยอด 390', uid }));
+    const r = await say(uid, 'เปลี่ยนเป็นเยลลี่แทน', 'รับทราบค่ะ');
+    t(358, '⚠️ จ่ายแล้ว + เปลี่ยนกลิ่น → ต้องให้คนตัดสิน', /รอทีมงาน/.test(r) && store.has('mute:v20:' + uid), 'แก้ออเดอร์ที่จ่ายเงินแล้วโดยไม่มีคนดู');
+  }
+
+  for (const x of T) {
+    if (x.ok) { pass++; console.log(`${GRN}✅ ${x.n}${RESET} ${DIM}[ออเดอร์จบ]${RESET} ${x.name}`); }
+    else { fails.push({ n: String(x.n), c: { ask: x.name }, why: [x.why], out: '' }); console.log(`${RED}❌ ${x.n}${RESET} ${DIM}[ออเดอร์จบ]${RESET} ${x.name}\n      ${RED}↓${RESET} ${x.why}`); }
+  }
+}
+
 // ═══ k169: ส่งการ์ดเลขบัญชีตาม "เจตนา" ไม่ใช่ตามคำที่ตรงลิสต์ ═══
 {
   const T = [];
