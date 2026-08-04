@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>จีทู — สนามซ้อม</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Kanit',sans-serif;background:#0d0d0d;color:#f2f2f2;min-height:100vh;padding:16px 12px 60px;}
+.box{width:100%;max-width:760px;margin:0 auto;}
+.card{background:#171717;border:1px solid #2b2b2b;border-radius:22px;padding:20px;margin-bottom:14px;}
+h1{font-size:19px;display:flex;align-items:center;justify-content:center;gap:9px;}
+.sub2{font-size:12.5px;color:#9a9a9a;text-align:center;margin-top:7px;line-height:1.7;}
+input{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;text-align:center;}
+.bigbtn{width:100%;border:none;border-radius:18px;padding:18px;font-family:inherit;font-size:18px;font-weight:800;cursor:pointer;background:#bdfb00;color:#111;margin-top:14px;}
+.bigbtn:active{transform:scale(.98);}
+.bigbtn:disabled{opacity:.5;cursor:default;}
+.sub{margin-top:10px;width:100%;background:#222;border:1.5px solid #333;color:#f2f2f2;border-radius:14px;padding:12px;font-family:inherit;font-size:13.5px;font-weight:600;cursor:pointer;}
+.hidden{display:none!important;}
+#msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;text-align:center;}
+.safe{background:#12261c;border:1px solid #2c5f43;border-radius:14px;padding:12px 14px;font-size:12.5px;color:#9fd8bb;line-height:1.85;margin-top:14px;}
+.safe b{color:#bdfb00;}
+.bar{height:9px;background:#222;border-radius:9px;overflow:hidden;margin-top:12px;}
+.bar>i{display:block;height:100%;background:#bdfb00;width:0;transition:width .3s;}
+.tot{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+.tot div{flex:1;min-width:80px;background:#1f1f1f;border:1px solid #303030;border-radius:14px;padding:11px 8px;text-align:center;}
+.tot b{display:block;font-size:22px;font-weight:800;}
+.tot span{font-size:11px;color:#9a9a9a;}
+.g{color:#bdfb00;} .r{color:#ff5d5d;} .y{color:#ffb86b;}
+.row{background:#1f1f1f;border:1px solid #333;border-left:4px solid #444;border-radius:12px;padding:11px 13px;margin-top:9px;cursor:pointer;}
+.row.pass{border-left-color:#bdfb00;} .row.fail{border-left-color:#ff5d5d;} .row.run{border-left-color:#ffb86b;}
+.rtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+.rtop b{font-size:14.5px;color:#fff;}
+.rscore{font-size:16px;font-weight:800;white-space:nowrap;}
+.rcat{font-size:11.5px;color:#8a8a8a;margin-top:2px;}
+.rwhy{font-size:12.5px;color:#ff9a9a;margin-top:6px;line-height:1.6;}
+.det{display:none;margin-top:11px;border-top:1px solid #303030;padding-top:11px;}
+.row.open .det{display:block;}
+.dh{font-size:12px;font-weight:800;color:#bdfb00;margin:11px 0 5px;}
+.sc{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;}
+.sc span{background:#161616;border:1px solid #2e2e2e;border-radius:9px;padding:5px 8px;font-size:11px;color:#bbb;}
+.chat{background:#131313;border-radius:10px;padding:10px;font-size:12.5px;line-height:1.65;max-height:340px;overflow:auto;}
+.cu{color:#8fd0ff;margin-top:8px;} .cb{color:#dcdcdc;margin-top:3px;white-space:pre-wrap;}
+.fl{font-size:12px;line-height:1.7;color:#ffb86b;}
+.fl i{color:#ff5d5d;font-style:normal;font-weight:700;}
+.rec{background:#1a1f17;border:1px solid #2f3a26;border-radius:12px;padding:11px 13px;margin-top:9px;font-size:12.5px;line-height:1.75;color:#d7e7c4;}
+.rec b{color:#bdfb00;}
+.warnbox{background:#2a1414;border:1px solid #7a2020;border-radius:14px;padding:12px 14px;font-size:12.5px;color:#ffc9c9;line-height:1.8;margin-top:12px;}
+</style>
+</head>
+<body>
+<div class="box">
+
+<div class="card">
+  <h1>🧪 สนามซ้อมจีทู</h1>
+  <p class="sub2">ลูกค้าจำลองคุยกับจีทูตัวจริง 20 เคส แล้วให้กรรมการ AI ตรวจให้คะแนน</p>
+
+  <div id="login">
+    <input id="key" type="password" placeholder="ใส่รหัสผ่าน" autocomplete="off">
+    <button class="sub" onclick="saveKey()">เข้าใช้งาน</button>
+  </div>
+
+  <div id="main" class="hidden">
+    <div class="safe">
+      🔒 <b>วิ่งในสนามซ้อมเท่านั้น</b><br>
+      • ไม่สร้างออเดอร์จริง ไม่ตัดสต็อก<br>
+      • ใช้บัญชีทดสอบ ไม่มีเลขบัญชีจริงหลุด<br>
+      • ไม่มีข้อความส่งออกไปหาใครเลย<br>
+      • อ่านราคา/สต็อกของจริง เพื่อให้ผลตรงหน้างาน<br>
+      • <b>ไม่แก้โค้ดและไม่ดีพลอยเอง</b> — ได้แค่เสนอ รอพี่อนุมัติ
+    </div>
+    <button id="go" class="bigbtn" onclick="runAll()">▶ รันทั้งชุด 20 เคส</button>
+    <div class="bar"><i id="prog"></i></div>
+    <div id="msg"></div>
+    <div class="tot hidden" id="tot">
+      <div><b id="tPass" class="g">–</b><span>ผ่าน</span></div>
+      <div><b id="tFail" class="r">–</b><span>ไม่ผ่าน</span></div>
+      <div><b id="tAvg">–</b><span>คะแนนเฉลี่ย</span></div>
+      <div><b id="tMoney" class="r">–</b><span>ผิดเรื่องเงิน</span></div>
+    </div>
+    <div id="dims" class="sc"></div>
+  </div>
+</div>
+
+<div id="list" class="card hidden">
+  <div class="dh" style="margin-top:0">ผลรายเคส (กดเพื่อดูบทสนทนา)</div>
+  <div id="rows"></div>
+</div>
+
+<div id="recs" class="card hidden">
+  <div class="dh" style="margin-top:0">📝 ข้อเสนอแก้ไข — รอพี่อนุมัติ</div>
+  <div class="warnbox">ระบบนี้ <b>ไม่แก้ Prompt · ไม่แก้ Knowledge · ไม่ดีพลอย</b> ให้เองเด็ดขาด<br>รายการข้างล่างคือข้อเสนอเฉยๆ พี่อ่านแล้วบอกว่าจะเอาข้อไหน ค่อยลงมือแก้</div>
+  <div id="reclist"></div>
+  <button class="sub" onclick="copyRecs()">📋 คัดลอกทั้งหมดไปให้จีทูเทรนเนอร์</button>
+</div>
+
+</div>
+<script>
+const W='https://abc-line-ai.milin-mengg.workers.dev';
+let KEY=localStorage.getItem('g2key')||'';
+let RESULTS=[];
+const $=(id)=>document.getElementById(id);
+
+function init(){
+  if(KEY){ $('login').classList.add('hidden'); $('main').classList.remove('hidden'); }
+  else { $('login').classList.remove('hidden'); $('main').classList.add('hidden'); }
+}
+function saveKey(){
+  const v=$('key').value.trim();
+  if(!v){ $('msg').textContent='ใส่รหัสก่อนค่ะ'; return; }
+  KEY=v; localStorage.setItem('g2key',KEY); init();
+}
+async function q(path){
+  const r=await fetch(W+path+(path.indexOf('?')===-1?'?':'&')+'key='+encodeURIComponent(KEY)+'&r='+Math.random().toString(36).slice(2));
+  if(r.status===403){ localStorage.removeItem('g2key'); KEY=''; init(); throw new Error('รหัสไม่ถูกต้อง'); }
+  return r.json();
+}
+
+async function runAll(){
+  $('go').disabled=true; RESULTS=[];
+  $('rows').innerHTML=''; $('reclist').innerHTML='';
+  $('list').classList.remove('hidden'); $('recs').classList.add('hidden'); $('tot').classList.add('hidden');
+  let cases;
+  try{ cases=(await q('/eval?list=1')).เคส; }
+  catch(e){ $('msg').textContent='เปิดสนามซ้อมไม่ได้: '+e.message; $('go').disabled=false; return; }
+
+  for(let i=0;i<cases.length;i++){
+    const c=cases[i];
+    $('msg').textContent='กำลังซ้อมเคส '+(i+1)+'/'+cases.length+' — '+c['ชื่อ'];
+    $('prog').style.width=Math.round(i/cases.length*100)+'%';
+    const ph=document.createElement('div');
+    ph.className='row run'; ph.innerHTML='<div class="rtop"><b>'+esc(c['ชื่อ'])+'</b><span class="rscore y">⏳</span></div><div class="rcat">'+esc(c['หมวด'])+' · กำลังคุย...</div>';
+    $('rows').appendChild(ph);
+    let res;
+    try{ res=await q('/eval?case='+c.id); }
+    catch(e){ res={เคส:c.id,หมวด:c['หมวด'],'ชื่อ':c['ชื่อ'],ผล:'ERROR','คะแนนรวม':0,'เหตุผลที่ตก':['เรียกไม่สำเร็จ: '+e.message],'บทสนทนา':[]}; }
+    RESULTS.push(res);
+    ph.replaceWith(rowOf(res));
+    paint();
+  }
+  $('prog').style.width='100%';
+  $('msg').textContent='ซ้อมครบ '+cases.length+' เคสแล้ว';
+  $('go').disabled=false;
+  paint(); paintRecs();
+}
+
+function esc(s){ return String(s==null?'':s).replace(/[<>&]/g,m=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[m])); }
+
+function rowOf(r){
+  const ok=r['ผล']==='PASS';
+  const d=document.createElement('div');
+  d.className='row '+(ok?'pass':'fail');
+  const sc=r['คะแนน']||{};
+  const money=(r['โค้ดจับได้']||[]).filter(f=>f['ระดับ']==='critical');
+  let h='<div class="rtop"><b>'+esc(r['ชื่อ'])+'</b><span class="rscore '+(ok?'g':'r')+'">'+(ok?'ผ่าน ':'ตก ')+(r['คะแนนรวม']||0)+'</span></div>';
+  h+='<div class="rcat">'+esc(r['หมวด'])+' · คุย '+(r['จำนวนตา']||0)+' ตา · '+(r['วินาที']||0)+' วิ</div>';
+  if(!ok) h+='<div class="rwhy">⛔ '+(r['เหตุผลที่ตก']||[]).map(esc).join('<br>⛔ ')+'</div>';
+  h+='<div class="det">';
+  if(r['คะแนน']) h+='<div class="sc">'
+    +'<span>ข้อเท็จจริง '+sc.accuracy+'</span><span>กฎร้าน '+sc.policy_compliance+'</span>'
+    +'<span>ออเดอร์ '+sc.order_accuracy+'</span><span>ส่งต่อคน '+sc.escalation+'</span><span>เป็นธรรมชาติ '+sc.naturalness+'</span></div>';
+  if(money.length||((r['โค้ดจับได้']||[]).length)){
+    h+='<div class="dh">โค้ดจับได้ (พิสูจน์ด้วยการคำนวณ)</div><div class="fl">'
+      +(r['โค้ดจับได้']||[]).map(f=>'<i>['+f['ระดับ']+']</i> '+esc(f['เรื่อง'])).join('<br>')+'</div>';
+  }
+  if((r['กรรมการจับได้']||[]).length){
+    h+='<div class="dh">กรรมการจับได้</div><div class="fl">'
+      +r['กรรมการจับได้'].map(v=>'<i>['+esc(v.severity)+' ตาที่ '+esc(v.turn)+']</i> '+esc(v.what)+(v.evidence?'<br><span style="color:#8a8a8a">“'+esc(v.evidence)+'”</span>':'')).join('<br>')+'</div>';
+  }
+  if((r['ตรวจไม่ได้']||[]).length)
+    h+='<div class="dh">ตรวจไม่ได้ (ไม่มีข้อมูล — ไม่หักคะแนน)</div><div class="fl" style="color:#8a8a8a">'+r['ตรวจไม่ได้'].map(esc).join('<br>')+'</div>';
+  if(r['ข้อเสนอแก้ไข']) h+='<div class="dh">ข้อเสนอ</div><div class="rec">'+esc(r['ข้อเสนอแก้ไข'])+'</div>';
+  h+='<div class="dh">บทสนทนา</div><div class="chat">'
+    +(r['บทสนทนา']||[]).map(x=>x.who==='ลูกค้า'
+      ? '<div class="cu">🙋 ลูกค้า: '+esc(x.text)+'</div>'
+      : '<div class="cb">🤖 '+esc(x.text)+'</div>').join('')+'</div>';
+  h+='</div>';
+  d.innerHTML=h;
+  d.onclick=()=>d.classList.toggle('open');
+  return d;
+}
+
+function paint(){
+  if(!RESULTS.length) return;
+  $('tot').classList.remove('hidden');
+  const p=RESULTS.filter(r=>r['ผล']==='PASS').length;
+  const money=RESULTS.filter(r=>(r['โค้ดจับได้']||[]).some(f=>f['ระดับ']==='critical')).length;
+  const avg=Math.round(RESULTS.reduce((a,b)=>a+(b['คะแนนรวม']||0),0)/RESULTS.length);
+  $('tPass').textContent=p; $('tFail').textContent=RESULTS.length-p;
+  $('tAvg').textContent=avg; $('tAvg').className=avg>=80?'g':(avg>=60?'y':'r');
+  $('tMoney').textContent=money;
+  const keys=[['accuracy','ข้อเท็จจริง'],['policy_compliance','กฎร้าน'],['order_accuracy','ออเดอร์'],['escalation','ส่งต่อคน'],['naturalness','เป็นธรรมชาติ']];
+  const have=RESULTS.filter(r=>r['คะแนน']);
+  $('dims').innerHTML=have.length?keys.map(([k,th])=>{
+    const v=Math.round(have.reduce((a,b)=>a+b['คะแนน'][k],0)/have.length);
+    return '<span>'+th+' <b class="'+(v>=90?'g':(v>=75?'y':'r'))+'">'+v+'</b></span>';
+  }).join(''):'';
+}
+
+function recText(){
+  const bad=RESULTS.filter(r=>r['ผล']!=='PASS');
+  if(!bad.length) return 'ซ้อมครบ '+RESULTS.length+' เคส ผ่านหมด — ยังไม่มีอะไรต้องแก้';
+  let t='ผลซ้อม '+RESULTS.filter(r=>r['ผล']==='PASS').length+'/'+RESULTS.length+' เคส · ตก '+bad.length+' เคส\n\n';
+  bad.forEach((r,i)=>{
+    t+=(i+1)+') ['+r['หมวด']+'] '+r['ชื่อ']+' — คะแนนรวม '+(r['คะแนนรวม']||0)+'\n';
+    t+='   ตกเพราะ: '+(r['เหตุผลที่ตก']||[]).join(' · ')+'\n';
+    const f=(r['โค้ดจับได้']||[]).map(x=>'['+x['ระดับ']+'] '+x['เรื่อง']);
+    if(f.length) t+='   โค้ดจับได้: '+f.join(' · ')+'\n';
+    if(r['ข้อเสนอแก้ไข']) t+='   ข้อเสนอ: '+r['ข้อเสนอแก้ไข']+'\n';
+    t+='\n';
+  });
+  t+='⛔ ยังไม่แก้อะไรทั้งนั้น รอพี่อนุมัติก่อน';
+  return t;
+}
+function paintRecs(){
+  $('recs').classList.remove('hidden');
+  const bad=RESULTS.filter(r=>r['ผล']!=='PASS');
+  $('reclist').innerHTML=bad.length
+    ? bad.map(r=>'<div class="rec"><b>'+esc(r['ชื่อ'])+'</b><br>ตกเพราะ: '+(r['เหตุผลที่ตก']||[]).map(esc).join(' · ')+(r['ข้อเสนอแก้ไข']?'<br>ข้อเสนอ: '+esc(r['ข้อเสนอแก้ไข']):'')+'</div>').join('')
+    : '<div class="rec">ผ่านครบทุกเคส — ไม่มีอะไรต้องแก้วันนี้</div>';
+}
+function copyRecs(){
+  navigator.clipboard.writeText(recText()).then(()=>{ $('msg').textContent='คัดลอกแล้ว เอาไปวางในแชทได้เลย'; });
+}
+init();
+</script>
+</body>
+</html>

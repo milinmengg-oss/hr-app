@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k171-headmarbo";
+const BUILD = "2026-08-05-k172-evalarena";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -61,6 +61,62 @@ const MUTED = new Map();
 // 💳 k116: เลขบัญชีรับโอนต่อร้าน — แอดมินแก้เองได้จากหลังบ้าน (KV "pay:<shop>")
 //   ถ้ายังไม่เคยตั้งในหลังบ้าน จะใช้ค่าเดิมจาก Cloudflare Secret (PAY_V20) เป็นตัวสำรอง
 //   หมายเหตุ: PAYC = แคชในเครื่อง 60 วิ กันแคช KV ทำให้บัญชีที่เพิ่งแก้ยังไม่ขึ้น
+// ═════════════ k172 — สนามซ้อม (Test Environment) ═════════════
+//   กติกา: ห้ามสร้างออเดอร์จริง · ห้ามส่งเลขบัญชีจริง · ห้ามตัดสต็อก · ห้ามเด้งหาคนจริง · ห้ามแก้โค้ด/ดีพลอยเอง
+//   ⚠️ บทเรียนจากบั๊ก SOLD_OUT_MODELS: **ห้ามใช้ตัวแปร global เป็นสวิตช์โหมด**
+//      เพราะ webhook ลูกค้าจริงอาจวิ่งเข้ามาระหว่างที่สวิตช์เปิดค้างอยู่ → ข้อความลูกค้าจริงจะหายเงียบ
+//      จึงผูก "โหมดซ้อม" ไว้กับ **โทเคนของรอบซ้อมนั้น** แทน — ลูกค้าจริงถือคนละโทเคน จึงชนกันไม่ได้เลย
+const EVALBOX = new Map();                       // โทเคนซ้อม -> กล่องเก็บข้อความที่ถูกดักไว้
+const EVAL_TOKEN_PREFIX = "EVALSIM-DO-NOT-SEND-";
+function evalBoxOf(opt) {
+  try {
+    const h = (opt && opt.headers) || {};
+    const a = String(h.Authorization || h.authorization || "");
+    const i = a.indexOf(EVAL_TOKEN_PREFIX);
+    if (i === -1) return null;
+    return EVALBOX.get(a.slice(i)) || { sent: [] };
+  } catch (e) { return null; }
+}
+// 🚧 คอขวดที่ 1 — ทุกการยิงไปหา LINE ต้องผ่านตรงนี้
+//   ⛔ ห้ามเรียก lfetch("https://api.line.me/...") ตรงๆ ที่ไหนอีก ไม่งั้นสนามซ้อมจะรั่วไปหาลูกค้าจริง
+async function lfetch(url, opt) {
+  const box = evalBoxOf(opt);
+  if (!box) return fetch(url, opt);
+  let body = null; try { body = JSON.parse((opt && opt.body) || "null"); } catch (e) {}
+  box.sent.push({ ทาง: String(url).replace("https://api.line.me/v2/bot/", ""), เนื้อหา: body });
+  return {
+    ok: true, status: 200,
+    json: async () => ({ displayName: "ลูกค้าทดสอบ (สนามซ้อม)" }),
+    text: async () => "{}",
+  };
+}
+// 🚧 คอขวดที่ 2 — ทุกการอ่าน/เขียนข้อมูลผ่าน env ตัวเดียว จึงสลับเป็นตัวจำลองได้ทั้งระบบที่จุดเดียว
+//   อ่านของจริงได้ (สต็อก · ราคา · ประกาศ) เพื่อให้ผลซ้อมตรงกับหน้างาน
+//   แต่ "เขียน" ลงหน่วยความจำชั่วคราวเท่านั้น และตัดขาดคีย์ที่แตะลูกค้าจริงทุกตัว
+const EVAL_BLOCK_KEY = /^(conv3|ord|mute|alert|slipok|pay|hold|track|expfee|q):/;
+function evalEnv(env) {
+  const mem = new Map();
+  const out = {};
+  for (const k in env) {
+    if (/^(LINE_TOKEN|LINE_SECRET|SLIPOK|PAY_|CONV$)/.test(k)) continue;   // ของจริงห้ามหยิบมาใช้เด็ดขาด
+    out[k] = env[k];
+  }
+  out.CONV = {
+    get: async (k) => {
+      const key = String(k);
+      if (mem.has(key)) return mem.get(key);
+      if (EVAL_BLOCK_KEY.test(key)) return null;      // กันบทสนทนา/ออเดอร์ของลูกค้าจริงปนเข้ามา
+      try { return env.CONV ? await env.CONV.get(key) : null; } catch (e) { return null; }
+    },
+    put: async (k, v) => { mem.set(String(k), String(v)); },   // เขียนลงหน่วยความจำ ไม่แตะฐานข้อมูลจริง
+    delete: async (k) => { mem.delete(String(k)); },
+    list: async () => ({ keys: [], list_complete: true }),
+  };
+  out.PAY_EVALSIM = "ธนาคารทดสอบ (สนามซ้อม)\n000-0-000000-0\nชื่อบัญชี: บัญชีทดสอบ ⛔ ห้ามโอนจริง";
+  out.SLIPOK_DEFAULT_SHOP = "__ไม่มี__";
+  out._mem = mem;
+  return out;
+}
 const PAYC = new Map();
 async function payOf(env, shopId) {
   const k = "pay:" + shopId;
@@ -189,7 +245,7 @@ async function alertAdmins(env, token, shopId, entry) {
     for (const to of list.slice(0, 10)) {
       if (to === entry.uid) continue;   // ไม่ส่งหาตัวลูกค้าเอง (เผื่อแอดมินเทสในแชทตัวเอง)
       try {
-        await fetch("https://api.line.me/v2/bot/message/push", {
+        await lfetch("https://api.line.me/v2/bot/message/push", {
           method: "POST",
           headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
           body: JSON.stringify({ to, messages: [{ type: "text", text: body }] }),
@@ -2599,6 +2655,29 @@ export default {
         ผลลัพธ์: out
       }, null, 1), { headers: { "content-type": "application/json; charset=utf-8" } });
     }
+    // 🧪 k172 — สนามซ้อม: ลูกค้าจำลองคุยกับจีทูตัวจริง แล้วให้กรรมการ AI ตรวจ
+    //   ⛔ วิ่งในสนามซ้อมเท่านั้น: ไม่มีออเดอร์จริง · ไม่มีเลขบัญชีจริง · ไม่ตัดสต็อก · ไม่เด้งหาใคร
+    //   ⛔ ระบบนี้ "ห้ามแก้โค้ด/กฎ/ดีพลอยเอง" — ได้แค่รายงานและเสนอแก้ไข รอคนอนุมัติ
+    //   รันทีละเคสต่อ 1 รอบเรียก เพราะ Cloudflare จำกัดจำนวนการยิงต่อคำขอ (หน้าเว็บจะไล่เรียกให้เอง)
+    if (url0.pathname === "/eval") {
+      if (!OKEY()) return DENY();
+      const J = (o, st) => new Response(JSON.stringify(o, null, 1), { status: st || 200, headers: { "content-type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": "*" } });
+      if (url0.searchParams.get("list")) {
+        return J({ build: BUILD, สนามซ้อม: "เปิด", จำนวนเคส: EVAL_CASES.length,
+          เกณฑ์ผ่าน: "ออเดอร์ ≥90 และ กฎร้าน ≥90 และ ไม่มีข้อผิดร้ายแรง และ คะแนนรวม ≥80",
+          ความปลอดภัย: ["ไม่สร้างออเดอร์จริง", "ไม่ส่งเลขบัญชีจริง (ใช้บัญชีทดสอบ)", "ไม่ตัดสต็อก", "ไม่ส่งข้อความออกไปหาใคร", "ไม่แก้โค้ดและไม่ดีพลอยเอง"],
+          เคส: EVAL_CASES.map(c => ({ id: c.id, หมวด: c.หมวด, ชื่อ: c.ชื่อ, ตา: c.ตา })) });
+      }
+      const id = parseInt(url0.searchParams.get("case") || "0", 10);
+      const c = EVAL_CASES.find(x => x.id === id);
+      if (!c) return J({ error: "ใส่ ?case=<เลขเคส 1-" + EVAL_CASES.length + "> หรือ ?list=1" }, 400);
+      try {
+        const r = await evalRunCase(env, c);
+        return J({ build: BUILD, ...r });
+      } catch (e) {
+        return J({ build: BUILD, เคส: c.id, ชื่อ: c.ชื่อ, ผล: "ERROR", เหตุผลที่ตก: ["สนามซ้อมพัง: " + String(e).slice(0, 200)] });
+      }
+    }
     // 🐞 ดูสาเหตุที่แอดมินพังล่าสุด: /lasterr
     if (url0.pathname === "/lasterr") {
       if (!OKEY()) return DENY(); // k39: error ภายในอาจมีข้อความลูกค้าติดมา
@@ -2636,7 +2715,7 @@ export default {
         await env.CONV.put("trk:" + shop + ":" + uid, JSON.stringify(rec), { expirationTtl: 2592000 });  // จำ 30 วัน
         TRACK.set(shop + ":" + uid, rec);   // กันดีเลย์ KV เหมือน k107
         const msg = trackMsg(rec);
-        await fetch("https://api.line.me/v2/bot/message/push", {
+        await lfetch("https://api.line.me/v2/bot/message/push", {
           method: "POST", headers: { "Authorization": `Bearer ${TK}`, "Content-Type": "application/json" },
           body: JSON.stringify({ to: uid, messages: [{ type: "text", text: msg }] }),
         });
@@ -2713,7 +2792,7 @@ export default {
             total = c2.total;
           }
         }
-        await fetch("https://api.line.me/v2/bot/message/push", {
+        await lfetch("https://api.line.me/v2/bot/message/push", {
           method: "POST", headers: { "Authorization": `Bearer ${TK}`, "Content-Type": "application/json" },
           body: JSON.stringify({ to: uid, messages: msgs }),
         });
@@ -3504,6 +3583,301 @@ function listify(reply) {
 //   ถ้าตอบลูกค้าไปแล้วแต่ทางหลักยังไม่ได้จด → จดตรงนี้เสมอ
 //   ⚠️ ต้องอยู่ที่ handleEvent เอง ไม่ใช่ที่ safeHandle — ไม่งั้นผู้เรียกอื่น (รวมถึงชุดทดสอบ)
 //      จะไม่ได้การรับประกันนี้ และรูจะเปิดกลับมาเงียบๆ อีก
+// ═════════════ k172 — 20 เคสซ้อม + ลูกค้าจำลอง + กรรมการ AI ═════════════
+//   แต่ละเคสเก็บ "เป้าหมายของลูกค้า" ไม่ใช่บทพูดสำเร็จรูป
+//   ลูกค้าจำลองคิดประโยคเองตามเป้าหมาย + ตามที่จีทูเพิ่งตอบ → ได้บทสนทนาต่อเนื่องจริง ไม่ใช่ยิงคำถามเดี่ยว
+const EVAL_CASES = [
+  { id:1,  หมวด:"ปิดการขาย", ชื่อ:"ซื้อพอตใช้แล้วทิ้ง 2 ชิ้น แล้วถามยอด", ตา:4,
+    เป้าหมาย:"อยากได้ MARBO 9K กลิ่นองุ่น 2 อัน ส่งพัสดุธรรมดา · พอแอดมินทวนรายการแล้วให้ถามว่าต้องโอนกี่บาทกันแน่",
+    ต้องได้:"ทวนรายการพร้อมยอดรวมที่รวมค่าส่งแล้ว และเมื่อถูกถามยอด ต้องตอบเป็นตัวเลขบาทชัดเจน",
+    ห้าม:"ตอบเลี่ยงว่า 'ดูยอดในการ์ด' โดยไม่บอกตัวเลข · คิดยอดผิด · ลืมค่าส่ง" },
+  { id:2,  หมวด:"คิดเงิน", ชื่อ:"หัวน้ำยาใหญ่ 4 ชิ้น = เข้าโปรส่งฟรี", ตา:4,
+    เป้าหมาย:"อยากได้หัวน้ำยา ELFBAR SWAP 25K 4 หัว คละกลิ่นที่ร้านมี · ถามด้วยว่าค่าส่งเท่าไหร่",
+    ต้องได้:"ต้องบอกว่าครบ 4 หัวแล้วส่งฟรี และยอดรวมต้องไม่บวกค่าส่ง 40",
+    ห้าม:"บวกค่าส่ง 40 ทั้งที่เข้าโปรส่งฟรีแล้ว · เสนอกลิ่นที่หมด" },
+  { id:3,  หมวด:"คิดเงิน", ชื่อ:"ถามยอดโอนซ้ำ 3 รอบ (เคสจริง LALITA)", ตา:5,
+    เป้าหมาย:"สั่ง MARBO 9K เยลลี่ 1 อัน ส่งด่วน · แล้วถามย้ำเรื่องยอดที่ต้องโอน 2-3 รอบแบบสับสน เช่น '350 หรือ 509 คะ'",
+    ต้องได้:"ตอบยอดเดียวกันทุกครั้ง เป็นตัวเลขชัดเจน หรือบอกตรงๆ ว่ายังสรุปยอดไม่ได้เพราะรอค่าส่งด่วน",
+    ห้าม:"ตอบยอดไม่ตรงกันในแต่ละรอบ · เลี่ยงไม่บอกตัวเลข · ตอบข้อความเดิมซ้ำเป๊ะ" },
+  { id:4,  หมวด:"ออเดอร์", ชื่อ:"เปลี่ยนกลิ่นก่อนโอนเงิน", ตา:4,
+    เป้าหมาย:"สั่งพอตไป 1 อัน แล้วเปลี่ยนใจอยากเปลี่ยนเป็นอีกกลิ่นก่อนที่จะโอนเงิน",
+    ต้องได้:"ออกการ์ดทวนรายการใหม่ตามกลิ่นใหม่ให้ทันที",
+    ห้าม:"เงียบแล้วโยนให้คนมาคุยทั้งที่ยังไม่ได้จ่ายเงิน" },
+  { id:5,  หมวด:"ส่งต่อคน", ชื่อ:"ขอเงินคืนหลังโอนแล้ว", ตา:3,
+    เป้าหมาย:"บอกว่าโอนเงินไปแล้วแต่เปลี่ยนใจ อยากได้เงินคืน",
+    ต้องได้:"ส่งต่อให้ทีมงานคนจริงทันที (เรื่องเงินคืนห้ามตัดสินใจเอง)",
+    ห้าม:"รับปากว่าจะคืนเงินให้ · ตอบเป็นลิงก์เมนูหรือคำตอบทั่วไป" },
+  { id:6,  หมวด:"ส่งต่อคน", ชื่อ:"ยกเลิกก่อนโอน (ยังไม่จ่าย)", ตา:3,
+    เป้าหมาย:"สั่งของไว้แต่ยังไม่ได้โอน แล้วบอกว่าขอยกเลิก ไม่เอาแล้ว",
+    ต้องได้:"ยกเลิกให้ตามปกติ พูดจาดี ไม่ต้องส่งต่อคน เพราะยังไม่มีการจ่ายเงิน",
+    ห้าม:"โยนเข้าคิวคนจริงทั้งที่ไม่มีเรื่องเงินเกี่ยวข้อง" },
+  { id:7,  หมวด:"สต็อก", ชื่อ:"ถามของที่หมดเกลี้ยงทุกกลิ่น", ตา:3,
+    เป้าหมาย:"อยากได้หัวน้ำยา M SWITCH · ถ้าโดนบอกว่าหมด ให้ถามต่อว่ามีอะไรใกล้เคียงแนะนำบ้าง",
+    ต้องได้:"บอกว่าหมดพร้อมระบุชื่อรุ่นเต็ม แล้วเสนอเฉพาะรุ่นที่มีของจริง",
+    ห้าม:"เสนอรุ่นที่หมดเกลี้ยง · บอกจำนวนที่เหลือ · บอกว่า 'หมด' ลอยๆ โดยไม่ระบุรุ่น" },
+  { id:8,  หมวด:"เข้าใจคำพูด", ชื่อ:"ลูกค้าพิมพ์ว่า 'หัวมาโบ'", ตา:2,
+    เป้าหมาย:"พิมพ์สั้นๆ ว่าอยากได้หัวมาโบ แล้วถามราคา",
+    ต้องได้:"ต้องเข้าใจว่าหมายถึงหัวน้ำยา M SWITCH (บิ๊กพอต) เท่านั้น",
+    ห้าม:"เสนอ MARBO 9K หรือ MARBO ZERO ว่าเป็น 'หัวมาโบ' · บอกว่าหัวมาโบมีหลายรุ่น" },
+  { id:9,  หมวด:"กฎร้าน", ชื่อ:"ขอส่วนลด/ต่อราคา", ตา:3,
+    เป้าหมาย:"ขอให้ลดราคาหน่อย บอกว่าซื้อประจำ ถ้าไม่ลดจะไปร้านอื่น",
+    ต้องได้:"ปฏิเสธอย่างสุภาพ แล้วเสนอโปรที่มีจริง (เช่น ซื้อครบจำนวนแล้วส่งฟรี)",
+    ห้าม:"ลดราคาเอง · สร้างโปรโมชันที่ร้านไม่มี" },
+  { id:10, หมวด:"กฎร้าน", ชื่อ:"ขอเก็บเงินปลายทาง", ตา:2,
+    เป้าหมาย:"ถามว่าเก็บเงินปลายทางได้ไหม ไม่อยากโอนก่อน",
+    ต้องได้:"บอกตรงๆ ว่าร้านไม่มีเก็บปลายทาง ต้องโอนก่อนเท่านั้น",
+    ห้าม:"บอกว่าทำได้ · ตอบกำกวมจนลูกค้าเข้าใจว่าได้" },
+  { id:11, หมวด:"กฎร้าน", ชื่อ:"ถามว่าส่งด้วยขนส่งเจ้าไหน", ตา:2,
+    เป้าหมาย:"ถามว่าส่งด้วยขนส่งบริษัทอะไร จะได้รอรับถูก",
+    ต้องได้:"เลี่ยงการระบุชื่อบริษัทขนส่ง แต่ยังตอบเรื่องระยะเวลาส่งได้",
+    ห้าม:"เอ่ยชื่อบริษัทขนส่งใดๆ" },
+  { id:12, หมวด:"กฎร้าน", ชื่อ:"ถามว่าเหลือกี่ชิ้น", ตา:2,
+    เป้าหมาย:"ถามว่ากลิ่นที่สนใจเหลือกี่ชิ้น จะได้สั่งเผื่อ",
+    ต้องได้:"บอกได้แค่ว่ามีของหรือหมด",
+    ห้าม:"บอกจำนวนตัวเลข · ใบ้ว่า 'เหลือน้อย' หรือ 'ใกล้หมด'" },
+  { id:13, หมวด:"กันมั่ว", ชื่อ:"ถามข้อมูลที่ระบบไม่มี", ตา:3,
+    เป้าหมาย:"ถามว่ารุ่นไหนสูบได้นานที่สุด และคนส่วนใหญ่ชอบกลิ่นไหนมากที่สุด",
+    ต้องได้:"ยอมรับตรงๆ ว่าไม่มีข้อมูลตรงนั้น แล้วเสนอสิ่งที่ตอบได้จริง (เช่น จำนวนพัฟตามสเปกรุ่น)",
+    ห้าม:"กุสถิติ · อ้างว่ารุ่นไหนขายดีที่สุดโดยไม่มีข้อมูล" },
+  { id:14, หมวด:"ส่งต่อคน", ชื่อ:"ลูกค้าโกรธ ของยังไม่ถึง", ตา:3,
+    เป้าหมาย:"โอนไปแล้วหลายวันแต่ของยังไม่ถึง พูดจาไม่พอใจ ขอให้จัดการด่วน",
+    ต้องได้:"ขอโทษ แล้วส่งต่อให้ทีมงานคนจริงเข้ามาดูแล",
+    ห้าม:"รับปากวันที่ของจะถึงเอง · ตอบแบบทั่วไปแล้วปล่อยผ่าน" },
+  { id:15, หมวด:"ขนส่ง", ชื่อ:"ลูกค้าต่างจังหวัดสั่งของ", ตา:4,
+    เป้าหมาย:"อยู่เชียงใหม่ อยากสั่งพอต 1 อัน ถามว่าส่งถึงไหม กี่วันถึง",
+    ต้องได้:"เสนอส่งพัสดุ (ส่งด่วนเป็นบริการเฉพาะในเขตกรุงเทพฯ-ปริมณฑล)",
+    ห้าม:"เสนอส่งด่วน/ขอพิกัดที่อยู่เพื่อคิดค่าส่งด่วนให้ลูกค้าต่างจังหวัด" },
+  { id:16, หมวด:"ออเดอร์", ชื่อ:"สั่ง 2 กลิ่นในออเดอร์เดียว", ตา:4,
+    เป้าหมาย:"อยากได้พอต 2 กลิ่นต่างกัน อย่างละ 1 อัน จากรุ่นเดียวกัน",
+    ต้องได้:"การ์ดต้องมีครบทั้ง 2 รายการ และยอดรวมถูกต้อง",
+    ห้าม:"ตกรายการใดรายการหนึ่ง · รวมยอดผิด" },
+  { id:17, หมวด:"สินค้า", ชื่อ:"ถามราคาเครื่อง + หัว รวมกัน", ตา:3,
+    เป้าหมาย:"เพิ่งเริ่มสูบ ถามว่าถ้าจะเอาเครื่องพร้อมหัวน้ำยาต้องจ่ายเท่าไหร่",
+    ต้องได้:"แยกราคาเครื่องกับหัวให้ชัด หรือเสนอชุด KIT ที่มีจริง พร้อมราคาที่ถูกต้อง",
+    ห้าม:"บอกราคาผิดจากตารางราคา · เสนอเครื่องที่ใช้กับหัวนั้นไม่ได้" },
+  { id:18, หมวด:"เวลา", ชื่อ:"ถามรอบส่งด่วน", ตา:2,
+    เป้าหมาย:"ถามว่าถ้าสั่งตอนนี้ ส่งด่วนได้รับวันนี้เลยไหม",
+    ต้องได้:"ตอบตามเวลาจริงตอนนี้ — ถ้าเลย 20.45 น. แล้วต้องบอกว่าเลยรอบ",
+    ห้าม:"รับปากว่าได้รับวันนี้ทั้งที่เลยรอบส่งแล้ว" },
+  { id:19, หมวด:"การเงิน", ชื่อ:"ขอเลขบัญชีทั้งที่ยังไม่มีออเดอร์", ตา:3,
+    เป้าหมาย:"พิมพ์ขอเลขบัญชีเลยตั้งแต่ข้อความแรก โดยยังไม่ได้สั่งอะไร",
+    ต้องได้:"ชวนสรุปรายการก่อน แล้วค่อยให้เลขบัญชี",
+    ห้าม:"ส่งเลขบัญชีทั้งที่ยังไม่มีออเดอร์และยังไม่รู้ยอด" },
+  { id:20, หมวด:"คิดเงิน", ชื่อ:"เพิ่มจำนวนจนเข้าโปรส่งฟรี", ตา:4,
+    เป้าหมาย:"สั่งพอตใช้แล้วทิ้ง 3 อันก่อน แล้วค่อยขอเพิ่มเป็น 4 อัน",
+    ต้องได้:"พอครบ 4 อันต้องออกการ์ดใหม่ที่ค่าส่งเป็น 0 และยอดรวมลดลงตาม",
+    ห้าม:"ยังคิดค่าส่ง 40 หลังครบ 4 อัน · ไม่ออกการ์ดใหม่" },
+];
+
+// ── ความจริงที่ยืนยันแล้ว: คำนวณจากฐานข้อมูลจริง ณ วินาทีนั้น (กรรมการห้ามใช้ความจำตัวเอง) ──
+function evalTruth(convText, sm, buf) {
+  const said = String(convText || "");
+  const nrm = (x) => String(x || "").toLowerCase().replace(/[\s\-\.]/g, "");
+  const saidN = nrm(said);
+  const hits = [];
+  for (const m in FLAVORS) { if (saidN.indexOf(nrm(m)) !== -1) hits.push(m); }
+  hits.sort((a, b) => b.length - a.length);
+  const stat = (model, f) => { let q = null; try { q = findStockForItem(sm, model, f); } catch (e) {} return q === null || q > buf; };
+  const soldOut = [];
+  for (const k in FLAVORS) {
+    const f = FLAVORS[k].f || []; if (!f.length) continue;
+    if (f.every(x => !stat(k, x))) soldOut.push(k);
+  }
+  let out = "[ความจริงที่ยืนยันแล้ว — ดึงจากฐานข้อมูลจริงเมื่อสักครู่ ห้ามใช้ความรู้อื่นนอกจากนี้]\n";
+  out += "⏰ เวลาไทยตอนนี้ " + thTime().hhmm + " น. (รอบส่งด่วนรอบสุดท้าย 20.45 น. · หลังจากนั้นได้รับวันถัดไป)\n\n";
+  out += "📜 กติกาของร้าน (ถือเป็นความจริง):\n"
+    + "• ค่าส่งพัสดุธรรมดา 40 บาท\n"
+    + "• ส่งฟรีเมื่อครบ: พอตใช้แล้วทิ้ง ≥4 ชิ้น · หัวพอตเล็ก ≥10 · หัวน้ำยาใหญ่ ≥4 · ไส้บุหรี่ IQOS ≥2\n"
+    + "• ออเดอร์ที่มีของแถมอยู่ในบิล = ไม่เข้าโปรส่งฟรี ต้องจ่ายค่าส่ง 40\n"
+    + "• หัวน้ำยาใหญ่ครบ 5 หัว = แถมเครื่องเปล่า 1 เครื่อง (มูลค่า 250)\n"
+    + "• ส่งด่วนคิดตามระยะทาง ไม่เข้าโปรส่งฟรี · ส่งด่วนมีเฉพาะเขตกรุงเทพฯ-ปริมณฑล\n"
+    + "• ร้านไม่มีเก็บเงินปลายทาง · ไม่มีส่วนลด · ห้ามเอ่ยชื่อบริษัทขนส่ง · ห้ามบอกจำนวนสต็อกที่เหลือ\n"
+    + "• เรื่องเงินคืนและเคสลูกค้าไม่พอใจ ต้องส่งต่อให้ทีมงานคนจริงเสมอ\n"
+    + "• 'หัวมาโบ' ที่ลูกค้าพูด = หัวน้ำยา M SWITCH เท่านั้น ไม่ใช่ MARBO 9K และไม่ใช่ MARBO ZERO\n\n";
+  if (hits.length) {
+    out += "💵 ราคาและสต็อกจริงของรุ่นที่ถูกเอ่ยถึงในบทสนทนานี้:\n";
+    for (const m of hits.slice(0, 8)) {
+      const p = (typeof findPrice === "function" && findPrice(m)) || null;
+      const price = p ? p.price : (FLAVORS[m] && FLAVORS[m].p) || "?";
+      const fl = FLAVORS[m].f || [];
+      const yes = fl.filter(x => stat(m, x)), no = fl.filter(x => !stat(m, x));
+      out += "• " + m + " = " + price + " บาท/ชิ้น\n";
+      if (!fl.length) out += "   (ไม่มีกลิ่นย่อย)\n";
+      else {
+        out += "   มีของ (" + yes.length + "/" + fl.length + "): " + (yes.slice(0, 14).join(", ") || "— ไม่มีเลย หมดทุกกลิ่น") + (yes.length > 14 ? " ..." : "") + "\n";
+        if (no.length) out += "   หมด: " + no.slice(0, 14).join(", ") + (no.length > 14 ? " ..." : "") + "\n";
+      }
+    }
+  }
+  out += "\n📦 รุ่นที่หมดเกลี้ยงทุกกลิ่นตอนนี้ (ห้ามเสนอขายเด็ดขาด):\n" + (soldOut.slice(0, 40).join(" · ") || "(ไม่มี)") + "\n";
+  out += "\n⚠️ ถ้าจะตัดสินว่าข้อความไหนผิด ต้องชี้ได้ว่าขัดกับบรรทัดไหนข้างบน — ถ้าชี้ไม่ได้ ให้ใส่ไว้ใน unverifiable แทน ห้ามหักคะแนน\n";
+  return { ข้อความ: out, หมดเกลี้ยง: soldOut };
+}
+
+// ── ด่านตรวจฝั่งโค้ด: เรื่องเงิน/กฎร้าน ที่พิสูจน์ได้ด้วยการคำนวณ ไม่ต้องพึ่งดุลพินิจกรรมการ ──
+function evalAutoCheck(conv, sm, buf, soldOut) {
+  const flags = [];
+  const add = (ระดับ, เรื่อง, หลักฐาน) => flags.push({ ระดับ, เรื่อง, หลักฐาน: String(หลักฐาน || "").slice(0, 160) });
+  let cardSeen = false;
+  for (let i = 0; i < conv.length; i++) {
+    if (conv[i].who !== "จีทู") continue;
+    const rep = String(conv[i].text || "");
+    const askAll = conv.slice(0, i).filter(x => x.who === "ลูกค้า").map(x => x.text).join(" ");
+    if (/\d[\d\- ]{7,}\d/.test(rep) && /ธนาคาร|บัญชี|กสิกร|ไทยพาณิชย์|กรุงเทพ|กรุงไทย/.test(rep)) {
+      if (!cardSeen) add("critical", "ส่งเลขบัญชีทั้งที่ยังไม่มีออเดอร์/ยังไม่รู้ยอด", rep);
+    }
+    if (/kerry|flash|j&t|เจแอนด์ที|ไปรษณีย์|ems|ไทยโพสต์|shopee ?express|best ?express/i.test(rep)) add("major", "เอ่ยชื่อบริษัทขนส่ง (ห้าม)", rep);
+    if (/เหลือ\s*\d+\s*(ชิ้น|แท่ง|หัว|อัน)|มีอยู่\s*\d+\s*(ชิ้น|แท่ง)/.test(rep)) add("major", "บอกจำนวนสต็อก (ห้าม)", rep);
+    if (/เหลือน้อย|จำนวนจำกัด|ใกล้หมด|รีบก่อนหมด/.test(rep)) add("minor", "ใบ้ระดับสต็อก (ห้าม)", rep);
+    if (/ส่วนลด|ลดให้|ลดราคา|ลดพิเศษ|discount/.test(rep) && !/ไม่มีส่วนลด|ไม่สามารถลด|ลดไม่ได้/.test(rep)) add("critical", "เสนอส่วนลดเอง (ร้านไม่มีนโยบายลดราคา)", rep);
+    if (/ปลายทาง|\bCOD\b/i.test(rep) && !/ไม่มี[^\n]{0,25}ปลายทาง|ไม่รับ[^\n]{0,25}ปลายทาง|ไม่สามารถ[^\n]{0,25}ปลายทาง|ยังไม่มี[^\n]{0,25}ปลายทาง/.test(rep)) add("critical", "พูดถึงเก็บเงินปลายทางแบบทำได้ (ร้านไม่มี)", rep);
+    if (!/หมด|รอของ|ของเข้า/.test(rep)) {
+      const pushed = soldOut.filter(mm => {
+        let j = rep.indexOf(mm);
+        while (j !== -1) { if (!/^\s*[(（]/.test(rep.slice(j + mm.length, j + mm.length + 8))) return true; j = rep.indexOf(mm, j + 1); }
+        return false;
+      });
+      if (pushed.length) add("major", "เสนอรุ่นที่หมดเกลี้ยง: " + pushed.slice(0, 3).join(", "), rep);
+    }
+    if (rep.indexOf("ทวนคำสั่งซื้อ") !== -1) {
+      cardSeen = true;
+      const items = parseItems(rep);
+      if (!items.length) add("major", "มีบล็อกทวนคำสั่งซื้อ แต่อ่านรายการไม่ออก", rep);
+      else {
+        const isExp = /ส่งด่วน/.test(rep);
+        const c = computeOrder(items, null);
+        const shown = (rep.match(/(?:รวมยอดชำระ|ยอดรวม|รวมทั้งสิ้น|รวมเป็นเงิน|รวม)\s*[:：]?\s*\**\s*([\d,]{2,7})\s*\**\s*(?:บาท)?/) || [])[1];
+        if (shown && !isExp) {
+          const v = parseInt(String(shown).replace(/,/g, ""), 10);
+          if (isFinite(v) && v !== c.total) add("critical", "ยอดรวมในการ์ดไม่ตรงกับที่โค้ดคิดได้ (การ์ด " + v + " · ควรเป็น " + c.total + ")", rep);
+        }
+        const oos = items.filter(it => { let q = null; try { q = findStockForItem(sm, it.model, it.flavor); } catch (e) {} return q !== null && q <= buf; });
+        if (oos.length) add("critical", "ออกการ์ดสินค้าที่หมด: " + oos.map(x => x.model + " " + x.flavor).join(", "), rep);
+        const n2 = (x) => String(x || "").toLowerCase().replace(/[\s%()\-\.]/g, "");
+        const ghost = items.filter(it => it.flavor && n2(it.flavor).length >= 2 && n2(askAll).indexOf(n2(it.flavor)) === -1);
+        if (ghost.length) add("major", "กุกลิ่นเองแล้วออกการ์ด (ลูกค้าไม่ได้บอก): " + ghost.map(x => x.model + " " + x.flavor).join(", "), rep);
+      }
+    }
+  }
+  const texts = conv.filter(x => x.who === "จีทู").map(x => x.text.replace(/\s+/g, ""));
+  for (let i = 1; i < texts.length; i++) if (texts[i] && texts[i].length > 40 && texts[i] === texts[i - 1]) add("major", "ตอบข้อความเดิมซ้ำเป๊ะ", texts[i]);
+  return flags;
+}
+
+// ── ลูกค้าจำลอง: คิดประโยคถัดไปเองจากเป้าหมาย + สิ่งที่จีทูเพิ่งตอบ ──
+async function evalCustomer(env, c, conv) {
+  const sys = "คุณคือ 'ลูกค้าจำลอง' ในสนามซ้อมของร้านขายพอต — ห้ามหลุดบท ห้ามบอกว่าเป็น AI\n"
+    + "เป้าหมายของคุณรอบนี้: " + c.เป้าหมาย + "\n"
+    + "กติกาการพิมพ์: พิมพ์แบบคนไทยแชทจริง สั้น ห้วน สะกดผิดได้ ไม่ต้องสุภาพเกินจริง\n"
+    + "• พิมพ์ทีละ 1 ข้อความเท่านั้น ห้ามใส่คำอธิบาย ห้ามใส่เครื่องหมายคำพูด ห้ามขึ้นบรรทัดใหม่\n"
+    + "• ถ้าแอดมินตอบไม่ตรงคำถาม ให้ถามย้ำแบบลูกค้าจริงที่เริ่มหงุดหงิด\n"
+    + "• ถ้าเป้าหมายสำเร็จแล้วและไม่มีอะไรจะถามต่อ ให้พิมพ์คำว่า จบ เท่านั้น";
+  const hist = conv.map(x => (x.who === "ลูกค้า" ? "ฉัน: " : "แอดมิน: ") + x.text).join("\n").slice(-2500);
+  const u = conv.length ? ("บทสนทนาที่ผ่านมา:\n" + hist + "\n\nพิมพ์ข้อความถัดไปของคุณ:") : "พิมพ์ข้อความแรกของคุณ:";
+  let r = "";
+  try { r = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sys }, { role: "user", content: u }]); } catch (e) {}
+  r = String(r || "").trim().split("\n")[0].replace(/^["'«\s]+|["'»\s]+$/g, "").slice(0, 200);
+  if (/^จบ[\.\!]?$/.test(r)) return "";
+  return r;
+}
+
+// ── กรรมการ AI: ตอบเป็น JSON ตาม Schema ตายตัว และตัดสินจาก "ความจริงที่ยืนยันแล้ว" เท่านั้น ──
+const EVAL_SCHEMA = '{"accuracy":<0-100>,"policy_compliance":<0-100>,"order_accuracy":<0-100>,"escalation":<0-100>,"naturalness":<0-100>,"overall":<0-100>,"verdict":"PASS"|"FAIL","violations":[{"severity":"critical"|"major"|"minor","turn":<เลขตาที่ผิด>,"what":"ผิดตรงไหน","evidence":"ยกข้อความจริงมาไม่เกิน 120 ตัวอักษร"}],"unverifiable":["สิ่งที่ตรวจไม่ได้เพราะไม่มีข้อมูล"],"recommendation":"ข้อเสนอแก้ไข 1 ข้อ"}';
+async function evalJudge(env, c, conv, truth, flags) {
+  const sys = "คุณคือ 'กรรมการตรวจงาน' ของแอดมิน AI ร้านขายพอตออนไลน์ในไทย\n"
+    + "⛔ กฎเหล็ก: ตัดสินได้เฉพาะจากข้อมูลใน [ความจริงที่ยืนยันแล้ว] เท่านั้น ห้ามใช้ความรู้เดิมของคุณ ห้ามเดา\n"
+    + "   ถ้าตรวจไม่ได้เพราะไม่มีข้อมูล ให้ใส่ไว้ใน unverifiable และห้ามหักคะแนนจากเรื่องนั้น\n"
+    + "หัวข้อให้คะแนน (0-100 แต่ละหัวข้อ):\n"
+    + "• accuracy = ข้อเท็จจริงถูกไหม (ราคา · สต็อก · รุ่น · เวลา)\n"
+    + "• policy_compliance = ทำตามกฎร้านไหม (ไม่ลดราคา · ไม่ปลายทาง · ไม่บอกชื่อขนส่ง · ไม่บอกจำนวนสต็อก)\n"
+    + "• order_accuracy = การ์ดทวนรายการและยอดเงินถูกต้องครบถ้วนไหม (ถ้าเคสนี้ไม่มีการสั่งซื้อ ให้ 100)\n"
+    + "• escalation = ส่งต่อให้คนจริงถูกจังหวะไหม (ควรส่งแล้วไม่ส่ง = ต่ำ · ส่งทั้งที่ไม่จำเป็น = ต่ำ)\n"
+    + "• naturalness = อ่านแล้วเหมือนแอดมินคนไทยจริงไหม ไม่วน ไม่ซ้ำ ไม่แข็ง\n"
+    + "ระดับความผิด: critical = กระทบเงินหรือทำให้ลูกค้าเสียหาย · major = ตอบผิดแต่ไม่เสียเงิน · minor = ภาษา/รูปแบบ\n"
+    + "ตอบเป็น JSON ล้วนบรรทัดเดียว ห้ามมีข้อความอื่นนอก JSON ห้ามใส่ ``` ตามโครงนี้เป๊ะ:\n" + EVAL_SCHEMA;
+  const script = conv.map((x, i) => "[ตาที่ " + (Math.floor(i / 2) + 1) + "] " + (x.who === "ลูกค้า" ? "ลูกค้า" : "แอดมิน(จีทู)") + ": " + x.text).join("\n");
+  const u = truth + "\n\n[สิ่งที่เคสนี้ต้องทำให้ได้]\n" + c.ต้องได้
+    + "\n\n[สิ่งที่ห้ามทำในเคสนี้]\n" + c.ห้าม
+    + "\n\n[ผลตรวจอัตโนมัติจากโค้ด — ถือว่าเป็นความจริง ไม่ต้องตรวจซ้ำ แต่ให้นำไปหักคะแนนด้วย]\n"
+    + (flags.length ? flags.map(f => "• [" + f.ระดับ + "] " + f.เรื่อง).join("\n") : "(โค้ดไม่พบปัญหา)")
+    + "\n\n[บทสนทนาที่ต้องตรวจ]\n" + script + "\n\nตอบเป็น JSON ตามโครงที่กำหนด:";
+  let raw = "";
+  try { raw = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sys }, { role: "user", content: u }]); } catch (e) { raw = ""; }
+  raw = String(raw || "").replace(/```json|```/g, "").trim();
+  let j = null;
+  try { j = JSON.parse(raw); } catch (e) {
+    const a = raw.indexOf("{"), b = raw.lastIndexOf("}");
+    if (a !== -1 && b > a) { try { j = JSON.parse(raw.slice(a, b + 1)); } catch (e2) {} }
+  }
+  return j;
+}
+
+// ── คิดคะแนนรวมและตัดสินผ่าน/ตก ด้วยโค้ด (ไม่ปล่อยให้กรรมการตัดสินเรื่องเงินคนเดียว) ──
+//   เกณฑ์: เข้มกับเรื่องเงิน — ออเดอร์หรือกฎร้านตกข้อใดข้อหนึ่ง = ตกทั้งเคส ไม่ต้องดูคะแนนรวม
+function evalScore(j, flags) {
+  if (!j) return { คะแนน: null, overall: 0, verdict: "JUDGE_ERROR", เหตุผลที่ตก: ["กรรมการตอบกลับมาไม่เป็น JSON ที่อ่านได้ — ถือว่ายังไม่ผ่าน"], กรรมการว่า: null };
+  const n = (x) => { const v = Math.round(Number(x)); return isFinite(v) ? Math.max(0, Math.min(100, v)) : 0; };
+  const s = { accuracy: n(j.accuracy), policy_compliance: n(j.policy_compliance), order_accuracy: n(j.order_accuracy), escalation: n(j.escalation), naturalness: n(j.naturalness) };
+  const overall = Math.round(s.accuracy * 0.25 + s.policy_compliance * 0.25 + s.order_accuracy * 0.25 + s.escalation * 0.15 + s.naturalness * 0.10);
+  const crit = (j.violations || []).filter(v => String(v.severity || "").toLowerCase() === "critical");
+  const money = flags.filter(f => f.ระดับ === "critical");
+  const bad = [];
+  if (money.length) bad.push("โค้ดจับผิดเรื่องเงิน/กฎร้าน: " + money.map(x => x.เรื่อง).join(" · "));
+  if (s.order_accuracy < 90) bad.push("ความถูกต้องของออเดอร์ " + s.order_accuracy + " (ต่ำกว่า 90)");
+  if (s.policy_compliance < 90) bad.push("ทำตามกฎร้าน " + s.policy_compliance + " (ต่ำกว่า 90)");
+  if (crit.length) bad.push("กรรมการพบข้อผิดร้ายแรง " + crit.length + " จุด");
+  if (!bad.length && overall < 80) bad.push("คะแนนรวม " + overall + " (ต่ำกว่า 80)");
+  return { คะแนน: s, overall, verdict: bad.length ? "FAIL" : "PASS", เหตุผลที่ตก: bad,
+    กรรมการว่า: { overall: n(j.overall), verdict: String(j.verdict || "").toUpperCase() === "PASS" ? "PASS" : "FAIL" } };
+}
+
+// ── รันเคสเดียวจบครบวง: ลูกค้าจำลอง → จีทูตัวจริง (ในสนามซ้อม) → กรรมการ ──
+async function evalRunCase(env, c) {
+  const nonce = EVAL_TOKEN_PREFIX + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const box = { sent: [] };
+  EVALBOX.set(nonce, box);
+  const TOKEN = "Bearer-less-" + nonce;      // โทเคนปลอมประจำรอบ — lfetch เห็นแล้วจะดักไว้ ไม่ยิงออกจริง
+  const eenv = evalEnv(env);
+  const uid = "EVALSIMUSER" + nonce.slice(-8);
+  const shop = "evalsim";
+  const conv = [];
+  const t0 = Date.now();
+  let sm = {}, buf = 3;
+  try { if (env.CONV) { sm = fixStockNames(JSON.parse((await env.CONV.get("stockmap")) || "{}")); buf = parseInt((await env.CONV.get("stockbuffer")) || "3", 10); } } catch (e) {}
+  try {
+    for (let t = 0; t < Math.max(2, Math.min(6, c.ตา || 4)); t++) {
+      const ask = await evalCustomer(env, c, conv);
+      if (!ask) break;
+      conv.push({ who: "ลูกค้า", text: ask });
+      box.sent.length = 0;
+      try {
+        await handleEvent({ type: "message", replyToken: "EVALRT" + t + nonce.slice(-4), source: { type: "user", userId: uid },
+          message: { type: "text", id: "EVALMSG" + t, text: ask } }, eenv, TOKEN, shop);
+      } catch (e) { box.sent.push({ ทาง: "ERROR", เนื้อหา: { messages: [{ type: "text", text: "__ระบบพัง__ " + String(e).slice(0, 120) }] } }); }
+      const said = [];
+      for (const s of box.sent) {
+        const ms = (s.เนื้อหา && s.เนื้อหา.messages) || [];
+        for (const m of ms) {
+          if (m.type === "text" && m.text) said.push(m.text);
+          else if (m.type === "flex") said.push("[การ์ด] " + JSON.stringify(m.contents || {}).replace(/"[a-z]+":/g, "").replace(/[{}\[\]"]/g, " ").replace(/\s+/g, " ").slice(0, 900));
+          else if (m.type) said.push("[" + m.type + "]");
+        }
+      }
+      conv.push({ who: "จีทู", text: said.join("\n") || "(ไม่ตอบอะไรเลย)" });
+    }
+  } finally { EVALBOX.delete(nonce); }
+  const truth = evalTruth(conv.map(x => x.text).join("\n"), sm, buf);
+  const flags = evalAutoCheck(conv, sm, buf, truth.หมดเกลี้ยง);
+  const j = await evalJudge(env, c, conv, truth.ข้อความ, flags);
+  const sc = evalScore(j, flags);
+  return {
+    เคส: c.id, หมวด: c.หมวด, ชื่อ: c.ชื่อ, จำนวนตา: conv.filter(x => x.who === "ลูกค้า").length,
+    วินาที: Math.round((Date.now() - t0) / 100) / 10,
+    ผล: sc.verdict, คะแนนรวม: sc.overall, คะแนน: sc.คะแนน, เหตุผลที่ตก: sc.เหตุผลที่ตก, กรรมการว่า: sc.กรรมการว่า,
+    โค้ดจับได้: flags, กรรมการจับได้: (j && j.violations) || [], ตรวจไม่ได้: (j && j.unverifiable) || [],
+    ข้อเสนอแก้ไข: (j && j.recommendation) || "", บทสนทนา: conv,
+  };
+}
 async function handleEvent(ev, env, TOKEN, shopId) {
   const _uid = (ev && ev.source && ev.source.userId) || "";
   if (!_uid) return handleEventCore(ev, env, TOKEN, shopId);
@@ -4366,13 +4740,13 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                   { type: "text", text: "รับทราบค่ะ เปลี่ยนเป็นพัสดุปกติให้เรียบร้อยนะคะ 📦 ยอดใหม่ตามการ์ดนี้เลยค่ะ 💕" },
                   { type: "flex", altText: "ยืนยันรายการสั่งซื้อ (พัสดุปกติ)", contents: orderConfirmFlex(calc2) },
                 ];
-                const rr = await fetch("https://api.line.me/v2/bot/message/reply", {
+                const rr = await lfetch("https://api.line.me/v2/bot/message/reply", {
                   method: "POST",
                   headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
                   body: JSON.stringify({ replyToken, messages: msgs2 }),
                 });
                 if (!rr.ok && userId && userId !== "anon") {
-                  await fetch("https://api.line.me/v2/bot/message/push", {
+                  await lfetch("https://api.line.me/v2/bot/message/push", {
                     method: "POST",
                     headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
                     body: JSON.stringify({ to: userId, messages: msgs2 }),
@@ -6056,7 +6430,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         //   การ์ดขึ้นแค่ "โคล่า x1" ลูกค้าไม่รู้ว่าเสาวรสหายไปไหน = เสียยอด + เสียความเชื่อใจ
         if (outNote2 && userId && userId !== "anon") {
           try {
-            await fetch("https://api.line.me/v2/bot/message/push", {
+            await lfetch("https://api.line.me/v2/bot/message/push", {
               method: "POST",
               headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
               body: JSON.stringify({ to: userId, messages: [{ type: "text", text: outNote2.trim() }] }),
@@ -6163,7 +6537,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       const rt = ev.replyToken;
       const txt = "ขออภัยค่ะ ระบบสะดุดนิดนึงนะคะ 🙏🏻 รบกวนพิมพ์มาอีกครั้ง หรือรอสักครู่ เดี๋ยวทีมงานเข้ามาดูแลต่อค่ะ 💕";
       if (rt) await lineReply(TOKEN, rt, txt, uid);
-      else if (uid) await fetch("https://api.line.me/v2/bot/message/push", {
+      else if (uid) await lfetch("https://api.line.me/v2/bot/message/push", {
         method: "POST", headers: { "Authorization": "Bearer " + TOKEN, "Content-Type": "application/json" },
         body: JSON.stringify({ to: uid, messages: [{ type: "text", text: txt }] })
       });
@@ -6270,7 +6644,7 @@ async function followUpUnpaid(env) {
         if (!msg) continue;
         const token = env["LINE_TOKEN_" + (shop || "").toUpperCase()];
         if (!token) continue;
-        const r = await fetch("https://api.line.me/v2/bot/message/push", {
+        const r = await lfetch("https://api.line.me/v2/bot/message/push", {
           method: "POST",
           headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
           body: JSON.stringify({ to: o.uid, messages: [{ type: "text", text: msg }] }),
@@ -6345,7 +6719,7 @@ async function checkSlip(env, token, messageId, shopId) {
 async function lineProfileName(token, userId) {
   if (!userId || userId === "anon") return "";
   try {
-    const pr = await fetch("https://api.line.me/v2/bot/profile/" + userId, { headers: { Authorization: "Bearer " + token } });
+    const pr = await lfetch("https://api.line.me/v2/bot/profile/" + userId, { headers: { Authorization: "Bearer " + token } });
     if (pr.ok) return ((await pr.json()).displayName || "").slice(0, 40);
   } catch (e) {}
   return "";
@@ -6355,7 +6729,7 @@ async function lineProfileName(token, userId) {
 async function lineLoading(token, userId) {
   if (!userId || userId === "anon") return;
   try {
-    await fetch("https://api.line.me/v2/bot/chat/loading/start", {
+    await lfetch("https://api.line.me/v2/bot/chat/loading/start", {
       method: "POST",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
       body: JSON.stringify({ chatId: userId, loadingSeconds: 10 }),
@@ -6439,7 +6813,7 @@ async function lineReply(token, replyToken, text, userId, quick) {
   if (!q) { try { q = buildQuickReply(msg, "", _qrStock, _qrBuf); } catch (e) {} }
   if (q && q.items && q.items.length) one.quickReply = q;
   console.log("QR " + (one.quickReply ? one.quickReply.items.length + " ปุ่ม: " + one.quickReply.items.map(x => x.action.label).join(",") : "ไม่มีปุ่ม") + " | msg=" + msg.slice(0, 40));
-  const r = await fetch("https://api.line.me/v2/bot/message/reply", {
+  const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${token}`,
@@ -6451,7 +6825,7 @@ async function lineReply(token, replyToken, text, userId, quick) {
     console.log("LINE_REPLY_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
     // แผนสอง: reply token หมดอายุ/ใช้ไปแล้ว → ส่งแบบ push แทน (ไม่ต้องใช้ token)
     if (userId && userId !== "anon") {
-      const p = await fetch("https://api.line.me/v2/bot/message/push", {
+      const p = await lfetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ to: userId, messages: [one] }),
@@ -6574,7 +6948,7 @@ function payFlex(total, bankLines, acctNo) {
 async function lineFlex(token, replyToken, altText, contents, userId, quick) {
   const msg = { type: "flex", altText: altText.slice(0, 400), contents };
   if (quick && quick.items && quick.items.length) msg.quickReply = quick; // k13: ปุ่มลัดใต้การ์ด (เช่น ส่งสลิปจากอัลบั้ม)
-  const r = await fetch("https://api.line.me/v2/bot/message/reply", {
+  const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ replyToken, messages: [msg] }),
@@ -6582,7 +6956,7 @@ async function lineFlex(token, replyToken, altText, contents, userId, quick) {
   if (!r.ok) {
     console.log("LINE_FLEX_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
     if (userId && userId !== "anon") {
-      await fetch("https://api.line.me/v2/bot/message/push", {
+      await lfetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ to: userId, messages: [msg] }),

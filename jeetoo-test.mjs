@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2495,6 +2495,142 @@ function strengthTests() {
 for (const t of strengthTests()) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: '' }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ความแรง]${RESET} ${t.name}\n      ${RED}\u2193${RESET} ${t.why}`); }
+}
+
+// ═══ [สนามซ้อม] k172 — ด่านกัน "สนามซ้อมรั่วไปโดนของจริง" (366-380) ═══
+//   ชุดนี้สำคัญเป็นพิเศษ: ถ้าแดง = ระบบทดสอบอาจไปแตะข้อมูลจริงหรือส่งข้อความหาคนจริง
+const arenaT = [];
+{
+  // ของจริงจำลอง — ถ้าคีย์ไหนถูกเขียน แปลว่ารั่ว
+  const เขียนจริง = [];
+  const ของจริง = {
+    "stockmap": '{"MARBO 9K - องุ่น":50}',
+    "conv3:v20:Uจริง": '[{"role":"user","content":"ความลับของลูกค้า"}]',
+    "ord:v20:Uจริง": "ออเดอร์จริงของลูกค้า",
+    "pay:v20": "ธนาคารจริง 123-4-56789-0",
+    "alert:v20": '["Uแอดมินจริง"]',
+    "slipok:v20": '{"key":"คีย์สลิปจริง"}',
+    "notice": "ประกาศจริง",
+  };
+  const envจริง = {
+    CONV: { get: async (k) => (k in ของจริง ? ของจริง[k] : null),
+            put: async (k) => { เขียนจริง.push(k); }, delete: async (k) => { เขียนจริง.push("ลบ:" + k); } },
+    OPENROUTER_KEY: "sk-ทดสอบ", LINE_TOKEN_V20: "โทเคนจริง", LINE_SECRET_V20: "ซีเคร็ทจริง",
+    PAY_V20: "ธนาคารจริง 123-4-56789-0", SLIPOK_KEY_V20: "คีย์สลิปจริง",
+  };
+  const ee = evalEnv(envจริง);
+
+  await ee.CONV.put("conv3:evalsim:X", "ซ้อม");
+  await ee.CONV.put("ord:evalsim:X", "ออเดอร์ซ้อม");
+  await ee.CONV.delete("stockmap");
+  arenaT.push({ n: 366, name: "สนามซ้อมเขียนข้อมูล ไม่แตะฐานข้อมูลจริงแม้แต่คีย์เดียว",
+    ok: เขียนจริง.length === 0, why: `ไปเขียนของจริง: ${เขียนจริง.join(", ")}` });
+
+  arenaT.push({ n: 367, name: "สนามซ้อมอ่านสต็อกจริงได้ (ผลซ้อมจะได้ตรงหน้างาน)",
+    ok: (await ee.CONV.get("stockmap")) === ของจริง["stockmap"], why: "อ่านสต็อกจริงไม่ได้" });
+
+  const รั่ว = [];
+  for (const k of ["conv3:v20:Uจริง", "ord:v20:Uจริง", "pay:v20", "alert:v20", "slipok:v20"])
+    if (await ee.CONV.get(k)) รั่ว.push(k);
+  arenaT.push({ n: 368, name: "สนามซ้อมอ่านบทสนทนา/ออเดอร์/บัญชี/คิวแจ้งเตือนของจริงไม่ได้",
+    ok: รั่ว.length === 0, why: `อ่านของจริงทะลุ: ${รั่ว.join(", ")}` });
+
+  arenaT.push({ n: 369, name: "สิ่งที่เขียนในสนามซ้อม อ่านกลับได้ในรอบเดียวกัน (โฟลว์ออเดอร์ยังเดินได้)",
+    ok: (await ee.CONV.get("ord:evalsim:X")) === "ออเดอร์ซ้อม", why: "เขียนแล้วอ่านไม่เจอ" });
+
+  arenaT.push({ n: 370, name: "สนามซ้อมไม่ได้ถือโทเคน LINE จริง / คีย์สลิปจริง / เลขบัญชีจริง",
+    ok: !ee.LINE_TOKEN_V20 && !ee.LINE_SECRET_V20 && !ee.SLIPOK_KEY_V20 && !ee.PAY_V20,
+    why: "ยังมีของจริงติดมาใน env สนามซ้อม" });
+
+  arenaT.push({ n: 371, name: "บัญชีที่ใช้ในสนามซ้อมเป็นบัญชีทดสอบ และเขียนกำกับว่าห้ามโอน",
+    ok: /000-0-000000-0/.test(ee.PAY_EVALSIM || "") && /ห้ามโอนจริง/.test(ee.PAY_EVALSIM || ""),
+    why: `ได้: ${ee.PAY_EVALSIM}` });
+
+  // ── lfetch: ต้องดักเฉพาะโทเคนซ้อม ห้ามดักของลูกค้าจริง ──
+  const nonce = EVAL_TOKEN_PREFIX + "ทดสอบ001";
+  const box = { sent: [] };
+  EVALBOX.set(nonce, box);
+  const rSim = await lfetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST", headers: { Authorization: "Bearer Bearer-less-" + nonce, "Content-Type": "application/json" },
+    body: JSON.stringify({ replyToken: "rt", messages: [{ type: "text", text: "ข้อความซ้อม" }] }) });
+  arenaT.push({ n: 372, name: "ข้อความในสนามซ้อมถูกดักไว้ ไม่ยิงออกไปหา LINE จริง",
+    ok: rSim.ok === true && box.sent.length === 1 && box.sent[0].เนื้อหา.messages[0].text === "ข้อความซ้อม",
+    why: `ดักได้ ${box.sent.length} ข้อความ` });
+  EVALBOX.delete(nonce);
+
+  let ยิงจริง = false;
+  const fetchเดิม = globalThis.fetch;
+  globalThis.fetch = async () => { ยิงจริง = true; return { ok: true, status: 200, json: async () => ({}), text: async () => "{}" }; };
+  await lfetch("https://api.line.me/v2/bot/message/reply", { method: "POST", headers: { Authorization: "Bearer โทเคนลูกค้าจริง" }, body: "{}" });
+  arenaT.push({ n: 373, name: "⚠️ ลูกค้าจริงต้องไม่โดนดัก — ข้อความยังส่งออกตามปกติ",
+    ok: ยิงจริง === true, why: "ข้อความลูกค้าจริงถูกสนามซ้อมกลืนหายไป (อันตรายที่สุด)" });
+  ยิงจริง = false;
+  await lfetch("https://api.line.me/v2/bot/message/push", { method: "POST", headers: {}, body: "{}" });
+  arenaT.push({ n: 374, name: "ไม่มี header ก็ต้องยิงออกจริง (ไม่เผลอเหมาว่าเป็นการซ้อม)",
+    ok: ยิงจริง === true, why: "ถูกดักทั้งที่ไม่ใช่การซ้อม" });
+  globalThis.fetch = fetchเดิม;
+
+  // ── เกณฑ์ผ่าน/ตก: เข้มกับเรื่องเงิน ──
+  const เต็ม = { accuracy: 100, policy_compliance: 100, order_accuracy: 100, escalation: 100, naturalness: 100, overall: 100, verdict: "PASS", violations: [] };
+  arenaT.push({ n: 375, name: "คะแนนเต็มและโค้ดไม่จับอะไร = ผ่าน",
+    ok: evalScore(เต็ม, []).verdict === "PASS", why: JSON.stringify(evalScore(เต็ม, []).เหตุผลที่ตก) });
+  const เงินผิด = evalScore(เต็ม, [{ ระดับ: "critical", เรื่อง: "ยอดรวมในการ์ดไม่ตรง" }]);
+  arenaT.push({ n: 376, name: "คะแนนเต็มแต่โค้ดจับผิดเรื่องเงิน = ตกทันที (กรรมการค้านไม่ได้)",
+    ok: เงินผิด.verdict === "FAIL", why: `ได้ ${เงินผิด.verdict}` });
+  const ออเดอร์ต่ำ = evalScore({ ...เต็ม, order_accuracy: 89 }, []);
+  arenaT.push({ n: 377, name: "ออเดอร์ 89 คะแนน = ตก แม้คะแนนรวมยังสูง",
+    ok: ออเดอร์ต่ำ.verdict === "FAIL" && ออเดอร์ต่ำ.overall >= 90, why: `${ออเดอร์ต่ำ.verdict} รวม ${ออเดอร์ต่ำ.overall}` });
+  arenaT.push({ n: 378, name: "กรรมการตอบไม่เป็น JSON = ไม่ผ่าน (ห้ามปล่อยผ่านเงียบๆ)",
+    ok: evalScore(null, []).verdict === "JUDGE_ERROR", why: "กรรมการพังแล้วยังนับว่าผ่าน" });
+  const กรรมการปล่อย = evalScore({ ...เต็ม, policy_compliance: 40, verdict: "PASS", overall: 95 }, []);
+  arenaT.push({ n: 379, name: "กรรมการบอกผ่านแต่คะแนนกฎร้านต่ำ = โค้ดตัดสินว่าตก",
+    ok: กรรมการปล่อย.verdict === "FAIL" && กรรมการปล่อย.กรรมการว่า.verdict === "PASS",
+    why: `ได้ ${กรรมการปล่อย.verdict}` });
+
+  // ── ด่านตรวจฝั่งโค้ด ──
+  const sm = {}, buf = 3;
+  const พูด = (t) => [{ who: "ลูกค้า", text: "เอาอันนี้" }, { who: "จีทู", text: t }];
+  const มี = (fl, คำ) => fl.some(f => f.เรื่อง.indexOf(คำ) !== -1);
+  const f1 = evalAutoCheck(พูด("ส่งด้วย Kerry นะคะ ประมาณ 2 วัน"), sm, buf, []);
+  arenaT.push({ n: 380, name: "โค้ดจับได้: เอ่ยชื่อบริษัทขนส่ง", ok: มี(f1, "ขนส่ง"), why: JSON.stringify(f1) });
+  const f2 = evalAutoCheck(พูด("ลดให้ 50 บาทนะคะ"), sm, buf, []);
+  arenaT.push({ n: 381, name: "โค้ดจับได้: เสนอส่วนลดเอง (นับเป็นเรื่องเงิน = ตกทันที)",
+    ok: f2.some(x => x.ระดับ === "critical" && x.เรื่อง.indexOf("ส่วนลด") !== -1), why: JSON.stringify(f2) });
+  const f3 = evalAutoCheck(พูด("เก็บเงินปลายทางได้ค่ะ"), sm, buf, []);
+  arenaT.push({ n: 382, name: "โค้ดจับได้: บอกว่าเก็บปลายทางได้", ok: มี(f3, "ปลายทาง"), why: JSON.stringify(f3) });
+  const f4 = evalAutoCheck(พูด("ไม่มีเก็บเงินปลายทางนะคะ ต้องโอนก่อนค่ะ"), sm, buf, []);
+  arenaT.push({ n: 383, name: "ปฏิเสธปลายทางถูกต้อง = ต้องไม่โดนจับผิด", ok: !มี(f4, "ปลายทาง"), why: JSON.stringify(f4) });
+  const f5 = evalAutoCheck(พูด("กลิ่นนี้เหลือ 5 ชิ้นค่ะ"), sm, buf, []);
+  arenaT.push({ n: 384, name: "โค้ดจับได้: บอกจำนวนสต็อก", ok: มี(f5, "จำนวนสต็อก"), why: JSON.stringify(f5) });
+  const การ์ดผิด = "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\nMARBO 9K | องุ่น | 1\nยอดสินค้า 350\nค่าส่ง 40\nรวมยอดชำระ 350 บาท";
+  const f6 = evalAutoCheck([{ who: "ลูกค้า", text: "เอา MARBO 9K องุ่น 1 อัน" }, { who: "จีทู", text: การ์ดผิด }], sm, buf, []);
+  const การ์ดถูก = การ์ดผิด.replace("รวมยอดชำระ 350", "รวมยอดชำระ 390");
+  const f6b = evalAutoCheck([{ who: "ลูกค้า", text: "เอา MARBO 9K องุ่น 1 อัน" }, { who: "จีทู", text: การ์ดถูก }], sm, buf, []);
+  arenaT.push({ n: 385, name: "โค้ดจับได้: ยอดรวมในการ์ดไม่ตรงกับที่คำนวณจริง (เคส LALITA)",
+    ok: f6.some(x => x.ระดับ === "critical" && x.เรื่อง.indexOf("ยอดรวม") !== -1), why: JSON.stringify(f6.map(x => x.เรื่อง)) });
+  arenaT.push({ n: 385.5, name: "การ์ดที่ยอดถูกต้อง ต้องไม่โดนจับผิด (กันเตือนมั่ว)",
+    ok: !f6b.some(x => x.เรื่อง.indexOf("ยอดรวม") !== -1), why: JSON.stringify(f6b.map(x => x.เรื่อง)) });
+  const f7 = evalAutoCheck([{ who: "ลูกค้า", text: "ขอเลขบัญชี" }, { who: "จีทู", text: "ธนาคารกสิกร 123-4-56789-0 ค่ะ" }], sm, buf, []);
+  arenaT.push({ n: 386, name: "โค้ดจับได้: ส่งเลขบัญชีทั้งที่ยังไม่มีการ์ดออเดอร์",
+    ok: f7.some(x => x.ระดับ === "critical" && x.เรื่อง.indexOf("เลขบัญชี") !== -1), why: JSON.stringify(f7.map(x => x.เรื่อง)) });
+
+  // ── ความจริงที่ป้อนให้กรรมการ ต้องมาจากฐานข้อมูล ไม่ใช่ความจำ ──
+  const tr = evalTruth("อยากได้ MARBO 9K องุ่น", {}, 3);
+  arenaT.push({ n: 387, name: "ความจริงที่ป้อนกรรมการ มีราคาจริงจากตารางราคา",
+    ok: tr.ข้อความ.indexOf("MARBO 9K = 350 บาท/ชิ้น") !== -1, why: tr.ข้อความ.slice(0, 200) });
+  arenaT.push({ n: 388, name: "ความจริงที่ป้อนกรรมการ มีกติกาเงิน (ค่าส่ง 40 · ส่งฟรี · ห้ามลดราคา)",
+    ok: /ค่าส่งพัสดุธรรมดา 40 บาท/.test(tr.ข้อความ) && /ไม่มีส่วนลด/.test(tr.ข้อความ), why: "กติกาเงินหาย" });
+  arenaT.push({ n: 389, name: "ความจริงที่ป้อนกรรมการ ต้องไม่มีเลขบัญชีจริงหลุดไป",
+    ok: !/\d{3}-\d-\d{5,6}-\d/.test(tr.ข้อความ.replace(/000-0-000000-0/g, "")), why: "มีเลขบัญชีหลุดในบล็อกความจริง" });
+  arenaT.push({ n: 390, name: "กรรมการถูกสั่งห้ามเดา (มีคำสั่ง unverifiable)",
+    ok: /unverifiable/.test(tr.ข้อความ) && /ห้ามหักคะแนน/.test(tr.ข้อความ), why: "ไม่มีคำสั่งกันกรรมการเดา" });
+  arenaT.push({ n: 391, name: "มีเคสซ้อมครบ 20 เคส และทุกเคสคุยต่อเนื่อง 2-6 ข้อ",
+    ok: EVAL_CASES.length === 20 && EVAL_CASES.every(c => c.ตา >= 2 && c.ตา <= 6 && c.เป้าหมาย && c.ต้องได้ && c.ห้าม),
+    why: `ได้ ${EVAL_CASES.length} เคส` });
+}
+for (const t of arenaT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[สนามซ้อม]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[สนามซ้อม]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
