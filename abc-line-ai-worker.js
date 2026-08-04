@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k177-headmarbo2";
+const BUILD = "2026-08-05-k178-ruleconflict";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -663,6 +663,20 @@ function specificModelGate(userText, reply) {
     if (!drop.length) return { blocked: false };
     return { blocked: true, win: win.key, said: win.text, drop: [...new Set(drop)] };
   } catch (e) { return { blocked: false }; }
+}
+// 🩹 k178 (QA): เช็คว่าตำแหน่งนี้เป็น "ชื่อรุ่นอื่นที่ยาวกว่า" หรือเปล่า
+//   เดิมใช้วิธีดูว่ามีวงเล็บตามหลังไหม → "ABC LEGO 20K (หัวน้ำยา Big Pod)" โดนข้ามทั้งที่ต้องจับ
+//   เปลี่ยนมาเทียบกับฐานสินค้าจริง: ถ้าตรงนั้นมีชื่อรุ่นที่ยาวกว่าตรงอยู่ = คนละรุ่น ให้ข้าม
+function isLongerModelAt(text, pos, name) {
+  try {
+    for (const nm of MODEL_NAMES_LONGFIRST) {
+      if (nm.length <= name.length) break;                 // เรียงยาวก่อนสั้น พอสั้นกว่าก็เลิกดู
+      if (nm.indexOf(name) === -1) continue;
+      const st = pos - nm.indexOf(name);
+      if (st >= 0 && text.substr(st, nm.length) === nm) return true;
+    }
+  } catch (e) {}
+  return false;
 }
 // 🙇 k163 — "ขออภัย" นำหน้าข่าวดี (เจอซ้ำหลายแชท)
 //   เคสจริง: "ขออภัยค่ะ รุ่น STAR 2,500 ยังมีของพร้อมส่งค่ะ" · "ขออภัยค่ะ รุ่น RELX SPARTA มีของค่ะ"
@@ -3923,10 +3937,18 @@ function evalAutoCheck(conv, sm, buf, soldOut) {
     //   กฎใหม่: จับเฉพาะประโยคที่ "ยืนยันว่าเก็บปลายทางได้" เท่านั้น
     if (/(?:ได้|รับ|มีบริการ|บริการ)\s*(?:ค่ะ|นะคะ|ครับ)?\s*(?:เก็บ)?เงินปลายทาง|เก็บเงินปลายทาง(?:ได้|ค่ะ)|ปลายทางได้(?:ค่ะ|นะคะ|เลย)/.test(rep)
         && !/ไม่|ปิดบริการ|งดบริการ|ยกเลิกบริการ/.test(rep)) add("critical", "ยืนยันว่าเก็บเงินปลายทางได้ (ร้านไม่มี)", rep);
-    if (!/หมด|รอของ|ของเข้า/.test(rep)) {
+    // k178 (QA): ตรวจ "รายรุ่น รายบรรทัด" แบบเดียวกับด่านจริง — เดิมมีคำว่า "หมด" ที่ไหนก็ข้ามทั้งข้อความ
+    {
       const pushed = soldOut.filter(mm => {
+        if (!mm || mm.length < 4) return false;
         let j = rep.indexOf(mm);
-        while (j !== -1) { if (!/^\s*[(（]/.test(rep.slice(j + mm.length, j + mm.length + 8))) return true; j = rep.indexOf(mm, j + 1); }
+        while (j !== -1) {
+          if (isLongerModelAt(rep, j, mm)) { j = rep.indexOf(mm, j + 1); continue; }
+          const ls = rep.lastIndexOf("\n", j) + 1;
+          let le = rep.indexOf("\n", j); if (le === -1) le = rep.length;
+          if (!/หมด|รอของ|ของเข้า|ไม่มี|สินค้าเข้า/.test(rep.slice(ls, le))) return true;
+          j = rep.indexOf(mm, j + 1);
+        }
         return false;
       });
       if (pushed.length) add("major", "เสนอรุ่นที่หมดเกลี้ยง: " + pushed.slice(0, 3).join(", "), rep);
@@ -5925,7 +5947,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   กฎใหม่ (ระดับแบรนด์): ลูกค้าเอ่ยแบรนด์เดียว → คำตอบห้ามเป็นเรื่องแบรนด์อื่นล้วนๆ
       try {
         const _cust = String(msgText || "");
-        const _bIn = BRAND_TH.filter(([re]) => re.test(_cust)).map(([, b]) => b);
+        // 🩹 k178 (QA): กฎเจาะจงต้องชนะกฎกว้าง — ใช้หลักเดียวกับ k171/k177
+        //   เคสจริง: ลูกค้าพิมพ์ "หัวมาโบ" → ตัวแปลชื่อสินค้าตัดสินแล้วว่า = M SWITCH (กฎร้าน k152)
+        //     แต่ด่านนี้เห็นคำว่า "มาโบ" แล้วเหมาว่าถามแบรนด์ MARBO
+        //     พอคำตอบเป็น M SWITCH (ซึ่งไม่ได้ขึ้นทะเบียนว่าอยู่แบรนด์ไหน) เลยตัดสินว่า "ผิดแบรนด์"
+        //     → เขียนทับคำตอบที่ถูกต้องทิ้ง แล้ว k117 มาซ่อมต่อครึ่งๆ กลางๆ = ลูกค้าไม่ได้คำตอบ
+        //   กฎ: ถ้าตัวแปลชื่อสินค้าชี้ "รุ่น" ได้ชัดแล้ว ด่านระดับ "แบรนด์" ต้องไม่เข้ามายุ่ง
+        //     (ปล่อยให้ด่านระดับรุ่น k117/k177 ซึ่งเจาะจงกว่าเป็นคนดูแล)
+        //   ใช้เกณฑ์เดียวกับ k171: กฎรุ่นจับข้อความได้ "ยาวกว่า" กฎแบรนด์ = ลูกค้าเจาะจงรุ่นแล้ว
+        //   "หัวมาโบ" (7 ตัว) > "มาโบ" (4 ตัว) → ด่านแบรนด์ถอย
+        //   "แบรนด์มาโบมีอะไรบ้าง" → กฎรุ่นจับได้แค่ "มาโบ" เท่ากัน → ด่านแบรนด์ยังทำงานตามปกติ
+        let _mLen2 = 0, _bLen2 = 0;
+        try {
+          for (const [re] of TH_MODEL) { const mm = new RegExp(re.source, re.flags.replace("g", "")).exec(_cust); if (mm) { _mLen2 = mm[0].length; break; } }
+          for (const [re] of BRAND_TH) { const mm = new RegExp(re.source, re.flags.replace("g", "")).exec(_cust); if (mm && mm[0].length > _bLen2) _bLen2 = mm[0].length; }
+        } catch (e) {}
+        const _bIn = (_mLen2 > _bLen2) ? [] : BRAND_TH.filter(([re]) => re.test(_cust)).map(([, b]) => b);
         if (_bIn.length === 1) {
           const _want = _bIn[0];
           const _modelsInReply = [];
@@ -6029,8 +6066,24 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       // 🛑 k57: ตาข่ายสุดท้าย — ห้ามเสนอรุ่นที่ "หมดทั้งรุ่น" ว่ายังมีของ
       // เคสจริง 1/8: "แบรนด์ abc มีของมั้ย" → "มีค่ะ ABC LEGO 20K / ABC TANK 22K" ทั้งที่หมดทั้งแบรนด์
       // = ลูกค้าสั่งแล้วส่งไม่ได้ เสียเครดิตร้าน
-      if (SOLD_OUT_MODELS.length && /มีค่ะ|มีนะคะ|มีพร้อมส่ง|พร้อมส่ง|มีอยู่|ยังมี|ทางร้านมี/.test(reply)) {
-        const named = SOLD_OUT_MODELS.filter(m => m.length >= 4 && reply.indexOf(m) !== -1);
+      // 🩹 k178 (QA · เคสจริงจากสนามซ้อม 5 ส.ค.): เดิมต้องเจอคำว่า "มีค่ะ/ยังมี/พร้อมส่ง" ถึงจะเริ่มตรวจ
+      //   = เขียนกฎเป็น "ลิสต์คำที่เคยเห็น" → บอทเสนอของหมดด้วยสำนวนอื่นก็รอดหมด
+      //   เคสจริง: บอทพูดว่า "รุ่น A หมด" ตรงหนึ่ง แล้วเสนอ M SWITCH (หมดเกลี้ยง 17 กลิ่น) อีกตรงหนึ่ง
+      //   กฎใหม่ (รูปร่างของความผิด): เอ่ยชื่อรุ่นที่หมด โดย "บรรทัดนั้นไม่ได้บอกว่าหมด" = กำลังเสนอขาย
+      //   ⚠️ ต้องข้ามกรณีชื่อรุ่นเป็นส่วนหนึ่งของอีกรุ่น เช่น "ESKO BAR SWITCH 20K (KIT)"
+      if (SOLD_OUT_MODELS.length) {
+        const named = SOLD_OUT_MODELS.filter(m => {
+          if (!m || m.length < 4) return false;
+          let i = reply.indexOf(m);
+          while (i !== -1) {
+            if (isLongerModelAt(reply, i, m)) { i = reply.indexOf(m, i + 1); continue; }   // คนละรุ่น
+            const ls = reply.lastIndexOf("\n", i) + 1;
+            let le = reply.indexOf("\n", i); if (le === -1) le = reply.length;
+            if (!/หมด|รอของ|ของเข้า|ไม่มี|สินค้าเข้า/.test(reply.slice(ls, le))) return true;
+            i = reply.indexOf(m, i + 1);
+          }
+          return false;
+        });
         if (named.length) {
           const gone = named.join(" · ");
           // ตัดบรรทัดที่เอ่ยรุ่นที่หมดออก แล้วบอกตรงๆ ว่าหมด

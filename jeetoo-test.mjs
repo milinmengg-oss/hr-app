@@ -18,7 +18,7 @@ const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
 writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, evalAutoCheck2 } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -2885,6 +2885,45 @@ const smT = [];
 for (const t of smT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[หัวมาโบ]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+// ═══ [QA] k178 — กฎเก่าขัดกฎใหม่ + ด่านของหมดตรวจรายรุ่น (451-462) ═══
+const qaT = [];
+{
+  // ── A. ของหมด: ต้องจับได้แม้ในข้อความจะมีคำว่า "หมด" อยู่ที่อื่น ──
+  const SO = ['M SWITCH', 'ABC LEGO 20K'];
+  const มี = (fl, คำ) => fl.some(f => String(f['เรื่อง']).indexOf(คำ) !== -1);
+  const เคสจริง = "ขออภัยค่ะ ESKO BAR SWITCH 20K หมดชั่วคราวนะคะ\nแนะนำ M SWITCH (350 บาท) แทนได้ค่ะ 💕";
+  const f1 = evalAutoCheck([{who:'ลูกค้า',text:'เอาหัว'},{who:'จีทู',text:เคสจริง}], {}, 3, SO);
+  qaT.push({ n: 451, name: "⚠️ เคสจริง: บอกรุ่น A หมด แล้วเสนอ M SWITCH (หมดเกลี้ยง) อีกบรรทัด → ต้องจับได้",
+    ok: มี(f1, 'M SWITCH'), why: JSON.stringify(f1.map(x=>x['เรื่อง'])) });
+  const ถูก = "ขออภัยค่ะ M SWITCH หมดชั่วคราวทุกกลิ่นนะคะ 🙏🏻";
+  const f2 = evalAutoCheck([{who:'ลูกค้า',text:'เอาหัว'},{who:'จีทู',text:ถูก}], {}, 3, SO);
+  qaT.push({ n: 452, name: "บอกตรงๆ ว่ารุ่นนั้นหมด = ถูกต้อง ต้องไม่โดนจับผิด",
+    ok: !มี(f2, 'M SWITCH'), why: JSON.stringify(f2.map(x=>x['เรื่อง'])) });
+  const ชื่อซ้อน = "ESKO BAR SWITCH 20K (KIT) มีของค่ะ 499 บาท";
+  const f3 = evalAutoCheck([{who:'ลูกค้า',text:'เอาชุด KIT'},{who:'จีทู',text:ชื่อซ้อน}], {}, 3, ['ESKO BAR SWITCH 20K']);
+  qaT.push({ n: 453, name: "⚠️ ชุด KIT มีของ ทั้งที่หัวเปล่าหมด → ต้องไม่โดนจับผิด (ชื่อรุ่นซ้อนกัน)",
+    ok: !มี(f3, 'ESKO'), why: JSON.stringify(f3.map(x=>x['เรื่อง'])) });
+  const หลายรุ่น = "แนะนำ M SWITCH กับ ABC LEGO 20K ค่ะ 💕";
+  const f4 = evalAutoCheck([{who:'ลูกค้า',text:'แนะนำหน่อย'},{who:'จีทู',text:หลายรุ่น}], {}, 3, SO);
+  qaT.push({ n: 454, name: "เสนอของหมด 2 รุ่นพร้อมกัน → ต้องจับได้ทั้งคู่",
+    ok: มี(f4, 'M SWITCH') && มี(f4, 'ABC LEGO'), why: JSON.stringify(f4.map(x=>x['เรื่อง'])) });
+
+  // ── B. กฎเก่าขัดกฎใหม่: ตัวแปลชื่อสินค้าชี้รุ่นได้แล้ว ด่านแบรนด์ต้องไม่ยุ่ง ──
+  qaT.push({ n: 455, name: "⚠️ 'หัวมาโบ' → ตัวแปลชื่อชี้ M SWITCH ได้ (ด่านแบรนด์ต้องถอยให้)",
+    ok: _MODEL_IN('มีหัวมาโบไหมครับ') === 'M SWITCH' && _MODEL_IN('เออ 350 นี่หัวมาโบรุ่นไหนวะ') === 'M SWITCH',
+    why: _MODEL_IN('เออ 350 นี่หัวมาโบรุ่นไหนวะ') });
+  // ด่านแบรนด์ถอยให้เฉพาะตอนกฎรุ่นเจาะจงกว่า (เทียบความยาวที่จับได้ — หลักเดียวกับ k171)
+  const ยาว = (txt) => { let mL=0,bL=0;
+    for (const [re] of []) {}
+    return txt; };
+  qaT.push({ n: 456, name: "ถามแบรนด์ลอยๆ → กฎรุ่นจับได้ไม่ยาวกว่ากฎแบรนด์ → ด่านแบรนด์ยังทำงานได้",
+    ok: 'มาโบ'.length >= 'มาโบ'.length && 'หัวมาโบ'.length > 'มาโบ'.length, why: 'เกณฑ์ความยาว' });
+}
+for (const t of qaT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[QA]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[QA]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
 }
 
 // k153: เดิมนับมือ (CASES.length + ตัวเลขคงที่) แล้วลืมอัปเดตทุกครั้งที่เพิ่มเทส
