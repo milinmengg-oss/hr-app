@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k201-silence";
+const BUILD = "2026-08-05-k202-restart";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -307,6 +307,58 @@ function trackMsg(rec) {
     + "เช็คสถานะได้ที่ลิงก์นี้เลยค่ะ 👉\n" + link + "\n\n"
     + "ปกติได้รับภายใน 2-3 วันนับจากวันส่งออกค่ะ 🙏🏻\n"
     + "ระบบขนส่งอาจอัปเดตสถานะช้าประมาณ 6-12 ชม. หลังส่งออกนะคะ 💕";
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔄🔄 k202 · RESTART CONVERSATION — "เริ่มการสนทนาใหม่" (ล้างจริงฝั่งหลังบ้าน)
+// ═══════════════════════════════════════════════════════════════════════════
+//  ปัญหาที่แก้: บางครั้งบทสนทนาไปต่อไม่ได้ (AI เข้าใจผิด · ตอบซ้ำ · ติดลูป ·
+//    ค้างคำถามเก่า · Draft เพี้ยน) — เดิมลูกค้าทำได้อย่างเดียวคือรอคน
+//  กฎ: ล้าง "สถานะของรอบสนทนา" เท่านั้น ⛔ ห้ามแตะข้อมูลถาวรและเรื่องเงิน
+//
+//  ⚠️ เส้นแบ่งที่สำคัญที่สุด 3 ข้อ (ตัดสินจากการไล่โค้ดจริง ไม่ใช่เดา):
+//   1) mute: / MUTED / MUTED_UIDS = **Human Handoff ห้ามแตะเด็ดขาด**
+//      ถ้าล้าง = บอทกลับมาตอบแทรกแอดมินที่กำลังคุยอยู่ = พังบั๊ก k201 ที่เพิ่งแก้
+//      → ปุ่มนี้จึงวางไว้ "หลังด่านมิ้วต์" ตอนถูกส่งต่อคนอยู่ ปุ่มจะไม่ทำงาน (เงียบตามเดิม)
+//   2) ord: ที่ "ชำระแล้ว ✅" = เงินเข้าแล้ว ห้ามล้าง · ล้างได้เฉพาะที่ยัง "รอโอน" (= Draft)
+//   3) exp: (หมุด/ค่าส่งด่วน) ล้างได้เฉพาะตอนยังไม่มีออเดอร์ที่ชำระแล้ว
+//      ถ้าจ่ายแล้วรอส่งตามหมุด แล้วล้างหมุดทิ้ง = ส่งของไม่ได้
+const RESET_MSG = "เริ่มการสนทนาใหม่เรียบร้อยแล้วค่ะ 😊\nยินดีต้อนรับค่ะ\nมีอะไรให้ช่วยเหลือในวันนี้คะ";
+const RESET_RE = /^[\s#]*(เริ่ม(การสนทนา|แชท|คุย)?ใหม่|เริ่มต้นใหม่|รีเซ็?ต|reset|restart|เคลียร์แชท|ล้างแชท)[\s!.ๆ]*$/i;
+const RESET_AT = new Map();   // กันกดรัว: uid → เวลาที่รีเซ็ตล่าสุด
+async function resetSession(env, shopId, userId) {
+  const done = [], kept = [];
+  if (!env || !env.CONV || !userId) return { done, kept, ok: false };
+  const K = (p) => p + ":" + shopId + ":" + userId;
+  // ── ตรวจสถานะเรื่องเงินก่อนตัดสินใจ (ห้ามล้างของที่จ่ายแล้ว) ──
+  let paid = false;
+  try {
+    const ov = await env.CONV.get(K("ord"));
+    if (ov) paid = /✅/.test(String((JSON.parse(ov) || {}).status || ""));
+  } catch (e) { paid = true; }          // อ่านไม่ได้ = ถือว่าจ่ายแล้วไว้ก่อน (ปลอดภัยกว่า)
+  // ── ล้างได้เสมอ: สถานะของรอบสนทนาล้วนๆ ──
+  const wipe = [
+    ["conv3", "ความจำบทสนทนา"], ["slot", "Product Slot + Draft"], ["as", "คำถามค้างหลังการขาย"],
+    ["card", "ลายเซ็นการ์ดล่าสุด"], ["reask", "ตัวนับถามซ้ำ"], ["paidclaim", "ตัวนับแจ้งโอน"],
+    ["cxl", "สถานะเพิ่งยกเลิก"],
+  ];
+  for (const [pfx, label] of wipe) {
+    try { await env.CONV.delete(K(pfx)); done.push(label); } catch (e) {}
+  }
+  // ── ล้างแบบมีเงื่อนไข ──
+  if (!paid) {
+    try { await env.CONV.delete(K("ord")); done.push("ออเดอร์ที่ยังไม่ชำระ (Draft)"); } catch (e) {}
+    try { await env.CONV.delete(K("exp")); EXPFEE.delete(shopId + ":" + userId); done.push("หมุด/ค่าส่งด่วนที่ยังไม่ผูกออเดอร์"); } catch (e) {}
+  } else {
+    kept.push("ออเดอร์ที่ชำระแล้ว ✅ + หมุด/ค่าส่งด่วนของออเดอร์นั้น");
+  }
+  // ── สถานะในหน่วยความจำที่ทำให้ "ตอบซ้ำ/ติดลูป" ──
+  try { LASTOUT.delete(userId); done.push("ตัวจำคำตอบล่าสุด (กันลูปตอบซ้ำ)"); } catch (e) {}
+  try { CANCELLED.delete(K("cxl").replace("cxl:", "cxl:")); } catch (e) {}
+  try { const t = TURN.get(userId); if (t) { t.replies.length = 0; t.written = true; } done.push("คำตอบที่ค้างอยู่ในคิวของรอบนี้"); } catch (e) {}
+  // ── ห้ามแตะ (บันทึกไว้ให้ตรวจสอบได้) ──
+  kept.push("Human Handoff (mute:) · โปรไฟล์+ที่อยู่ลูกค้า (cust:) · เลขพัสดุ (trk:) · Log ถาวร (log:) · รายชื่อแชทหลังบ้าน (chat:) · ภาษาที่ลูกค้าใช้ (lang:)");
+  console.log("K202_RESET shop=" + shopId + " uid=" + String(userId).slice(0, 8) + " paid=" + paid + " cleared=" + done.length);
+  return { done, kept, ok: true, paid };
 }
 const wakeKey = (shop, uid) => shop + ":" + uid;
 
@@ -5406,6 +5458,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         }
       }
     }
+    // 🔄 k202: "เริ่มการสนทนาใหม่" — ล้าง session จริงฝั่งหลังบ้าน
+    //   ⚠️ ตำแหน่งสำคัญ: อยู่ **หลังด่านมิ้วต์** โดยตั้งใจ
+    //      ตอนถูกส่งต่อคนอยู่ ปุ่มนี้ต้องไม่ทำงาน ไม่งั้นบอทจะกลับมาตอบแทรกแอดมิน (บั๊ก k201)
+    if (mtype === "text" && RESET_RE.test(String(ev.message.text || ""))) {
+      const _rt = RESET_AT.get(userId);
+      if (_rt && Date.now() - _rt < 10000) {          // กดรัว → ตอบสั้นครั้งเดียว ไม่ล้างซ้ำ
+        console.log("K202_RESET_DUP uid=" + String(userId).slice(0, 8));
+        await lineReply(TOKEN, replyToken, "เริ่มการสนทนาใหม่ให้แล้วนะคะ 😊 พิมพ์สิ่งที่ต้องการได้เลยค่ะ", userId);
+        return;
+      }
+      RESET_AT.set(userId, Date.now());
+      if (RESET_AT.size > 500) { const k0 = RESET_AT.keys().next().value; RESET_AT.delete(k0); }
+      const _r = await resetSession(env, shopId, userId);
+      await lineFlex(TOKEN, replyToken, RESET_MSG, welcomeFlex(RESET_MSG), userId);
+      return;                                          // ⛔ จบที่นี่ ห้ามไหลต่อไปให้ AI
+    }
     // 💰💰 k168: ลูกค้าถาม "ต้องโอนเท่าไหร่" → โค้ดตอบเองด้วยยอดจริง ไม่ปล่อยให้ AI เลี่ยง
     //   เคสจริง LALITA: ถาม 3 รอบ ("ต้องโอนยอดไหนคะ" · "350 หรือ 209คะ" · "350หรือ 509 คะ")
     //   บอทตอบ "ยอดรวมในการ์ดคือยอดที่ถูกต้องค่ะ" ทุกครั้ง = ไม่ตอบคำถามเลยสักที
@@ -8782,13 +8850,21 @@ async function lineReply(token, replyToken, text, userId, quick, sysAck, force) 
     : _dupN >= 3
     ? "ขออภัยจริงๆ นะคะ 🙏🏻 แอดมินตอบวนอยู่ที่เดิม แปลว่าแอดมินยังไม่เข้าใจคำถามของคุณลูกค้าค่ะ\n\nขอส่งต่อให้ทีมงานคนจริงเข้ามาตอบให้ชัดเจนเลยนะคะ รอสักครู่ค่ะ 💕"
     : _dupN === 2
-    ? "ขออภัยที่ตอบไม่ตรงคำถามนะคะ 🙏🏻 รบกวนช่วยขยายความอีกนิดได้ไหมคะว่าอยากทราบเรื่องไหนเป็นพิเศษ เดี๋ยวแอดมินตอบให้ตรงจุดเลยค่ะ\n(หรือถ้าอยากคุยกับทีมงานคนจริง พิมพ์ \"ขอคุยกับคน\" ได้เลยนะคะ 💕)"
+    ? "ขออภัยที่ตอบไม่ตรงคำถามนะคะ 🙏🏻 รบกวนช่วยขยายความอีกนิดได้ไหมคะว่าอยากทราบเรื่องไหนเป็นพิเศษ เดี๋ยวแอดมินตอบให้ตรงจุดเลยค่ะ\n(หรือกดปุ่ม \"🔄 เริ่มการสนทนาใหม่\" ด้านล่าง หรือพิมพ์ \"ขอคุยกับคน\" ก็ได้นะคะ 💕)"
     : msg };
   // 🧠 k158: จดสิ่งที่ "ตอบออกไปจริง" ลงสมุดของเทิร์นนี้ — ไม่ว่าจะถูกเรียกจากทางไหนใน ~71 ทาง
   //   จดข้อความที่ลูกค้าเห็นจริง (one.text) ไม่ใช่ msg ดิบ เพราะ k149 อาจเปลี่ยนสำนวนตอนตอบซ้ำ
   try { const _t = userId && TURN.get(userId); if (_t) _t.replies.push(String(one.text || msg)); } catch (e) {}
   let q = quick;
   if (!q) { try { q = buildQuickReply(msg, "", _qrStock, _qrBuf); } catch (e) {} }
+  // 🔄 k202: ระบบจับได้ว่ากำลังวน/ตอบซ้ำ → แนบปุ่มทางออกให้ลูกค้าเสมอ
+  //   จุดนี้คือจุดเดียวที่ระบบ "รู้ตัว" ว่าคุยต่อไม่ได้ ปุ่มจึงควรโผล่ตรงนี้
+  if (_dupN >= 2 && !_repeatSameAsk) {
+    const _it = (q && q.items ? q.items.slice(0, 11) : []);
+    _it.unshift({ type: "action", action: { type: "message", label: "🔄 เริ่มการสนทนาใหม่", text: "เริ่มการสนทนาใหม่" } });
+    _it.push({ type: "action", action: { type: "message", label: "🙋 ขอคุยกับคน", text: "ขอคุยกับคน" } });
+    q = { items: _it };
+  }
   if (q && q.items && q.items.length) one.quickReply = q;
   console.log("QR " + (one.quickReply ? one.quickReply.items.length + " ปุ่ม: " + one.quickReply.items.map(x => x.action.label).join(",") : "ไม่มีปุ่ม") + " | msg=" + msg.slice(0, 40));
   const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
@@ -8822,20 +8898,26 @@ function btnDark(label, text) {
     contents: [{ type: "text", text: label, color: "#FFFFFF", align: "center", weight: "bold", size: "xs", wrap: false, adjustMode: "shrink-to-fit" }]
   };
 }
-function welcomeFlex() {
+// k202: รับข้อความหัวการ์ดได้ (ใช้ซ้ำเป็นการ์ด "เริ่มการสนทนาใหม่" โดยไม่ต้องสร้างการ์ดใหม่)
+function welcomeFlex(headMsg) {
+  const lines = String(headMsg || "").split("\n");
+  const head = headMsg ? lines[0] : "ABC ยินดีต้อนรับค่ะ ✨";
+  const sub = headMsg ? (lines.slice(1).join("\n") || "เลือกเมนูด้านล่างได้เลยนะคะ")
+                      : "แอดมินยินดีให้บริการค่ะ 💚\nเลือกเมนูด้านล่างได้เลยนะคะ";
   return {
     type: "bubble",
     body: {
       type: "box", layout: "vertical", paddingAll: "20px", backgroundColor: "#FFFFFF",
       contents: [
-        { type: "text", text: "ABC ยินดีต้อนรับค่ะ ✨", weight: "bold", size: "xl", color: "#111418", align: "center" },
-        { type: "text", text: "แอดมินยินดีให้บริการค่ะ 💚\nเลือกเมนูด้านล่างได้เลยนะคะ", size: "sm", color: "#666666", align: "center", wrap: true, margin: "md" },
+        { type: "text", text: head, weight: "bold", size: "xl", color: "#111418", align: "center", wrap: true },
+        { type: "text", text: sub, size: "sm", color: "#666666", align: "center", wrap: true, margin: "md" },
         { type: "box", layout: "horizontal", margin: "lg", spacing: "sm", contents: [
           btnDark("🛒 เมนูสินค้า", "ดูเมนูสินค้า"),
           btnDark("🚚 การจัดส่ง", "รูปแบบการจัดส่ง")
         ] },
         { type: "box", layout: "horizontal", margin: "sm", spacing: "sm", contents: [
-          btnDark("📝 วิธีสั่งซื้อ", "วิธีสั่งซื้อ")
+          btnDark("📝 วิธีสั่งซื้อ", "วิธีสั่งซื้อ"),
+          btnDark("🔄 เริ่มการสนทนาใหม่", "เริ่มการสนทนาใหม่")   // k202
         ] }
       ]
     }
