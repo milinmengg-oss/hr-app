@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k197-grabclose";
+const BUILD = "2026-08-05-k199-paidlock";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -656,6 +656,67 @@ function priceGate(reply) {
 //     · สต็อก ≤ กันชน แต่บอกมี   → แก้เป็น "หมดชั่วคราว"
 //     · หาไม่เจอ / ไม่รู้จัก SKU  → ห้ามเดา เปลี่ยนเป็น "ขอเช็คสต็อกให้ก่อน"
 //   ⛔ ไม่แตะการคิดเงิน · ไม่แตะ stockmap · ไม่แตะ prompt — เป็นด่านอ่านอย่างเดียวแล้วเขียนข้อความใหม่
+// ═══════════════════════════════════════════════════════════════════════════
+// 🆘🆘 k198 · AFTER SALE → ส่งต่อคนเสมอ (ห้าม G2 ตอบสถานะเอง)
+// ═══════════════════════════════════════════════════════════════════════════
+//  🔍 Root Cause (ไล่จากโค้ดจริง ไม่ใช่เดา) — ทำไม G2 ถึงตอบเองไม่ส่งต่อ:
+//    1) ข้อความสำเร็จรูปตอบแทนแล้ว return ทันที ไม่มีการเรียกคนเลย
+//       · TRACK_MSG (ถามเลขพัสดุ/เช็คสถานะ) → ตอบ "ส่งออกภายใน 1-2 วัน" แล้วจบ
+//       · CLAIM_MSG (ถามเคลม) → ตอบเงื่อนไขวันเคลม แล้วจบ
+//       ทั้งคู่ไม่เรียก muteNow เลยสักครั้ง = เคสไม่เคยขึ้นหลังบ้าน
+//    2) เส้นทางส่งต่อที่มีอยู่ (k23) เงื่อนไขแคบเกิน — จับแค่ "ของยังไม่ถึง/ของหาย"
+//       "ขอเลขพัสดุ" · "เปลี่ยนสินค้า" · "คืนสินค้า" ไม่เข้าเงื่อนไขเลย
+//    3) มี askInfo เป็นช่องยกเว้น: ถ้าลูกค้าถาม "ยังไง/กี่วัน/ได้ไหม" จะ **ตั้งใจไม่ส่งต่อ**
+//       แต่ลูกค้าจริงถามหลังการขายด้วยคำพวกนี้แทบทุกครั้ง ("เคลมยังไง" "เปลี่ยนได้ไหม")
+//    4) ทางสุดท้ายผูกกับการที่ AI ต้องพิมพ์คำว่า "ทีมงานหลังการขาย" ออกมาเอง
+//       = กฎอยู่ใน prompt ล้วน ซึ่งบทเรียน k15/k88/k175/k190/k192 บอกแล้วว่าเอาไม่อยู่
+//  สรุป: ไม่มี "ด่านเดียว" ที่ตัดสินว่านี่คือเคสหลังการขาย — มันกระจายและส่วนใหญ่ตอบเอง
+//  ⛔ ขอบเขตการแก้: เฉพาะเส้นทางหลังการขาย ไม่แตะ prompt หลัก · โฟลว์สั่งซื้อ · Slot · Vision · Payment
+const AS_TRACK  = /เลขพัสดุ|เลขติดตาม|เลข ?tracking|tracking|เลขออเดอร์|เลขที่ออเดอร์|ตามออเดอร์|เช็คออเดอร์|เช็คสถานะ|สถานะออเดอร์|สถานะพัสดุ|สถานะสินค้า|ของถึงไหน|ถึงไหนแล้ว|ส่งหรือยัง|ส่งยัง|ส่งของยัง|จัดส่งยัง|ของมายัง|ของถึงยัง|ได้ของยัง/;
+const AS_TROUBLE= /ยังไม่ได้(รับ)?(ของ|สินค้า|พัสดุ)|ของ(ยัง)?ไม่(ถึง|มา|ได้)|ของยังไม่มา|ของหาย|พัสดุหาย|ของไม่ครบ|ได้ไม่ครบ|ของขาด|ของเสีย|ของชำรุด|ของแตก|ใช้ไม่ได้|สูบไม่ขึ้น|หัวตัน|น้ำยาซึม|เครื่องไม่ติด|พัสดุตีกลับ|ตีกลับ/;
+// 🏠 k199: หลังจ่ายเงินแล้ว ขอแก้ข้อมูลจัดส่ง = หลังการขาย ⛔ ห้ามกลับเข้าโฟลว์สั่งซื้อ
+const AS_EDIT   = /เปลี่ยน(ชื่อ|ผู้รับ|เบอร์|ที่อยู่|จุดส่ง|ที่ส่ง)|แก้(ชื่อ|เบอร์|ที่อยู่|ข้อมูล(จัดส่ง|ผู้รับ)?)|ที่อยู่ผิด|ส่งผิดที่|ย้ายที่อยู่|เปลี่ยนที่จัดส่ง|ขอแก้ที่อยู่|ขอเปลี่ยนที่อยู่|ใช้เบอร์ใหม่|เบอร์ผิด|ชื่อผิด/;
+const AS_CLAIM  = /เคลม|รับประกัน|ประกันสินค้า|เปลี่ยนสินค้า|ขอเปลี่ยนของ|เปลี่ยนของ|คืนสินค้า|ส่งคืน|ส่งของคืน|คืนของ/;
+function afterSaleIntent(text) {
+  const t = String(text || "");
+  if (!t) return "";
+  if (AS_TROUBLE.test(t)) return "ปัญหาสินค้า/ยังไม่ได้รับของ";
+  if (AS_EDIT.test(t))    return "แก้ข้อมูลจัดส่ง (ชื่อ/เบอร์/ที่อยู่)";
+  if (AS_CLAIM.test(t))   return "เคลม/เปลี่ยน/คืนสินค้า";
+  if (AS_TRACK.test(t))   return "ตามออเดอร์/เลขพัสดุ/สถานะจัดส่ง";
+  return "";
+}
+// อ่าน "ตัวระบุตัวตน" ที่ใช้ค้นออเดอร์ได้ — ต้องการแค่อย่างใดอย่างหนึ่ง
+//  ⚠️ ต้องไม่ไปชนเลขที่มีความหมายอื่น (เบอร์โทร · เลขพัสดุที่ลูกค้าอ่านผิด)
+function asIdentityIn(text) {
+  const t = String(text || "");
+  const out = { order: "", name: "", tel: "" };
+  const tel = t.match(/0\d{1,2}[- ]?\d{3}[- ]?\d{3,4}/);
+  if (tel) out.tel = tel[0].replace(/[- ]/g, "");
+  const ord = t.match(/(?:ออเดอร์|order|#)\s*([A-Za-z0-9\-]{3,20})/i);
+  if (ord) out.order = ord[1];
+  else {
+    // เลขล้วนยาว 5-20 หลัก ที่ไม่ใช่เบอร์โทร = เลขออเดอร์/เลขพัสดุที่ลูกค้าส่งมา
+    const bare = t.replace(/0\d{8,9}/g, " ").match(/(?:^|\s)([A-Za-z]{0,3}\d{5,20})(?:\s|$)/);
+    if (bare) out.order = bare[1];
+  }
+  const nm = t.match(/(?:ชื่อ(?:ผู้รับ)?\s*[:：]?\s*)([ก-๙a-zA-Z][ก-๙a-zA-Z\s\.]{1,40})/);
+  if (nm) out.name = nm[1].trim();
+  return out;
+}
+function asHasIdentity(g) { return !!(g && (g.order || g.name || g.tel)); }
+// ข้อความถาม — ขอแค่อย่างใดอย่างหนึ่ง ⛔ ห้ามถามซ้ำสิ่งที่ลูกค้าให้มาแล้ว
+const AS_ASK_MSG = "รับเรื่องไว้แล้วนะคะ 🙏🏻\nรบกวนแจ้ง **เลขออเดอร์ หรือ ชื่อผู้รับ หรือ เบอร์โทรที่ใช้สั่ง** อย่างใดอย่างหนึ่ง เพื่อให้ทีมงานตรวจสอบให้ถูกออเดอร์นะคะ 💕";
+const AS_DONE_MSG = "รับเรื่องเรียบร้อยค่ะ 🙏 เดี๋ยวแอดมินตรวจสอบและแจ้งกลับในแชทนี้นะคะ 💕";
+// สรุปบทสนทนาสั้นๆ ให้แอดมินอ่านในหลังบ้าน (ไม่ต้องไล่อ่านทั้งบท)
+function asSummary(hist, lastMsg) {
+  try {
+    const h = (Array.isArray(hist) ? hist : []).slice(-6)
+      .filter(m => m && typeof m.content === "string")
+      .map(m => (m.role === "user" ? "ลูกค้า: " : "บอท: ") + String(m.content).replace(/\s+/g, " ").slice(0, 70));
+    return (h.join(" | ") + " | ลูกค้า(ล่าสุด): " + String(lastMsg || "").slice(0, 70)).slice(0, 400);
+  } catch (e) { return String(lastMsg || "").slice(0, 200); }
+}
 // 🚦 k192 — "ไม่มีสต็อกอยู่ในมือ" ≠ "มีของทุกกลิ่น"
 //   กติกา `q === null → ถือว่ามี` ถูกออกแบบไว้สำหรับกรณีเดียวคือ "SKU นี้ไม่รู้จัก" (อย่าปิดการขายเอง)
 //   แต่ถ้า stockmap ทั้งก้อนเป็นค่าว่าง ทุก SKU จะกลายเป็น null พร้อมกัน
@@ -5407,7 +5468,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       try {
         if (!env.CONV) return;
         const name = await lineProfileName(TOKEN, userId);
-        const entry = { name, reason: reason || "เคสปัญหา", msg: (msg || "").slice(0, 120), t: Date.now(), uid: userId };
+        const entry = { name, reason: reason || "เคสปัญหา", msg: (msg || "").slice(0, 400), t: Date.now(), uid: userId };   // k198: 120 สั้นไป สรุปบทถูกตัดหาย
         MUTED.set(wakeKey(shopId, userId), { t: Date.now(), reason: entry.reason });   // k114: เงียบทันที ไม่รอแคช KV
         UNMUTED.delete(wakeKey(shopId, userId));
         await env.CONV.put(muteKey, JSON.stringify(entry), { expirationTtl: 3600 });
@@ -5641,6 +5702,91 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       // 🧱 k56: "หัวเลโก้" เลิกตอบตายตัวแล้ว — เจ้าของร้านอยากให้คุยเป็นธรรมชาติ
       //   แต่ข้อมูล 3 ยี่ห้อ + สต็อกจริง ยังถูกส่งให้ AI ทุกครั้งผ่าน legoHint() ด้านล่าง
       //   AI เป็นคน "เรียบเรียงคำพูด" · โค้ดเป็นคน "ให้ข้อเท็จจริง" — ไม่มีทางเดายี่ห้อเองได้
+
+      // ═══ 🆘🆘 k198 · AFTER SALE มาก่อนทุกอย่าง ═══
+      //   วางไว้เหนือ CLAIM_MSG · TRACK_MSG · KB · AI ทั้งหมด (เจ้าของร้านสั่ง 5/8)
+      //   "ถ้าเป็นเคสหลังการขาย ให้ข้าม KB และข้ามการตอบด้วย AI ทันที แล้วเข้า Human Handoff โดยตรง"
+      //   ⛔ G2 ห้ามเดาสถานะพัสดุ · ห้ามเดาเลข tracking · ห้ามบอกเวลาจัดส่งแทนแอดมิน
+      try {
+        if (env.CONV) {
+          const _asKey = "as:" + shopId + ":" + userId;
+          let _asPend = null;
+          try { const v = await env.CONV.get(_asKey); if (v) _asPend = JSON.parse(v); } catch (e) {}
+          let _asIntent = afterSaleIntent(t);
+          // 💳 k199: ลูกค้าจ่ายเงินแล้ว → เคสหลังการขายทุกชนิด ส่งต่อคนทันที
+          //   ⛔ ห้ามกลับเข้าโฟลว์สั่งซื้อ · ห้ามสร้าง Draft ใหม่ · ห้ามออกการ์ดยืนยัน · ห้ามถามยืนยันรายการ
+          //   เหตุผล: เงินเข้าแล้ว ออเดอร์ถูกล็อกแล้ว ทุกการแก้ต้องผ่านคนเท่านั้น
+          let _asPaid = false, _asOrd = null;
+          try {
+            const _ov2 = await env.CONV.get("ord:" + shopId + ":" + userId);
+            if (_ov2) { _asOrd = JSON.parse(_ov2); _asPaid = /✅/.test(String((_asOrd && _asOrd.status) || "")); }
+          } catch (e) {}
+          // 📦 ข้อยกเว้นเดียว (k124): แอดมิน "กรอกเลขพัสดุไว้แล้ว" สำหรับลูกค้าคนนี้
+          //   = ข้อมูลจริงที่คนเป็นคนใส่ ไม่ใช่ G2 เดาเอง → ตอบเลขให้ลูกค้าได้เลย เร็วกว่ารอคน
+          //   ⛔ ถ้าไม่มีเลขในระบบ ห้ามเดา ห้ามบอกเวลาจัดส่งเอง → ส่งต่อคนตามกฎ
+          if (_asIntent === "ตามออเดอร์/เลขพัสดุ/สถานะจัดส่ง") {
+            try {
+              let _trk = TRACK.get(shopId + ":" + userId);
+              if (!_trk) { const v = await env.CONV.get("trk:" + shopId + ":" + userId); if (v) _trk = JSON.parse(v); }
+              if (_trk && _trk.no) { _asIntent = ""; console.log("K198_AS_HAS_TRACKING"); }
+            } catch (e) {}
+          }
+          // ลูกค้าตอบสั้นๆ (เลข/ชื่อ/เบอร์) ตอนที่เรากำลังรอข้อมูลอยู่ = คำตอบของคำถามเรา
+          //   ⛔ ห้ามตีความเป็นชื่อสินค้า/จำนวน (ข้อ 6 ที่เจ้าของร้านกำชับ)
+          const _asWaiting = !!(_asPend && _asPend.waiting && Date.now() - (_asPend.t || 0) < 3600000);
+          if (_asIntent || _asWaiting) {
+            const _kind = _asIntent || (_asPend && _asPend.intent) || "หลังการขาย";
+            // รวมข้อมูลระบุตัวตนจาก 3 ทาง: ข้อความนี้ → ที่เคยให้ไว้ → โปรไฟล์ลูกค้าที่ระบบมีอยู่แล้ว
+            const _got = asIdentityIn(t);
+            const _prev = (_asPend && _asPend.got) || {};
+            const _id = { order: _got.order || _prev.order || "", name: _got.name || _prev.name || "", tel: _got.tel || _prev.tel || "" };
+            // จ่ายเงินแล้ว = ระบบมีออเดอร์อยู่ในมือ → ใช้ข้อมูลจากออเดอร์ ไม่ต้องถามลูกค้าซ้ำ
+            if (_asPaid && _asOrd) {
+              const _blk = String(_asOrd.block || "");
+              const _tl = _blk.match(/0\d{1,2}[- ]?\d{3}[- ]?\d{3,4}/);
+              if (!_id.tel && _tl) _id.tel = _tl[0].replace(/[- ]/g, "");
+              if (!_id.name) _id.name = String(_asOrd.name || "").slice(0, 40);
+              if (!_id.order) _id.order = "มีออเดอร์ในระบบ (ชำระแล้ว)";
+            }
+            if (!asHasIdentity(_id)) {
+              try {
+                const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
+                if (cv) { const c = JSON.parse(cv); if (c) { _id.name = _id.name || c.name || ""; _id.tel = _id.tel || c.tel || ""; } }
+              } catch (e) {}
+            }
+            // 🆘 เคสลูกค้าเดือดร้อน (ของหาย/ของเสีย/ยังไม่ได้รับ) → ส่งต่อคน **ทันที**
+            //    ⛔ ห้ามถามเลขออเดอร์ก่อน — ลูกค้ากำลังไม่พอใจ การถามเอกสารก่อนช่วยยิ่งทำให้แย่ลง
+            //    แอดมินถามเองได้ในแชท (เกณฑ์เดิม k23 ที่ทำถูกอยู่แล้ว ห้ามทำให้ถอยหลัง)
+            const _urgent = /ปัญหาสินค้า/.test(_kind) || _asPaid;   // k199: จ่ายเงินแล้ว = ห้ามถามก่อน ส่งต่อเลย
+            // ⛔ ยังไม่มีอะไรระบุออเดอร์ได้เลย → ถาม 1 ครั้ง แล้วรอ (ห้ามถามซ้ำถ้าเคยถามไปแล้ว)
+            if (!asHasIdentity(_id) && !_urgent) {
+              if (_asWaiting) {
+                console.log("K198_AS_WAIT_AGAIN " + _kind);
+                return;                                   // ถามไปแล้ว ลูกค้ายังไม่ให้ → เงียบ ไม่ถามซ้ำ
+              }
+              await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: true, got: _id, t: Date.now() }), { expirationTtl: 3600 });
+              console.log("K198_AS_ASK_ID " + _kind);
+              await lineReply(TOKEN, replyToken, AS_ASK_MSG, userId);
+              return;
+            }
+            // ✅ มีข้อมูลพอแล้ว → ส่งเข้าหลังบ้านทันที + ตอบลูกค้าข้อความเดียว แล้วหยุด
+            // ⚠️ เทสจับได้: ตรงจุดนี้ตัวแปร history ยังไม่ถูกประกาศ (TDZ) → เดิมโยน error แล้วหลุดไปตอบ TRACK_MSG
+            //    บทเรียนเดียวกับ k192b (ตัวแปร text) — ด่านที่โยน error เงียบ หน้าตาเหมือนด่านที่ทำงานปกติ
+            let _asHist = [];
+            try { const hv = await env.CONV.get("conv3:" + shopId + ":" + userId); if (hv) _asHist = JSON.parse(hv) || []; } catch (e) {}
+            await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: false, got: _id, t: Date.now() }), { expirationTtl: 3600 });
+            const _payload = (_asPaid ? "💳 ชำระเงินแล้ว | " : "") + "intent: " + _kind
+              + " | uid: " + userId + " | shop: " + shopId
+              + " | ข้อมูลลูกค้า: " + [_id.order && ("ออเดอร์ " + _id.order), _id.name && ("ชื่อ " + _id.name), _id.tel && ("เบอร์ " + _id.tel)].filter(Boolean).join(" · ")
+              + " | ข้อความล่าสุด: " + String(t).slice(0, 80)
+              + " | สรุปบท: " + asSummary(_asHist, t);
+            await muteNow("📦 หลังการขาย — " + _kind, _payload);
+            console.log("K198_AS_HANDOFF " + _kind + " id=" + JSON.stringify(_id));
+            await lineReply(TOKEN, replyToken, AS_DONE_MSG, userId);
+            return;                                        // ⛔ หยุดตอบ ห้ามส่งข้อความเพิ่มหลัง muteNow
+          }
+        }
+      } catch (e) { console.log("K198_AS_ERR " + String((e && e.message) || e).slice(0, 60)); }
 
       // 💧 k46: "Freebase / Saltnic คืออะไร ต่างกันยังไง" → คำอธิบายตายตัว
       if (/freebase|ฟรีเบส|saltnic|salt ?nic|ซอลนิค|ซอลท์นิค/i.test(t)) {
@@ -7598,6 +7744,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         .replace(/\s*\(?\s*(เหลือ(จำนวน)?จำกัด|จำนวนจำกัด|เหลือน้อย|ใกล้หมด|เหลือไม่กี่(ชิ้น|อัน|แท่ง|หัว)|มีจำนวนจำกัด|สต็อกเหลือน้อย|ของใกล้หมด|รีบก่อนหมด)\s*\)?/g, "")
         .replace(/เหลือ(อีก)?\s*\d+\s*(ชิ้น|อัน|แท่ง|หัว|กล่อง|ตัว)/g, "มีของ")
         .replace(/\n{3,}/g, "\n\n");
+    } catch (e) {}
+
+    // 🔒🔒 k199 — ประตูบานสุดท้าย: จ่ายเงินแล้ว + ข้อความนี้เป็นเคสหลังการขาย
+    //   → ห้ามออกการ์ดยืนยันออเดอร์ / ห้ามทวนรายการ / ห้ามชวนสั่งซื้อต่อ เด็ดขาด
+    //   ปกติด่าน k198 ด้านบนจะ return ไปก่อนแล้ว — ชั้นนี้คือตาข่ายกันเหนียวเผื่อมีทางอื่นเล็ดลอดมา
+    //   (บทเรียนซ้ำ: ทางออกของระบบนี้มี 70+ ทาง การกันที่ทางเข้าอย่างเดียวไม่เคยพอ)
+    try {
+      if (env.CONV && afterSaleIntent(String(msgText || ""))) {
+        const _ovG = await env.CONV.get("ord:" + shopId + ":" + userId);
+        if (_ovG && /✅/.test(String((JSON.parse(_ovG) || {}).status || ""))) {
+          if (/ยืนยันรายการ|ทวนคำสั่งซื้อ|สรุปคำสั่งซื้อ|รวมยอดชำระ|รับกลิ่นไหน|รับกี่ชิ้น|สนใจรุ่นไหน/.test(reply)) {
+            console.log("K199_BLOCK_ORDERFLOW_AFTER_PAID");
+            reply = AS_DONE_MSG;
+          }
+        }
+      }
     } catch (e) {}
 
     // ⚡ ส่งคำตอบให้ลูกค้าก่อนเสมอ (ห้ามให้ขั้นตอนบันทึกประวัติมาบล็อกการตอบ)
