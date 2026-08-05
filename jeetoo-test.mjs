@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -3570,6 +3570,155 @@ const pyT = [];
   pyT.push({ n: 560, name: '⚠️ ต้องเก็บออเดอร์เข้า KV ก่อนส่งเลขบัญชี (ไม่งั้น SlipOK เทียบยอดไม่ได้)',
     ok: /รอโอน/.test(o10) && /รวมยอดชำระ 390/.test(o10), why: o10.slice(0, 120) });
 }
+// ═══ [สต็อกตรงจริง] k190 — คำพูดเรื่อง มี/หมด ต้องตรงกับ stockmap (561-570) ═══
+//  เคสจริง 5 ส.ค. (ลูกค้า abc.v20 · ยืนยันด้วย stockmap จริงจาก /stock):
+//    KS Quik 6K สับปะรด = 61 (มีของ) · มิกซ์เบอร์รี่ = 0 (หมด)
+//    AI ตอบเป็นข้อความอิสระว่า "สับปะรดหมด · มิกซ์เบอร์รี่มีของ" = ผิดสลับกันทั้งคู่
+//    ลูกค้าตอบ "หมดแล้วพิมมาทำไม"
+//  ต้นเหตุ: ด่านตรวจสต็อกเดิมผูกกับ "ตอนออกการ์ด" เท่านั้น ข้อความอิสระไม่ถูกตรวจเลย
+const skT = [];
+{
+  const M = 'KS Quik 6K';
+  // สต็อกจำลองตามของจริง: สับปะรด 61 · มิกซ์เบอร์รี่ 0 · มะนาว 77
+  const SM = {};
+  for (const f of [...new Set(FLAVORS[M].f)]) SM[M + ' - ' + f] = 0;
+  SM[M + ' - สับปะรด'] = 61; SM[M + ' - มะนาว'] = 77; SM[M + ' - มิกซ์เบอร์รี่'] = 0;
+  const g = (rep, ut) => stockClaimGate(rep, ut || '', [], SM, 1);
+
+  // A) สับปะรด stock 61 → ห้ามตอบหมด
+  {
+    const r = g(M + ' กลิ่นสับปะรดหมดชั่วคราวค่ะ', 'สับปะรดมีไหม');
+    skT.push({ n: 561, name: 'A ⭐ สับปะรด stock 61 → ห้ามตอบว่าหมด',
+      ok: r.blocked && /สับปะรด.*มีพร้อมส่ง/.test(r.reply) && !/สับปะรด.*หมด/.test(r.reply), why: r.reply.slice(0, 110) });
+  }
+  // B) มิกซ์เบอร์รี่ stock 0 → ห้ามตอบมีของ
+  {
+    const r = g(M + ' กลิ่นมิกซ์เบอร์รี่ มีพร้อมส่งค่ะ 💕', 'มิกซ์เบอร์รี่มีไหม');
+    skT.push({ n: 562, name: 'B ⭐ มิกซ์เบอร์รี่ stock 0 → ห้ามตอบว่ามีของ',
+      ok: r.blocked && /มิกซ์เบอร์รี่.*หมด/.test(r.reply) && !/มิกซ์เบอร์รี่.*พร้อมส่ง/.test(r.reply), why: r.reply.slice(0, 110) });
+    const rB2 = g('กลิ่นมิกซ์เบอร์รี่ มีพร้อมส่งค่ะ 💕', 'มิกซ์เบอร์รี่มีไหม');   // ไม่มีบริบทรุ่นเลย
+    skT.push({ n: 571, name: 'B2 ⛔ ไม่รู้รุ่น → ห้ามฟันธงว่ามี ต้องตอบกลางๆ',
+      ok: rB2.blocked && !/มีพร้อมส่ง/.test(rB2.reply) && /ขอเช็คสต็อก/.test(rB2.reply), why: rB2.reply.slice(0, 110) });
+  }
+  // C) ข้อความเดียวพูดหลายกลิ่น → ต้องแยกตรวจทีละกลิ่น
+  {
+    const r = g(M + ' กลิ่นสับปะรด กับ มิกซ์เบอร์รี่ มีของค่ะ', 'สองกลิ่นนี้มีไหม');
+    skT.push({ n: 563, name: 'C ⭐ ประโยคเดียวหลายกลิ่น → แยกตรวจทีละกลิ่น',
+      ok: r.blocked && /สับปะรด.*มีพร้อมส่ง/.test(r.reply) && /มิกซ์เบอร์รี่.*หมด/.test(r.reply), why: r.reply.slice(0, 130) });
+  }
+  // D) กลิ่นไม่รู้จัก (ไม่มีใน stockmap) → ห้ามเดาสถานะ
+  {
+    const SM2 = { ...SM }; delete SM2[M + ' - สับปะรด'];
+    const r = stockClaimGate(M + ' กลิ่นสับปะรด มีพร้อมส่งค่ะ', 'สับปะรดมีไหม', [], SM2, 1);
+    skT.push({ n: 564, name: 'D ⛔ ไม่รู้จัก SKU → ห้ามเดา ต้องขอเช็คก่อน',
+      ok: r.blocked && /ขอเช็คสต็อก/.test(r.reply) && !/มีพร้อมส่ง|หมดชั่วคราว/.test(r.reply), why: r.reply.slice(0, 110) });
+  }
+  // D2) รุ่นไม่รู้จักเลย → ไม่แตะข้อความ (ไม่มีข้อมูลให้ตัดสิน)
+  {
+    const r = g('รุ่น XYZ999 หมดค่ะ', 'XYZ999 มีไหม');
+    skT.push({ n: 565, name: 'D2 รุ่นไม่รู้จัก → ไม่แตะข้อความ (ไม่เดาทั้ง 2 ทาง)', ok: !r.blocked, why: r.reply.slice(0, 90) });
+  }
+  // E) ลิสต์ครั้งแรกบอกมี → ถามซ้ำต้องได้คำตอบตรงกัน
+  {
+    const H = [{ role: 'user', content: M + ' มีกลิ่นอะไรบ้าง' }, { role: 'assistant', content: M + ' กลิ่นที่มีพร้อมส่ง' }];
+    const r1 = stockClaimGate(M + ' กลิ่นที่มีพร้อมส่งค่ะ\n- สับปะรด\n- มะนาว', 'มีกลิ่นอะไรบ้าง', H, SM, 1);
+    const r2 = stockClaimGate('สับปะรดหมดค่ะ', 'สับปะรดยังมีอยู่ไหม', H, SM, 1);
+    skT.push({ n: 566, name: 'E ⭐ ลิสต์บอกมี → ถามซ้ำต้องตอบตรงกัน ไม่กลับคำ',
+      ok: !r1.blocked && r2.blocked && /สับปะรด.*มีพร้อมส่ง/.test(r2.reply), why: 'ลิสต์=' + r1.blocked + ' ถามซ้ำ=' + r2.reply.slice(0, 80) });
+  }
+  // F) เคสจริงเป๊ะ — ข้อความที่ AI ตอบจริงในแชท abc.v20
+  {
+    const จริง = 'ขออภัยค่ะ 🙏🏻 KS Quik 6K กลิ่นสับปะรดหมดชั่วคราวค่ะ\n\nส่วนกลิ่นมิกซ์เบอร์รี่ กับ มะนาว มีของค่ะ 💕';
+    const r = g(จริง, 'สับปะรด1 มิกซ์เบอร์รี่1 มะนาว2 ครับ');
+    skT.push({ n: 567, name: 'F ⭐ เคสจริง: สับปะรดต้องกลับเป็นมี · มิกซ์เบอร์รี่ต้องกลับเป็นหมด',
+      ok: r.blocked && /สับปะรด.*มีพร้อมส่ง/.test(r.reply) && /มิกซ์เบอร์รี่.*หมด/.test(r.reply) && /มะนาว.*มีพร้อมส่ง/.test(r.reply),
+      why: r.reply.replace(/\n/g, ' / ').slice(0, 150) });
+  }
+  // ไม่ถอยหลัง: ข้อความที่ถูกต้องอยู่แล้ว ต้องไม่ถูกแก้
+  {
+    const H2 = [{ role: 'user', content: M + ' มีกลิ่นไหนบ้าง' }];
+    const r = stockClaimGate('กลิ่นสับปะรด มีพร้อมส่งค่ะ 💕', 'สับปะรดมีไหม', H2, SM, 1);
+    skT.push({ n: 568, name: 'ไม่ถอยหลัง: ข้อความถูกอยู่แล้ว (รู้รุ่นจากประวัติ) → ห้ามแก้', ok: !r.blocked, why: r.reply.slice(0, 90) });
+  }
+  // ไม่ถอยหลัง: ข้อความไม่เกี่ยวสต็อก ต้องไม่ถูกแตะ
+  {
+    const r = g('ค่าส่ง 40 บาทค่ะ ได้รับภายใน 2-3 วันนะคะ', 'ค่าส่งเท่าไหร่');
+    skT.push({ n: 569, name: 'ไม่ถอยหลัง: ข้อความไม่เกี่ยวสต็อก → ห้ามแตะ', ok: !r.blocked, why: r.reply.slice(0, 90) });
+  }
+  // ไม่ถอยหลัง: ไม่มี stockmap → ต้องไม่ล้มและไม่แก้อะไร
+  {
+    const r = stockClaimGate('สับปะรดหมดค่ะ', 'สับปะรดมีไหม', [], {}, 1);
+    skT.push({ n: 570, name: 'ไม่ถอยหลัง: ยังไม่มี stockmap → ไม่ล้ม ไม่แก้', ok: !r.blocked, why: String(r.reply).slice(0, 90) });
+  }
+}
+// ═══ [ตัดของหมดออกจากรายการ] k190b — Order State ต้องตรงกับ Stock Gate (581-585) ═══
+//  เคสจริง: ระบบแจ้ง "มิกซ์เบอร์รี่หมด" แล้วบรรทัดถัดไปยังทวน "รับมิกซ์เบอร์รี่ 1 และมะนาว 2 รวม 3 ชิ้น"
+//  กฎ: ของ stock=0 ต้องหลุดจากรายการทวน · ของที่ซื้อได้ต้องอยู่ครบ · ยอดรวมคิดใหม่
+const sk2 = [];
+{
+  const M = 'KS Quik 6K';
+  const SM = {};
+  for (const f of [...new Set(FLAVORS[M].f)]) SM[M + ' - ' + f] = 0;
+  SM[M + ' - สับปะรด'] = 61; SM[M + ' - มะนาว'] = 77; SM[M + ' - เมล่อน'] = 91; SM[M + ' - มิกซ์เบอร์รี่'] = 0;
+  const สั่ง = 'สับปะรด1 มิกซ์เบอร์รี่1 มะนาว2 ครับ';
+  const ทวนผิด = M + ' กลิ่นสับปะรดหมดชั่วคราวค่ะ\nส่วนกลิ่นมิกซ์เบอร์รี่ กับ มะนาว มีของค่ะ\nรับกลิ่นมิกซ์เบอร์รี่ 1 และมะนาว 2 รวม 3 ชิ้น ใช่ไหมคะ';
+
+  // A) มี 3 รายการ หมด 1 → แจ้งหมด 1 และทวนเฉพาะ 2 รายการที่เหลือ
+  {
+    const r = stockClaimGate(ทวนผิด, สั่ง, [], SM, 1);
+    const ทวน = r.reply.split('\n').find(l => /ตอนนี้รับ/.test(l)) || '';
+    sk2.push({ n: 581, name: 'A ⭐ 3 รายการ หมด 1 → ทวนเฉพาะ 2 รายการที่ซื้อได้',
+      ok: r.blocked && /สับปะรด/.test(ทวน) && /มะนาว/.test(ทวน) && !/มิกซ์เบอร์รี่/.test(ทวน), why: ทวน.slice(0, 130) });
+  }
+  // B) จำนวนรวมต้องลดตามรายการที่ถูกตัด (3 → สับปะรด1 + มะนาว2 = 3 ชิ้น · ไม่ใช่ 4)
+  {
+    const r = stockClaimGate(ทวนผิด, สั่ง, [], SM, 1);
+    const ทวน = r.reply.split('\n').find(l => /ตอนนี้รับ/.test(l)) || '';
+    sk2.push({ n: 582, name: 'B ⭐ ยอดรวมคิดใหม่จากรายการที่ซื้อได้เท่านั้น (สับปะรด1+มะนาว2 = 3)',
+      ok: /รวม 3 ชิ้น/.test(ทวน), why: ทวน.slice(0, 130) });
+  }
+  // C) หมดทุกรายการ → ห้ามทวนยอด
+  {
+    const SMz = {}; for (const f of [...new Set(FLAVORS[M].f)]) SMz[M + ' - ' + f] = 0;
+    const r = stockClaimGate(ทวนผิด, สั่ง, [], SMz, 1);
+    sk2.push({ n: 583, name: 'C ⛔ หมดทุกรายการ → ห้ามทวนยอด ห้ามสร้างออเดอร์',
+      ok: r.blocked && !/ตอนนี้รับ .*\d/.test(r.reply) && /ยังไม่มีรายการที่สั่งได้/.test(r.reply), why: r.reply.replace(/\n/g, ' / ').slice(0, 140) });
+  }
+  // D) รายการหมดอยู่กลางประโยค → ตัดออกโดยรายการอื่นต้องไม่หาย
+  {
+    const สั่ง2 = 'สับปะรด1 มิกซ์เบอร์รี่1 เมล่อน1 มะนาว2 ครับ';
+    const rep2 = M + ' กลิ่นมิกซ์เบอร์รี่ มีของค่ะ\nรับสับปะรด 1 มิกซ์เบอร์รี่ 1 เมล่อน 1 มะนาว 2 รวม 5 ชิ้น ใช่ไหมคะ';
+    const r = stockClaimGate(rep2, สั่ง2, [], SM, 1);
+    const ทวน = r.reply.split('\n').find(l => /ตอนนี้รับ/.test(l)) || '';
+    sk2.push({ n: 584, name: 'D ⭐ ของหมดอยู่กลางประโยค → ตัดออก รายการอื่นต้องอยู่ครบ (4 ชิ้น)',
+      ok: /สับปะรด/.test(ทวน) && /เมล่อน/.test(ทวน) && /มะนาว/.test(ทวน) && !/มิกซ์เบอร์รี่/.test(ทวน) && /รวม 4 ชิ้น/.test(ทวน), why: ทวน.slice(0, 150) });
+  }
+  // E) ลูกค้าเปลี่ยนกลิ่นแทน → ตัวใหม่ต้องเข้า และตัวที่หมดต้องไม่กลับมา
+  {
+    const สั่ง3 = 'งั้นเอาเมล่อน 1 แทนมิกซ์เบอร์รี่ กับ มะนาว 2 ครับ';
+    const rep3 = M + ' กลิ่นมิกซ์เบอร์รี่ มีของค่ะ\nรับมิกซ์เบอร์รี่ 1 และมะนาว 2 รวม 3 ชิ้น ใช่ไหมคะ';
+    const r = stockClaimGate(rep3, สั่ง3, [], SM, 1);
+    const ทวน = r.reply.split('\n').find(l => /ตอนนี้รับ/.test(l)) || '';
+    sk2.push({ n: 585, name: 'E ⭐ เปลี่ยนกลิ่นแทน → ตัวใหม่เข้า · ตัวที่หมดห้ามกลับมา',
+      ok: /เมล่อน/.test(ทวน) && /มะนาว/.test(ทวน) && !/มิกซ์เบอร์รี่/.test(ทวน), why: ทวน.slice(0, 140) });
+  }
+  // ไม่ถอยหลัง: ไม่มีของหมดเลย → ห้ามแตะบรรทัดทวน
+  {
+    const rep4 = M + ' กลิ่นสับปะรด กับ มะนาว มีพร้อมส่งค่ะ\nรับสับปะรด 1 และมะนาว 2 รวม 3 ชิ้น ใช่ไหมคะ';
+    const r = stockClaimGate(rep4, 'สับปะรด1 มะนาว2', [], SM, 1);
+    sk2.push({ n: 586, name: 'ไม่ถอยหลัง: ไม่มีของหมด → ห้ามแตะบรรทัดทวน', ok: !r.blocked, why: r.reply.replace(/\n/g, ' / ').slice(0, 120) });
+  }
+}
+for (const t of sk2) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ตัดของหมด]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ตัดของหมด]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
+for (const t of skT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[สต็อกตรงจริง]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[สต็อกตรงจริง]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 for (const t of pyT) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ยอด→บัญชี]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ยอด→บัญชี]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }

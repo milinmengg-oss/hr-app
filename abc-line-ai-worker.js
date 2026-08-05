@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k189-shortreply";
+const BUILD = "2026-08-05-k190-stockclaim";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -642,6 +642,130 @@ function priceGate(reply) {
 //     = บังคับใช้คำตัดสินของ Product Resolver ไม่ใช่ไปเพิ่มข้อความในคำสั่ง AI
 //   ครอบทั้งตระกูล ไม่ใช่แค่มาโบ (ESKO KIT vs ESKO · หัวพอต X vs X ฯลฯ)
 //   ⚠️ ถ้าลูกค้าพิมพ์ชื่อรุ่นที่ถูกตัดมาเอง = ไม่บล็อก (เขาถามถึงรุ่นนั้นจริง)
+// 📦📦📦 k190 — ด่านตรวจ "คำพูดเรื่องสต็อก" ก่อนส่งออก (เคสจริง 5 ส.ค. · ลูกค้า abc.v20)
+//   เกิดจริง: ระบบลิสต์ให้ลูกค้าว่า KS Quik 6K มี 8 กลิ่น (ถูกต้อง สับปะรด=61)
+//     ลูกค้าสั่ง "สับปะรด1 มิกซ์เบอร์รี่1 มะนาว2"
+//     → AI ตอบเป็น "ข้อความอิสระ" ว่า สับปะรดหมด · มิกซ์เบอร์รี่มีของ  = ผิดสลับกันทั้งคู่
+//     → ลูกค้าตอบ "หมดแล้วพิมมาทำไม"  (สต็อกจริง: สับปะรด 61 · มิกซ์เบอร์รี่ 0)
+//   ต้นเหตุ (ยืนยันด้วยการรันโค้ดจริง ไม่ใช่อ่านเอา):
+//     ด่านตรวจสต็อกเดิมผูกกับ "ตอนออกการ์ด" เท่านั้น
+//     ถ้า AI พูดเรื่อง มี/หมด ในข้อความธรรมดา ไม่มีอะไรตรวจเลย = พูดอะไรก็ได้
+//   บทเรียนเดิมซ้ำรอย k15/k88/k175: กฎใน prompt เป็นแค่ "คำขอ" — โค้ดต้องเป็นคนบังคับ
+//   กฎใหม่: ทุกประโยคที่อ้างสถานะสต็อก ต้องตรงกับ stockmap จริง ไม่ตรง = โค้ดแก้ให้ก่อนส่ง
+//     · สต็อก > กันชน แต่บอกหมด  → แก้เป็น "มีพร้อมส่ง"
+//     · สต็อก ≤ กันชน แต่บอกมี   → แก้เป็น "หมดชั่วคราว"
+//     · หาไม่เจอ / ไม่รู้จัก SKU  → ห้ามเดา เปลี่ยนเป็น "ขอเช็คสต็อกให้ก่อน"
+//   ⛔ ไม่แตะการคิดเงิน · ไม่แตะ stockmap · ไม่แตะ prompt — เป็นด่านอ่านอย่างเดียวแล้วเขียนข้อความใหม่
+const RX_HAVE = /มีพร้อมส่ง|พร้อมส่ง|มีของ|ยังมีของ|มีค่ะ|มีคะ|เหลืออยู่|ยังเหลือ|มีสต็อก/;
+const RX_GONE = /หมดชั่วคราว|หมดแล้ว|ของหมด|หมดค่ะ|หมดคะ|ไม่มีของ|ไม่มีค่ะ|หมดสต็อก|หมดทุกกลิ่น/;
+function stockClaimGate(reply, userText, hist, sm, buf) {
+  const rep = String(reply || "");
+  if (!rep || !sm || !Object.keys(sm).length) return { blocked: false, reply: rep };
+  const B = (typeof buf === "number" ? buf : 1);
+  // หา "รุ่นที่กำลังคุยอยู่" — จากข้อความบอทเอง > ข้อความลูกค้า > ประวัติล่าสุด
+  let ctxModel = "";
+  try {
+    ctxModel = _MODEL_IN(rep) || _MODEL_IN(String(userText || "")) || "";
+    if (!ctxModel) {
+      const hs = (Array.isArray(hist) ? hist : []).slice(-6).reverse();
+      for (const h of hs) { const m = _MODEL_IN(String((h && h.content) || "")); if (m) { ctxModel = m; break; } }
+    }
+  } catch (e) {}
+  const fixed = [];
+  const หมดAll = [];                                        // กลิ่นที่ยืนยันแล้วว่าหมด — ใช้ตัดออกจากบรรทัดทวนรายการ
+  const lines = rep.split("\n").map((ln) => {
+    const said = RX_GONE.test(ln) ? "หมด" : (RX_HAVE.test(ln) ? "มี" : "");
+    if (!said) return ln;                                   // ประโยคนี้ไม่ได้อ้างสต็อก → ไม่แตะ
+    if (/^\s*[-•]/.test(ln)) return ln;                     // บรรทัดลิสต์กลิ่น (โค้ดสร้างเอง) → ไม่แตะ
+    let mdl = "";
+    try { mdl = _MODEL_IN(ln) || ctxModel; } catch (e) { mdl = ctxModel; }
+    // ⛔ ไม่รู้ว่ารุ่นไหน แต่ประโยคเอ่ยชื่อกลิ่นที่มีในแคตตาล็อก → ห้ามเดาสถานะทั้ง 2 ทาง
+    //   (สเปคข้อ 5: หารุ่น/กลิ่นไม่เจอ = ตอบกลางๆ ห้ามฟันธงว่ามีหรือหมด)
+    if (!mdl || !FLAVORS[mdl]) {
+      const tn0 = normTH(ln);
+      const พบ = [];
+      for (const k in FLAVORS) {
+        for (const f of ((FLAVORS[k] && FLAVORS[k].f) || [])) {
+          const b = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+          const nb = normTH(b);
+          if (nb.length >= 3 && tn0.indexOf(nb) !== -1 && พบ.indexOf(b) === -1) พบ.push(b);
+        }
+      }
+      if (!พบ.length) return ln;                            // ไม่เอ่ยชื่อกลิ่นเลย → ไม่ใช่หน้าที่ด่านนี้
+      fixed.push("ไม่รู้รุ่น · กลิ่น[" + พบ.slice(0, 4).join(",") + "]");
+      return "กลิ่น" + พบ.slice(0, 4).join(" / ") + " ขอเช็คสต็อกให้ก่อนนะคะ 🙏🏻 เดี๋ยวแจ้งกลับทันทีค่ะ";
+    }
+    const fl = [...new Set((FLAVORS[mdl] && FLAVORS[mdl].f) || [])];
+    const tn = normTH(ln);
+    const hit = [];
+    for (const f of fl) {
+      const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+      const nb = normTH(bare);
+      if (nb.length >= 3 && tn.indexOf(nb) !== -1) hit.push({ f, bare });
+    }
+    if (!hit.length) return ln;                             // ประโยคพูดลอยๆ ไม่ระบุกลิ่น → ไม่แตะ
+    const มี = [], หมด = [], ไม่รู้ = [];
+    for (const h of hit) {
+      const q = findStockForItem(sm, mdl, h.f);
+      if (q === null) { ไม่รู้.push(h.bare); continue; }
+      if (q > B || stockOtherStrength(sm, mdl, h.f) > B) มี.push(h.bare); else หมด.push(h.bare);
+    }
+    if (ไม่รู้.length) {                                     // ห้ามเดาสถานะ
+      fixed.push(mdl + " " + ไม่รู้.join("/") + " (ไม่รู้จัก SKU)");
+      return "กลิ่น" + ไม่รู้.join(" / ") + " ของ " + mdl + " ขอเช็คสต็อกให้ก่อนนะคะ 🙏🏻 เดี๋ยวแจ้งกลับทันทีค่ะ";
+    }
+    for (const b of หมด) if (หมดAll.indexOf(b) === -1) หมดAll.push(b);
+    if (mdl && !ctxModel) ctxModel = mdl;
+    const ผิด = (said === "หมด" && มี.length && !หมด.length) || (said === "มี" && หมด.length && !มี.length) || (มี.length && หมด.length);
+    if (!ผิด) return ln;
+    fixed.push(mdl + " · บอกว่า" + said + " · จริง: มี[" + มี.join(",") + "] หมด[" + หมด.join(",") + "]");
+    const ส่วน = [];
+    if (มี.length) ส่วน.push("กลิ่น" + มี.join(" / ") + " มีพร้อมส่งค่ะ 💕");
+    if (หมด.length) ส่วน.push("กลิ่น" + หมด.join(" / ") + " หมดชั่วคราวค่ะ 🙏🏻");
+    return ส่วน.join("\n");
+  });
+  // 🧾 k190b — รอบสอง: บรรทัด "ทวนรายการ" ต้องไม่มีของที่หมดค้างอยู่ และจำนวนรวมต้องคิดใหม่
+  //   เคสจริง: ระบบแจ้ง "มิกซ์เบอร์รี่หมด" แล้วบรรทัดถัดไปยังทวน "รับมิกซ์เบอร์รี่ 1 และมะนาว 2 รวม 3 ชิ้น"
+  //   = Order State ไม่ตรงกับ Stock Gate → ลูกค้าอ่านแล้วขัดกันเอง
+  //   กฎ: ของที่ stock=0 ต้องหลุดจากรายการทวน · ของที่ยังซื้อได้ต้องอยู่ครบ · ยอดรวมคิดใหม่จากที่เหลือ
+  if (หมดAll.length && ctxModel && FLAVORS[ctxModel]) {
+    const flAll = [...new Set((FLAVORS[ctxModel] && FLAVORS[ctxModel].f) || [])]
+      .map((f) => String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim())
+      .filter((b) => b.length >= 3)
+      .sort((a, b) => b.length - a.length);           // ชื่อยาวก่อน กัน "องุ่น" กิน "องุ่นว่านหางจระเข้"
+    for (let i = 0; i < lines.length; i++) {
+      const ln = lines[i];
+      if (!/รวม|ทั้งหมด|ถูกต้อง|ใช่ไหม|ใช่มั้ย|ยืนยัน|รับ/.test(ln)) continue;
+      if (RX_GONE.test(ln) || RX_HAVE.test(ln)) continue;   // บรรทัดแจ้งสถานะ (รอบแรกจัดการแล้ว)
+      const tn2 = normTH(ln);
+      if (!หมดAll.some((b) => tn2.indexOf(normTH(b)) !== -1)) continue;   // ไม่มีของที่หมดในบรรทัดนี้
+      // อ่านคู่ (กลิ่น, จำนวน)  ⚠️ อ่านจาก "คำสั่งของลูกค้า" ก่อนเสมอ
+      //   เพราะบรรทัดที่ AI เขียนอาจตกรายการไปแล้ว (เคสจริง: AI ตกสับปะรดเพราะนึกว่าหมด)
+      const อ่านคู่ = (txt) => {
+        let work = String(txt || ""), out = [];
+        for (const b of flAll) {
+          if (normTH(work).indexOf(normTH(b)) === -1) continue;
+          const pos = work.indexOf(b.slice(0, 3));
+          const after = pos >= 0 ? work.slice(pos, pos + b.length + 14) : "";
+          const qm = after.match(/(\d{1,3})/);
+          out.push({ b, qty: qm ? parseInt(qm[1], 10) : 1 });
+          if (pos >= 0) work = work.slice(0, pos) + " ".repeat(b.length) + work.slice(pos + b.length);
+        }
+        return out;
+      };
+      const จากลูกค้า = อ่านคู่(String(userText || ""));
+      const ทั้งหมด = จากลูกค้า.length ? จากลูกค้า : อ่านคู่(ln);
+      const เหลือ = ทั้งหมด.filter((x) => หมดAll.indexOf(x.b) === -1);
+      const รวม = เหลือ.reduce((a, x) => a + x.qty, 0);
+      fixed.push("ทวนรายการ · ตัด[" + หมดAll.join(",") + "] เหลือ " + รวม + " ชิ้น");
+      lines[i] = เหลือ.length
+        ? "ตอนนี้รับ " + เหลือ.map((x) => x.b + " " + x.qty).join(" และ ") + " รวม " + รวม + " ชิ้น ถูกต้องไหมคะ 💕"
+        : "ตอนนี้ยังไม่มีรายการที่สั่งได้เลยค่ะ 🙏🏻 รบกวนเลือกกลิ่นอื่นที่มีของนะคะ";
+    }
+  }
+  if (!fixed.length) return { blocked: false, reply: rep };
+  return { blocked: true, reply: lines.join("\n"), said: fixed.join(" | ").slice(0, 200) };
+}
 function specificModelGate(userText, reply) {
   try {
     const t = String(userText || ""), rep = String(reply || "");
@@ -6733,6 +6857,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       try {
         const _gpz = priceGate(reply);
         if (_gpz.blocked) { console.log("K176_PRICE_FIXED " + _gpz.said); reply = _gpz.reply; }
+      } catch (e) {}
+      // 📦 k190 (ด่านสุดท้ายจริงๆ): คำพูดเรื่อง "มี/หมด" ต้องตรงกับ stockmap ของร้าน
+      //   วางท้ายสุดเหมือน k175/k176 — ต้องตรวจข้อความที่จะส่งจริง ไม่ใช่ร่างกลางทาง
+      try {
+        const _gsk = stockClaimGate(reply, String(msgText || ""), history, smForQR, bufForQR);
+        if (_gsk.blocked) { console.log("K190_STOCK_CLAIM_FIXED " + _gsk.said); reply = _gsk.reply; }
       } catch (e) {}
     } catch (e) {}
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
