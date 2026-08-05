@@ -16,9 +16,9 @@ const WORKER = new URL('./abc-line-ai-worker.js', import.meta.url).pathname;
 // ── เตรียมไฟล์ให้ import ได้ ────────────────────────────────────────
 const dir = mkdtempSync(join(tmpdir(), 'jeetoo-'));
 const wPath = join(dir, 'w.mjs');
-writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength };\n');
+writeFileSync(wPath, readFileSync(WORKER, 'utf8') + '\nexport { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength, flowKPI, flowSummary, FLOW_CASES, FLOW_STAGES };\n');
 const workerApp = (await import(wPath)).default;
-const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength } = await import(wPath);
+const { handleEvent, FLAVORS, histForAI, stampHist, findStockForItem, carryModel, legoHint, flavorSearchHint, styleHint, catOf, computeOrder, unknownAskHint, typoHint, factGate, _MODEL_IN, matchUpcountry, detectLang, findPrice, PROMO_MSG, thTime, lateNote, latePromiseGate, foldTH, flavorHint, ghostImageGate, slipVisionClear, carryFlavor, slipCfgOf, looksLikeOrderText, shopOf, shopList, fakePromoGate, crossFlavorGate, fixSorryGoodNews, bestSellerGate, unitWord, refundIntent, ordTotal, totalMsg, brandHint, evalEnv, lfetch, evalScore, evalAutoCheck, evalTruth, EVAL_CASES, EVALBOX, EVAL_TOKEN_PREFIX, evalCompare, evalSaveFail, evalReplay, promptVer, mathGate, priceMathCheck, priceGate, priceFamilyOf, specificModelGate, strengthAskGate, strengthChoices, askTotalIntent, MUTEACK, MUTED, stockClaimGate, stockOtherStrength, flowKPI, flowSummary, FLOW_CASES, FLOW_STAGES } = await import(wPath);
 
 // ── สต็อกจำลอง: ให้ทุกกลิ่นมีของ ยกเว้นที่กำหนดว่าหมด ──────────────
 const SOLD_OUT = ['MARBO 9K - บลูไอซ์'];
@@ -3709,6 +3709,136 @@ const sk2 = [];
     sk2.push({ n: 586, name: 'ไม่ถอยหลัง: ไม่มีของหมด → ห้ามแตะบรรทัดทวน', ok: !r.blocked, why: r.reply.replace(/\n/g, ' / ').slice(0, 120) });
   }
 }
+// ═══ [ตัวนับ KPI] k191 — พิสูจน์ว่า flowKPI นับถูก ก่อนเอาไปตัดสินคุณภาพ G2 (591-600) ═══
+//  ⚠️ ถ้าตัวนับเองผิด ตัวเลข KPI ทั้งชุดจะหลอกเรา — ต้องเทสตัวนับก่อนเชื่อผลที่มันวัด
+const kpT = [];
+{
+  const ลค = (t) => ({ who: 'ลูกค้า', text: t });
+  const บอท = (t) => ({ who: 'จีทู', text: t });
+  const เต็ม = [ลค('เอา MARBO 9K องุ่น 2 อัน'), บอท('รับกลิ่นไหนดีคะ'), ลค('องุ่น'),
+    บอท('ส่งแบบไหนดีคะ'), ลค('พัสดุ'), บอท('ขออนุญาตทวนคำสั่งซื้อ รวมยอดชำระ 740'),
+    ลค('โอนยังไง'), บอท('ช่องทางการชำระ เลขบัญชี ...')];
+
+  // 1) ปิดได้ครบ 7 ขั้น
+  {
+    const k = flowKPI(เต็ม, { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 591, name: '⭐ บทที่ปิดได้ → ขั้นที่ไปถึงต้องเป็น S7 และ ปิดได้L1 = true',
+      ok: k.ปิดได้L1 === true && k.ขั้นเลข === 7, why: k.ขั้นที่ไปถึง + ' ปิด=' + k.ปิดได้L1 });
+  }
+  // 2) Drop-off: หลุดตั้งแต่ขั้นเลือกสินค้า
+  {
+    const k = flowKPI([ลค('มีอะไรขายบ้าง'), บอท('เมนูสินค้า สนใจตัวไหนแจ้งได้เลยค่ะ')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 592, name: '⭐ Drop-off: จบที่ส่งเมนู → ต้องนับเป็น S1 ไม่ใช่ S7',
+      ok: k.ขั้นเลข === 1 && !k.ปิดได้L1, why: k.ขั้นที่ไปถึง });
+  }
+  // 3) Wrong Turn: ขอที่อยู่ทั้งที่ยังไม่รู้ว่าลูกค้าจะเอาอะไร
+  {
+    const k = flowKPI([ลค('สนใจสั่งของ'), บอท('รบกวนขอที่อยู่ลูกค้าด้วยค่ะ ชื่อผู้รับ เบอร์โทร')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 593, name: '⭐ Wrong Turn: ขอที่อยู่ก่อนรู้ว่าจะเอาอะไร → ต้องจับได้',
+      ok: k.พาออกนอกFlow === true, why: k.เหตุพาออกนอกFlow });
+  }
+  // 4) ไม่ Wrong Turn: ขอที่อยู่หลังทวนรายการแล้ว
+  {
+    const k = flowKPI(เต็ม.concat([บอท('รบกวนขอที่อยู่ลูกค้าด้วยค่ะ')]), { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 594, name: 'ไม่ถอยหลัง: ขอที่อยู่หลังทวนรายการแล้ว → ห้ามนับเป็น Wrong Turn',
+      ok: k.พาออกนอกFlow === false, why: 'wrongTurn=' + k.พาออกนอกFlow });
+  }
+  // 5) Recovery สำเร็จ: ลูกค้าท้วง → บอทไม่ถามซ้ำ ไม่โยนให้คน
+  {
+    const k = flowKPI([ลค('เอาองุ่น 2'), บอท('รับกลิ่นไหนดีคะ'), ลค('บอกไปแล้วว่าองุ่น'),
+      บอท('ขออภัยค่ะ MARBO 9K องุ่น 2 อัน รวมยอดชำระ 740 ค่ะ')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 595, name: '⭐ Recovery สำเร็จ: ลูกค้าท้วง → บอทกลับเข้า Flow เองได้',
+      ok: k.ต้องกู้คืน === 1 && k.กู้คืนสำเร็จ === 1, why: 'ต้องกู้=' + k.ต้องกู้คืน + ' กู้ได้=' + k.กู้คืนสำเร็จ });
+  }
+  // 6) Recovery ล้มเหลว: ลูกค้าท้วง → บอทถามซ้ำเรื่องเดิม
+  {
+    const k = flowKPI([ลค('เอาองุ่น 2'), บอท('รับกลิ่นไหนดีคะ'), ลค('บอกไปแล้วว่าองุ่น'),
+      บอท('รับกลิ่นไหนดีคะ')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 596, name: '⭐ Recovery ล้มเหลว: ท้วงแล้วยังถามซ้ำ → ต้องนับว่ากู้ไม่สำเร็จ',
+      ok: k.ต้องกู้คืน === 1 && k.กู้คืนสำเร็จ === 0, why: 'ต้องกู้=' + k.ต้องกู้คืน + ' กู้ได้=' + k.กู้คืนสำเร็จ });
+  }
+  // 7) Recovery ล้มเหลว: ท้วงแล้วโยนให้คน
+  {
+    const k = flowKPI([ลค('เอาองุ่น 2'), บอท('รับกลิ่นไหนดีคะ'), ลค('ไม่ใช่ อ่านใหม่'),
+      บอท('รอสักครู่นะคะ ประสานงานแอดมินเข้ามาดูแลค่ะ')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 597, name: '⭐ ท้วงแล้วโยนให้คน → นับว่ากู้ไม่สำเร็จ + Handoff',
+      ok: k.กู้คืนสำเร็จ === 0 && k.ส่งต่อคน === true, why: 'กู้ได้=' + k.กู้คืนสำเร็จ + ' handoff=' + k.ส่งต่อคน });
+  }
+  // 8) Conversation Loop: ถามกลิ่นซ้ำ 3 รอบ
+  {
+    const k = flowKPI([ลค('สั่งของ'), บอท('รับกลิ่นไหนดีคะ'), ลค('องุ่น'), บอท('รับกลิ่นไหนดีคะ'),
+      ลค('องุ่นไง'), บอท('รับกลิ่นไหนดีคะ')], { เส้นทาง: 'พัสดุ' });
+    kpT.push({ n: 598, name: '⭐ Conversation Loop: ถามกลิ่นซ้ำ 3 รอบ → ถามซ้ำต้อง ≥2',
+      ok: k.ถามซ้ำ >= 2, why: 'ถามซ้ำ=' + k.ถามซ้ำ });
+  }
+  // 9) flowSummary รวมผลถูกต้อง
+  {
+    const rows = [
+      { เคส: 1, คะแนน: { order_accuracy: 100 }, KPI: flowKPI(เต็ม, { เส้นทาง: 'พัสดุ' }) },
+      { เคส: 2, คะแนน: { order_accuracy: 80 }, KPI: flowKPI([ลค('สั่งของ'), บอท('เมนูสินค้าค่ะ')], { เส้นทาง: 'Grab' }) },
+    ];
+    const s = flowSummary(rows);
+    const พัสดุ = s.OrderCompletionRate.find(x => x.เส้นทาง === 'พัสดุ');
+    const grab = s.OrderCompletionRate.find(x => x.เส้นทาง === 'Grab');
+    kpT.push({ n: 599, name: '⭐ flowSummary: แยกพัสดุ/Grab ถูก · พัสดุปิดได้ 100% · Grab 0%',
+      ok: พัสดุ['ปิดได้%'] === 100 && grab['ปิดได้%'] === 0 && s.OrderAccuracy === 90,
+      why: 'พัสดุ=' + พัสดุ['ปิดได้%'] + '% grab=' + grab['ปิดได้%'] + '% acc=' + s.OrderAccuracy });
+  }
+  // 10) ชุดบท 30 บทครบและแยกเส้นทางถูก
+  {
+    const p = FLOW_CASES.filter(c => c.เส้นทาง === 'พัสดุ').length;
+    const gr = FLOW_CASES.filter(c => c.เส้นทาง === 'Grab').length;
+    const seeded = FLOW_CASES.filter(c => c.ค่าส่งด่วน).length;
+    kpT.push({ n: 600, name: '⭐ ชุดบท 30 บท: พัสดุ 15 · Grab 15 · Grab ที่ป้อนค่าส่งไว้ 6 บท',
+      ok: FLOW_CASES.length === 30 && p + gr === 30 && seeded === 6 && FLOW_STAGES.length === 7,
+      why: 'รวม=' + FLOW_CASES.length + ' พัสดุ=' + p + ' grab=' + gr + ' ป้อนค่าส่ง=' + seeded });
+  }
+}
+// ── k191b: FPC + Intent Switch (601-605) ──
+{
+  const ลค = (t) => ({ who: 'ลูกค้า', text: t });
+  const บอท = (t) => ({ who: 'จีทู', text: t });
+  // 11) FPC ผ่าน: บอกครบข้อความแรก → บอทไม่ถามย้อน
+  {
+    const k = flowKPI([ลค('เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุ'), บอท('รวมยอดชำระ 740 ค่ะ ขอที่อยู่ด้วยนะคะ')], {});
+    kpT.push({ n: 601, name: '⭐ FPC ผ่าน: บอกครบข้อความแรก → บอทไม่ถามกลิ่น/จำนวนย้อน',
+      ok: k.เข้าใจตั้งแต่ข้อความแรก === true, why: 'FPC=' + k.เข้าใจตั้งแต่ข้อความแรก });
+  }
+  // 12) FPC ไม่ผ่าน: บอกครบแล้วยังถามกลิ่นย้อน
+  {
+    const k = flowKPI([ลค('เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุ'), บอท('รับกลิ่นไหนดีคะ')], {});
+    kpT.push({ n: 602, name: '⭐ FPC ไม่ผ่าน: บอกกลิ่นแล้วยังถามกลิ่นซ้ำ → ต้องจับได้',
+      ok: k.เข้าใจตั้งแต่ข้อความแรก === false && !!k.เหตุที่ไม่เข้าใจ, why: k.เหตุที่ไม่เข้าใจ });
+  }
+  // 13) FPC = N/A: ข้อความแรกไม่ได้ให้อะไรครบ → ห้ามนับ
+  {
+    const k = flowKPI([ลค('สั่งของหน่อยครับ'), บอท('รับกลิ่นไหนดีคะ')], {});
+    kpT.push({ n: 603, name: 'FPC = N/A: ข้อความแรกไม่ครบ → ต้องไม่นับ (null)',
+      ok: k.เข้าใจตั้งแต่ข้อความแรก === null, why: 'FPC=' + k.เข้าใจตั้งแต่ข้อความแรก });
+  }
+  // 14) Intent Switch สำเร็จ: พัสดุ → Grab แล้วไปต่อได้
+  {
+    const k = flowKPI([ลค('เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุ'), บอท('รวมยอดชำระ 740 ค่ะ'),
+      ลค('ขอเปลี่ยนเป็นส่งด่วนแทน'), บอท('ได้ค่ะ รบกวนแชร์พิกัดเพื่อเช็คค่าส่งด่วนนะคะ')], {});
+    kpT.push({ n: 604, name: '⭐ Intent Switch สำเร็จ: พัสดุ→Grab ไม่ถามของซ้ำ ไม่โยนคน',
+      ok: k.เปลี่ยนวิธีส่งกี่ครั้ง === 1 && k.เปลี่ยนแล้วไปต่อได้ === 1,
+      why: 'เปลี่ยน=' + k.เปลี่ยนวิธีส่งกี่ครั้ง + ' ไปต่อได้=' + k.เปลี่ยนแล้วไปต่อได้ });
+  }
+  // 15) Intent Switch ล้มเหลว: เปลี่ยนแล้วถามของใหม่ทั้งหมด
+  {
+    const k = flowKPI([ลค('เอา MARBO 9K องุ่น 2 อัน ส่งพัสดุ'), บอท('รวมยอดชำระ 740 ค่ะ'),
+      ลค('ขอเปลี่ยนเป็นส่งด่วนแทน'), บอท('รับกลิ่นไหนดีคะ รับกี่ชิ้นคะ')], {});
+    kpT.push({ n: 605, name: '⭐ Intent Switch ล้มเหลว: เปลี่ยนแล้วถามของใหม่ → ต้องนับว่าไม่ผ่าน',
+      ok: k.เปลี่ยนวิธีส่งกี่ครั้ง === 1 && k.เปลี่ยนแล้วไปต่อได้ === 0,
+      why: 'เปลี่ยน=' + k.เปลี่ยนวิธีส่งกี่ครั้ง + ' ไปต่อได้=' + k.เปลี่ยนแล้วไปต่อได้ });
+  }
+}
+
+for (const t of kpT) {
+  if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ตัวนับ KPI]${RESET} ${t.name}`); }
+  else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ตัวนับ KPI]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
+}
+
 for (const t of sk2) {
   if (t.ok) { pass++; console.log(`${GRN}✅ ${t.n}${RESET} ${DIM}[ตัดของหมด]${RESET} ${t.name}`); }
   else { fails.push({ n: String(t.n), c: { ask: t.name }, why: [t.why], out: String(t.why || '') }); console.log(`${RED}❌ ${t.n}${RESET} ${DIM}[ตัดของหมด]${RESET} ${t.name}\n      ${RED}↓${RESET} ${t.why}`); }
