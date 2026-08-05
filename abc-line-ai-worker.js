@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k202-restart";
+const BUILD = "2026-08-05-k203-slipcard";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -6854,6 +6854,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         let statusLine = "ส่งสลิปแล้ว รอตรวจยอด 🧾";
         let customerMsg = "ได้รับสลิปแล้วค่ะ 🙏🏻 รอทีมงานตรวจสอบและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕";
         let slipPassed = false;
+        let slipCard = null;   // k203: ข้อมูลสำหรับการ์ด (แสดงผลอย่างเดียว)
         try {
           const sok = await checkSlip(env, TOKEN, ev.message.id, shopId);
           // 🏦 k159: ร้านนี้ยังไม่ได้ตั้งค่า SlipOK → ตรวจไม่ได้ ⛔ ห้ามยืมบัญชีร้านอื่นมาตรวจ
@@ -6870,10 +6871,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                 slipPassed = true;
                 statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " บาท → " + recv + (_expOrd ? " (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)" : " (รอที่อยู่จัดส่ง)");
                 customerMsg = "✅ สลิปถูกต้อง จำนวนเงิน " + slipAmt + " บาท เข้าบัญชีร้านเรียบร้อยค่ะ 🎉 ขอบคุณที่อุดหนุนนะคะ 💕" + ADDR_FORM;
+                slipCard = { amt: slipAmt, recv, expected: null, matched: false };   // k203
               } else if (Math.abs(slipAmt - expected) <= 1) {
                 slipPassed = true;
                 statusLine = "ชำระแล้ว ✅ ยอด " + slipAmt + " ตรงออเดอร์ → " + recv + (_expOrd ? " (ส่งด่วนตามหมุด 📍 รอชื่อ+เบอร์ผู้รับ)" : " (รอที่อยู่จัดส่ง)");
                 customerMsg = "✅ สลิปถูกต้อง จำนวนเงิน " + slipAmt + " บาท ตรงกับยอดออเดอร์เรียบร้อยค่ะ 🎉 ขอบคุณที่อุดหนุนนะคะ 💕" + ADDR_FORM;
+                slipCard = { amt: slipAmt, recv, expected, matched: true };          // k203
               } else {
                 statusLine = "⚠️ ยอดไม่ตรง: สลิป " + slipAmt + " / ออเดอร์ " + expected + " → " + recv + " — ทีมงานเช็คด่วน";
                 customerMsg = "⚠️ ตรวจสอบสลิปแล้วนะคะ\nยอดในสลิป " + slipAmt + " บาท แต่ยอดออเดอร์คือ " + expected + " บาท ไม่ตรงกันค่ะ 🙏🏻\nรบกวนเช็คอีกครั้ง เดี๋ยวทีมงานเข้ามาดูแลให้นะคะ";
@@ -6926,7 +6929,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
             }
           } catch (e) {}
-          await lineReply(TOKEN, replyToken, customerMsg, userId);
+          // 🧾 k203: แสดงผลเป็นการ์ด + ฟอร์มที่อยู่ต่อท้าย
+          //   ⛔ เปลี่ยนเฉพาะ "วิธีแสดง" — สถานะออเดอร์ · ประวัติ · การตัดสินใจ เหมือนเดิมทุกบรรทัด
+          //   ถ้าสร้างการ์ดไม่ได้ด้วยเหตุใดก็ตาม → ตกกลับไปข้อความเดิม (ห้ามเงียบใส่ลูกค้า)
+          let _cardSent = false;
+          try {
+            if (slipCard) {
+              await lineMulti(TOKEN, replyToken, [
+                { type: "flex", altText: "✅ ตรวจสอบสลิปเรียบร้อย · ยอด " + slipCard.amt + " บาท",
+                  contents: slipOkFlex(slipCard.amt, slipCard.recv, slipCard.expected, slipCard.matched) },
+                { type: "text", text: ADDR_FORM.replace(/^\n+/, "") },
+              ], userId);
+              _cardSent = true;
+              console.log("K203_SLIP_CARD amt=" + slipCard.amt + " matched=" + slipCard.matched);
+            }
+          } catch (e) { console.log("K203_CARD_FAIL " + String(e).slice(0, 80)); }
+          if (!_cardSent) await lineReply(TOKEN, replyToken, customerMsg, userId);
           return;
         }
 
@@ -9004,6 +9022,51 @@ function payFlex(total, bankLines, acctNo) {
       { type: "text", text: "โอนแล้วรบกวนส่งสลิปมาเลยนะคะ 🙏🏻", size: "xxs", color: "#aaaaaa", align: "center", margin: "sm" }
     ] }
   };
+}
+// 🧾🧾 k203 — การ์ดผลตรวจสลิป (แสดงผลอย่างเดียว ⛔ ไม่แตะตรรกะตรวจสลิป/Payment/Order)
+//   ตรวจย้อนหลังแล้วระบบ **ไม่เคยมีการ์ดสลิปมาก่อน** (มีแค่ welcomeFlex · orderConfirmFlex · payFlex)
+//   จึงสร้างใหม่ให้เข้าชุดกับการ์ดเดิม: หัวดำ #111418 · บอดี้ขาว · เลขยอดตัวใหญ่
+//   ⛔ ตัวเลขทุกตัวรับมาจากผลตรวจจริงของ SlipOK เท่านั้น การ์ดไม่คำนวณอะไรเองเลย
+function slipOkFlex(slipAmt, recv, expected, matched) {
+  const fmt = (n) => Number(n).toLocaleString("en-US");
+  const rows = [];
+  if (recv) rows.push({ type: "box", layout: "horizontal", margin: "sm", contents: [
+    { type: "text", text: "เข้าบัญชี", size: "sm", color: "#888888", flex: 3 },
+    { type: "text", text: String(recv).slice(0, 40), size: "sm", color: "#333333", align: "end", flex: 5, wrap: true } ] });
+  if (matched && expected) rows.push({ type: "box", layout: "horizontal", margin: "sm", contents: [
+    { type: "text", text: "ยอดออเดอร์", size: "sm", color: "#888888", flex: 3 },
+    { type: "text", text: fmt(expected) + " บาท · ตรงกัน ✅", size: "sm", color: "#2e7d32", align: "end", flex: 5 } ] });
+  return {
+    type: "bubble",
+    header: { type: "box", layout: "vertical", backgroundColor: "#111418", paddingAll: "16px",
+      contents: [{ type: "text", text: "✅ ตรวจสอบสลิปเรียบร้อย", color: "#FFFFFF", weight: "bold", size: "lg" }] },
+    body: { type: "box", layout: "vertical", paddingAll: "18px", contents: [
+      { type: "text", text: "ยอดที่ได้รับ", size: "xs", color: "#999999" },
+      { type: "text", text: fmt(slipAmt) + " บาท", weight: "bold", size: "xxl", color: "#111418", margin: "sm" },
+      { type: "separator", margin: "lg" },
+      { type: "box", layout: "vertical", margin: "md", contents: rows.length ? rows : [
+        { type: "text", text: "รับชำระเรียบร้อยแล้วค่ะ", size: "sm", color: "#333333" } ] },
+      { type: "box", layout: "vertical", backgroundColor: "#F1F8E9", cornerRadius: "8px", paddingAll: "12px", margin: "lg", contents: [
+        { type: "text", text: "🎉 ขอบคุณที่อุดหนุนนะคะ 💕", size: "sm", color: "#2e7d32", wrap: true },
+        { type: "text", text: "📸 เมื่อได้รับพัสดุ รบกวนถ่ายวิดีโอตอนแกะกล่องไว้ด้วยนะคะ เผื่อต้องใช้เคลมค่ะ", size: "xxs", color: "#666666", wrap: true, margin: "sm" } ] }
+    ] }
+  };
+}
+// k203: ส่งหลายข้อความในการตอบครั้งเดียว (การ์ด + ฟอร์มที่อยู่) — ใช้แพทเทิร์นเดิมของ k87/k78
+async function lineMulti(token, replyToken, messages, userId) {
+  const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
+    method: "POST",
+    headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+    body: JSON.stringify({ replyToken, messages }),
+  });
+  if (!r.ok && userId && userId !== "anon") {
+    console.log("K203_REPLY_FAIL status=" + r.status + " → push แทน");
+    await lfetch("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      body: JSON.stringify({ to: userId, messages }),
+    });
+  }
 }
 async function lineFlex(token, replyToken, altText, contents, userId, quick) {
   const msg = { type: "flex", altText: altText.slice(0, 400), contents };
