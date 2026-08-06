@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-05-k203-slipcard";
+const BUILD = "2026-08-06-k212-gateway";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -359,6 +359,41 @@ async function resetSession(env, shopId, userId) {
   kept.push("Human Handoff (mute:) · โปรไฟล์+ที่อยู่ลูกค้า (cust:) · เลขพัสดุ (trk:) · Log ถาวร (log:) · รายชื่อแชทหลังบ้าน (chat:) · ภาษาที่ลูกค้าใช้ (lang:)");
   console.log("K202_RESET shop=" + shopId + " uid=" + String(userId).slice(0, 8) + " paid=" + paid + " cleared=" + done.length);
   return { done, kept, ok: true, paid };
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒🔒 k207 · NON-PRODUCT FLOW GUARD — Critical Severity สูงสุด
+// ═══════════════════════════════════════════════════════════════════════════
+//  กฎที่เจ้าของร้านสั่ง (6/8): เมื่ออยู่ใน Flow ที่ไม่เกี่ยวกับสินค้า
+//    (แจ้งที่อยู่ · เปลี่ยนที่อยู่/เบอร์/ชื่อผู้รับ · แจ้งสลิป · ตามพัสดุ · หลังการขาย)
+//    ⛔ ห้ามเรียกตัวอ่านสินค้า และห้ามแก้ รุ่น/กลิ่น/จำนวน/ออเดอร์ จากข้อความนั้น
+//  เหตุผล: ข้อความพวกนี้เต็มไปด้วยคำที่บังเอิญตรงกับชื่อกลิ่นและตัวเลข
+//    "ซอยแตงโม ถนนองุ่น" · "191 หมู่6" · "โอนแล้ว 390 บาท"
+//    ถ้าปล่อยให้ตัวอ่านสินค้าทำงาน = ออเดอร์ถูกแก้เงียบๆ = ส่งของผิด/คิดเงินผิด
+//  ⚠️ ต้องไม่ไปบล็อกลูกค้าที่ "สั่งของพร้อมบอกที่อยู่ในข้อความเดียว"
+//    → ถ้าข้อความมีชื่อรุ่นชัดเจน = กำลังสั่งของ ไม่ใช่ Flow ที่อยู่ล้วน → ปล่อยผ่าน
+const RX_ADDRESS = /ต\.\s*\S|อ\.\s*\S|จ\.\s*\S|ตำบล|อำเภอ|แขวง|เขต|จังหวัด|หมู่\s*\d|ม\.\s*\d|ซอย|ซ\.\s*\d|ถนน|ถ\.\s*\S|บ้านเลขที่|รหัสไปรษณีย์|\b\d{5}\b/;
+const RX_CHANGE_INFO = /เปลี่ยน(ชื่อ|ผู้รับ|เบอร์|ที่อยู่|จุดส่ง|ที่ส่ง)|แก้(ชื่อ|เบอร์|ที่อยู่)|ใช้เบอร์ใหม่|เบอร์ใหม่|ที่อยู่ใหม่/;
+const RX_PAYMENT_TALK = /โอน(แล้ว|เสร็จ|เรียบร้อย)|ส่งสลิป|สลิป|ชำระ(แล้ว|เรียบร้อย)|จ่ายแล้ว/;
+function nonProductFlow(text, ordObj, asWaiting) {
+  const t = String(text || "");
+  if (!t) return "";
+  // ⛔ ข้อความมีชื่อรุ่นชัดเจน = ลูกค้ากำลังสั่งของ ห้ามบล็อก (สั่งของพร้อมที่อยู่ในข้อความเดียว)
+  try { if (_MODEL_IN(t)) return ""; } catch (e) {}
+  if (asWaiting) return "รอข้อมูลเคสหลังการขาย";
+  if (RX_CHANGE_INFO.test(t)) return "ขอแก้ข้อมูลผู้รับ/ที่อยู่";
+  if (RX_PAYMENT_TALK.test(t)) return "กำลังคุยเรื่องการชำระเงิน";
+  try { if (afterSaleIntent(t)) return "เคสหลังการขาย"; } catch (e) {}
+  // ข้อความที่ "หน้าตาเป็นที่อยู่" — ต้องมีสัญญาณที่อยู่ + (เบอร์โทร หรือ สัญญาณที่อยู่ซ้ำ)
+  const addrHits = (t.match(new RegExp(RX_ADDRESS.source, "g")) || []).length;
+  const hasTel = RX_TEL.test(t);
+  if (addrHits >= 2 || (addrHits >= 1 && hasTel)) return "ลูกค้ากำลังแจ้งที่อยู่จัดส่ง";
+  // จ่ายเงินแล้วและระบบยังรอที่อยู่ → ข้อความถัดไปคือข้อมูลผู้รับ
+  try {
+    const st = String((ordObj && ordObj.status) || ""), bk = String((ordObj && ordObj.block) || "");
+    if (/✅/.test(st) && !/พร้อมจัดส่ง/.test(st) && /รอลูกค้าแจ้ง/.test(bk) && (hasTel || addrHits >= 1))
+      return "จ่ายเงินแล้ว ระบบกำลังรอที่อยู่";
+  } catch (e) {}
+  return "";
 }
 const wakeKey = (shop, uid) => shop + ":" + uid;
 
@@ -1301,9 +1336,10 @@ const TH_MODEL = [
   //   → ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน (อาการเดียวกับ k143 แต่คนละทาง)
   //   ต้องมาก่อนกฎ "มาโบ" ทั้งหมด ไม่งั้นโดนกฎล่างจับไปเป็น MARBO 9K ก่อน
   [/หัว\s*(มาโบ|มาร์โบ|marbo)/i, "M SWITCH"],
-  [/มา(?:ร์)?โบ\s*สวิ[ชซต]|เอ็?ม\s*สวิ[ชซต]|m\s*swi[ct]?ch/i, "M SWITCH"],
+  // k209: ลูกค้าเขียนอังกฤษเต็ม "Marbo switch pod" — เดิมจับได้เฉพาะ "m switch" ที่มีเว้นวรรค
+  [/มา(?:ร์)?โบ\s*สวิ[ชซต]|เอ็?ม\s*สวิ[ชซต]|m\s*swi[ct]?ch|mar?bo\s*swi[ct]?ch/i, "M SWITCH"],
   [/เอสโค่|เอสโก้|เอกโค|เอคโค|เอโคบาร์|esko\s*bar\s*switch|esko\s*swi/i, "ESKO BAR SWITCH 20K"],
-  [/เอสโค่\s*บาร์|esko\s*bar\s*20/i, "ESKO BAR 20K"],
+  [/เอสโค่\s*บาร์|esko\s*(?:bar\s*)?20/i, "ESKO BAR 20K"],
   [/มา(?:ร์)?โบ\s*ซีโร่|มา(?:ร์)?โบ\s*เซโร่|marbo\s*zero|เอ็?ม\s*ซีโร่/i, "หัวพอต MARBO ZERO"],
   [/มา(?:ร์)?โบ\s*9|marbo\s*9|มา(?:ร์)?โบเก้า/i, "MARBO 9K"],
   [/มา(?:ร์)?โบ\s*10|marbo\s*10/i, "MARBO 10K"],
@@ -1312,10 +1348,10 @@ const TH_MODEL = [
   [/รีแลค\s*อินฟิ|relx\s*infinity|อินฟินิตี้/i, "หัวพอต RELX INFINITY"],
   // 🎯 k126: ตระกูล INFY มี 5 รุ่น — ต้องแยกให้ออกก่อนตกไปที่ "อินฟี่ลอยๆ = หัวพอต INFY PLUS"
   //    เคสจริง 3/8: "อินฟี่ 20เค เหลือกลิ่นไหนมั่ง" → ระบบตอบ RELX SMASH GO 12K (คนละแบรนด์เลย)
-  [/(อินฟี่?|infy)\s*บาร์?\s*(โปร|pro)|infy\s*bar\s*pro/i, "INFY BAR PRO 20K"],
-  [/(อินฟี่?|infy)\s*บาร์\s*15\s*k|infy\s*bar\s*15/i, "INFY BAR 15K"],
-  [/(อินฟี่?|infy)\s*20\s*k/i, "INFY 20K"],
-  [/(อินฟี่?|infy)\s*12\s*k/i, "INFY 12K"],
+  [/(อ[ิี]นฟ[ิี]?่?|ออนฟ[ิี]?่?|อินฟี่?|infy)\s*บาร์?\s*(โปร|pro)|infy\s*bar\s*pro/i, "INFY BAR PRO 20K"],
+  [/(อ[ิี]นฟ[ิี]?่?|ออนฟ[ิี]?่?|อินฟี่?|infy)\s*บาร์\s*15\s*k|infy\s*bar\s*15/i, "INFY BAR 15K"],
+  [/(อ[ิี]นฟ[ิี]?่?|ออนฟ[ิี]?่?|อินฟี่?|infy)\s*20\s*k/i, "INFY 20K"],
+  [/(อ[ิี]นฟ[ิี]?่?|ออนฟ[ิี]?่?|อินฟี่?|infy)\s*12\s*k/i, "INFY 12K"],
   [/อินฟี่|infy\s*plus|อินฟี\s*พลัส/i, "หัวพอต INFY PLUS"],
   // k48: ถอด "เลโก้" ลอยๆ ออก — ร้านมีหัวแบบเติมน้ำยาเอง 3 ยี่ห้อ ห้ามเดาว่าเป็น ABC
   //   เคสจริง 31/7: ลูกค้าถาม "หัวเลโก้เหลืออะไรบ้าง" → ระบบล็อกเป็น ABC LEGO ตัวเดียว
@@ -1361,7 +1397,9 @@ const TH_MODEL = [
 // เติมราคาจากฐานสินค้าจริงเข้า PRICE ทุกรุ่นที่ยังไม่มี (กันราคาหลุด → การ์ดขึ้น "-" แล้วยอดรวมขาด)
 for (const k in FLAVORS) if (!(k in PRICE)) PRICE[k] = FLAVORS[k].p;
 const FLAVOR_KEYS = Object.keys(FLAVORS).sort((a,b)=>b.length-a.length);
-function normTH(s){ return String(s||"").toUpperCase().replace(/[\s\-_.]/g,""); }
+// k208 Pattern B: คีย์บอร์ดไทยพิมพ์ "เเ" (เ สองตัว) แทน "แ" ได้ง่ายมาก — ตาเปล่าแยกไม่ออก
+//   เคสจริง "เอาหัวหมากฝรั่งเเตงโม2หัว" → จับคู่ "แตงโม" ไม่ได้เลย → ระบบใช้กลิ่นเก่าจากบริบท = ส่งของผิด
+function normTH(s){ return String(s||"").replace(/เเ/g,"แ").toUpperCase().replace(/[\s\-_.]/g,""); }
 // sm = stockmap (ถ้ามี) → บอกไปเลยว่ากลิ่นไหนมี กลิ่นไหนหมด แอดมินจะได้ไม่ลิสต์กลิ่นที่หมดให้ลูกค้า
 // 🧠 k55: "จำว่ากำลังคุยรุ่นไหนอยู่"
 // เคสจริง 1/8: ลูกค้าถาม "เอสโค่เข้าเมื่อไหร่" → แล้วถามต่อ "มีกลิ่นไรเหลือบ้าง"
@@ -1371,6 +1409,7 @@ function normTH(s){ return String(s||"").toUpperCase().replace(/[\s\-_.]/g,""); 
 //   ระบบอ่านไม่ออก เลยจับได้แค่ "อินฟี่" ลอยๆ → ชี้ไปผิดรุ่น → ตอบ RELX SMASH GO 12K คนละเรื่อง
 //   แก้ที่ต้นทาง: แปลง "20เค" → "20K" ก่อนจับรุ่นทุกครั้ง (ครอบคลุม 9เค/12เค/15เค/20เค/25เค/30เค)
 const _K2 = (s) => String(s || "").replace(/(\d+)\s*(เค|ค่ะ?K)/gi, "$1K").replace(/(\d+)\s*เค/g, "$1K");
+const CLONE_MARK_RE = /งานเทียบ|ตัวเทียบ|เทียบ|โคลน|clone|ก๊อป|ก็อป|เกรดรอง|งานรอง/i;
 const _MODEL_IN = (s) => {
   const raw = String(s || ""), nosp = raw.replace(/\s+/g, "");
   const rk = _K2(raw), nk = _K2(nosp);
@@ -1378,11 +1417,33 @@ const _MODEL_IN = (s) => {
   //   ทั้งที่ flavorHint เทียบ 8 แบบ (มี deTone ด้วย) = สองที่ใช้เกณฑ์คนละอย่าง จับได้ไม่เท่ากัน
   //   เพิ่มแบบ "ปรับรูปมาตรฐาน" เข้าไปให้ครบ ตัวจับรุ่นทั้งระบบจะทนคำสะกดเพี้ยนเท่ากัน
   const fr = foldTH(raw), fn = foldTH(nosp), fk = _K2(fr), fkn = _K2(fn);
-  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(rk) || re.test(nk) || re.test(fr) || re.test(fn) || re.test(fk) || re.test(fkn)) return key;
+  for (const [re, key] of TH_MODEL) if (re.test(raw) || re.test(nosp) || re.test(rk) || re.test(nk) || re.test(fr) || re.test(fn) || re.test(fk) || re.test(fkn)) return cloneSwap(key, raw);
   const tn = normTH(raw);
   for (const k of FLAVOR_KEYS) if (normTH(k).length >= 4 && tn.indexOf(normTH(k)) !== -1) return k;
+  // 🏷️ k209: ลูกค้าเรียกด้วย "จำนวนคำ + คำบอกโคลน" โดยไม่เอ่ยชื่อแบรนด์ ("9k งานเทียบที่290")
+  //   ปกติเลขคำลอยๆ = กำกวม (แท้/โคลน) ต้องถาม — แต่พอมีคำบอกโคลน ก็เหลือตัวเดียว ไม่ต้องเดา
+  try {
+    if (CLONE_MARK_RE.test(raw)) {
+      const pf = raw.match(/(?<![\d.,])(\d{1,2})\s*[kK]\b/);
+      if (pf) {
+        const tok = pf[1] + "K";
+        const hit = Object.keys(FLAVORS).filter(m => m.indexOf(tok) !== -1 && /\(โคลน\)/.test(m));
+        if (hit.length === 1) return hit[0];
+      }
+    }
+  } catch (e) {}
   return "";
 };
+// 🏷️ k209 (หลักฐาน Gold120 · ศัพท์ร้าน): "งานเทียบ · เทียบ · โคลน · ก๊อป · เกรดรอง" = สินค้ารุ่นโคลน
+//   เคสจริง "งั้นเอา9kงานเทียบที่290" และ "เอามาโบตัวโคลน" → ระบบตอบรุ่นแท้ (350) แทนโคลน (290)
+//   = คิดเงินผิด 60 บาท และส่งของผิดตัว  ⛔ P0
+//   กติกาทั่วไป: จับรุ่นตามปกติก่อน แล้วถ้าข้อความมีคำบอกโคลน และแคตตาล็อกมีคู่ "(โคลน)" ให้สลับ
+function cloneSwap(key, text) {
+  if (!key || !CLONE_MARK_RE.test(String(text || ""))) return key;
+  for (const cand of [key + " (โคลน)", key.replace(/\s*\(KIT\)$/, "") + " (โคลน)"])
+    if (FLAVORS[cand]) return cand;
+  return key;
+}
 // ⚠️ ระวังคำที่ซ้อนอยู่ในคำสุภาพ — "ขอบคุณค**รับ**" มีคำว่า "รับ" อยู่ข้างใน (ชุดทดสอบข้อ 62 จับได้)
 // k95 เคสจริง: บอทถาม "หมายถึง MARBO 9K แท้ ใช่ไหมคะ" ลูกค้าตอบ "ใช่ครับ"
 //   คำนี้ไม่เข้าเงื่อนไขเดิม → ระบบไม่แนบสต็อกให้ → แอดมินโยนแอดมิน "เดี๋ยวเช็คสต็อกให้"
@@ -1654,6 +1715,38 @@ function slotCurrent(s) { return (slotOk(s) && s.cur >= 0 && s.cur < s.items.len
 // บันทึกสินค้าที่ระบุได้ · ถ้าเป็นรุ่นเดิมให้ "อัปเดต" ไม่ใช่เพิ่มซ้ำ
 // ⚠️ ข้อมูลที่มั่นใจน้อยกว่า ห้ามทับข้อมูลที่มั่นใจมากกว่าในรอบเดียวกัน
 //    (กันรุ่นที่ระบบ "แนะนำ" ไปทับรุ่นที่ลูกค้า "พิมพ์มาเอง")
+// 🔗🔗 k211 · Engine 2 (Cross-turn Context) — "พาสินค้าข้ามเทิร์น" ต้องรู้จักคำว่ากำกวม
+//  Root Cause จริง (พิสูจน์จาก Gold120 B11 · ไม่ใช่การเดา):
+//    ตัวพาบริบทข้ามเทิร์นอ่านค่าจาก slotCurrent() ซึ่งคืน "รายการล่าสุด" เสมอ
+//    โครงสร้างนี้ไม่มีสถานะ "ยังไม่รู้ว่าหมายถึงตัวไหน" เลย — มีแต่ "ตัวล่าสุด"
+//    ต่างจาก slotResolveRef() ที่มี ambiguous อยู่แล้วเมื่ออ้างด้วยราคา/คำชี้
+//  เคสจริง: ลูกค้าพิมพ์ 2 รุ่นในข้อความเดียว
+//      "หัวm switch -แบล็คเบอร์รี่ 2 / M switch Kit -องุ่น 2"
+//    เทิร์นถัดมา "เปลี่ยนเป็นแบล็คเบอร์รี่ก็ได้ครับ"
+//    → ระบบพา M SWITCH 15K (KIT) มาเพราะเป็นตัวหลังสุด = แก้ผิดรายการ ราคาต่างกัน 149 บาท
+//  กฎทั่วไป (ไม่ผูกรุ่นใดรุ่นหนึ่ง ไม่มี if รายเคส):
+//    1) เทิร์นนี้เอ่ยชื่อรุ่นเอง        → ไม่ต้องพา ใช้ของในเทิร์น
+//    2) เทิร์นนี้มีคำอ้างอิงที่ชี้ได้ชัด → ใช้ผลของ slotResolveRef
+//    3) ตะกร้ามีรุ่นเดียว              → พาได้
+//    4) ตะกร้ามีหลายรุ่นที่ถูกพูดถึง "ในช่วงเวลาเดียวกัน" → กำกวม ห้ามเดา คืน null ให้ระบบถามกลับ
+//    5) รุ่นล่าสุดใหม่กว่าตัวอื่นชัดเจน (คนละช่วงการคุย) → ถือว่าลูกค้าเปลี่ยนมาคุยตัวใหม่แล้ว พาได้
+const SLOT_CARRY_GAP_MS = 60 * 1000;
+function slotCarry(s, text) {
+  const cur = slotCurrent(s);
+  if (!cur || !cur.model) return null;
+  const t = String(text || "");
+  try { if (_MODEL_IN(t)) return cur; } catch (e) {}
+  try { const r = slotResolveRef(t, s); if (r && r.item) return r.item; if (r && r.ambiguous) return null; } catch (e) {}
+  const items = (slotOk(s) ? s.items : []).filter(x => x && x.model);
+  const models = [];
+  for (const x of items) if (models.indexOf(x.model) === -1) models.push(x.model);
+  if (models.length < 2) return cur;
+  let newest = 0;
+  for (const x of items) if (x.model !== cur.model && (x.t || 0) > newest) newest = x.t || 0;
+  if ((cur.t || 0) - newest > SLOT_CARRY_GAP_MS) return cur;
+  console.log("K211_CARRY_AMBIG models=" + models.length);
+  return null;
+}
 function slotPut(s, item) {
   const slot = slotOk(s) ? s : slotNew();
   const it = {
@@ -1668,7 +1761,15 @@ function slotPut(s, item) {
     t: Date.now()
   };
   if (!it.model) return slot;
-  const i = slot.items.findIndex(x => x.model === it.model);
+  // k204: เดิมชี้ด้วย "ชื่อรุ่น" อย่างเดียว → สั่งรุ่นเดียวกันหลายกลิ่น (มะม่วง+โคล่า+แตงโม)
+  //   จะทับกันเองเหลือรายการเดียว = ตกออเดอร์ (เคสจริง: สั่ง 20 หัว เหลือ 5 หัว)
+  //   กติกาใหม่: ชี้ด้วย "รุ่น+กลิ่น" · ถ้าของเดิมยังไม่มีกลิ่น ให้เติมกลิ่นลงตัวเดิม (ไม่สร้างซ้ำ)
+  let i = slot.items.findIndex(x => x.model === it.model && (x.flavor || "") === it.flavor);
+  if (i === -1 && it.flavor) i = slot.items.findIndex(x => x.model === it.model && !x.flavor);
+  if (i === -1 && !it.flavor) i = slot.items.findIndex(x => x.model === it.model);
+  // ⛔ คงกฎ P0 เดิม: ข้อมูลที่มั่นใจน้อยกว่า (เช่นอ่านจากรูป) ห้ามสร้างรายการใหม่ซ้อนของที่ลูกค้าพิมพ์เอง
+  //   ให้ชี้กลับไปที่รายการเดิมของรุ่นนั้น แล้วปล่อยให้ตัวกรอง better ด้านล่างเป็นคนบล็อกการทับ
+  if (i === -1) { const j = slot.items.findIndex(x => x.model === it.model && x.confidence > it.confidence); if (j !== -1) i = j; }
   if (i === -1) {
     slot.items.push(it);
     if (slot.items.length > SLOT_MAX) slot.items.shift();
@@ -1841,7 +1942,7 @@ function draftPlan(text, s) {
     // ⚠️ บทเรียน k154: ต้องตัด "ตัวเลขที่เป็นส่วนหนึ่งของชื่อรุ่น" ทิ้งก่อนอ่านจำนวน
     //    ไม่งั้น "KS Quik 6K เท่าเดิม" จะอ่าน 6 เป็นจำนวนสั่งซื้อ
     // ตัดเลขที่ไม่ใช่ "จำนวนสั่งซื้อ" ออกก่อนเสมอ: เลขในชื่อรุ่น (k154) · เลขตำแหน่ง · เลขราคา
-    let cq = c.replace(/\d+\s*[Kk]\b/g, " ").replace(/\d+\s*เค/g, " ")
+    let cq = c.replace(/\d+\s*[Kk]\b/g, " ").replace(/\d+\s*เค(?!รื)/g, " ")   // k209: อย่ากิน "6เครื่อง"
               .replace(RX_POSNUM, " ").replace(RX_PRICENUM, " ");
     if (tgt.idx >= 0 && items[tgt.idx]) {
       for (const w of String(items[tgt.idx].model).split(/[^A-Za-z0-9ก-๙]+/)) {
@@ -2281,6 +2382,294 @@ function unknownAskHint(text, sm, buf) {
     + "\n✅ หรือถ้าพอเดาได้ว่าลูกค้าน่าจะหมายถึงอะไร ให้ **ถามยืนยันก่อน** (\"หมายถึง ... ใช่ไหมคะ\") ห้ามตอบราคา/สต็อกจนกว่าลูกค้ายืนยัน";
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🎯🎯 k204 · ตัวจับคู่กลิ่นตัวเดียวของระบบ (แก้ 3 ต้นเหตุจากแชทจริง 500 บท)
+// ═══════════════════════════════════════════════════════════════════════════
+//  วัดจากแชทลูกค้าจริง: ข้อความที่มีทั้งชื่อรุ่นและชื่อกลิ่น 429 ข้อความ
+//    → ล็อกกลิ่นไม่ได้ 95 ข้อความ (22.1%) = ถามซ้ำ = ปิดออเดอร์ไม่ได้
+//
+//  ต้นเหตุที่ 1 — กลิ่นชื่อสั้นที่เป็น "คำนำหน้า" ของกลิ่นอื่น กลายเป็นกำกวมทั้งที่ลูกค้าพิมพ์ชื่อเต็ม
+//    แคตตาล็อกมี 53 คู่แบบนี้ ("องุ่น" ชนกับ องุ่นลิ้นจี่/องุ่นเคียวโฮ/องุ่นว่านหางจระเข้)
+//    กฎเดิมให้คะแนน "ตรงเต็ม" กับ "ตรงหัว" เท่ากัน → คะแนนเสมอ → ประกาศกำกวม → ถามซ้ำ
+//    ⛔ "องุ่น" คือกลิ่นที่มีอยู่จริง ลูกค้าพิมพ์ชื่อเต็มแล้ว ไม่ควรถูกถามซ้ำ
+//    แก้: **ตรงเต็มชนะตรงหัวเสมอ** ถ้ามีตรงเต็ม ให้ดูเฉพาะพวกตรงเต็ม แล้วเอาตัวที่ยาวสุด
+//
+//  ต้นเหตุที่ 2 — กฎ "ตรงหัว" ไปตรงกับ *ท้ายคำอื่น* แล้วล็อกกลิ่นผิดตัว (ร้ายแรงสุด)
+//    เคสจริง: "M SWITCH สตอเบอร์รี่ 1" → ระบบล็อก **เบอร์รี่ชมพู** พร้อมจำนวน = ออกการ์ดได้เลย
+//    เพราะ "เบอร์รี่" (หัวของ เบอร์รี่ชมพู) ไปโผล่ท้ายคำว่า "สต-อเบอร์รี่"
+//    ⛔ นี่ไม่ใช่ "ไม่รู้" แต่คือ "รู้ผิด" → ลูกค้าได้ของผิดกลิ่น เสียเงินจริง
+//    แก้: ตรงหัวนับได้เฉพาะเมื่อ **เริ่มที่ขอบคำ** (ต้นข้อความ/หลังเว้นวรรค/หลังตัวเลข)
+//         แล้วค่อยตกไปที่ตัวเทียบคำสะกดเพี้ยน (โครงพยัญชนะ — ตัวเดียวกับที่ typoHint ใช้อยู่)
+//
+//  ต้นเหตุที่ 3 — ข้อความเดียวสั่งหลายรายการ → เก็บได้ตัวเดียว และเลือกผิดตัว
+//    เคสจริง: "หัวMarbo มะม่วง 5 หัว / โคล่า 10 หัว / แตงโม 5 หัว" = ออเดอร์ 20 หัว
+//    ระบบล็อกได้ตัวเดียว (และเป็น "มะม่วงเสาวรส" ซึ่งผิด) → ตกไป 2 รายการ = เก็บเงินขาด
+//    แก้: แยกข้อความเป็นท่อนตามที่คนไทยเขียนจริง (ขึ้นบรรทัด / จุลภาค / ขีด) แล้วอ่านทีละท่อน
+//         ได้ทั้ง "หลายรายการ" และ "จำนวนของแต่ละรายการ" ในกลไกเดียว
+//  ⛔ ไม่ได้เพิ่มคำตอบตายตัวรายเคสแม้แต่เคสเดียว — แก้ที่กติกาการจับคู่ล้วนๆ
+const FM_BARE = f => String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+// แปลงข้อความโดย "จำขอบคำไว้" (normTH ตัดช่องว่างทิ้ง ทำให้ตรวจขอบคำไม่ได้)
+function fmText(s) {
+  const up = String(s || "").toUpperCase();
+  let t = "", edge = [], brk = true;
+  for (const ch of up.replace(/เเ/g, "แ")) {
+    if (/[\s\-_.,\/|:=()]/.test(ch)) { brk = true; continue; }
+    t += ch; edge.push(brk); brk = /[0-9]/.test(ch);   // หลังตัวเลขถือเป็นคำใหม่ ("5หัวMarbo")
+  }
+  return { t, edge };
+}
+// 🔢 k209 (Engine 1 · หลักฐาน Gold120): หน่วยนับไทยในตารางเดิมขาด "เครื่อง/ชุด/ห่อ/ซอง/แพ็ค"
+//   และคนไทยพูด "แท่งนึง / อันนึง" แทน "1 แท่ง" ตลอด → อ่านจำนวนไม่ได้เลย
+//   เคสจริงในชุด Gold: A09 "เอา6เครื่องก่อนครับ" · D07 "9kราคาส่ง5เครื่อง" · E10 "เอาอันนี้อันนึง"
+//   และเลขนิโคติน "นิค5 / 5%" ถูกอ่านเป็นจำนวน (C16 → ส่ง 5 ชิ้นแทน 1 = Critical)
+const QTY_UNIT = "ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|เครื่อง|ชุด|ห่อ|ซอง|แพ็?ค";
+const QTY_ONE_RE = new RegExp("(?:" + QTY_UNIT + ")\\s*(?:นึง|หนึ่ง)");
+function fmQty(seg) {
+  const t = String(seg || "").replace(/\d+\s*[Kk]\b/g, " ").replace(/\d+\s*เค(?!รื)/g, " ")
+    // ⛔ เลขที่ "ไม่ใช่จำนวนสินค้า" ต้องถูกลบก่อนเสมอ — ความเข้มนิโคติน · ขนาดขวด · ราคา
+    .replace(/(นิ[คโก]|นิโคติน|nic|ni[ck]otine|salt)\s*\d{1,3}/gi, " ")
+    .replace(/\d{1,3}\s*(mg|ml|มล|มก|%)/gi, " ")
+    .replace(/\d[\d,]{3,}/g, " ").replace(/\d{2,3}\s*(บาท|฿|%)/g, " ");
+  // k210: "2ตัวนี้ต่างกันยังไง" = ชี้ของเพื่อเปรียบเทียบ ไม่ใช่สั่ง 2 ชิ้น
+  const t2 = t.replace(new RegExp("\\d{1,3}\\s*(?:" + QTY_UNIT + ")\\s*(?:นี้|นั้น|ไหน|ใด)", "g"), " ");
+  if (QTY_ONE_RE.test(t2)) return 1;                    // "แท่งนึง / อันนึง / เครื่องนึง" = 1
+  // ⚠️ คนไทยพิมพ์ "นมกล้วย 2 ครับ" — เลขอยู่ท้ายแต่มีคำลงท้ายต่อ ตัดออกก่อนอ่าน
+  //   เดิมจับได้เฉพาะเลขที่อยู่ท้ายสุดจริงๆ → ออเดอร์ที่พิมพ์สุภาพอ่านจำนวนไม่ได้ทั้งหมด
+  // k209: คนไทยพิมพ์ "555" = หัวเราะ ไม่ใช่จำนวน (เคสจริง "6เครื่องครังะมผิด555")
+  const tp = t2.replace(/\s*(ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|ค๊า|จ้า|จ้ะ|นะ|น๊า|ฮะ|งับ|ครัช)+\s*$/g, "")
+    .replace(/(\d)\1{2,}(?!\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|เครื่อง|ชุด))/g, " ").trim();
+  const m = tp.match(new RegExp("(\\d{1,3})\\s*(?:" + QTY_UNIT + ")")) || tp.match(/[=x×]\s*(\d{1,3})/) || tp.match(/(\d{1,3})\s*$/);
+  const n = m ? parseInt(m[1], 10) : 0;
+  return (n > 0 && n <= 999) ? n : null;
+}
+// หากลิ่นที่ตรงที่สุดใน "ท่อนเดียว" — คืน null ถ้ายังกำกวมจริงๆ
+// 🧹 k209: คำลงท้ายสุภาพเกาะท้ายชื่อกลิ่นโดยไม่เว้นวรรค ("เอาลูกอมเรนโบค่ะ")
+//   ทำให้ชื่อกลิ่นไม่จบที่ขอบคำ → ตัวจับคู่มองไม่เห็นชื่อเต็ม แล้วไปคว้าชื่อสั้นแทน ("ลูกอม")
+//   คำพวกนี้ไม่เคยเป็นส่วนหนึ่งของชื่อกลิ่น ตัดท้ายท่อนได้อย่างปลอดภัย
+const FM_POLITE_RE = /\s*(ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|ค๊า|จ้า|จ้ะ|นะ|น๊า|ฮะ|งับ|ครัช|ครัฟ|คร่ะ)+\s*$/;
+// 🔤 k209 (ต้นเหตุใหญ่สุดที่เหลือใน Gold120): คนไทยพิมพ์คำนำติดกับชื่อกลิ่นโดยไม่เว้นวรรค
+//   "เอาลูกอมเรนโบค่ะ" · "เอามิ้นคับ" · "กลิ่นมิ้น1" · "เอาboost pod - มิกเบอรี่"
+//   ตัวจับคู่บังคับให้ชื่อกลิ่น "เริ่มที่ขอบคำ" (กฎ k204 ที่กันจับผิดตัว) → พอไม่มีเว้นวรรคก็มองไม่เห็น
+//   คำเหล่านี้เป็นคำนำหน้าคำสั่งซื้อ ไม่เคยเป็นส่วนหนึ่งของชื่อกลิ่น → แยกเป็นคำได้อย่างปลอดภัย
+const FM_LEAD_RE = /(เอา|ขอ|รับ|สั่ง|เพิ่ม|กลิ่น|รส|เปลี่ยนเป็น|เป็น|แบบ)(?=[ก-๙])/g;
+// 🔤 k209: ศัพท์ย่อที่ร้านและลูกค้าใช้จริงทุกวัน — "สตอ" = สตรอว์เบอร์รี่
+//   เดิมจับได้เฉพาะ "สตอเบอรี่" (ผ่านตัวเทียบคำเพี้ยน) แต่คำผสมอย่าง "สตอกีวี่ · สตอแตงโม · สตอกล้วย"
+//   ไม่มีทางเข้าถึงชื่อเต็มเลย → ตกรายการทั้งบรรทัด (D05 ตกไป 1 หัว · D16 ตกไป 1 หัว)
+//   "สตรอว์เบอร์รี่" เป็นคำที่คนไทยสะกดหลากหลายที่สุดในแคตตาล็อก (สตอ · สตอเบอรี่ · สตรอเบอรี่)
+//   เคสจริง "พีช สตอเบอรี่marbo" → ระบบได้แค่ "พีช" = ส่งกลิ่นผิด (P0)
+//   ทำให้เป็นรูปมาตรฐานก่อนเทียบ = กฎเดียวครอบทุกคำผสมที่มีสตรอว์เบอร์รี่
+const FM_ABBR = [
+  [/ส\s*ต\s*ร?\s*อ\s*ว?์?\s*เบอ\s*ร?\s*์?\s*รี?่?/g, "สตรอว์เบอร์รี่"],
+  // ⛔ "สตอ" ลอยๆ คำเดียว ห้ามขยาย — สั้นเกินกว่าจะรู้ว่าหมายถึงสตรอว์เบอร์รี่ตัวไหน (ชุดทดสอบข้อ 866)
+  //    ขยายเฉพาะตอนที่มันเป็นส่วนหนึ่งของคำผสม (มีตัวอักษรไทยติดหน้าหรือหลัง)
+  [/(?<=[ก-๙])สตอ(?![เบ])|สตอ(?![เบ])(?=[ก-๙])/g, "สตรอว์เบอร์รี่"],
+];
+// 🎨 k210: ตัวเลือกประเภท "สี" (เป็นของเครื่อง ไม่ใช่กลิ่นน้ำยา)
+const FM_COLOR_RE = /^สี[ก-๙]/;
+// 🗣️ k210 (P0 · Gold120 B10): ประโยค "เล่าต่อ" ไม่ใช่คำสั่งซื้อ
+//   เคสจริง "พอดีฝากเพื่อนสั่ง แตงโมไป ร้านบอกหมดจ้า" → ระบบสร้างรายการ แตงโม ×1
+//   = ลูกค้าได้ของที่ไม่เคยสั่ง (Wrong Product Critical)
+//   กติกาทั่วไป: ท่อนที่เป็น "คำพูดที่ยกมาจากคนอื่น" หรือ "รายงานว่าซื้อ/สั่งไปแล้ว"
+//   ไม่ใช่การสั่งของในเทิร์นนี้ — ไม่ใช่รายการที่ต้องขึ้นออเดอร์
+//   ⛔ ไม่ครอบคำถามสต็อกธรรมดา ("องุ่นหมดหรอครับ") เพราะไม่มีการอ้างคำพูดของใคร
+const FM_REPORT_RE = /(?:ร้าน|แอด(?:มิน)?|เพื่อน|เขา|เค้า|พี่|น้อง|แม่ค้า)\s*(?:บอก|แจ้ง|ว่า)|บอก(?:ว่า)?\s*(?:หมด|ไม่มี)|(?:สั่ง|ซื้อ|เอา)[^\n]{0,14}(?:ไปแล้ว|มาแล้ว|ไปก่อนหน้า)/;
+function fmBest(seg, models) {
+  let _s = String(seg || "").replace(FM_POLITE_RE, "").replace(FM_LEAD_RE, "$1 ");
+  for (const [re, full] of FM_ABBR) _s = _s.replace(re, full);
+  const { t, edge } = fmText(_s);
+  if (t.length < 3) return null;
+  const exact = [], pre = [], typo = [];
+  for (const k of models) {
+    const v = FLAVORS[k]; if (!v || !v.f.length) continue;
+    const seen = new Set();
+    for (const f of v.f) {
+      const bare = FM_BARE(f), nb = normTH(bare);
+      if (nb.length < 3 || seen.has(nb)) continue;
+      // 🎨 k210 (P0 · Gold120 B03/B15/B16): แคตตาล็อกเก็บ "สี" ของเครื่องไว้ในช่องกลิ่น
+      //   ("เครื่อง M ZERO PRO - สีดำ") ทำให้คำว่า "สีดำ" กลายเป็นกลิ่นของสินค้าอะไรก็ได้
+      //   เคสจริง "เอาเครื่องสีดำ ก่ะ เทาเหลือง" → ระบบสร้างรายการ กลิ่น "สีดำ" ×1 = ออเดอร์ผิดชนิด
+      //   กติกาทั่วไป: ชื่อตัวเลือกที่เป็น "สี" มีความหมายเฉพาะเมื่อรู้แล้วว่าเป็นเครื่องรุ่นไหน
+      //   → ถ้ายังไม่ล็อกรุ่น ห้ามหยิบตัวเลือกประเภทสีมาเป็นคำตอบ (ต้องถามรุ่นก่อน)
+      if (FM_COLOR_RE.test(bare) && models.length !== 1) continue;
+      seen.add(nb);
+      const i = t.indexOf(nb);
+      if (i !== -1) { exact.push({ model: k, flavor: bare, pos: i, len: nb.length, ex: 1, atStart: !!edge[i] }); continue; }
+      let hit = 0, hp = -1, hEdge = false;
+      for (let L = Math.min(nb.length - 1, 14); L >= 4; L--) {
+        const j = t.indexOf(nb.slice(0, L));
+        // ⛔ k204: ต้องเริ่มที่ขอบคำ  ⛔ k209: และต้องเป็น "การอ้างถึงกลิ่นนั้นจริง" ไม่ใช่บังเอิญตัวอักษรตรง
+        //   หลักฐาน Gold120 — เดิม "องุ่นหมดหรอครับ" ตรงหัว "องุ่นห" (6 ตัว) ยาวกว่าตรงเต็ม "องุ่น" (5)
+        //   → ระบบล็อก "องุ่นหน้าร้อน" ทั้งที่ตัว "ห" มาจากคำว่า "หมด" คนละคำกัน
+        //   เช่นเดียวกับ "แตงโมไป" → "แตงโมไอซ์"  = รู้ผิด ไม่ใช่ไม่รู้ → ลูกค้าได้ของผิดกลิ่น (P0)
+        //   กติกาทั่วไป — ตรงหัวนับได้เมื่อเข้าข้อใดข้อหนึ่ง:
+        //     (1) คำในข้อความจบพอดีตรงนั้น  → ลูกค้าพิมพ์ชื่อย่อจริง ("องุ่นว่าน")
+        //     (2) ครอบคลุมชื่อกลิ่นเกิน 65%  → เป็นการสะกดหางคำต่างกัน ("เลม่อนมิ้นท์" vs "เลม่อนมิ้นต์")
+        //   "องุ่นห" ครอบคลุม องุ่นหน้าร้อน แค่ 46% และไม่จบคำ → ตัดทิ้ง ตรงเต็ม "องุ่น" ชนะ ✅
+        if (j !== -1 && edge[j] && ((j + L >= t.length || edge[j + L]) || L / nb.length >= 0.65)) {
+          hit = L; hp = j; hEdge = (j + L >= t.length || edge[j + L]); break;
+        }
+      }
+      if (hit) { pre.push({ model: k, flavor: bare, pos: hp, len: hit, ex: 0, cov: hit / nb.length, atEdge: hEdge }); continue; }
+      // สะกดเพี้ยน — เทียบโครงพยัญชนะ (กติกาเดียวกับ typoHint ที่ใช้อยู่แล้ว)
+      //   ⚠️ ต้องเข้ม ไม่งั้นคำสั้นจะจับมั่ว: "มาโบ"(โครง มบ) เคยไปตรงกับ "โคล่า"(โครง คล)
+      //   กติกา: โครงต้องยาว ≥4 · ต่างได้ไม่เกิน 25% · และตัวแรกของโครงต้องตรงกัน
+      const sk = _skel(nb);
+      if (nb.length >= 5 && sk.length >= 4) {
+        let bd = 99, bw = "";
+        for (const w of String(seg).split(/[\s,\/|:=()]+/)) {
+          const nw = normTH(w); if (nw.length < 4) continue;
+          const sw = _skel(nw); if (sw.length < 3 || sw[0] !== sk[0]) continue;
+          const dd = _levFull(sw, sk);
+          if (dd < bd) { bd = dd; bw = nw; }
+        }
+        if (bw && bd <= Math.max(2, Math.ceil(sk.length * 0.34))) typo.push({ model: k, flavor: bare, pos: t.indexOf(bw.slice(0, 3)), len: nb.length, dist: bd });
+      }
+    }
+  }
+  // ⭐ กติกาเดียว: "ตรงยาวกว่าชนะ" · ยาวเท่ากันให้ **ตรงเต็มชนะตรงหัว**
+  //   "องุ่น" → ตรงเต็ม องุ่น(5) เสมอกับ ตรงหัว องุ่นลิ้นจี่(5) → เอา องุ่น ✅
+  //   "องุ่นว่าน" → ตรงหัว องุ่นว่านหางจระเข้(9) ยาวกว่า ตรงเต็ม องุ่น(5) → เอาตัวยาว ✅
+  // 🎯 k209 (P0 · หลักฐาน Gold120): ตรงหัวที่ "ทับตำแหน่งเดียวกับตรงเต็ม" ต้องชนะขาดจริงถึงจะเอาชนะได้
+  //   "รสแตงโมได้มั้ย" → ตรงหัว "แตงโมไ" (66% ของ แตงโมไอซ์) ยาวกว่าตรงเต็ม "แตงโม"
+  //   → ระบบล็อก แตงโมไอซ์ ทั้งที่ตัว "ไ" มาจากคำว่า "ได้"  = ลูกค้าได้ของผิดกลิ่น
+  //   แต่ "เลม่อนมิ้นท์" (83% ของ เลม่อนมิ้นต์) คือการสะกดหางคำต่างกันจริง ต้องชนะ "เลม่อน"
+  //   กติกา: ถ้าตำแหน่งเริ่มตรงกับตรงเต็ม → ตรงหัวต้องครอบคลุมชื่อกลิ่น ≥80% เท่านั้น
+  const exPos = new Set(exact.map(x => x.pos));
+  //   ⚠️ ยกเว้น: ถ้าคำในข้อความ "จบพอดี" ที่ชื่อย่อนั้น = ลูกค้าตั้งใจพิมพ์แบบนั้น ("องุ่นว่าน") → ผ่านเสมอ
+  const solid = exact.concat(pre.filter(p => p.atEdge || !exPos.has(p.pos) || p.cov >= 0.8));
+  // 🔤 k210 (P0 · Gold120 D10): ชื่อกลิ่นที่สะกดผิด "ข้างใน" มีชื่อกลิ่นสั้นอีกตัวซ่อนอยู่
+  //   เคสจริง "หมากฟรั่งแตงโม2" (ฝ→ฟ) → ระบบเจอ "แตงโม" แบบตรงเต็ม เลยไม่เคยลองตัวเทียบคำเพี้ยนเลย
+  //   → ได้ แตงโม ซึ่งซ้ำกับรายการก่อนหน้า แล้วถูกตัดทิ้ง = ตกไป 1 รายการ (ส่งของขาด 2 หัว)
+  //   กติกาทั่วไป: ถ้าตัวเทียบคำเพี้ยนชี้ไปชื่อที่ยาวกว่าตัวตรงเต็มมาก = ลูกค้าพิมพ์ชื่อยาวแบบเพี้ยน
+  //   ⛔ ต้องยาวกว่าอย่างน้อย 2 เท่า ไม่งั้นจะไปทับเคสที่ตรงเต็มถูกอยู่แล้ว
+  //   เกณฑ์ที่ถูกต้องคือ "ตรงเต็มตัวนั้นเริ่มที่ขอบคำหรือไม่"
+  //     · "พีช1"            → "พีช" เริ่มที่ขอบคำ = ลูกค้าพิมพ์คำนี้จริง → ห้ามไปเดาเป็น "พีชเย็น"
+  //     · "หมากฟรั่งแตงโม2" → "แตงโม" ฝังอยู่กลางคำ = เศษของคำที่สะกดผิด → ให้ตัวเทียบคำเพี้ยนตัดสิน
+  let solid2 = solid;
+  //   (ตรงหัวบังคับ edge อยู่แล้ว จึงนับเป็น "เริ่มที่ขอบคำ" เสมอ)
+  if (solid.length && typo.length && !solid.some(x => x.atStart !== false)) solid2 = [];
+  const pool = solid2.length ? solid2 : typo;
+  if (!pool.length) return null;
+  if (pool === typo) {
+    // สะกดเพี้ยน: ใกล้ที่สุดชนะ · เท่ากันให้เอาชื่อสั้นกว่า ("สตอเบอร์รี่" ต้องได้ สตรอว์เบอร์รี่ ไม่ใช่ สตรอว์เบอร์รี่แตงโม)
+    pool.sort((a, b) => (a.dist - b.dist) || (a.len - b.len));
+    const t0 = pool.filter(x => x.dist === pool[0].dist && x.len === pool[0].len);
+    if ([...new Set(t0.map(x => x.flavor))].length > 1) return null;
+    return pool[0];
+  }
+  pool.sort((a, b) => (b.len - a.len) || (b.ex - a.ex));
+  const top = pool.filter(x => x.len === pool[0].len && x.ex === pool[0].ex);
+  const uniq = [...new Set(top.map(x => x.flavor))];
+  if (uniq.length > 1) {
+    // 🍬 k209: แคตตาล็อกมีกลิ่น "คู่" เขียนด้วยขีดทับ (ลูกอมเรนโบว์ / มิ้นต์)
+    //   ลูกค้าพิมพ์ "ลูกอมเรนโบ" → เสมอกันทั้ง 3 ชื่อ → ระบบประกาศกำกวมแล้วถามซ้ำ
+    //   ทั้งที่ชื่อสั้นสุดเป็นต้นทางของทุกตัว = ลูกค้าหมายถึงตัวนั้นแน่นอน
+    //   กติกา: เสมอกัน + ชื่อสั้นสุดเป็นคำนำหน้าของทุกตัวที่เหลือ → เอาชื่อสั้นสุด (ไม่เดาส่วนเกิน)
+    const byLen = [...uniq].sort((a, b) => normTH(a).length - normTH(b).length);
+    const base = normTH(byLen[0]);
+    if (!byLen.every(x => normTH(x).indexOf(base) === 0)) return null;   // ไม่ใช่ตระกูลเดียวกัน = กำกวมจริง
+    return top.find(x => x.flavor === byLen[0]);
+  }
+  return pool[0];
+}
+// อ่านทั้งข้อความ → รายการสินค้าตามลำดับที่ลูกค้าพิมพ์ (รองรับหลายรายการในข้อความเดียว)
+// 📦 k209 (P0 · Gold120 D14/D16/D17): ข้อความเดียวสั่ง "หลายรุ่น" — คนไทยเขียนแบบนี้เวลาสั่งยกชุด
+//   "Marbo switch pod -องุ่น 1 -สตอแตงโม 1   Esko bar switch pod -สตอกล้วย 1 -แตงโมเย็น 1"
+//   เดิมตัวจับคู่มองทั้งข้อความเป็นก้อนเดียว → กลิ่นของรุ่นหลังไปเกาะรุ่นแรก และตกรายการ
+//   = ส่งของผิดรุ่นและจำนวนขาด (Critical)
+//   กติกาทั่วไป: ชื่อรุ่นที่โผล่ในข้อความ = จุดเริ่มบล็อกใหม่ · กลิ่นในบล็อกไหน ผูกกับรุ่นของบล็อกนั้นเท่านั้น
+function fmModelBlocks(text) {
+  const hits = [];
+  for (const [re, key] of TH_MODEL) {
+    let r; try { r = new RegExp(re.source, re.flags.replace(/g/g, "") + "g"); } catch (e) { continue; }
+    let m, guard = 0;
+    while ((m = r.exec(text)) !== null && guard++ < 40) {
+      hits.push({ i: m.index, key });
+      if (r.lastIndex === m.index) r.lastIndex++;
+    }
+  }
+  if (hits.length < 2) return [];
+  hits.sort((a, b) => a.i - b.i);
+  const marks = [];                                   // ยุบตำแหน่งที่ทับกัน (หลายกฎจับรุ่นเดียวกัน)
+  for (const h of hits) {
+    const last = marks[marks.length - 1];
+    if (last && h.i - last.i < 14) continue;
+    marks.push(h);
+  }
+  if ([...new Set(marks.map(x => x.key))].length < 2) return [];
+  return marks.map((m, k) => ({ model: m.key, txt: text.slice(m.i, k + 1 < marks.length ? marks[k + 1].i : text.length) }));
+}
+function fmPick(text, models) {
+  try {
+    {
+      const blocks = fmModelBlocks(String(text || ""));   // k209: ข้อความเองบอกหลายรุ่น = เชื่อข้อความ
+      if (blocks.length >= 2) {
+        const out = [], seenB = new Set();
+        for (const b of blocks) for (const it of fmPick(b.txt, [b.model])) {
+          const k = it.model + "|" + it.flavor;
+          if (seenB.has(k)) continue;
+          seenB.add(k); out.push(it);
+        }
+        if (out.length) return out;
+      }
+    }
+  } catch (e) { console.log("K209_BLOCK_FAIL " + String(e).slice(0, 60)); }
+  // ⚠️ วัดจากแชทจริง: คนไทยคั่นรายการด้วย "กับ · และ · แล้วก็" พอๆ กับขึ้นบรรทัดใหม่
+  //   เคสจริง "บลูไอซ์กับมิกซ์เบอร์รี่คับ" → เดิมอ่านได้กลิ่นเดียว = ตกไป 1 รายการ (คิดจำนวนผิด)
+  //   ⛔ "กับ" ต้องมีตัวอักษรขนาบทั้งสองข้าง ไม่งั้นจะไปตัดคำอย่าง "กับข้าว" ผิด
+  // 🎯 k208 Pattern A (165 เคสในคลังจริง — ใหญ่ที่สุด)
+  //   คนไทยเขียนออเดอร์ติดกันบรรทัดเดียว: "หัวM แตงโม2 แตงโมสตอร์2"
+  //   เดิมตัดรายการด้วยขึ้นบรรทัด/จุลภาค/เว้นวรรคคู่เท่านั้น → อ่านได้รายการเดียว
+  //   → ระบบเห็น 2 ชิ้น ทั้งที่ลูกค้าสั่ง 4 ชิ้น = คิดจำนวนผิด/ตกรายการ (Critical)
+  //   กติกาทั่วไป: "ตัวเลข (+หน่วย) ที่ตามด้วยตัวอักษร" = จบรายการหนึ่ง เริ่มรายการใหม่
+  //   ⛔ ต้องไม่ตัดตรงเลขที่เป็นส่วนหนึ่งของชื่อรุ่น (9K · 15,000 คำ · 20000 puff)
+  const preSplit = String(text || "")
+    .replace(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|เครื่อง|ชุด|ห่อ|ซอง|แพ็?ค)?\s*(?=[ก-๙a-zA-Z])/g,
+      (all, n, u, off, str) => {
+        const tail = str.slice(off + all.length);
+        if (/^\s*(k\b|เค|คำ|puff|พัฟ|บาท|฿|mg|ml|%)/i.test(tail)) return all;   // เลขในชื่อรุ่น/ราคา/ความแรง
+        const head = str.slice(0, off);
+        if (/[\d,]\s*$/.test(head)) return all;                                  // อยู่กลางตัวเลขยาว (15,000)
+        return n + (u || "") + "\n";
+      });
+  const segs = String(preSplit || "")
+    //   ⛔ จุลภาคที่อยู่ "ระหว่างตัวเลข" คือตัวคั่นหลักพันในชื่อรุ่น (STAR 2,500) ห้ามใช้ตัดรายการ
+    //      ไม่งั้น "STAR 2,500 แตงโม" จะถูกตัดเป็น "STAR 2" แล้วอ่าน 2 เป็นจำนวน = คิดจำนวนผิด
+    // k209: "ก่ะ / ก๊ะ" คือการสะกด "กับ" แบบพูด พบจริงในแชท ("เอากล้วย ก่ะแตงโม")
+    //   ไม่ได้อยู่ในตัวคั่นเดิม → ทั้งท่อนถูกอ่านรวมกัน แล้วจับกลิ่นไม่ได้เลยสักตัว
+    .split(/[\n;·]|(?<!\d),(?!\d)|\s\/\s|\s{2,}|(?<=[ก-๙a-zA-Z0-9])\s*(?:กับ|และ|แล้วก็|กะ|ก่ะ|ก๊ะ)\s*(?=[ก-๙a-zA-Z])/)
+    .map(x => x.trim()).filter(x => x.length >= 2);
+  const items = [], seen = new Set();
+  for (const seg of segs) {
+    if (FM_REPORT_RE.test(seg)) continue;              // k210: ท่อนเล่าต่อ/อ้างคำพูดคนอื่น = ไม่ใช่การสั่ง
+    const b = fmBest(seg, models);
+    if (!b) continue;
+    const key = b.model + "|" + b.flavor;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({ model: b.model, flavor: b.flavor, qty: fmQty(seg) });
+  }
+  if (!items.length && !FM_REPORT_RE.test(String(text || ""))) {   // เขียนติดกันไม่มีตัวคั่น
+    const b = fmBest(text, models);
+    if (b) items.push({ model: b.model, flavor: b.flavor, qty: fmQty(text) });
+  }
+  // ⚠️ ท่อนที่บอก "จำนวนอย่างเดียว" (ตอบคำถาม "รับกี่หัว" → "เอา 5 หัวครับ")
+  //   เดิมอ่านจำนวนได้เฉพาะตอนจับกลิ่นได้ในท่อนเดียวกัน → เคสนี้จำนวนหายทั้งหมด
+  //   กติกา: ถ้ามีรายการที่ยังไม่รู้จำนวนอยู่ ให้เติมจำนวนที่ลอยอยู่ให้รายการนั้น
+  if (items.length && items.some(x => x.qty === null)) {
+    for (const seg of segs) {
+      if (fmBest(seg, models)) continue;                           // ท่อนนี้มีกลิ่นแล้ว ข้าม
+      const q = fmQty(seg);
+      if (q === null) continue;
+      const t = items.find(x => x.qty === null);
+      if (t) t.qty = q;
+    }
+  }
+  // "อย่างละ 1" = จำนวนเดียวกันทุกรายการ (คนไทยเขียนแบบนี้บ่อย)
+  const each = String(text || "").match(/อย่างละ\s*(\d{1,3})/);
+  if (each && items.length > 1) { const q = parseInt(each[1], 10); if (q > 0 && q <= 999) for (const it of items) if (it.qty === null) it.qty = q; }
+  return items;
+}
 function flavorHint(text, sm, buf){
   const t = normTH(text);
   const hits = [];
@@ -2370,23 +2759,26 @@ function flavorHint(text, sm, buf){
     //   เหตุที่ต้องให้คะแนน ไม่ใช่แค่เจอ/ไม่เจอ: "องุ่นว่าน" ไปตรงหัว 4 ตัว ("องุ่") ของ
     //   องุ่นลิ้นจี่ · องุ่นเคียวโฮ ด้วย → ถ้านับแค่ "เจอ" จะกลายเป็นกำกวมทั้งที่ลูกค้าพิมพ์ชัดมาก
     //   ตรง 9 ตัว (องุ่นว่าน) ย่อมชนะตรง 4 ตัว (องุ่) — ยาวกว่า = เจาะจงกว่า
-    const tn2 = normTH(text);
-    let lockModel = "", lockFlavor = "", lockScore = 0, ambiguous = false;
-    for (const k of hits) {
-      const v = FLAVORS[k]; if (!v || !v.f.length) continue;
-      for (const f of v.f) {
-        const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
-        const nb = normTH(bare);
-        if (nb.length < 3) continue;
-        let score = 0;
-        if (tn2.indexOf(nb) !== -1) score = nb.length;                     // พิมพ์ชื่อกลิ่นเต็ม
-        else for (let L = Math.min(nb.length - 1, 14); L >= 4; L--) {      // พิมพ์ย่อแบบตัดท้าย
-          if (tn2.indexOf(nb.slice(0, L)) !== -1) { score = L; break; }
-        }
-        if (!score) continue;
-        if (score > lockScore) { lockScore = score; lockModel = k; lockFlavor = bare; ambiguous = false; }
-        else if (score === lockScore && bare !== lockFlavor) ambiguous = true;   // ตรงยาวเท่ากันหลายกลิ่น = ต้องถามต่อ
+    // 🎯 k204: ใช้ตัวจับคู่ตัวเดียวของระบบ (fmPick) — รองรับหลายรายการในข้อความเดียว
+    const picks = fmPick(text, hits);
+    let lockModel = "", lockFlavor = "", ambiguous = !picks.length;
+    if (picks.length) { lockModel = picks[0].model; lockFlavor = picks[0].flavor; }
+    // ── หลายรายการในข้อความเดียว → ส่งทั้งชุดให้ AI + ให้ผู้เรียกเขียนลง Draft ──
+    if (picks.length > 1) {
+      const rows = [], gone = [];
+      for (const it of picks) {
+        const full = (FLAVORS[it.model].f || []).filter(f => FM_BARE(f) === it.flavor);
+        const ok = full.some(f => { const q = qtyOf(it.model, f); return q === null || q > B; });
+        (ok ? rows : gone).push(it);
       }
+      _LAST_LOCK = { model: picks[0].model, flavor: picks[0].flavor, qty: picks[0].qty, items: rows, t: Date.now() };
+      out += "\n\n🧾🧾 [ลูกค้าสั่งหลายรายการในข้อความเดียว — ระบบอ่านได้ครบแล้ว]"
+           + rows.map((x, i) => "\n" + (i + 1) + ". " + x.model + " | " + x.flavor + (x.qty ? " | " + x.qty : " | (ยังไม่บอกจำนวน)")).join("")
+           + (gone.length ? "\n❌ หมดชั่วคราว: " + gone.map(x => x.flavor).join(" · ") + " → บอกลูกค้าตรงๆ ห้ามเงียบ" : "")
+           + "\n⛔⛔ ต้องทวนให้ครบทุกรายการ ห้ามตกหล่นแม้แต่รายการเดียว (เคสจริง: ตกไป 2 รายการ = เก็บเงินขาด)"
+           + (rows.every(x => x.qty) ? "\n✅ บอกจำนวนครบทุกรายการแล้ว → **ออกบล็อกทวนคำสั่งซื้อได้เลย**"
+                                     : "\n✅ ถามเฉพาะรายการที่ยังไม่บอกจำนวน ห้ามถามรายการที่บอกแล้วซ้ำ");
+      return out;
     }
     if (lockFlavor && !ambiguous) {
       const v = FLAVORS[lockModel];
@@ -2395,9 +2787,7 @@ function flavorHint(text, sm, buf){
       if (inStock) {
         // ⚠️ ต้องตัดตัวเลขที่เป็น "ส่วนหนึ่งของชื่อรุ่น" ทิ้งก่อน ไม่งั้น "มาโบ9k เอาเบอร์รี่"
         //   จะอ่าน 9 เป็นจำนวนสั่งซื้อ → ออกการ์ด 9 ชิ้นทั้งที่ลูกค้าไม่เคยบอกจำนวน (เก็บเงินเกิน)
-        const _tq = String(text || "").replace(/\d+\s*(k|เค)/gi, " ").replace(/\d[\d,]{2,}/g, " ");
-        const qm = _tq.match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)?/);
-        const qty = qm ? parseInt(qm[1], 10) : 0;
+        const qty = (picks[0] && picks[0].qty) || fmQty(text) || 0;   // k204: ตัวอ่านจำนวนตัวเดียวของระบบ
         // 🎯 P0: lockModel/lockFlavor คือ "ผลการระบุสินค้า" ที่เดิมเกิดใหม่แล้วหายไปทุกเทิร์น
         //   ส่งออกให้ผู้เรียกเขียนลง Product Slot แทน — ครั้งนี้ระบุได้ ครั้งหน้าไม่ต้องคิดใหม่
         _LAST_LOCK = { model: lockModel, flavor: lockFlavor, qty: (qty > 0 && qty <= 200) ? qty : null, t: Date.now() };
@@ -4454,8 +4844,15 @@ export default {
     // อ่าน raw body เพื่อตรวจลายเซ็น
     const raw = await request.text();
     const sig = request.headers.get("x-line-signature") || "";
-    const ok = await verifySignature(SECRET, raw, sig);
+    let ok = await verifySignature(SECRET, raw, sig), authVia = ok ? "line" : "";
+    // 🔗 k212 — Webhook Gateway ของ Mini App (เข้าทางเดียวกับ LINE คือ /w/<ร้าน>)
+    //   Gateway เซ็นด้วย "คีย์ของตัวเอง" ไม่ใช่ LINE Channel Secret → ลายเซ็น LINE ไม่มีทางผ่าน
+    //   จึงเปิดทางที่สองไว้ **เฉพาะร้านที่ตั้ง GATEWAY_SECRET_<ร้าน> เท่านั้น**
+    //   ⛔ ไม่ตั้ง env = ทางนี้ปิดสนิท (fail-closed) ร้านอื่นจึงไม่ได้รับผลกระทบใดๆ
+    //   ⛔ ไม่แตะเส้นทางลายเซ็น LINE เดิมแม้แต่บรรทัดเดียว — ของเดิมยังต้องผ่านก่อนเสมอ
+    if (!ok && (await verifyGateway(env, shopId, request, raw))) { ok = true; authVia = "gateway"; }
     if (!ok) return new Response("bad signature", { status: 401 });
+    if (authVia === "gateway") console.log("K212_GW_AUTH_OK shop=" + shopId);   // ⛔ ห้าม log ค่าคีย์
 
     let body;
     try { body = JSON.parse(raw); } catch (e) { return new Response("bad json", { status: 400 }); }
@@ -7021,10 +7418,21 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       }
       // k17: ลูกค้าเรียกจำนวนพัฟว่า "คำ" — "มาโบ 9000 คำ" = MARBO 9K · "อินฟี่ 20000 คำ" = INFY 20K
       const textH = puffToK(text);
+      // 🔒 k207: ตัดสินก่อนว่าเทิร์นนี้อยู่ใน Flow ที่ไม่เกี่ยวกับสินค้าหรือไม่
+      let _npFlow = "";
+      try {
+        let _o = null, _asW = false;
+        if (env.CONV) {
+          const _v = await env.CONV.get("ord:" + shopId + ":" + userId); if (_v) _o = JSON.parse(_v);
+          const _a = await env.CONV.get("as:" + shopId + ":" + userId);
+          if (_a) { const _aj = JSON.parse(_a); _asW = !!(_aj && _aj.waiting && Date.now() - (_aj.t || 0) < 3600000); }
+        }
+        _npFlow = nonProductFlow(text, _o, _asW);
+      } catch (e) {}
       // 🎯 P0 (ฝั่งเขียน · แหล่ง customer_text): ลูกค้าพิมพ์ชื่อรุ่นมาเอง = หลักฐานที่เชื่อได้มากที่สุด
       //   บันทึกทันทีที่ระบุได้ ⛔ ไม่รอให้ตอบเสร็จ เพราะถ้าเทิร์นนี้พลาด เทิร์นหน้าจะไม่มีอะไรให้ชี้กลับ
       try {
-        const _m = _MODEL_IN(textH);
+        const _m = _npFlow ? "" : _MODEL_IN(textH);   // k207: Flow ไม่เกี่ยวสินค้า = ห้ามแตะ Slot
         if (_m) {
           const _f = carryFlavor(textH, []) || "";
           const _qm = String(textH).replace(/\d+\s*[Kk]\b/g, " ").match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)/);
@@ -7210,7 +7618,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             // 🧾 P0 (Multi-Product): ลูกค้าแก้รายการใน Draft — หาว่าแก้แถวไหน จาก Draft เท่านั้น
             let draftNote = "";
             try {
-              const _ops = draftPlan(textH, pslot);
+              const _ops = _npFlow ? [] : draftPlan(textH, pslot);   // k207: Flow ไม่เกี่ยวสินค้า = ห้ามแก้ Draft
               if (_ops.length) {
                 const _r = draftApply(pslot, _ops);
                 if (_r.done.length) {
@@ -7243,8 +7651,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               } else if (_ref && _ref.empty) {
                 slotWhy = "EMPTY";                      // อ้างถึงของที่ยังไม่เคยคุยกัน → ต้องถาม
               } else {
-                const _cur = slotCurrent(pslot);
+                const _cur = slotCarry(pslot, textH);   // k211: พาได้เฉพาะเมื่อไม่กำกวม
                 if (_cur && _cur.model && !_MODEL_IN(textH)) { slotModel = _cur.model; slotFlavor = _cur.flavor || ""; slotWhy = "สินค้าที่กำลังคุยกันอยู่"; }
+                else if (!_cur && slotOk(pslot) && pslot.items.length > 1) slotWhy = "AMBIG_CARRY";
               }
             }
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
@@ -7253,6 +7662,14 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             const tForHint = textH + carried + carriedF;
             _LEGO_CTX = { txt: tForHint, sm: smForHint, buf: bufForHint, t: Date.now() };   // k123: เก็บไว้ให้ด่านขาออกตรวจ
             _LAST_LOCK = null;   // P0: ล้างก่อนเรียก จะได้รู้ว่ารอบนี้ระบุได้จริงไหม
+            // 🔒 k207: อยู่ใน Flow ที่ไม่เกี่ยวกับสินค้า → ห้ามเรียกตัวอ่านสินค้าเด็ดขาด
+            if (_npFlow) {
+              console.log("K207_PRODUCT_PARSER_BLOCKED เหตุผล=" + _npFlow);
+              return "\n\n🔒 [ตอนนี้อยู่ในขั้นตอน: " + _npFlow + "]"
+                + "\n⛔⛔ ห้ามแก้รุ่น/กลิ่น/จำนวน/ออเดอร์จากข้อความนี้เด็ดขาด"
+                + "\n⛔ ห้ามตีความข้อความนี้เป็นการสั่งสินค้า (ในที่อยู่มีคำที่บังเอิญตรงกับชื่อกลิ่นได้ เช่น ซอยแตงโม)"
+                + "\n✅ ให้ตอบเฉพาะเรื่องที่ลูกค้ากำลังคุยอยู่ แล้วเดินขั้นตอนนั้นให้จบ";
+            }
             let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint) + typoHint(textH, smForHint, bufForHint);
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             if (carriedF) h += "\n[ลูกค้าเลือกกลิ่น **" + carriedF.trim() + "** ไว้แล้วจากข้อความก่อนหน้า]"
@@ -7276,10 +7693,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                  + "\n⛔ เวลาทวนรายการ ต้องทวนให้ครบทุกข้อ ห้ามตกหล่นข้อใดข้อหนึ่ง";
             }
             h += draftNote;
-            if (_LAST_LOCK && _LAST_LOCK.model) {
-              pslot = slotPut(pslot, { model: _LAST_LOCK.model, flavor: _LAST_LOCK.flavor, qty: _LAST_LOCK.qty, source: "customer_text" });
+            if (_LAST_LOCK && _LAST_LOCK.model && !_npFlow) {
+              // k204: ลูกค้าสั่งหลายรายการในข้อความเดียว → ต้องเข้า Draft ให้ครบทุกตัว
+              const _its = (_LAST_LOCK.items && _LAST_LOCK.items.length) ? _LAST_LOCK.items : [_LAST_LOCK];
+              for (const _it of _its) pslot = slotPut(pslot, { model: _it.model, flavor: _it.flavor, qty: _it.qty, source: "customer_text" });
               pslotDirty = true;
-              console.log("P0_SLOT_FROM_FLAVORHINT " + _LAST_LOCK.model + " | " + _LAST_LOCK.flavor);
+              console.log("P0_SLOT_FROM_FLAVORHINT " + _its.map(x => x.model + "|" + x.flavor + (x.qty ? "x" + x.qty : "")).join(" · "));
             }
             return h;
           })();
@@ -9107,6 +9526,46 @@ async function getLineImage(messageId, token) {
   } catch (e) { return null; }
 }
 
+// 🔐🔐 k212 · ตรวจคีย์ของ Webhook Gateway (Mini App) — แยกจากลายเซ็น LINE คนละชุดกัน
+//  กติกาความปลอดภัยที่บังคับตัวเอง:
+//   1) ผูกรายร้าน — อ่าน env "GATEWAY_SECRET_<ร้านตัวใหญ่>" เท่านั้น ร้านไหนไม่ตั้ง = ปิดสนิท
+//   2) เทียบแบบ constant-time ทุกกรณี (ไม่ใช้ === เหมือนเส้นทาง LINE เดิม)
+//   3) ห้าม log ค่าคีย์ · ห้ามส่งค่าคีย์กลับใน response · ห้ามฝังในซอร์ส
+//   4) รองรับ 2 แบบที่ Gateway ทั่วไปใช้ ให้เดฟเลือกได้โดยไม่ต้องแก้โค้ดอีก:
+//      · แบบเซ็น (แนะนำ): HMAC-SHA256 ของ raw body ส่งมาใน x-gateway-signature (base64 หรือ hex · มี sha256= นำหน้าก็ได้)
+//      · แบบคีย์ตรง: ส่งคีย์มาใน x-gateway-secret หรือ Authorization: Bearer <คีย์>
+const eqSafe = (a, b) => {
+  const A = String(a == null ? "" : a), B = String(b == null ? "" : b);
+  if (!A.length || A.length !== B.length) return false;
+  let d = 0;
+  for (let i = 0; i < A.length; i++) d |= A.charCodeAt(i) ^ B.charCodeAt(i);
+  return d === 0;
+};
+async function gwMac(secret, body) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const buf = new Uint8Array(await crypto.subtle.sign("HMAC", key, enc.encode(body)));
+  let hex = "";
+  for (const b of buf) hex += b.toString(16).padStart(2, "0");
+  return { b64: btoa(String.fromCharCode(...buf)), hex };
+}
+async function verifyGateway(env, shopId, request, raw) {
+  try {
+    const id = String(shopId || "").toLowerCase();
+    if (!/^[a-z0-9]+$/.test(id)) return false;
+    const secret = env["GATEWAY_SECRET_" + id.toUpperCase()];
+    if (!secret) return false;                       // ⛔ ร้านที่ไม่ได้ตั้งคีย์ = ทางนี้ไม่มีอยู่จริง
+    const sigHdr = String(request.headers.get("x-gateway-signature") || request.headers.get("x-webhook-signature") || "").trim();
+    if (sigHdr) {
+      const v = sigHdr.replace(/^sha256=/i, "").trim();
+      const mac = await gwMac(secret, raw);
+      return eqSafe(v, mac.b64) || eqSafe(v.toLowerCase(), mac.hex);
+    }
+    const bearer = String(request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "").trim();
+    const plain = String(request.headers.get("x-gateway-secret") || "").trim() || bearer;
+    return plain ? eqSafe(plain, secret) : false;
+  } catch (e) { console.log("K212_GW_AUTH_ERR " + String(e).slice(0, 80)); return false; }   // ⛔ พัง = ไม่ผ่าน (fail-closed)
+}
 async function verifySignature(secret, body, signature) {
   try {
     const enc = new TextEncoder();
