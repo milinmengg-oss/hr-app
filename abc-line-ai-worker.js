@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-08-07-k227-knowunknown";
+const BUILD = "2026-08-14-k319c-ack-close";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -171,6 +171,57 @@ const TRACK = new Map();
 const CANCELLED = new Map();
 // 🔁 k149: จำข้อความล่าสุดที่ส่งให้แต่ละคน กันตอบซ้ำเป๊ะๆ (uid → {sig, t, n})
 const LASTOUT = new Map();
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔁🔁 k319a · ตัวกันตอบซ้ำต้องข้าม worker ได้
+//
+//  เคสจริงโปรดักชัน 13 ส.ค. 1.32-1.34 (ร้าน ABC EASY · ลูกค้า "เตอร์บ่เกี่ยว"):
+//    G2 ถาม "MARBO 9K แท้ 350 / โคลน 290 รับแบบไหนดีคะ"
+//    ลูกค้าตอบ "MARBO 9Kครับผม" → "9Kครับ" → "9Kครับ"
+//    G2 ส่งประโยคเดิมเป๊ะกลับไป **4 ใบติด**
+//
+//  ต้นเหตุที่พิสูจน์ด้วยการรันซ้ำ 2 แบบ:
+//    ทุกเทิร์นลง worker เดียวกัน → k180 ทำงานถูกต้อง (n=2 เปลี่ยนสำนวน · n=3 ส่งต่อคน)
+//    แต่ละเทิร์นลง worker คนละตัว → **ด่านไม่ทำงานเลยสักครั้ง** = ตรงกับภาพหน้าจอเป๊ะ
+//  เพราะ LASTOUT เป็น Map ในหน่วยความจำ = ของใครของมันต่อ worker 1 ตัว
+//    Cloudflare สร้าง worker ใหม่เมื่อไหร่ ตัวนับ "ซ้ำรอบที่เท่าไหร่" เริ่มนับหนึ่งใหม่
+//  ⚠️ บั๊กตระกูลเดียวกับ k311/k318a — คราวนั้นแก้ EVSEEN/LASTSENT ไป แต่ **ไม่ได้แตะ LASTOUT**
+//
+//  วิธีแก้: หนุน LASTOUT ด้วย KV (รูปแบบเดียวกับ k318a เป๊ะ ๆ ไม่คิดกลไกใหม่)
+//    ชั้น 1 · Map ในหน่วยความจำ — เร็ว ไม่แตะ KV เลยเมื่อเทิร์นถัดไปลง worker เดิม
+//    ชั้น 2 · KV — อ่านเฉพาะตอนหน่วยความจำไม่มี (worker เพิ่งเกิด) · เขียนทุกครั้งที่ตอบข้อความ
+//  ⛔ ไม่แตะตรรกะตัดสินของ k180/k149 แม้แต่บรรทัดเดียว — เปลี่ยนแค่ "ที่เก็บข้อมูล"
+//  ⛔ KV พัง/ช้า = ทำงานเหมือนเดิมทุกประการ (ใช้หน่วยความจำล้วน) ห้ามบล็อกการตอบลูกค้า
+//  ⚠️ KV ไม่มี compare-and-set — 2 เทิร์นที่ชนกันพอดีอาจนับพลาด 1 ครั้ง
+//     ยอมรับได้: พลาดฝั่ง "ซ้ำเพิ่ม 1 ใบ" ดีกว่าพลาดฝั่ง "บล็อกคำตอบจริง" (บทเรียน k318a D1b)
+const LASTOUT_TTL319 = 1800;                     // 1800 วิ = 30 นาที เท่ากับหน้าต่างเดิมของ k180 เป๊ะ
+function loKey319(userId) {
+  try {
+    const t = userId && TURN.get(userId);
+    const shop = (t && t.shop319) || "";
+    if (!shop || !userId) return "";
+    return "lo:" + shop + ":" + userId;          // ผูกร้าน+ลูกค้า → คนละคน/คนละร้านไม่มีทางปนกัน
+  } catch (e) { return ""; }
+}
+function loEnv319(userId) {
+  try { const t = userId && TURN.get(userId); return (t && t.env318) || null; } catch (e) { return null; }
+}
+async function loLoad319(userId) {
+  try {
+    const k = loKey319(userId), env = loEnv319(userId);
+    if (!k || !env || !env.CONV) return null;
+    const v = await env.CONV.get(k);
+    if (!v) return null;
+    const j = JSON.parse(v);
+    return (j && typeof j.sig === "string") ? j : null;
+  } catch (e) { return null; }
+}
+async function loSave319(userId, rec) {
+  try {
+    const k = loKey319(userId), env = loEnv319(userId);
+    if (!k || !env || !env.CONV || !rec) return;
+    await env.CONV.put(k, JSON.stringify(rec), { expirationTtl: LASTOUT_TTL319 });
+  } catch (e) {}
+}
 // 🧠🧠🧠 k158 — "ทางออกเดียวของความจำ" (แก้รากของบั๊กความจำทั้งตระกูล)
 //   ปัญหาที่เจอซ้ำๆ ทั้งคืน 3-4 ส.ค. (k69 · k150 · k155 · k157) จริงๆ คือรูเดียวกัน:
 //     จีทูตอบลูกค้าได้ ~71 ทาง (lineReply แล้ว return) แต่ **จดความจำแค่ 3 ทาง**
@@ -182,6 +233,114 @@ const LASTOUT = new Map();
 //   ⚠️ ใช้ Map แยกตาม userId ไม่ใช่ตัวแปร global เดี่ยว — บทเรียนจากบั๊ก SOLD_OUT_MODELS
 //      (global ข้าม await → ข้อมูลลูกค้า A ทับ B) · คนละคนจะไม่ทับกันเด็ดขาด
 const TURN = new Map();
+// 📮📮 k311 · กัน "ฟลัดข้อความตอบซ้ำ" (เคสจริงโปรดักชัน 13 ส.ค. 8.58-9.18)
+//   ต้นเหตุที่พิสูจน์แล้วด้วยการรันซ้ำ: TURN เป็น Map ที่ใช้ "userId" เป็นกุญแจตัวเดียว
+//     แต่ webhook หนึ่งก้อนของ LINE บรรจุได้หลาย event และโค้ดรันมันพร้อมกัน (Promise.all)
+//     ลูกค้าพิมพ์รัวๆ 5 ข้อความ → 5 เทิร์นรันซ้อนกัน → TURN.set ทับกันเอง
+//     → markSent() ไปติดแค่เทิร์นสุดท้าย · อีก 4 เทิร์นจบแบบ sentOk=false
+//     → ตาข่าย k297 เข้าใจผิดว่า "เทิร์นนี้เงียบ" แล้วยิง "รับข้อความแล้วนะคะ" ออกไปทีละใบ
+//   สูตรที่วัดได้: ลูกค้าส่ง N ข้อความพร้อมกัน → ข้อความซ้ำ N-1 ใบ (2→1, 3→2, 5→4 ตรงเป๊ะ)
+//   ⛔ ไม่แก้ที่ TURN — มีโค้ดอ่าน TURN.get(uid) อยู่ 8 จุด การเปลี่ยนรูปร่างเสี่ยงกว่าตัวบั๊กเอง
+//   แก้ที่ต้นทางของอาการแทน 2 ชั้น (ทั้งคู่เป็นตัวกันซ้ำล้วนๆ ไม่เปลี่ยนคำตอบใดๆ):
+//     ชั้น 1 · LASTSENT — จำว่า "ส่งอะไรถึงลูกค้าคนนี้สำเร็จเมื่อไร" แยกจาก TURN โดยสิ้นเชิง
+//              k297 จะเงียบถ้าเพิ่งส่งอะไรให้ลูกค้าไปหมาดๆ (เขาไม่ได้ถูกทิ้งอยู่แล้ว)
+//     ชั้น 2 · EVSEEN — event เดิม (webhookEventId / messageId) ประมวลผลได้ครั้งเดียว
+const LASTSENT = new Map();          // uid → เวลาที่ส่งถึงลูกค้าสำเร็จล่าสุด
+const LASTSENT_WINDOW_MS = 90000;    // 90 วิ — ในช่วงนี้ถือว่าลูกค้าได้รับการตอบแล้ว
+const EVSEEN = new Map();            // กุญแจ event → เวลาที่เคยรับไว้
+const EVSEEN_TTL_MS = 600000;        // 10 นาที
+function evKey311(ev, shopId) {
+  try {
+    const id = (ev && ev.webhookEventId) || (ev && ev.message && ev.message.id) || "";
+    if (!id) return "";
+    // กุญแจต้องผูก ร้าน + คนคุย + id — event หนึ่งมีความหมายเฉพาะในบทสนทนาของมันเอง
+    // (ผูกแค่ร้าน+id จะกว้างเกินไป: ถ้า id ชนกันข้ามลูกค้า จะกินข้อความจริงของอีกคนทิ้ง)
+    const uid = (ev && ev.source && ev.source.userId) || "-";
+    // ผนวก "ลายนิ้วมือของเนื้อหา" เข้าไปด้วย เพื่อความปลอดภัยฝั่งที่แพงกว่า:
+    //   ของจริงที่ถูกส่งซ้ำ = id เดิม + เนื้อหาเดิมเป๊ะ → ยังจับได้ครบ
+    //   แต่ถ้าที่ไหนสักแห่งส่ง id เดิมมาพร้อมเนื้อหาคนละอัน = ไม่ใช่ของซ้ำ ห้ามกินทิ้ง
+    //   (ยอมพลาดฝั่ง "กันซ้ำไม่ได้" ดีกว่าพลาดฝั่ง "กินข้อความลูกค้าหาย")
+    const m = (ev && ev.message) || {};
+    const body = String(ev && ev.type) + "|" + String(m.type || "") + "|" + String(m.text || m.id || "") + "|" + String((ev && ev.postback && ev.postback.data) || "");
+    let h = 5381; for (let i = 0; i < body.length; i++) h = (((h << 5) + h) ^ body.charCodeAt(i)) >>> 0;
+    return shopId + ":" + uid + ":" + id + ":" + h.toString(36);
+  } catch (e) { return ""; }
+}
+function evSeen311(ev, shopId) {
+  const k = evKey311(ev, shopId);
+  if (!k) return false;                                   // ไม่มี id ให้ยึด = ปล่อยผ่านตามเดิม ห้ามกินของจริงทิ้ง
+  const now = Date.now();
+  const prev = EVSEEN.get(k);
+  if (prev && now - prev < EVSEEN_TTL_MS) return true;
+  EVSEEN.set(k, now);
+  if (EVSEEN.size > 2000) { for (const [kk, tt] of EVSEEN) { if (now - tt >= EVSEEN_TTL_MS) EVSEEN.delete(kk); if (EVSEEN.size <= 1500) break; } }
+  return false;
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔇🔇 k318a · "event ที่ระบบไม่มีคำตอบให้ ต้องเงียบ ไม่ใช่ตอบรับ"
+//
+//  เคสจริงโปรดักชัน 13 ส.ค. 20.12-20.13 (ลูกค้า "Jee" · รีโปรได้ 100%):
+//    ลูกค้าเพิ่งเพิ่มเพื่อน → มีข้อความ "รับข้อความแล้วนะคะ…" เด้ง **2 ใบติดกัน**
+//    ทั้งที่ยังไม่ได้พิมพ์อะไรเลย แล้วค่อยพิมพ์ "มีบุหรี่เย็นอะไรบ้างคะ" ทีหลัง
+//
+//  ต้นเหตุ: 2 ชั้นของระบบตัดสิน "ลูกค้าพูดหรือยัง" คนละเกณฑ์กัน
+//    ตัวห่อ handleEvent : ตั้ง _utext = "[ลูกค้ากดปุ่มในการ์ด]" / "[video]" → นับว่าพูดแล้ว
+//    ตัวทำงาน Core      : `ev.type !== "message"` → return ทันที ไม่มีทางตอบเลย
+//    ตาข่าย k297        : เห็น "ลูกค้าพูด + ไม่มีอะไรส่งออก" → ยิง ack
+//    → ทุก event ที่ระบบไม่รองรับ = ack 1 ใบ · กดปุ่ม 2 ที = ack 2 ใบ
+//    ⚠️ postback ปรากฏในไฟล์ทั้งหมดแค่ 2 บรรทัด (คีย์กันซ้ำ + ชื่อ _utext) ไม่มีตัวรับจริงเลย
+//
+//  วิธีแก้: ทำ "ทะเบียนเดียว" ว่า event ชนิดไหนที่ระบบตั้งใจจะตอบ
+//    แล้วให้ทั้ง Core และตาข่าย k297 อ่านทะเบียนตัวเดียวกัน
+//  ⛔ ห้ามเขียนกฎซ้ำ 2 ที่ — ความไม่ตรงกันของ 2 ชั้นคือตัวบั๊กเอง
+//  ⛔ ไม่แตะข้อความ ack และไม่แตะเงื่อนไขของข้อความปกติแม้แต่นิดเดียว
+const MSG_KINDS318 = ["text", "image", "location", "sticker"];   // ชนิดที่ Core มีเส้นทางรองรับจริง
+function isAnswerable318(ev) {
+  try {
+    if (!ev || ev.type !== "message" || !ev.message) return false;
+    return MSG_KINDS318.indexOf(String(ev.message.type || "")) !== -1;
+  } catch (e) { return false; }
+}
+// 📮📮 k318a ชั้น 2 · กันซ้ำให้ข้าม isolate ได้
+//   k311 ใช้ Map ในหน่วยความจำ = ของใครของมันต่อ worker 1 ตัว
+//   Cloudflare สร้าง worker ตัวใหม่เมื่อไหร่ ตัวกันซ้ำเริ่มนับหนึ่งใหม่ (พิสูจน์ด้วยการรัน 2 isolate)
+//   → LINE ส่งซ้ำแล้วไปลง worker คนละตัว = ลูกค้าได้คำตอบเดียวกัน 2 รอบ
+//   ⛔ ใช้กุญแจตัวเดียวกับ k311 เป๊ะ (id ของ event + ลายนิ้วมือเนื้อหา)
+//      ไม่ได้ dedupe จาก "ข้อความ" อย่างเดียว → ข้อความเหมือนกันแต่คนละ event ยังผ่านครบ
+//   ⛔ KV พังหรือช้า = ปล่อยผ่านตามเดิมเสมอ ห้ามให้ตัวกันซ้ำบล็อกการตอบลูกค้า
+//   ⚠️ ข้อจำกัดจริงของ KV: ไม่มี compare-and-set — 2 worker ที่เริ่มพร้อมกันเป๊ะจะอ่านเจอ "ว่าง" ทั้งคู่
+//     (บทเรียนเดียวกับ k155) → ชั้นนี้ปิดเคส "ส่งซ้ำโดยมีช่วงห่าง" ซึ่งเป็นพฤติกรรมจริงของ LINE ได้ครบ
+//     ส่วนเคส "ยิงพร้อมกันเป๊ะ" ปิดด้วยชั้นที่ 3 (ตราจอง) ตอนจะส่งจริง — ดู evOwns318
+const EVKV_TTL318 = 600;                                          // 10 นาที เท่ากับชั้นหน่วยความจำ
+function evTok318() { return Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+async function evClaim318(env, ev, shopId) {
+  const out = { dup: false, key: "", tok: "" };
+  try {
+    if (!env || !env.CONV) return out;
+    const k = evKey311(ev, shopId);
+    if (!k) return out;                                           // ไม่มี id ให้ยึด = ห้ามกินของจริงทิ้ง
+    out.key = "ev:" + k;
+    if (await env.CONV.get(out.key)) { out.dup = true; return out; }
+    out.tok = evTok318();                                         // ตราจองของเทิร์นนี้
+    await env.CONV.put(out.key, out.tok, { expirationTtl: EVKV_TTL318 });
+  } catch (e) {}
+  return out;
+}
+// 📮 k318a ชั้น 3 · "ตราจอง" — ตรวจตอนจะส่งจริง ว่าเรายังเป็นเจ้าของ event นี้อยู่ไหม
+//   ใช้เฉพาะทางที่ "แพงและหายาก" เท่านั้น (push สำรองตอน reply token ใช้ไม่ได้ · ack ของ k297)
+//   ⛔ ห้ามเอาไปใส่ทางส่งปกติ — จะเพิ่มการอ่าน KV ทุกข้อความ = ลูกค้ารอนานขึ้นฟรี ๆ
+//   หลักการ: 2 worker เขียนตราทับกันได้ แต่ตอนจะส่ง (หลังเรียก AI เสร็จ = ผ่านไปหลายวินาที)
+//     ค่าใน KV นิ่งแล้ว → ใครที่ตราไม่ตรง แปลว่ามีอีกตัวรับผิดชอบ event นี้ไปแล้ว → ถอย
+//   ⛔ อ่านไม่ได้/ไม่มีข้อมูล = ถือว่าเป็นเจ้าของ (ปล่อยผ่าน) ห้ามให้ตัวกันซ้ำทำลูกค้าเงียบ
+async function evOwns318(userId) {
+  try {
+    const t = userId && TURN.get(userId);
+    if (!t || !t.evKey318 || !t.evTok318 || !t.env318 || !t.env318.CONV) return true;
+    const v = await t.env318.CONV.get(t.evKey318);
+    if (!v || v === t.evTok318) return true;
+    return false;
+  } catch (e) { return true; }
+}
 // 🆘 k147: เกณฑ์ "ขอเงินคืน / ลูกค้าโกรธ" — ใช้ร่วมกันทั้งด่าน k127 (ขาเข้า) และด่านกันตัดเคสทิ้ง (ขาออก)
 //   เดิมเขียนแยกกัน 2 ที่ แล้วฝั่งขาออกครอบคลุมแคบกว่า → เคสเงินคืนหลุดไปเจอลิงก์เมนู
 //   k147b: เพิ่ม "โอนคืน" (เดิมบังคับต้องมีคำว่าเงิน/ตังค์คั่น → "โอนคืน" หลุด)
@@ -243,6 +402,17 @@ function ordPaidActive(oj, now) {
     if (age <= ORD_PAID_ACTIVE_MS) return true;
     console.log("K224_ORD_PAID_STALE age=" + Math.round(age / 3600000) + "h → ถือเป็นออเดอร์ใหม่");
     return false;
+  } catch (e) { return false; }
+}
+// 📍 k259: ออเดอร์นี้มีที่อยู่จัดส่งอยู่แล้วหรือยัง (ลูกค้าเพิ่งยืนยันไป / เคยกรอกไว้ในการ์ด)
+//   ⛔ ใช้ตัวนี้ที่เดียวทั้งระบบ ห้ามเขียนเงื่อนไขซ้ำ — เดิมมี 3 จุดที่ขอที่อยู่โดยไม่เช็คก่อนเลย
+function ordHasShip(oj) {
+  try {
+    if (!oj) return false;
+    if (oj.ship && oj.ship.addr) return true;
+    const b = String(oj.block || "");
+    if (/\(รอลูกค้าแจ้งหลังโอน\)/.test(b)) return false;
+    return /\nที่อยู่:\s*\S/.test(b) || /จัดส่ง: ส่งด่วนตามหมุด/.test(b);
   } catch (e) { return false; }
 }
 function ordTotal(ordObj) {
@@ -426,6 +596,16 @@ function nonProductFlow(text, ordObj, asWaiting) {
   if (!t) return "";
   // ⛔ ข้อความมีชื่อรุ่นชัดเจน = ลูกค้ากำลังสั่งของ ห้ามบล็อก (สั่งของพร้อมที่อยู่ในข้อความเดียว)
   try { if (_MODEL_IN(t)) return ""; } catch (e) {}
+  // 📮📮 k262 (เคสจริงบนโปรดักชัน 9 ส.ค. 13.20 — เจ้าของร้านส่งแคปมาเอง):
+  //   ลูกค้ากำลังพิมพ์ที่อยู่ทีละบรรทัด แล้วส่ง "24190" (รหัสไปรษณีย์) มาเป็นข้อความเดี่ยว
+  //   → บอทตอบราคา MARBO 10K ทันที + วงเล็บ price-guard เพี้ยน
+  //   ต้นเหตุที่รีโปรได้ (log จริง): P0_DRAFT_EDIT ...set 0→190
+  //     ตัวอ่านจำนวนมีกฎ "ตัวเลขลอยท้ายท่อน" /(\d{1,3})\s*$/ → กิน 3 ตัวท้ายของเลข 5 หลัก = 190 ชิ้น
+  //   กติกา: ข้อความที่เป็น "เลข 5 หลักล้วน" = รหัสไปรษณีย์เสมอ ⛔ ไม่ใช่ชื่อรุ่น/จำนวน/ราคา
+  //   ⛔ แคบโดยตั้งใจ: ต้องเป็นเลข 5 หลักล้วน "ทั้งข้อความ" เท่านั้น
+  //      "5 ชิ้น" · "10700 บาท" · "เอา 3" ไม่เข้าเงื่อนไขนี้เลย (มีตัวอักษรปน)
+  //   ⛔ ไม่แตะราคา/ยอด/สถานะใด ๆ — แค่ปิดตัวอ่านสินค้าของเทิร์นนี้
+  if (/^\s*\d{5}\s*$/.test(t)) return "ลูกค้าแจ้งรหัสไปรษณีย์ (ส่วนหนึ่งของที่อยู่จัดส่ง)";
   if (asWaiting) return "รอข้อมูลเคสหลังการขาย";
   if (RX_CHANGE_INFO.test(t)) return "ขอแก้ข้อมูลผู้รับ/ที่อยู่";
   if (RX_PAYMENT_TALK.test(t)) return "กำลังคุยเรื่องการชำระเงิน";
@@ -439,6 +619,14 @@ function nonProductFlow(text, ordObj, asWaiting) {
     const st = String((ordObj && ordObj.status) || ""), bk = String((ordObj && ordObj.block) || "");
     if (/✅/.test(st) && !/พร้อมจัดส่ง/.test(st) && /รอลูกค้าแจ้ง/.test(bk) && (hasTel || addrHits >= 1))
       return "จ่ายเงินแล้ว ระบบกำลังรอที่อยู่";
+    // 🏠🔒 k261 (เคสจริง 9 ส.ค. — เงินจริง): ลูกค้าจ่าย 620 ✅ แล้วพิมพ์ "134/2 จรัญ"
+    //   ข้อความนี้ **ไม่เข้าเงื่อนไขไหนเลยข้างบน** — ไม่มี ต./อ./จ. · ไม่มีเบอร์ · ไม่มีรหัสไปรษณีย์
+    //   → ตัวอ่านสินค้าทำงานต่อ แล้วอ่านเลข "2" (และ "134") เป็นจำนวน
+    //     (log จริงที่รีโปรได้: P0_DRAFT_EDIT MARBO 9K:set 2→134) = ออเดอร์ถูกแก้เงียบ ๆ
+    //   กติกา: จ่ายแล้ว + ข้อความหน้าตาเป็น "บ้านเลขที่" (houseNoIn จับได้) = กำลังแจ้งที่อยู่
+    //   ⛔ แคบโดยตั้งใจ 2 ชั้น: (1) ข้อความมีชื่อรุ่น = ออกไปตั้งแต่บรรทัดแรกของฟังก์ชันแล้ว
+    //      (2) ต้องมีออเดอร์ที่ "จ่ายแล้วและยังไม่ปิด" เท่านั้น — ลูกค้าที่ยังไม่จ่ายไม่โดนแตะ
+    if (/✅/.test(st) && !/พร้อมจัดส่ง/.test(st) && houseNoIn(t)) return "จ่ายเงินแล้ว ลูกค้าแจ้งบ้านเลขที่";
   } catch (e) {}
   return "";
 }
@@ -534,21 +722,42 @@ function preferHead(mdl, txt) {
 //   = บอกลูกค้าว่ามีโปร แล้วเก็บเงินจริงไม่ตรงกับที่บอก → ลูกค้าทักท้วงหน้างาน เสียเครดิตร้าน
 //   เคสจริง 3/8 22.52: ลูกค้าถาม "มีโปรไร" → บอทตอบ "ยอดรวมครบ 1,000 บาท = ส่งฟรี"
 //   แก้: ตัดออกทุกจุด เหลือเฉพาะโปรส่งฟรีตามจำนวนชิ้น ซึ่งตรงกับที่โค้ดคิดเงินจริง
-const PROMO_MSG = "🎁 โปรโมชั่นของร้านตอนนี้ค่ะ 💕\n\n📦 ซื้อครบตามจำนวน = ส่งฟรี\n• พอตใช้แล้วทิ้ง — ครบ 4 แท่ง (คละยี่ห้อได้)\n• บิ๊กพอต / ชุด KIT — ครบ 4 ชิ้น\n• หัวพอตเล็ก — ครบ 10 หัว\n• ไส้บุหรี่ IQOS — ครบ 2 ชิ้น\n\n🎁 บิ๊กพอตครบ 5 หัว = แถมเครื่องเปล่า 1 เครื่อง (มูลค่า 250)\n(ออเดอร์ที่ได้ของแถม จะคิดค่าส่ง 40 บาทตามปกตินะคะ)\n\n⚠️ เครื่อง IQOS · น้ำยาขวด · นิโคตินพอช ไม่ร่วมโปรส่งฟรีนะคะ\n⚠️ โปรส่งฟรีใช้กับพัสดุปกติเท่านั้น ส่งด่วนคิดค่าส่งตามระยะทางค่ะ\n\nสนใจรุ่นไหนแจ้งได้เลยค่ะ เดี๋ยวแอดมินสรุปยอดให้ ✨";
+// 🏷️ k295 (เจ้าของร้านชี้ 12 ส.ค.): เดิมเขียนว่า "MARBO 9K เทียบแท้ — ครบ 20 แท่ง"
+//   "เทียบแท้" เป็นภาษาหลังร้าน ลูกค้าอ่านแล้วไม่รู้ว่าคืออะไร ต่างจาก MARBO 9K ปกติยังไง
+//   เขียนใหม่ให้บอกครบในบรรทัดเดียว: มันคือตัวไหน (รุ่นโคลน) + ราคา + ได้อะไร (เรทส่ง)
+//   ⛔ ตัวเลขทุกตัวมาจากตารางราคาในโค้ด (แท้ 350 · โคลน 290 · เรทส่ง 20+ = 250) ไม่ได้ตั้งใหม่
+const PROMO_MSG = "🎁 โปรโมชั่นของร้านตอนนี้ค่ะ 💕\n\n📦 ซื้อครบตามจำนวน = ส่งฟรี\n• พอตใช้แล้วทิ้ง — ครบ 4 แท่ง (คละยี่ห้อได้)\n• บิ๊กพอต / ชุด KIT — ครบ 4 ชิ้น\n• หัวพอตเล็ก — ครบ 10 หัว\n• ไส้บุหรี่ IQOS — ครบ 2 ชิ้น\n• MARBO 9K รุ่นโคลน (เทียบแท้ 290.-) — ซื้อครบ 20 แท่ง ลดเหลือแท่งละ 250.- และส่งฟรีค่ะ\n\n🎁 RELX BOOST POD ครบ 5 หัว = เลือกได้ 1 อย่าง\n• ส่งฟรี\n• หรือ รับเครื่อง RELX CREATOR 20K ฟรี 1 เครื่อง (มูลค่า 250) โดยคิดค่าส่ง 40 บาท\n(โปรนี้มีเฉพาะ RELX BOOST POD เท่านั้นนะคะ)\n\n⚠️ โปรหลักรับได้ 1 อย่างต่อ 1 ออเดอร์ ใช้พร้อมกันไม่ได้ค่ะ\n⚠️ เครื่อง IQOS · น้ำยาขวด · นิโคตินพอช ไม่ร่วมโปรส่งฟรีนะคะ\n⚠️ โปรส่งฟรีใช้กับพัสดุปกติเท่านั้น ส่งด่วนคิดค่าส่งตามระยะทางค่ะ\n\nสนใจรุ่นไหนแจ้งได้เลยค่ะ เดี๋ยวแอดมินสรุปยอดให้ ✨";
 const CLAIM_MSG = "📋 ระยะเวลารับเคลมสินค้าค่ะ\n\n• ซื้อ 1-19 แท่ง → เคลมได้ภายใน 7 วัน\n• ซื้อ 20 แท่งขึ้นไป → ภายใน 14 วัน\n• ซื้อ 50 แท่งขึ้นไป → ภายใน 21 วัน\n• ซื้อ 100 แท่งขึ้นไป → ภายใน 30 วัน\n(นับจากวันที่ได้รับสินค้าค่ะ)\n\n📸 หลักฐานที่ต้องมีทุกครั้ง\n1) รูป/คลิปกล่องพัสดุ + ใบปะหน้าที่อยู่ ให้เห็นชัด\n2) คลิปตอนแกะกล่อง เห็นว่าได้รับอะไร กี่ชิ้น\n3) คลิปสินค้าที่มีปัญหา พร้อมอธิบายอาการ\n\n⚠️ ไม่มีคลิปตอนแกะกล่อง ทางร้านไม่สามารถเคลมให้ได้นะคะ 🙏🏻\nถ้าสินค้ามีปัญหา แจ้งได้เลยค่ะ เดี๋ยวทีมงานหลังการขายดูแลให้ทันทีค่ะ 💕";
 
 // ===== ข้อความเมนู (ส่งทันทีเมื่อลูกค้าขอเมนู/ถามมีอะไรบ้าง) =====
-const NM2ID = {"ABC LEGO - ดับเบิ้ลมิ้นต์ 3%":1,"ABC LEGO - น้ำแร่ 3%":1,"ABC LEGO - มิกซ์เบอร์รี่ 3%":1,"ABC LEGO - องุ่น 3%":1,"ABC LEGO - โคล่า 3%":1,"ABC LEGO - ชามะลิ 3%":1,"ABC LEGO - สับปะรด 3%":1,"ABC LEGO - แตงโม 3%":1,"ABC LEGO - ดับเบิ้ลมิ้นต์ 5%":1,"ABC LEGO - มิกซ์เบอร์รี่ 5%":1,"ABC LEGO - องุ่น 5%":1,"ABC LEGO - แตงโม 5%":1,"ABC TANK - ดับเบิ้ลมิ้นต์ 3%":2,"ABC TANK - บลูเบอร์รี่เย็น 3%":2,"ABC TANK - พีชสตรอว์เบอร์รี่ 3%":2,"ABC TANK - มิกซ์เบอร์รี่ 3%":2,"ABC TANK - แตงโม 3%":2,"ABC TANK - องุ่น 3%":2,"ABC TANK - องุ่นลิ้นจี่ 3%":2,"ABC TANK - โคล่า 3%":2,"ABC TANK - ดับเบิ้ลมิ้นต์ 5%":2,"ABC TANK - แตงโม 5%":2,"ABC TANK - องุ่น 5%":2,"ABC TANK - โคล่า 5%":2,"ABC 8K - กล้วย":15,"ABC 8K - ดับเบิ้ลมิ้นต์":15,"ABC 8K - แตงโม":15,"ABC 8K - น้ำแร่":15,"ABC 8K - บลูไอซ์":15,"ABC 8K - มิกซ์เบอร์รี่":15,"ABC 8K - ลิ้นจี่":15,"ABC 8K - โคล่า":15,"ABC 8K - สตรอว์เบอร์รี่":15,"ABC 8K - สับปะรด":15,"ABC 8K - องุ่น":15,"ABC 8K - องุ่นอโล":15,"CARNIVAL 20K - กัมมี่":16,"CARNIVAL 20K - โคล่า":16,"CARNIVAL 20K - ดับเบิ้ลมิ้นต์":16,"CARNIVAL 20K - แตงโมไอซ์":16,"CARNIVAL 20K - บลูเบอร์รี่":16,"CARNIVAL 20K - พีชสตรอว์เบอร์รี่":16,"CARNIVAL 20K - สตรอว์เบอร์รี่":16,"CARNIVAL 20K - ส้มโซดา":16,"CARNIVAL 20K - องุ่น":16,"CARNIVAL 20K - องุ่นลิ้นจี่":16,"CARNIVAL 20K - องุ่นว่านหางจระเข้":16,"CARNIVAL 20K - สับปะรด":16,"CARNIVAL 20K - ยาคูลท์":16,"CARNIVAL 20K - แยมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - แยมบลูเบอร์รี่":16,"CARNIVAL 20K - ลิ้นจี่ไอซ์":16,"CARNIVAL 20K - ไอติมเผือก":16,"CARNIVAL 20K - ไอติมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - เมล่อน":16,"CARNIVAL 20K - เรดบลู":16,"DUAL SMASH 20K - แตงโม":17,"DUAL SMASH 20K - มิ้นต์":17,"DUAL SMASH 20K - โคล่า":17,"DUAL SMASH 20K - นมกล้วย":17,"DUAL SMASH 20K - น้ำแร่":17,"DUAL SMASH 20K - องุ่น":17,"DUAL SMASH 20K - องุ่นอโล":17,"DUAL SMASH 20K - สตรอว์เบอร์รี่":17,"DUAL SMASH 20K - แอปเปิ้ล":17,"DUAL SMASH 20K - ชาหลงจิน":17,"DUAL SMASH 20K - ฮันนี่เลม่อน":17,"DUAL SMASH 20K - ยาคูลท์":17,"เครื่อง DUAL SMASH - สีดำ":42,"ELFBAR SWAP 25K - ฝรั่งมะม่วงส้ม":3,"ELFBAR SWAP 25K - พีชสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - มะม่วง":3,"ELFBAR SWAP 25K - เมล่อน":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่ชีสเค้ก":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่องุ่นแอปเปิ้ล":3,"ELFBAR SWAP 25K - หมากฝรั่งแตงโม":3,"ELFBAR SWAP 25K - องุ่น":3,"ELFBAR SWAP 25K - ไอติมซอเลโร่":3,"ELFBAR SWAP 25K - ไอติมสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - แอปเปิ้ลลิ้นจี่":3,"ELFBAR SWAP 25K - โคล่าเย็น":3,"ELFBAR SWAP 25K - มะนาวเย็น":3,"ELFBAR SWAP 25K - ชามะลิ":3,"ELFBAR SWAP 25K - ชาหลงจิน":3,"ELFBAR SWAP 25K - ชาองุ่นกวนอิน":3,"ELFBAR SWAP 25K - ดับเบิ้ลมิ้นต์":3,"ELFBAR SWAP 25K - น้ำแร่":3,"ELFBAR SWAP 25K - องุ่นเย็น":3,"ELFBAR 15K - องุ่นว่านหางจระเข้":18,"ELFBAR 15K - บลูเบอร์รี่เย็น":18,"ELFBAR 15K - องุ่นเย็น":18,"ELFBAR 15K - องุ่นเยลลี่":18,"ELFBAR 15K - มะม่วงเขียว":18,"ELFBAR 15K - ฝรั่งเย็น":18,"ELFBAR 15K - โคล่าเลม่อน":18,"ELFBAR 15K - ชามะนาว":18,"ELFBAR 15K - แฟนต้าลิ้นจี่":18,"ELFBAR 15K - พีชเย็น":18,"ELFBAR 15K - องุ่นซากุระ":18,"ELFBAR 15K - สตรอว์เบอร์รี่เย็น":18,"ELFBAR 15K - พีชสตรอว์เบอร์รี่":18,"ELFBAR 15K - เบอร์รี่":18,"ELFBAR 15K - เมล่อนแตงโม":18,"ELFBAR 15K - แตงโม":18,"เครื่อง ELFBAR JOINONE - สีเขียว":43,"เครื่อง ELFBAR JOINONE - สีดำ":43,"เครื่อง ELFBAR JOINONE - สีแดง":43,"เครื่อง ELFBAR JOINONE - สีน้ำเงิน":43,"เครื่อง ELFBAR JOINONE - สีม่วง":43,"เครื่อง ELFBAR JOINONE - สีส้ม":43,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โคล่า":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แตงโมเย็น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แตงโมเลม่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  บลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  ฝรั่ง":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิกซ์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  เมล่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โยเกิร์ต":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   ลิ้นจี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่กล้วย":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   สับปะรด":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  องุ่น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แอปเปิ้ลอโล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แยมบลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - เมนทอล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - ช็อคโกแลตมิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะพร้าว":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะม่วง":4,"ESKO BAR 20K - โคล่า":19,"ESKO BAR 20K - แตงโม":19,"ESKO BAR 20K - แตงโมสตรอว์เบอร์รี่":19,"ESKO BAR 20K - บลูเบอร์รี่ไอซ์":19,"ESKO BAR 20K - บับเบิ้ลกัม":19,"ESKO BAR 20K - เบอร์รี่องุ่น":19,"ESKO BAR 20K - ฝรั่ง":19,"ESKO BAR 20K - มิกซ์เบอร์รี่":19,"ESKO BAR 20K - เมล่อน":19,"ESKO BAR 20K - สตรอว์เบอร์รี่":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กล้วย":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กีวี่":19,"ESKO BAR 20K - องุ่น":19,"ESKO BAR 20K - องุ่นเคียวโฮ":19,"ESKO BAR 20K - แอปเปิ้ลว่านหางจระเข้":19,"ESKO BAR 20K - ลิ้นจี่เย็น":19,"ESKO BAR 20K - ดับเบิ้ลมิ้นต์":19,"ESKO BAR 20K - กล้วยเย็น":19,"ESKO BAR 20K - มะม่วง":19,"ESKO BAR 20K - น้ำแร่":19,"ESKO BAR 20K - เรดเลม่อนโซดา":19,"ESKO BAR 20K - มิ้นต์เอ็กซ์ตร้า 5%":19,"ESKO BAR SWITCH 20K (KIT) - โคล่า":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเย็น":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเลม่อน":38,"ESKO BAR SWITCH 20K (KIT) - บลูเบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - ฝรั่ง":38,"ESKO BAR SWITCH 20K (KIT) - มิกซ์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - มิ้นต์":38,"ESKO BAR SWITCH 20K (KIT) - เมล่อน":38,"ESKO BAR SWITCH 20K (KIT) - โยเกิร์ต":38,"ESKO BAR SWITCH 20K (KIT) - ลิ้นจี่":38,"ESKO BAR SWITCH 20K (KIT) - สตรอว์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) -  สตรอว์เบอร์รี่กล้วย":38,"ESKO BAR SWITCH 20K (KIT) - สับปะรด":38,"ESKO BAR SWITCH 20K (KIT) - องุ่น":38,"ESKO BAR SWITCH 20K (KIT) -  แอปเปิ้ลอโล":38,"FREEBASE ESKOLIQ 30ML - โคล่า":60,"FREEBASE ESKOLIQ 30ML - มิกซ์เบอร์รี่":60,"FREEBASE ESKOLIQ 30ML - ไอซ์บลาสต์":60,"SALTNIC ESKOLIQ 30ML - โคล่า":58,"SALTNIC ESKOLIQ 30ML - มิกซ์เบอร์รี่":58,"INFY BAR 15K - โคล่าเลม่อน":22,"INFY BAR 15K - ซีซอล์ทเลม่อน":22,"INFY BAR 15K - แตงโม":22,"INFY BAR 15K - แตงโมลิ้นจี่":22,"INFY BAR 15K - พีชสตรอว์เบอร์รี่":22,"INFY BAR 15K - บลูเบอร์รี่":22,"INFY BAR 15K - แฟนต้าองุ่น":22,"INFY BAR 15K - มะม่วงโยเกิร์ต":22,"INFY BAR 15K - มิกซ์เบอร์รี่":22,"INFY BAR 15K - มิ้นต์":22,"INFY BAR 15K - เมล่อน":22,"INFY BAR 15K - ลิ้นจี่":22,"INFY BAR 15K - ลูกอมเปรี้ยว":22,"INFY BAR 15K - สตรอว์เบอร์รี่แตงโม":22,"INFY BAR 15K - องุ่นเคียวโฮ":22,"INFY BAR 15K - องุ่นลิ้นจี่":22,"INFY BAR 15K - มะนาว":22,"INFY BAR 15K - สับปะรดมะนาว":22,"INFY BAR 15K - โคล่า":22,"INFY BAR 15K - องุ่นแอปเปิ้ล":22,"INFY BAR PRO 20K - ดับเบิ้ลมิ้นต์":23,"INFY BAR PRO 20K - บลูไอซ์":23,"INFY BAR PRO 20K - โคล่า":23,"INFY BAR PRO 20K - มิกซ์เบอร์รี่":23,"INFY BAR PRO 20K - ลูกอมเรนโบว์":23,"INFY BAR PRO 20K - เบอร์รี่ชมพู":23,"INFY BAR PRO 20K - ลิ้นจี่เย็น":23,"INFY BAR PRO 20K - แตงโม":23,"INFY BAR PRO 20K - แตงโมสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - แตงโมลิ้นจี่":23,"INFY BAR PRO 20K - หมากฝรั่งแตงโม":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - พีชสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กล้วย":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กีวี่":23,"INFY BAR PRO 20K - องุ่น":23,"INFY BAR PRO 20K - องุ่นลิ้นจี่":23,"INFY BAR PRO 20K - องุ่นว่านหางจระเข้":23,"INFY BAR PRO 20K - แตงโมมิ้นต์":23,"INFY BAR PRO 20K - ยาคูลท์":23,"INFY BAR PRO 20K - เรดบลู":23,"INFY BAR PRO 20K - มัทฉะลาเต้":23,"INFY BAR PRO 20K - ฝรั่งเสาวรส":23,"INFY BAR PRO 20K - ราสเบอร์รี่แตงโม":23,"INFY BAR PRO 20K - ไอติมสตรอว์เบอร์รี่":23,"INFY 12K - โคล่า":20,"INFY 12K - แตงโมลิ้นจี่":20,"INFY 12K - น้ำแร่":20,"INFY 12K - บลูเบอร์รี่":20,"INFY 12K - พีช":20,"INFY 12K - มิกซ์เบอร์รี่":20,"INFY 12K - มิกซ์สตรอว์เบอร์รี่":20,"INFY 12K - มิ้นต์":20,"INFY 12K - เมล่อน":20,"INFY 12K - ลิ้นจี่":20,"INFY 12K - ลูกอมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่กล้วย":20,"INFY 12K - สตรอว์เบอร์รี่กีวี่":20,"INFY 12K - สตรอว์เบอร์รี่แตงโม":20,"INFY 12K - องุ่นเคียวโฮ":20,"INFY 12K - องุ่นซากุระ":20,"INFY 12K - องุ่นโยโย่":20,"INFY 12K - องุ่นแอปเปิ้ล":20,"INFY 12K - ไอศกรีมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่ราสเบอร์รี่":20,"INFY 12K - สไปร์ท":20,"INFY 12K - ส้มโซดา":20,"INFY 12K - หมากฝรั่งแตงโม":20,"INFY 12K - เลม่อนชมพู":20,"INFY 12K - ราสเบอร์รี่มัลเบอร์รี่":20,"INFY 12K - กัมมี่แบร์":20,"INFY 12K - ชาอู่หลงพีช":20,"INFY 12K - องุ่นหน้าร้อน":20,"INFY 12K - บานาน่าท๊อฟฟี่":20,"INFY 12K - ลิ้นจี่ราสเบอร์รี่":20,"INFY 20K - บลูเบอร์รี่":21,"INFY 20K - แตงโมลิ้นจี่":21,"INFY 20K - ลิ้นจี่":21,"INFY 20K - มิกซ์เบอร์รี่":21,"INFY 20K - มิ้นต์":21,"INFY 20K - สตรอว์เบอร์รี่กีวี่":21,"INFY 20K - สตรอว์เบอร์รี่แตงโม":21,"INFY 20K - องุ่นแอปเปิ้ล":21,"INFY 20K - องุ่นเคียวโฮ":21,"INFY 20K - องุ่นโยโย่":21,"INFY 20K - องุ่นลิ้นจี่":21,"INFY 20K - องุ่นอโล":21,"INFY 20K - พีช":21,"INFY 20K - แอปเปิ้ลอโล":21,"INFY 20K - สปาร์คกิ้งเลม่อน":21,"INFY 20K - น้ำแร่":21,"INFY 20K - โคล่า":21,"INFY 20K - สตรอว์เบอร์รี่กล้วย":21,"INFY 20K - เมนทอลฟรีซ":21,"INFY 20K - หมากฝรั่งองุ่น":21,"INFY 20K - หมากฝรั่งแตงโม":21,"INFY 20K - ชานมชาจี":21,"INFY 20K - ชาเขียวมัทฉะ":21,"INFY PLUS - โคล่า":10,"INFY PLUS - ชามะลิ":10,"INFY PLUS - แตงโมลิ้นจี่":10,"INFY PLUS - แตงโมสตรอว์เบอร์รี่":10,"INFY PLUS - น้ำส้มโซดา":10,"INFY PLUS - บลูเบอร์รี่":10,"INFY PLUS - พีช":10,"INFY PLUS - มะม่วงพีช":10,"INFY PLUS - มิ้นต์":10,"INFY PLUS - เยลลี่องุ่น":10,"INFY PLUS - ลิ้นจี่":10,"INFY PLUS - ลิ้นจี่ราสเบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่องุ่น":10,"INFY PLUS - สไปร์ท":10,"INFY PLUS - หมากฝรั่งองุ่น":10,"INFY PLUS - องุ่นกัมมี่":10,"INFY PLUS - องุ่นเคียวโฮ":10,"INFY PLUS - องุ่นแอปเปิ้ล":10,"INFY PLUS - แอปเปิ้ลแดง":10,"INFY PLUS - ไอศกรีมสตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งเปรี้ยว":10,"INFY PLUS - แอปเปิ้ลอโล":10,"INFY PLUS - เชอร์รี่สตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งสับปะรด":10,"INFY PLUS - ซีซอล์ทเลม่อน":10,"INFY PLUS - ผลไม้รวม":10,"INFY PLUS - แตงโมราสเบอร์รี่":10,"เครื่อง IQOS ILUMA I ONE - สีฟ้า":55,"เครื่อง IQOS ILUMA I ONE - สีส้ม":55,"เครื่อง IQOS ILUMA I ONE - สีม่วง":55,"เครื่อง IQOS ILUMA I ONE - สีดำ":55,"เครื่อง IQOS ILUMA I ONE - สีเขียว":55,"เครื่อง IQOS ILUMA I PRIME - สีดำ":56,"เครื่อง IQOS ILUMA I PRIME - สีฟ้า":56,"เครื่อง IQOS ILUMA I PRIME - สีเลือดหมู":56,"เครื่อง IQOS ILUMA I PRIME - สีเขียว":56,"เครื่อง IQOS ILUMA I PRIME - สีม่วง":56,"เครื่อง IQOS ILUMA I STANDARD - สีดำ":57,"เครื่อง IQOS ILUMA I STANDARD - สีฟ้า":57,"เครื่อง IQOS ILUMA I STANDARD - สีเขียว":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วงอ่อน":57,"เครื่อง IQOS ILUMA I STANDARD - สีส้ม":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วง":57,"TEREA IN - GREEN":52,"TEREA IN - BRIGHT WAVE":52,"TEREA IN - BLUE":52,"TEREA IN - BLACK GREEN":52,"TEREA IN - PURPLE WAVE":52,"TEREA IN - BRONZE":52,"TEREA IN - SIENNA":52,"TEREA IN - DIMENSION APRICITY":52,"TEREA IN - DIMENSION YUGEN":52,"TEREA IN - GOLDEN EDITION":52,"TEREA IN - RIVIERA PEARL":52,"TEREA IN - BERRINE EDITION":52,"TEREA IN - AUBURN EDITION":52,"TEREA IN - MULINT EDITION":52,"TEREA IN - SUN PEARL":52,"TEREA IN - BLACK RUBY":52,"TEREA IN - OASIS PEARL":52,"TEREA IN - BERMIN PEARL":52,"TEREA IN - PERINT PEARL":52,"TEREA IN - BLACK PURPLE":52,"TEREA JP - BALANCED REGULAR":53,"TEREA JP - BLACK MENTHOL":53,"TEREA JP - BLACK PURPLE MENTHOL":53,"TEREA JP - BLACK RUBY MENTHOL":53,"TEREA JP - FUSION MENTHOL":53,"TEREA JP - MENTHOL":53,"TEREA JP - MINT":53,"TEREA JP - OASIS PEARL":53,"TEREA JP - TROPICAL MENTHOL":53,"TEREA JP - PURPLE MENTHOL":53,"TEREA JP - REGULAR":53,"TEREA JP - RICH REGULAR":53,"TEREA JP - SMOOTH REGULAR":53,"TEREA JP - SUN PEARL":53,"TEREA JP - YELLOW MENTHOL":53,"TEREA JP - WARM REGULAR":53,"TEREA JP - BLACK FUCHSIA MENTHOL":53,"TEREA JP - BRIGHT MENTHOL":53,"TEREA JP - BLACK YELLOW MENTHOL":53,"TEREA JP - BLACK SUNSHINE MENTHOL":53,"TEREA JP - RUBY REGULAR":53,"TEREA JP - RIVIERA PEARL":53,"TEREA JP - CLEAR REGULAR":53,"TEREA JP - SHINE PEARL":53,"TEREA JP - VELVET PEARL":53,"TEREA JP - STARLING PEARL":53,"TEREA JP - STELLAR PEARL":53,"TEREA MY - ZING WAVE":54,"TEREA MY - TURQUOISE":54,"TEREA MY - RUSSET":54,"TEREA MY - BLUE":54,"TEREA MY - BLACK GREEN":54,"TEREA MY - PURPLE WAVE":54,"TEREA MY - SIENNA":54,"TEREA MY - OASIS PEARL":54,"TEREA MY - SUN PEARL":54,"TEREA MY - AMBER":54,"JOIWAY 12K - โคล่าเลม่อน":24,"JOIWAY 12K - โคล่า":24,"JOIWAY 12K - ลิ้นจี่":24,"JOIWAY 12K - แตงโม":24,"JOIWAY 12K - แอปเปิ้ลเขียว":24,"JOIWAY 12K - แฟนต้าเขียว":24,"JOIWAY 12K - เมล่อนฮอกไกโด":24,"JOIWAY 12K - มิ้นต์":24,"JOIWAY 12K - ส้มโซดา":24,"JOIWAY 12K - บลูเบอร์รี่":24,"JOIWAY 12K - องุ่น":24,"JOIWAY 12K - เสาวรส":24,"JOIWAY 12K - ลูกอมเรนโบว์":24,"JOIWAY 12K - สตรอว์เบอร์รี่":24,"JOIWAY 12K - ชามะนาว":24,"JOIWAY 12K - คุกกี้":24,"JOIWAY TWINS 20K - โคล่า / แอปเปิ้ลเขียว":25,"JOIWAY TWINS 20K - โคล่า / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - ลิ้นจี่ / คุกกี้":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / มิ้นต์":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - มิ้นต์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / บลูเบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / แตงโม":25,"JOIWAY TWINS 20K - องุ่น / ลิ้นจี่":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / คุกกี้":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / แตงโม":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / ลูกอมเรนโบว์":25,"JOIWAY TWINS 20K - แตงโม / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / สตรอว์เบอร์รี่":25,"KARDINAL POUCH - MANGO (3MG)":63,"KARDINAL POUCH - PEPPERMINT (3MG)":63,"KARDINAL POUCH - COLA (3MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (3MG)":63,"KARDINAL POUCH - ICE MINT (3MG)":63,"KARDINAL POUCH - PEPPERMINT (6MG)":63,"KARDINAL POUCH - COLA (6MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (6MG)":63,"KARDINAL POUCH - ICE MINT (6MG)":63,"KARDINAL POUCH - MANGO (6MG)":63,"KS QUIK PRO 15K (หัวน้ำยา) - โคล่าเลม่อน":5,"KS QUIK PRO 15K (หัวน้ำยา) - ชานม":5,"KS QUIK PRO 15K (หัวน้ำยา) - แตงโม":5,"KS QUIK PRO 15K (หัวน้ำยา) - น้ำแร่":5,"KS QUIK PRO 15K (หัวน้ำยา) - บลูเบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - เมนทอล":5,"KS QUIK PRO 15K (หัวน้ำยา) - โยเกิร์ต":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่แบล็คเคอร์แรนท์":5,"KS QUIK PRO 15K (หัวน้ำยา) - เลม่อนโซดา":5,"KS QUIK PRO 15K (หัวน้ำยา) - สตรอว์เบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - สับปะรด":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่น":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - แอปเปิ้ลเปรี้ยว":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นเบอร์รี่":5,"KS Quik 6K - โคล่าเลม่อน":26,"KS Quik 6K - ชานมอู่หลง":26,"KS Quik 6K - แตงโม":26,"KS Quik 6K - น้ำแร่":26,"KS Quik 6K - บลูเบอร์รี่":26,"KS Quik 6K - ฝรั่ง":26,"KS Quik 6K - มะนาว":26,"KS Quik 6K - มะม่วง":26,"KS Quik 6K - มิกซ์เบอร์รี่":26,"KS Quik 6K - เมนทอล":26,"KS Quik 6K - เมล่อน":26,"KS Quik 6K - ยาสูบครีม":26,"KS Quik 6K - ยาสูบคลาสสิค":26,"KS Quik 6K - ลิ้นจี่":26,"KS Quik 6K - สตรอว์เบอร์รี่":26,"KS Quik 6K - สับปะรด":26,"KS Quik 6K - องุ่น":26,"KS Quik 6K - ไอศกรีมสตรอว์เบอร์รี่":26,"KS QUIK PRO 15K (KIT) - โคล่าเลม่อน":39,"KS QUIK PRO 15K (KIT) - ชานม":39,"KS QUIK PRO 15K (KIT) - แตงโม":39,"KS QUIK PRO 15K (KIT) - น้ำแร่":39,"KS QUIK PRO 15K (KIT) - บลูเบอร์รี่":39,"KS QUIK PRO 15K (KIT) - เมนทอล":39,"KS QUIK PRO 15K (KIT) - โยเกิร์ต":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่แบล็คเคอร์แรนท์":39,"KS QUIK PRO 15K (KIT) - เลม่อนโซดา":39,"KS QUIK PRO 15K (KIT) - สตรอว์เบอร์รี่":39,"KS QUIK PRO 15K (KIT) - สับปะรด":39,"KS QUIK PRO 15K (KIT) - องุ่น":39,"KS QUIK PRO 15K (KIT) - องุ่นลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - แอปเปิ้ลเปรี้ยว":39,"KS QUIK PRO 15K (KIT) - องุ่นเบอร์รี่":39,"LANA IRIS 24K - ชากวนอิน 3%":27,"LANA IRIS 24K - แตงโม 3%":27,"LANA IRIS 24K - น้ำแร่ 3%":27,"LANA IRIS 24K - ฝรั่ง 3%":27,"LANA IRIS 24K - มิกซ์เบอร์รี่ 3%":27,"LANA IRIS 24K - มิ้นต์ 3%":27,"LANA IRIS 24K - ลิ้นจี่ 3%":27,"LANA IRIS 24K - สตรอว์เบอร์รี่ 3%":27,"LANA IRIS 24K - สับปะรด 3%":27,"LANA IRIS 24K - ส้มองุ่น 3%":27,"LANA IRIS 24K - องุ่น 3%":27,"LANA IRIS 24K - โคล่า 3%":27,"LANA IRIS 24K - เลม่อนโคล่า 3%":27,"LANA IRIS 24K - ชากวนอิน 5%":27,"LANA IRIS 24K - มิ้นต์ 5%":27,"M SWITCH - ดับเบิ้ลมิ้นต์":6,"M SWITCH - บลูเบอร์รี่เย็น":6,"M SWITCH - พีชสตรอว์เบอร์รี่":6,"M SWITCH - มะม่วงเสาวรส":6,"M SWITCH - มิกซ์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่แตงโม":6,"M SWITCH - หมากฝรั่งแตงโม":6,"M SWITCH - องุ่น":6,"M SWITCH - องุ่นลิ้นจี่":6,"M SWITCH - องุ่นว่านหางจระเข้":6,"M SWITCH - เบอร์รี่ชมพู":6,"M SWITCH - แตงโม":6,"M SWITCH - แบล็คเบอร์รี่":6,"M SWITCH - แอปเปิ้ลว่านหางจระเข้":6,"M SWITCH - โคล่า":6,"M SWITCH - องุ่นเคียวโฮ":6,"MARBO 9K - โคล่า":29,"MARBO 9K - ดับเบิ้ลมิ้นต์":29,"MARBO 9K - แตงโม":29,"MARBO 9K - บลูไอซ์":29,"MARBO 9K - เบอร์รี่ชมพู":29,"MARBO 9K - พีช":29,"MARBO 9K - พีชสตรอว์เบอร์รี่":29,"MARBO 9K - แฟนต้าส้ม":29,"MARBO 9K - มิกซ์เบอร์รี่":29,"MARBO 9K - เยลลี่":29,"MARBO 9K - ลูกอมเรนโบว์":29,"MARBO 9K - สตรอว์เบอร์รี่":29,"MARBO 9K - สปาร์คกิ้งเลม่อน":29,"MARBO 9K - หมากฝรั่งแตงโม":29,"MARBO 9K - องุ่น":29,"MARBO 9K - องุ่นลิ้นจี่":29,"MARBO 9K - องุ่นว่านหางจระเข้":29,"MARBO 9K - แอปเปิ้ลเขียว":29,"MARBO 9K - สตรอว์เบอร์รี่มิลค์เชค":29,"MARBO 9K - เมนทอลฟรีส":29,"MARBO 9K - องุ่นเคียวโฮ":29,"MARBO 9K - แอปเปิ้ลเลม่อน":29,"MARBO 9K - บลูเบอร์รี่มิ้นต์":29,"MARBO 9K -  สตรอว์เบอร์รี่กีวี่":29,"MARBO 10K - บลูไอซ์":28,"MARBO 10K - เบอร์รี่ชมพู":28,"MARBO 10K - เบอร์รี่รวม":28,"MARBO 10K - แตงโม":28,"MARBO 10K - แตงโมมิ้นต์":28,"MARBO 10K - โคล่า":28,"MARBO 10K - มัทฉะลาเต้":28,"MARBO 10K - เมนทอล":28,"MARBO 10K - เลม่อนมิ้นต์":28,"MARBO 10K - สตรอว์เบอร์รี่กีวี่":28,"MARBO 10K - องุ่น":28,"MARBO 10K - องุ่นเคียวโฮ":28,"เครื่อง M ZERO NANO - สีดำ":46,"เครื่อง M ZERO NANO - สีขาว":46,"เครื่อง M ZERO NANO - สีชมพู":46,"เครื่อง M ZERO NANO - สีฟ้า":46,"เครื่อง M ZERO PRO - สีเขียว":47,"เครื่อง M ZERO PRO - สีชมพู":47,"เครื่อง M ZERO PRO - สีแดง":47,"เครื่อง M ZERO PRO - สีเงิน":47,"เครื่อง M ZERO PRO - สีดำ":47,"เครื่อง M ZERO PRO - สีเหลืองดำ":47,"เครื่อง M ZERO PRO - สีฟ้าม่วง":47,"เครื่อง M ZERO PRO - สีดำชมพู":47,"เครื่อง M SWITCH - สีดำ":44,"เครื่อง M SWITCH KIT - ดับเบิ้ลมิ้นต์":40,"เครื่อง M SWITCH KIT - บลูเบอร์รี่เย็น":40,"เครื่อง M SWITCH KIT - พีชสตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - มะม่วงเสาวรส":40,"เครื่อง M SWITCH KIT - มิกซ์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่แตงโม":40,"เครื่อง M SWITCH KIT - หมากฝรั่งแตงโม":40,"เครื่อง M SWITCH KIT - องุ่น":40,"เครื่อง M SWITCH KIT - องุ่นลิ้นจี่":40,"เครื่อง M SWITCH KIT - องุ่นว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - เบอร์รี่ชมพู":40,"เครื่อง M SWITCH KIT - แตงโม":40,"เครื่อง M SWITCH KIT - แบล็คเบอร์รี่":40,"เครื่อง M SWITCH KIT - แอปเปิ้ลว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - โคล่า":40,"เครื่อง M SWITCH KIT - องุ่นเคียวโฮ":40,"FREEBASE MARBO 30ML - ทอง":61,"FREEBASE MARBO 30ML - ชมพู":61,"FREEBASE MARBO 30ML - ฟ้า":61,"FREEBASE MARBO 30ML - ม่วง":61,"SALTNIC MARBO 30ML - เขียว":59,"SALTNIC MARBO 30ML - ชมพู":59,"SALTNIC MARBO 30ML - ดำ":59,"SALTNIC MARBO 30ML - ทอง":59,"SALTNIC MARBO 30ML - น้ำเงิน":59,"SALTNIC MARBO 30ML - ม่วง":59,"SALTNIC MARBO 30ML - เงิน":59,"SALTNIC MARBO 30ML - แดง":59,"SALTNIC MARBO 30ML 50% - ม่วง":59,"MARBO ZERO - เกรปฟรุต":11,"MARBO ZERO - โคล่า":11,"MARBO ZERO - ชาผลไม้":11,"MARBO ZERO - ชาอู่หลง":11,"MARBO ZERO - ซิก้าร์":11,"MARBO ZERO - แตงโม":11,"MARBO ZERO - น้ำแร่":11,"MARBO ZERO - บลูเบอร์รี่":11,"MARBO ZERO - พีช":11,"MARBO ZERO - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO - มะม่วง":11,"MARBO ZERO - มิกซ์เบอร์รี่":11,"MARBO ZERO - มิ้นต์":11,"MARBO ZERO - ลิ้นจี่":11,"MARBO ZERO - เลม่อน":11,"MARBO ZERO - ส้มยูสุ":11,"MARBO ZERO - สับปะรด":11,"MARBO ZERO - องุ่น":11,"MARBO ZERO - องุ่นว่านหางจระเข้":11,"MARBO ZERO - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - โคล่า":11,"MARBO ZERO 5% - แตงโม":11,"MARBO ZERO 5% - เบอร์รี่ชมพู":11,"MARBO ZERO 5% - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO 5% - มิกซ์เบอร์รี่":11,"MARBO ZERO 5% - มิ้นต์":11,"MARBO ZERO 5% - สตรอว์เบอร์รี่กล้วย":11,"MARBO ZERO 5% - องุ่น":11,"MARBO ZERO 5% - องุ่นว่านหางจระเข้":11,"MARBO ZERO 5% - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - มิ้นต์ฟรีซ":11,"MARBO 9K (โคลน) - ดับเบิ้ลมิ้นต์":30,"MARBO 9K (โคลน) - บลูไอซ์":30,"MARBO 9K (โคลน) - พีช":30,"MARBO 9K (โคลน) - พีชสตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - มิกซ์เบอร์รี่":30,"MARBO 9K (โคลน) - ลูกอมเรนโบว์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - สปาร์คกิ้งเลม่อน":30,"MARBO 9K (โคลน) - หมากฝรั่งแตงโม":30,"MARBO 9K (โคลน) - องุ่น":30,"MARBO 9K (โคลน) - องุ่นลิ้นจี่":30,"MARBO 9K (โคลน) - องุ่นว่านหางจระเข้":30,"MARBO 9K (โคลน) - เบอร์รี่ชมพู":30,"MARBO 9K (โคลน) - เยลลี่":30,"MARBO 9K (โคลน) - แตงโม":30,"MARBO 9K (โคลน) - แฟนต้าส้ม":30,"MARBO 9K (โคลน) - แอปเปิ้ลเขียว":30,"MARBO 9K (โคลน) - โคล่า":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่มิลค์เชค":30,"MARBO 9K (โคลน) - เมนทอลฟรีส":30,"MARBO 9K (โคลน) - องุ่นเคียวโฮ":30,"MARBO 9K (โคลน) - แอปเปิ้ลเลม่อน":30,"MARBO 9K (โคลน) - บลูเบอร์รี่มิ้นต์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่กีวี่":30,"เครื่อง M SWITCH - สีดำ (โคลน)":44,"FREEBASE PHATJUICE 30ML - องุ่นยาว":62,"RELX BOOST POD - กล้วย":7,"RELX BOOST POD - บลูเบอร์รี่":7,"RELX BOOST POD - โคล่า":7,"RELX BOOST POD - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD - องุ่น":7,"RELX BOOST POD - ชามะลิ":7,"RELX BOOST POD - ลูกอมเลม่อนมิ้นต์":7,"RELX BOOST POD - น้ำแร่":7,"RELX BOOST POD - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD - สับปะรด":7,"RELX BOOST POD - ฝรั่ง":7,"RELX BOOST POD - ลูกอม":7,"RELX BOOST POD - แตงโม":7,"RELX BOOST POD - สตรอว์เบอร์รี่แตงโม":7,"RELX BOOST POD - เบอร์รี่ชมพู":7,"RELX BOOST POD - มะเฟือง":7,"RELX BOOST POD - คูลมิ้นต์":7,"RELX BOOST POD  - ลิ้นจี่":7,"RELX BOOST POD  - สเปียร์มิ้นต์":7,"RELX BOOST POD  - หมากฝรั่งแตงโม":7,"RELX BOOST POD  - แอปเปิ้ลว่านหางจระเข้":7,"RELX BOOST POD  - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD  - สตรอว์เบอร์รี่กล้วย":7,"RELX BOOST POD 5% - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD 5% - องุ่น":7,"RELX BOOST POD 5% - แตงโม":7,"RELX BOOST POD 5% - ยาสูบคลาสสิค":7,"RELX BOOST POD 5% - โคล่า":7,"RELX BOOST POD 5% - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD 5% - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD 5% - สตรอว์เบอร์รี่กล้วย":7,"RELX CLEAR 18K 3% - กาแฟโกปิโก้":8,"RELX CLEAR 18K 3% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 3% - แตงโม":8,"RELX CLEAR 18K 3% - น้ำส้มโซดา":8,"RELX CLEAR 18K 3% - น้ำแร่":8,"RELX CLEAR 18K 3% - สเปียร์มิ้นต์":8,"RELX CLEAR 18K 3% - สับปะรด":8,"RELX CLEAR 18K 3% - องุ่นอโล":8,"RELX CLEAR 18K 3% - องุ่น":8,"RELX CLEAR 18K 3% - แอปเปิ้ลเขียว":8,"RELX POD CLEAR 18K 3% - รวมมิตรเบอร์รี่":8,"RELX POD CLEAR 18K 3% - ไอติมสตรอว์เบอร์รี่":8,"RELX POD CLEAR 18K 3% - โคล่า":8,"RELX POD CLEAR 18K 3% - สตรอว์เบอร์รี่โซดา":8,"RELX POD CLEAR 18K 3% - มะม่วงเสาวรส":8,"RELX POD CLEAR 18K 3% - เมล่อน":8,"RELX CLEAR 18K 5% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 5% - แตงโม":8,"RELX CLEAR 18K 5% - องุ่น":8,"RELX DIVA 30K 3% - โคล่า":31,"RELX DIVA 30K 3% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 3% - แตงโม":31,"RELX DIVA 30K 3% - น้ำแร่":31,"RELX DIVA 30K 3% - น้ำส้มโซดา":31,"RELX DIVA 30K 3% - มะม่วงเสาวรส":31,"RELX DIVA 30K 3% - มิกซ์เบอร์รี่":31,"RELX DIVA 30K 3% - เมล่อน":31,"RELX DIVA 30K 3% - สเปียร์มิ้นต์":31,"RELX DIVA 30K 3% - องุ่น":31,"RELX DIVA 30K 3% - องุ่นอโล":31,"RELX DIVA 30K 3% - ไอติมสตรอว์เบอร์รี่":31,"RELX DIVA 30K 5% - กาแฟโกปิโก้":31,"RELX DIVA 30K 5% - โคล่า":31,"RELX DIVA 30K 5% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 5% - แตงโม":31,"RELX DIVA 30K 5% - องุ่น":31,"RELX SMASH GO 12K - แอปเปิ้ล 3%":32,"RELX SMASH GO 12K - เสาวรส 3%":32,"RELX SMASH GO 12K - องุ่น 3%":32,"RELX SMASH GO 12K - องุ่นลิ้นจี่ 3%":32,"RELX SMASH GO 12K - พีชสตรอว์เบอร์รี่ 3%":32,"RELX SMASH GO 12K - มะม่วง 3%":32,"RELX SMASH GO 12K - แตงโม 3%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 3%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 3%":32,"RELX SMASH GO 12K - โคล่า 3%":32,"RELX SMASH GO 12K - ชาอู่หลง 3%":32,"RELX SMASH GO 12K - บลูเบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - เบอร์รี่ชมพู 3%":32,"RELX SMASH GO 12K - ฝรั่ง 3%":32,"RELX SMASH GO 12K - ลิ้นจี่ 3%":32,"RELX SMASH GO 12K - สตรอว์เบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - สับปะรดเย็น 3%":32,"RELX SMASH GO 12K - องุ่นอโล 3%":32,"RELX SMASH GO 12K - หมากฝรั่งแตงโม 3%":32,"RELX SMASH GO 12K - แตงโม 5%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 5%":32,"RELX SMASH GO 12K - องุ่น 5%":32,"RELX SMASH GO 12K - โคล่า 5%":32,"RELX SMASH GO 12K - คูลมิ้นต์ 5%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 5%":32,"RELX SMASH GO 12K - ยาสูบคลาสสิค 5%":32,"RELX SMASH GO 12K - สเปียร์มิ้นต์ 5%":32,"RELX SPARTA 20K - โคล่า":33,"RELX SPARTA 20K - ชาอู่หลง":33,"RELX SPARTA 20K - ดับเบิ้ลมิ้นต์":33,"RELX SPARTA 20K - แตงโม":33,"RELX SPARTA 20K - น้ำแร่":33,"RELX SPARTA 20K - บลูเบอร์รี่":33,"RELX SPARTA 20K - พีชสตรอเบอร์รี่":33,"RELX SPARTA 20K - เยลลี่":33,"RELX SPARTA 20K - รวมมิตรเบอร์รี่":33,"RELX SPARTA 20K - ราสเบอร์รี่มิ้นติ์":33,"RELX SPARTA 20K - ลูกกวาด":33,"RELX SPARTA 20K - สตรอเบอร์รี่":33,"RELX SPARTA 20K - สัปปะรด":33,"RELX SPARTA 20K - องุ่น":33,"RELX SPARTA 20K - องุ่นลิ้นจี่":33,"RELX SPARTA 20K - แอปเปิ้ล":33,"RELX SPARTA 20K - เบอร์รี่ชมพู":33,"RELX SPARTA 20K - โพล่าร์มิ้นต์":33,"RELX SPARTA 20K - หมากฝรั่งแตงโม":33,"RELX SPARTA 20K - ลิ้นจี่":33,"RELX SPARTA 20K - องุ่นอโล":33,"เครื่อง RELX CREATOR 20K - สีดำ":48,"เครื่อง RELX CREATOR 20K - สีเทา-เหลือง":48,"เครื่อง RELX ESSENTIAL 2 - สีเทา":49,"เครื่อง RELX ESSENTIAL 2 - สีดำ":49,"เครื่อง RELX ESSENTIAL 2 - สีเงิน":49,"เครื่อง RELX ESSENTIAL 2 - สีฟ้าม่วง":49,"เครื่อง RELX INFINITY 2+ - สีเขียว":50,"เครื่อง RELX INFINITY 2+ - สีเงิน":50,"เครื่อง RELX INFINITY 2+ - สีดำ":50,"เครื่อง RELX INFINITY 2+ - สีเทา":50,"เครื่อง RELX INFINITY 2+ - สีบรอนซ์ทอง":50,"เครื่อง RELX INFINITY 2+ - สีโรสโกลด์":50,"เครื่อง RELX INFINITY 2+ - สีขาว":50,"RELX INFINITY - โคล่า":12,"RELX INFINITY - ชาเขียวมะลิ":12,"RELX INFINITY - ชาดอกชบาเย็น":12,"RELX INFINITY - ชาดำเย็น":12,"RELX INFINITY - ชาไทย":12,"RELX INFINITY - ชาพีช":12,"RELX INFINITY - ชามะนาวเย็น":12,"RELX INFINITY - ชาหลงจินเย็น":12,"RELX INFINITY - ชาอู่หลงเย็น":12,"RELX INFINITY - แตงโม":12,"RELX INFINITY - ถั่วเขียว":12,"RELX INFINITY - นํ้าส้มโซดา":12,"RELX INFINITY - น้ำเขียวโซดา":12,"RELX INFINITY - น้ำผึ้งส้มโอ":12,"RELX INFINITY - เผือก":12,"RELX INFINITY - ฝรั่ง":12,"RELX INFINITY - มะนาวเย็น":12,"RELX INFINITY - มะม่วง":12,"RELX INFINITY - เมล่อน":12,"RELX INFINITY - รูทเบียร์":12,"RELX INFINITY - ลิ้นจี่":12,"RELX INFINITY - ไวท์คอฟฟี่":12,"RELX INFINITY - สตรอว์เบอร์รี่":12,"RELX INFINITY - สไปรท์":12,"RELX INFINITY - เสาวรส":12,"RELX INFINITY - องุ่น":12,"RELX INFINITY - องุ่นเขียว":12,"RELX INFINITY - องุ่นแอปเปิ้ล":12,"RELX INFINITY - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - แตงโม":12,"RELX INFINITY 5% - เปปเปอร์มิ้นต์":12,"RELX INFINITY 5% - มิกซ์เบอร์รี่":12,"RELX INFINITY 5% - มิ้นต์เอ็กซ์ตร้า":12,"RELX INFINITY 5% - มิ้นต์ฟรีซ":12,"RELX INFINITY 5% - ยาสูบคลาสสิค":12,"RELX INFINITY 5% - ยาสูบร้อน":12,"RELX INFINITY 5% - เลม่อนมิ้นต์":12,"RELX INFINITY 5% - สเปียร์มิ้นต์":12,"RELX INFINITY 5% - องุ่น":12,"RELX INFINITY 5% - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - ซิตรัส":12,"RELX INFINITY 5% - ยาสูบมิ้นต์":12,"RELX INFINITY 5% - ราสเบอร์รี่มิ้นต์":12,"RELX INFINITY 5% - ไอซ์สปาร์คกิ้ง":12,"RELX INFINITY 5% - สตรอว์เบอร์รี่":12,"RELX INFINITY 5% - สับปะรด":12,"RELX LARGE - ลิ้นจี่":13,"RELX LARGE - องุ่น":13,"RELX LARGE - องุ่นแอปเปิ้ล":13,"RELX LARGE - แอปเปิ้ลเขียว":13,"RELX LARGE 5% - โคล่า":13,"RELX LARGE 5% - ชาหลงจิน":13,"RELX LARGE 5% - บลูเบอร์รี่":13,"RELX LARGE 5% - พีช":13,"RELX LARGE 5% - พีชสตรอว์เบอร์รี่":13,"RELX ULTRA 3% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 3% - แตงโม":14,"RELX ULTRA 3% - บลูเบอร์รี่":14,"RELX ULTRA 3% - เบอร์รี่ชมพู":14,"RELX ULTRA 3% - มะม่วงเขียว":14,"RELX ULTRA 3% - องุ่นอโล":14,"RELX ULTRA 5% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 5% - พีชสตรอว์เบอร์รี่":14,"RELX ULTRA 5% - มิกซ์เบอร์รี่":14,"RELX ULTRA 5% - ลิ้นจี่":14,"RELX ULTRA 5% - สับปะรด":14,"RELX ULTRA 5% - องุ่นอโล":14,"RELX ULTRA 5% - แอปเปิ้ลอโล":14,"RELX ULTRA 5% - โคล่า":14,"RELX ULTRA 5% - เบอร์รี่ชมพู":14,"SONIC 8K - กัมมี่แบร์":34,"SONIC 8K - โคล่า":34,"SONIC 8K - แตงโม":34,"SONIC 8K - น้ำแร่":34,"SONIC 8K - มิกซ์เบอร์รี่":34,"SONIC 8K - มิ้นต์":34,"SONIC 8K - ยาคูลท์":34,"SONIC 8K - สตรอว์เบอร์รี่":34,"SONIC 8K - องุ่น":34,"SONIC 8K - แอปเปิ้ลเขียว":34,"STAR 2,500 - กล้วย":35,"STAR 2,500 - โคล่า":35,"STAR 2,500 - แตงโม":35,"STAR 2,500 - น้ำแร่":35,"STAR 2,500 - บลูเบอร์รี่":35,"STAR 2,500 - พีช":35,"STAR 2,500 - มะม่วง":35,"STAR 2,500 - มิกซ์เบอร์รี่":35,"STAR 2,500 - มิ้นต์":35,"STAR 2,500 - ลิ้นจี่":35,"STAR 2,500 - สตรอว์เบอร์รี่":35,"STAR 2,500 - องุ่น":35,"VAZER RELOAD 15K (หัวน้ำยา) - โคล่า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แตงโม":9,"VAZER RELOAD 15K (หัวน้ำยา) - บลูเบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เบอร์รี่รวม":9,"VAZER RELOAD 15K (หัวน้ำยา) - พีช":9,"VAZER RELOAD 15K (หัวน้ำยา) - มิ้นต์เย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - รูทเบียร์":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลูกอมสตรอว์เบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เลม่อนโซดา":9,"VAZER RELOAD 15K (หัวน้ำยา) - สับปะรด":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นเย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นโอซาก้า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แอปเปิ้ลฟูจิ":9,"เครื่อง VAZER RELOAD - สีดำ":51,"VAZER RELOAD 15K (KIT) - โคล่า":41,"VAZER RELOAD 15K (KIT) - มิ้นต์เย็น":41,"VAZER RELOAD 15K (KIT) - ลูกอมสตรอว์เบอร์รี่":41,"VAZER RELOAD 15K (KIT) - องุ่นเย็น":41,"VAZER RELOAD 15K (KIT) - แตงโม":41,"VOSOON 23K - ชาหลงจิน":37,"VOSOON 23K - แตงโม":37,"VOSOON 23K - บลูเบอร์รี่เย็น":37,"VOSOON 23K - ฝรั่งเสาวรส":37,"VOSOON 23K - พีชสตรอว์เบอร์รี่":37,"VOSOON 23K - มิ้นต์ฟรีซ":37,"VOSOON 23K - ลิ้นจี่เย็น":37,"VOSOON 23K - องุ่นเย็น":37,"VOSOON 23K - แอปเปิ้ลอโล":37,"VOSOON 23K - โคล่า":37,"V PLUS 16K - กัมมี่แบร์":36,"V PLUS 16K - โคล่า":36,"V PLUS 16K - แตงโม":36,"V PLUS 16K - บลูเบอร์รี่":36,"V PLUS 16K - พีชสตรอว์เบอร์รี่":36,"V PLUS 16K - มิกซ์เบอร์รี่":36,"V PLUS 16K - มิ้นต์":36,"V PLUS 16K - ลิ้นจี่":36,"V PLUS 16K - ลูกอมเรนโบว์":36,"V PLUS 16K - สตรอว์เบอร์รี่":36,"V PLUS 16K - สตรอว์เบอร์รี่ราสเบอร์รี่":36,"V PLUS 16K - หมากฝรั่งแตงโม":36,"V PLUS 16K - องุ่น":36,"V PLUS 16K - องุ่นเคียวโฮ":36,"V PLUS 16K - แอปเปิ้ล":36,"V PLUS 16K - แอปเปิ้ลชิชา":36,"ZAR POUCH - FRESH MINT (3MG)":64,"ZAR POUCH - LEMON CRUSH (3MG)":64,"ZAR POUCH - COLA (3MG)":64,"ZAR POUCH - CITRUS (3MG)":64,"ZAR POUCH - WATERMELON (3MG)":64,"ZAR POUCH - FRESH MINT (6MG)":64,"ZAR POUCH - LEMON CRUSH (6MG)":64,"ZAR POUCH - COLA (6MG)":64,"ZAR POUCH - CITRUS (6MG)":64,"ZAR POUCH - WATERMELON (6MG)":64,"ZYN POUCH - SPEARMINT (1.5MG)":65,"ZYN POUCH - PEACH (1.5MG)":65,"ZYN POUCH - COFFEE (1.5MG)":65,"ZYN POUCH - COOL MINT (3MG)":65,"ZYN POUCH - SPEARMINT (3MG)":65,"ZYN POUCH - PEACH (3MG)":65,"ZYN POUCH - COFFEE (3MG)":65,"ZYN POUCH - COOL MINT (6MG)":65};
+const NM2ID = {"ABC LEGO - ดับเบิ้ลมิ้นต์ 3%":1,"ABC LEGO - น้ำแร่ 3%":1,"ABC LEGO - มิกซ์เบอร์รี่ 3%":1,"ABC LEGO - องุ่น 3%":1,"ABC LEGO - โคล่า 3%":1,"ABC LEGO - ชามะลิ 3%":1,"ABC LEGO - สับปะรด 3%":1,"ABC LEGO - แตงโม 3%":1,"ABC LEGO - ดับเบิ้ลมิ้นต์ 5%":1,"ABC LEGO - มิกซ์เบอร์รี่ 5%":1,"ABC LEGO - องุ่น 5%":1,"ABC LEGO - แตงโม 5%":1,"ABC TANK - ดับเบิ้ลมิ้นต์ 3%":2,"ABC TANK - บลูเบอร์รี่เย็น 3%":2,"ABC TANK - พีชสตรอว์เบอร์รี่ 3%":2,"ABC TANK - มิกซ์เบอร์รี่ 3%":2,"ABC TANK - แตงโม 3%":2,"ABC TANK - องุ่น 3%":2,"ABC TANK - องุ่นลิ้นจี่ 3%":2,"ABC TANK - โคล่า 3%":2,"ABC TANK - ดับเบิ้ลมิ้นต์ 5%":2,"ABC TANK - แตงโม 5%":2,"ABC TANK - องุ่น 5%":2,"ABC TANK - โคล่า 5%":2,"ABC 8K - กล้วย":15,"ABC 8K - ดับเบิ้ลมิ้นต์":15,"ABC 8K - แตงโม":15,"ABC 8K - น้ำแร่":15,"ABC 8K - บลูไอซ์":15,"ABC 8K - มิกซ์เบอร์รี่":15,"ABC 8K - ลิ้นจี่":15,"ABC 8K - โคล่า":15,"ABC 8K - สตรอว์เบอร์รี่":15,"ABC 8K - สับปะรด":15,"ABC 8K - องุ่น":15,"ABC 8K - องุ่นอโล":15,"CARNIVAL 20K - กัมมี่":16,"CARNIVAL 20K - โคล่า":16,"CARNIVAL 20K - ดับเบิ้ลมิ้นต์":16,"CARNIVAL 20K - แตงโมไอซ์":16,"CARNIVAL 20K - บลูเบอร์รี่":16,"CARNIVAL 20K - พีชสตรอว์เบอร์รี่":16,"CARNIVAL 20K - สตรอว์เบอร์รี่":16,"CARNIVAL 20K - ส้มโซดา":16,"CARNIVAL 20K - องุ่น":16,"CARNIVAL 20K - องุ่นลิ้นจี่":16,"CARNIVAL 20K - องุ่นว่านหางจระเข้":16,"CARNIVAL 20K - สับปะรด":16,"CARNIVAL 20K - ยาคูลท์":16,"CARNIVAL 20K - แยมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - แยมบลูเบอร์รี่":16,"CARNIVAL 20K - ลิ้นจี่ไอซ์":16,"CARNIVAL 20K - ไอติมเผือก":16,"CARNIVAL 20K - ไอติมสตรอว์เบอร์รี่":16,"CARNIVAL 20K - เมล่อน":16,"CARNIVAL 20K - เรดบลู":16,"DUAL SMASH 20K - แตงโม":17,"DUAL SMASH 20K - มิ้นต์":17,"DUAL SMASH 20K - โคล่า":17,"DUAL SMASH 20K - นมกล้วย":17,"DUAL SMASH 20K - น้ำแร่":17,"DUAL SMASH 20K - องุ่น":17,"DUAL SMASH 20K - องุ่นอโล":17,"DUAL SMASH 20K - สตรอว์เบอร์รี่":17,"DUAL SMASH 20K - แอปเปิ้ล":17,"DUAL SMASH 20K - ชาหลงจิน":17,"DUAL SMASH 20K - ฮันนี่เลม่อน":17,"DUAL SMASH 20K - ยาคูลท์":17,"เครื่อง DUAL SMASH - สีดำ":42,"ELFBAR SWAP 25K - ฝรั่งมะม่วงส้ม":3,"ELFBAR SWAP 25K - พีชสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - มะม่วง":3,"ELFBAR SWAP 25K - เมล่อน":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่ชีสเค้ก":3,"ELFBAR SWAP 25K - สตรอว์เบอร์รี่องุ่นแอปเปิ้ล":3,"ELFBAR SWAP 25K - หมากฝรั่งแตงโม":3,"ELFBAR SWAP 25K - องุ่น":3,"ELFBAR SWAP 25K - ไอติมซอเลโร่":3,"ELFBAR SWAP 25K - ไอติมสตรอว์เบอร์รี่":3,"ELFBAR SWAP 25K - แอปเปิ้ลลิ้นจี่":3,"ELFBAR SWAP 25K - โคล่าเย็น":3,"ELFBAR SWAP 25K - มะนาวเย็น":3,"ELFBAR SWAP 25K - ชามะลิ":3,"ELFBAR SWAP 25K - ชาหลงจิน":3,"ELFBAR SWAP 25K - ชาองุ่นกวนอิน":3,"ELFBAR SWAP 25K - ดับเบิ้ลมิ้นต์":3,"ELFBAR SWAP 25K - น้ำแร่":3,"ELFBAR SWAP 25K - องุ่นเย็น":3,"ELFBAR 15K - องุ่นว่านหางจระเข้":18,"ELFBAR 15K - บลูเบอร์รี่เย็น":18,"ELFBAR 15K - องุ่นเย็น":18,"ELFBAR 15K - องุ่นเยลลี่":18,"ELFBAR 15K - มะม่วงเขียว":18,"ELFBAR 15K - ฝรั่งเย็น":18,"ELFBAR 15K - โคล่าเลม่อน":18,"ELFBAR 15K - ชามะนาว":18,"ELFBAR 15K - แฟนต้าลิ้นจี่":18,"ELFBAR 15K - พีชเย็น":18,"ELFBAR 15K - องุ่นซากุระ":18,"ELFBAR 15K - สตรอว์เบอร์รี่เย็น":18,"ELFBAR 15K - พีชสตรอว์เบอร์รี่":18,"ELFBAR 15K - เบอร์รี่":18,"ELFBAR 15K - เมล่อนแตงโม":18,"ELFBAR 15K - แตงโม":18,"เครื่อง ELFBAR JOINONE - สีเขียว":43,"เครื่อง ELFBAR JOINONE - สีดำ":43,"เครื่อง ELFBAR JOINONE - สีแดง":43,"เครื่อง ELFBAR JOINONE - สีน้ำเงิน":43,"เครื่อง ELFBAR JOINONE - สีม่วง":43,"เครื่อง ELFBAR JOINONE - สีส้ม":43,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โคล่า":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แตงโมเย็น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แตงโมเลม่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  บลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  ฝรั่ง":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิกซ์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  มิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  เมล่อน":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  โยเกิร์ต":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   ลิ้นจี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  สตรอว์เบอร์รี่กล้วย":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -   สับปะรด":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  องุ่น":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) -  แอปเปิ้ลอโล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - แยมบลูเบอร์รี่":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - เมนทอล":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - ช็อคโกแลตมิ้นต์":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะพร้าว":4,"ESKO BAR SWITCH 20K (หัวน้ำยา) - มะม่วง":4,"ESKO BAR 20K - โคล่า":19,"ESKO BAR 20K - แตงโม":19,"ESKO BAR 20K - แตงโมสตรอว์เบอร์รี่":19,"ESKO BAR 20K - บลูเบอร์รี่ไอซ์":19,"ESKO BAR 20K - บับเบิ้ลกัม":19,"ESKO BAR 20K - เบอร์รี่องุ่น":19,"ESKO BAR 20K - ฝรั่ง":19,"ESKO BAR 20K - มิกซ์เบอร์รี่":19,"ESKO BAR 20K - เมล่อน":19,"ESKO BAR 20K - สตรอว์เบอร์รี่":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กล้วย":19,"ESKO BAR 20K - สตรอว์เบอร์รี่กีวี่":19,"ESKO BAR 20K - องุ่น":19,"ESKO BAR 20K - องุ่นเคียวโฮ":19,"ESKO BAR 20K - แอปเปิ้ลว่านหางจระเข้":19,"ESKO BAR 20K - ลิ้นจี่เย็น":19,"ESKO BAR 20K - ดับเบิ้ลมิ้นต์":19,"ESKO BAR 20K - กล้วยเย็น":19,"ESKO BAR 20K - มะม่วง":19,"ESKO BAR 20K - น้ำแร่":19,"ESKO BAR 20K - เรดเลม่อนโซดา":19,"ESKO BAR 20K - มิ้นต์เอ็กซ์ตร้า 5%":19,"ESKO BAR SWITCH 20K (KIT) - โคล่า":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเย็น":38,"ESKO BAR SWITCH 20K (KIT) - แตงโมเลม่อน":38,"ESKO BAR SWITCH 20K (KIT) - บลูเบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - ฝรั่ง":38,"ESKO BAR SWITCH 20K (KIT) - มิกซ์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) - มิ้นต์":38,"ESKO BAR SWITCH 20K (KIT) - เมล่อน":38,"ESKO BAR SWITCH 20K (KIT) - โยเกิร์ต":38,"ESKO BAR SWITCH 20K (KIT) - ลิ้นจี่":38,"ESKO BAR SWITCH 20K (KIT) - สตรอว์เบอร์รี่":38,"ESKO BAR SWITCH 20K (KIT) -  สตรอว์เบอร์รี่กล้วย":38,"ESKO BAR SWITCH 20K (KIT) - สับปะรด":38,"ESKO BAR SWITCH 20K (KIT) - องุ่น":38,"ESKO BAR SWITCH 20K (KIT) -  แอปเปิ้ลอโล":38,"FREEBASE ESKOLIQ 30ML - โคล่า":60,"FREEBASE ESKOLIQ 30ML - มิกซ์เบอร์รี่":60,"FREEBASE ESKOLIQ 30ML - ไอซ์บลาสต์":60,"SALTNIC ESKOLIQ 30ML - โคล่า":58,"SALTNIC ESKOLIQ 30ML - มิกซ์เบอร์รี่":58,"INFY BAR 15K - โคล่าเลม่อน":22,"INFY BAR 15K - ซีซอล์ทเลม่อน":22,"INFY BAR 15K - แตงโม":22,"INFY BAR 15K - แตงโมลิ้นจี่":22,"INFY BAR 15K - พีชสตรอว์เบอร์รี่":22,"INFY BAR 15K - บลูเบอร์รี่":22,"INFY BAR 15K - แฟนต้าองุ่น":22,"INFY BAR 15K - มะม่วงโยเกิร์ต":22,"INFY BAR 15K - มิกซ์เบอร์รี่":22,"INFY BAR 15K - มิ้นต์":22,"INFY BAR 15K - เมล่อน":22,"INFY BAR 15K - ลิ้นจี่":22,"INFY BAR 15K - ลูกอมเปรี้ยว":22,"INFY BAR 15K - สตรอว์เบอร์รี่แตงโม":22,"INFY BAR 15K - องุ่นเคียวโฮ":22,"INFY BAR 15K - องุ่นลิ้นจี่":22,"INFY BAR 15K - มะนาว":22,"INFY BAR 15K - สับปะรดมะนาว":22,"INFY BAR 15K - โคล่า":22,"INFY BAR 15K - องุ่นแอปเปิ้ล":22,"INFY BAR PRO 20K - ดับเบิ้ลมิ้นต์":23,"INFY BAR PRO 20K - บลูไอซ์":23,"INFY BAR PRO 20K - โคล่า":23,"INFY BAR PRO 20K - มิกซ์เบอร์รี่":23,"INFY BAR PRO 20K - ลูกอมเรนโบว์":23,"INFY BAR PRO 20K - เบอร์รี่ชมพู":23,"INFY BAR PRO 20K - ลิ้นจี่เย็น":23,"INFY BAR PRO 20K - แตงโม":23,"INFY BAR PRO 20K - แตงโมสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - แตงโมลิ้นจี่":23,"INFY BAR PRO 20K - หมากฝรั่งแตงโม":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - พีชสตรอว์เบอร์รี่":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กล้วย":23,"INFY BAR PRO 20K - สตรอว์เบอร์รี่กีวี่":23,"INFY BAR PRO 20K - องุ่น":23,"INFY BAR PRO 20K - องุ่นลิ้นจี่":23,"INFY BAR PRO 20K - องุ่นว่านหางจระเข้":23,"INFY BAR PRO 20K - แตงโมมิ้นต์":23,"INFY BAR PRO 20K - ยาคูลท์":23,"INFY BAR PRO 20K - เรดบลู":23,"INFY BAR PRO 20K - มัทฉะลาเต้":23,"INFY BAR PRO 20K - ฝรั่งเสาวรส":23,"INFY BAR PRO 20K - ราสเบอร์รี่แตงโม":23,"INFY BAR PRO 20K - ไอติมสตรอว์เบอร์รี่":23,"INFY 12K - โคล่า":20,"INFY 12K - แตงโมลิ้นจี่":20,"INFY 12K - น้ำแร่":20,"INFY 12K - บลูเบอร์รี่":20,"INFY 12K - พีช":20,"INFY 12K - มิกซ์เบอร์รี่":20,"INFY 12K - มิกซ์สตรอว์เบอร์รี่":20,"INFY 12K - มิ้นต์":20,"INFY 12K - เมล่อน":20,"INFY 12K - ลิ้นจี่":20,"INFY 12K - ลูกอมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่กล้วย":20,"INFY 12K - สตรอว์เบอร์รี่กีวี่":20,"INFY 12K - สตรอว์เบอร์รี่แตงโม":20,"INFY 12K - องุ่นเคียวโฮ":20,"INFY 12K - องุ่นซากุระ":20,"INFY 12K - องุ่นโยโย่":20,"INFY 12K - องุ่นแอปเปิ้ล":20,"INFY 12K - ไอศกรีมสตรอว์เบอร์รี่":20,"INFY 12K - สตรอว์เบอร์รี่ราสเบอร์รี่":20,"INFY 12K - สไปร์ท":20,"INFY 12K - ส้มโซดา":20,"INFY 12K - หมากฝรั่งแตงโม":20,"INFY 12K - เลม่อนชมพู":20,"INFY 12K - ราสเบอร์รี่มัลเบอร์รี่":20,"INFY 12K - กัมมี่แบร์":20,"INFY 12K - ชาอู่หลงพีช":20,"INFY 12K - องุ่นหน้าร้อน":20,"INFY 12K - บานาน่าท๊อฟฟี่":20,"INFY 12K - ลิ้นจี่ราสเบอร์รี่":20,"INFY 20K - บลูเบอร์รี่":21,"INFY 20K - แตงโมลิ้นจี่":21,"INFY 20K - ลิ้นจี่":21,"INFY 20K - มิกซ์เบอร์รี่":21,"INFY 20K - มิ้นต์":21,"INFY 20K - สตรอว์เบอร์รี่กีวี่":21,"INFY 20K - สตรอว์เบอร์รี่แตงโม":21,"INFY 20K - องุ่นแอปเปิ้ล":21,"INFY 20K - องุ่นเคียวโฮ":21,"INFY 20K - องุ่นโยโย่":21,"INFY 20K - องุ่นลิ้นจี่":21,"INFY 20K - องุ่นอโล":21,"INFY 20K - พีช":21,"INFY 20K - แอปเปิ้ลอโล":21,"INFY 20K - สปาร์คกิ้งเลม่อน":21,"INFY 20K - น้ำแร่":21,"INFY 20K - โคล่า":21,"INFY 20K - สตรอว์เบอร์รี่กล้วย":21,"INFY 20K - เมนทอลฟรีซ":21,"INFY 20K - หมากฝรั่งองุ่น":21,"INFY 20K - หมากฝรั่งแตงโม":21,"INFY 20K - ชานมชาจี":21,"INFY 20K - ชาเขียวมัทฉะ":21,"INFY PLUS - โคล่า":10,"INFY PLUS - ชามะลิ":10,"INFY PLUS - แตงโมลิ้นจี่":10,"INFY PLUS - แตงโมสตรอว์เบอร์รี่":10,"INFY PLUS - น้ำส้มโซดา":10,"INFY PLUS - บลูเบอร์รี่":10,"INFY PLUS - พีช":10,"INFY PLUS - มะม่วงพีช":10,"INFY PLUS - มิ้นต์":10,"INFY PLUS - เยลลี่องุ่น":10,"INFY PLUS - ลิ้นจี่":10,"INFY PLUS - ลิ้นจี่ราสเบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่":10,"INFY PLUS - สตรอว์เบอร์รี่องุ่น":10,"INFY PLUS - สไปร์ท":10,"INFY PLUS - หมากฝรั่งองุ่น":10,"INFY PLUS - องุ่นกัมมี่":10,"INFY PLUS - องุ่นเคียวโฮ":10,"INFY PLUS - องุ่นแอปเปิ้ล":10,"INFY PLUS - แอปเปิ้ลแดง":10,"INFY PLUS - ไอศกรีมสตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งเปรี้ยว":10,"INFY PLUS - แอปเปิ้ลอโล":10,"INFY PLUS - เชอร์รี่สตรอว์เบอร์รี่":10,"INFY PLUS - หมากฝรั่งสับปะรด":10,"INFY PLUS - ซีซอล์ทเลม่อน":10,"INFY PLUS - ผลไม้รวม":10,"INFY PLUS - แตงโมราสเบอร์รี่":10,"เครื่อง IQOS ILUMA I ONE - สีฟ้า":55,"เครื่อง IQOS ILUMA I ONE - สีส้ม":55,"เครื่อง IQOS ILUMA I ONE - สีม่วง":55,"เครื่อง IQOS ILUMA I ONE - สีดำ":55,"เครื่อง IQOS ILUMA I ONE - สีเขียว":55,"เครื่อง IQOS ILUMA I PRIME - สีดำ":56,"เครื่อง IQOS ILUMA I PRIME - สีฟ้า":56,"เครื่อง IQOS ILUMA I PRIME - สีเลือดหมู":56,"เครื่อง IQOS ILUMA I PRIME - สีเขียว":56,"เครื่อง IQOS ILUMA I PRIME - สีม่วง":56,"เครื่อง IQOS ILUMA I STANDARD - สีดำ":57,"เครื่อง IQOS ILUMA I STANDARD - สีฟ้า":57,"เครื่อง IQOS ILUMA I STANDARD - สีเขียว":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วงอ่อน":57,"เครื่อง IQOS ILUMA I STANDARD - สีส้ม":57,"เครื่อง IQOS ILUMA I STANDARD - สีม่วง":57,"TEREA IN - GREEN":52,"TEREA IN - BRIGHT WAVE":52,"TEREA IN - BLUE":52,"TEREA IN - BLACK GREEN":52,"TEREA IN - PURPLE WAVE":52,"TEREA IN - BRONZE":52,"TEREA IN - SIENNA":52,"TEREA IN - DIMENSION APRICITY":52,"TEREA IN - DIMENSION YUGEN":52,"TEREA IN - GOLDEN EDITION":52,"TEREA IN - RIVIERA PEARL":52,"TEREA IN - BERRINE EDITION":52,"TEREA IN - AUBURN EDITION":52,"TEREA IN - MULINT EDITION":52,"TEREA IN - SUN PEARL":52,"TEREA IN - BLACK RUBY":52,"TEREA IN - OASIS PEARL":52,"TEREA IN - BERMIN PEARL":52,"TEREA IN - PERINT PEARL":52,"TEREA IN - BLACK PURPLE":52,"TEREA JP - BALANCED REGULAR":53,"TEREA JP - BLACK MENTHOL":53,"TEREA JP - BLACK PURPLE MENTHOL":53,"TEREA JP - BLACK RUBY MENTHOL":53,"TEREA JP - FUSION MENTHOL":53,"TEREA JP - MENTHOL":53,"TEREA JP - MINT":53,"TEREA JP - OASIS PEARL":53,"TEREA JP - TROPICAL MENTHOL":53,"TEREA JP - PURPLE MENTHOL":53,"TEREA JP - REGULAR":53,"TEREA JP - RICH REGULAR":53,"TEREA JP - SMOOTH REGULAR":53,"TEREA JP - SUN PEARL":53,"TEREA JP - YELLOW MENTHOL":53,"TEREA JP - WARM REGULAR":53,"TEREA JP - BLACK FUCHSIA MENTHOL":53,"TEREA JP - BRIGHT MENTHOL":53,"TEREA JP - BLACK YELLOW MENTHOL":53,"TEREA JP - BLACK SUNSHINE MENTHOL":53,"TEREA JP - RUBY REGULAR":53,"TEREA JP - RIVIERA PEARL":53,"TEREA JP - CLEAR REGULAR":53,"TEREA JP - SHINE PEARL":53,"TEREA JP - VELVET PEARL":53,"TEREA JP - STARLING PEARL":53,"TEREA JP - STELLAR PEARL":53,"TEREA MY - ZING WAVE":54,"TEREA MY - TURQUOISE":54,"TEREA MY - RUSSET":54,"TEREA MY - BLUE":54,"TEREA MY - BLACK GREEN":54,"TEREA MY - PURPLE WAVE":54,"TEREA MY - SIENNA":54,"TEREA MY - OASIS PEARL":54,"TEREA MY - SUN PEARL":54,"TEREA MY - AMBER":54,"JOIWAY 12K - โคล่าเลม่อน":24,"JOIWAY 12K - โคล่า":24,"JOIWAY 12K - ลิ้นจี่":24,"JOIWAY 12K - แตงโม":24,"JOIWAY 12K - แอปเปิ้ลเขียว":24,"JOIWAY 12K - แฟนต้าเขียว":24,"JOIWAY 12K - เมล่อนฮอกไกโด":24,"JOIWAY 12K - มิ้นต์":24,"JOIWAY 12K - ส้มโซดา":24,"JOIWAY 12K - บลูเบอร์รี่":24,"JOIWAY 12K - องุ่น":24,"JOIWAY 12K - เสาวรส":24,"JOIWAY 12K - ลูกอมเรนโบว์":24,"JOIWAY 12K - สตรอว์เบอร์รี่":24,"JOIWAY 12K - ชามะนาว":24,"JOIWAY 12K - คุกกี้":24,"JOIWAY TWINS 20K - โคล่า / แอปเปิ้ลเขียว":25,"JOIWAY TWINS 20K - โคล่า / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - ลิ้นจี่ / คุกกี้":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / มิ้นต์":25,"JOIWAY TWINS 20K - ลูกอมเรนโบว์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - มิ้นต์ / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / บลูเบอร์รี่":25,"JOIWAY TWINS 20K - องุ่น / แตงโม":25,"JOIWAY TWINS 20K - องุ่น / ลิ้นจี่":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / คุกกี้":25,"JOIWAY TWINS 20K - แอปเปิ้ลเขียว / สตรอว์เบอร์รี่":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / แตงโม":25,"JOIWAY TWINS 20K - บลูเบอร์รี่ / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / ลูกอมเรนโบว์":25,"JOIWAY TWINS 20K - แตงโม / ลิ้นจี่":25,"JOIWAY TWINS 20K - แตงโม / สตรอว์เบอร์รี่":25,"KARDINAL POUCH - MANGO (3MG)":63,"KARDINAL POUCH - PEPPERMINT (3MG)":63,"KARDINAL POUCH - COLA (3MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (3MG)":63,"KARDINAL POUCH - ICE MINT (3MG)":63,"KARDINAL POUCH - PEPPERMINT (6MG)":63,"KARDINAL POUCH - COLA (6MG)":63,"KARDINAL POUCH - BLUEBERRY CITRUS (6MG)":63,"KARDINAL POUCH - ICE MINT (6MG)":63,"KARDINAL POUCH - MANGO (6MG)":63,"KS QUIK PRO 15K (หัวน้ำยา) - โคล่าเลม่อน":5,"KS QUIK PRO 15K (หัวน้ำยา) - ชานม":5,"KS QUIK PRO 15K (หัวน้ำยา) - แตงโม":5,"KS QUIK PRO 15K (หัวน้ำยา) - น้ำแร่":5,"KS QUIK PRO 15K (หัวน้ำยา) - บลูเบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - เมนทอล":5,"KS QUIK PRO 15K (หัวน้ำยา) - โยเกิร์ต":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - ลิ้นจี่แบล็คเคอร์แรนท์":5,"KS QUIK PRO 15K (หัวน้ำยา) - เลม่อนโซดา":5,"KS QUIK PRO 15K (หัวน้ำยา) - สตรอว์เบอร์รี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - สับปะรด":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่น":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นลิ้นจี่":5,"KS QUIK PRO 15K (หัวน้ำยา) - แอปเปิ้ลเปรี้ยว":5,"KS QUIK PRO 15K (หัวน้ำยา) - องุ่นเบอร์รี่":5,"KS Quik 6K - โคล่าเลม่อน":26,"KS Quik 6K - ชานมอู่หลง":26,"KS Quik 6K - แตงโม":26,"KS Quik 6K - น้ำแร่":26,"KS Quik 6K - บลูเบอร์รี่":26,"KS Quik 6K - ฝรั่ง":26,"KS Quik 6K - มะนาว":26,"KS Quik 6K - มะม่วง":26,"KS Quik 6K - มิกซ์เบอร์รี่":26,"KS Quik 6K - เมนทอล":26,"KS Quik 6K - เมล่อน":26,"KS Quik 6K - ยาสูบครีม":26,"KS Quik 6K - ยาสูบคลาสสิค":26,"KS Quik 6K - ลิ้นจี่":26,"KS Quik 6K - สตรอว์เบอร์รี่":26,"KS Quik 6K - สับปะรด":26,"KS Quik 6K - องุ่น":26,"KS Quik 6K - ไอศกรีมสตรอว์เบอร์รี่":26,"KS QUIK PRO 15K (KIT) - โคล่าเลม่อน":39,"KS QUIK PRO 15K (KIT) - ชานม":39,"KS QUIK PRO 15K (KIT) - แตงโม":39,"KS QUIK PRO 15K (KIT) - น้ำแร่":39,"KS QUIK PRO 15K (KIT) - บลูเบอร์รี่":39,"KS QUIK PRO 15K (KIT) - เมนทอล":39,"KS QUIK PRO 15K (KIT) - โยเกิร์ต":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - ลิ้นจี่แบล็คเคอร์แรนท์":39,"KS QUIK PRO 15K (KIT) - เลม่อนโซดา":39,"KS QUIK PRO 15K (KIT) - สตรอว์เบอร์รี่":39,"KS QUIK PRO 15K (KIT) - สับปะรด":39,"KS QUIK PRO 15K (KIT) - องุ่น":39,"KS QUIK PRO 15K (KIT) - องุ่นลิ้นจี่":39,"KS QUIK PRO 15K (KIT) - แอปเปิ้ลเปรี้ยว":39,"KS QUIK PRO 15K (KIT) - องุ่นเบอร์รี่":39,"LANA IRIS 24K - ชากวนอิน 3%":27,"LANA IRIS 24K - แตงโม 3%":27,"LANA IRIS 24K - น้ำแร่ 3%":27,"LANA IRIS 24K - ฝรั่ง 3%":27,"LANA IRIS 24K - มิกซ์เบอร์รี่ 3%":27,"LANA IRIS 24K - มิ้นต์ 3%":27,"LANA IRIS 24K - ลิ้นจี่ 3%":27,"LANA IRIS 24K - สตรอว์เบอร์รี่ 3%":27,"LANA IRIS 24K - สับปะรด 3%":27,"LANA IRIS 24K - ส้มองุ่น 3%":27,"LANA IRIS 24K - องุ่น 3%":27,"LANA IRIS 24K - โคล่า 3%":27,"LANA IRIS 24K - เลม่อนโคล่า 3%":27,"LANA IRIS 24K - ชากวนอิน 5%":27,"LANA IRIS 24K - มิ้นต์ 5%":27,"M SWITCH - ดับเบิ้ลมิ้นต์":6,"M SWITCH - บลูเบอร์รี่เย็น":6,"M SWITCH - พีชสตรอว์เบอร์รี่":6,"M SWITCH - มะม่วงเสาวรส":6,"M SWITCH - มิกซ์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่":6,"M SWITCH - สตรอว์เบอร์รี่แตงโม":6,"M SWITCH - หมากฝรั่งแตงโม":6,"M SWITCH - องุ่น":6,"M SWITCH - องุ่นลิ้นจี่":6,"M SWITCH - องุ่นว่านหางจระเข้":6,"M SWITCH - เบอร์รี่ชมพู":6,"M SWITCH - แตงโม":6,"M SWITCH - แบล็คเบอร์รี่":6,"M SWITCH - แอปเปิ้ลว่านหางจระเข้":6,"M SWITCH - โคล่า":6,"M SWITCH - องุ่นเคียวโฮ":6,"MARBO 9K - โคล่า":29,"MARBO 9K - ดับเบิ้ลมิ้นต์":29,"MARBO 9K - แตงโม":29,"MARBO 9K - บลูไอซ์":29,"MARBO 9K - เบอร์รี่ชมพู":29,"MARBO 9K - พีช":29,"MARBO 9K - พีชสตรอว์เบอร์รี่":29,"MARBO 9K - แฟนต้าส้ม":29,"MARBO 9K - มิกซ์เบอร์รี่":29,"MARBO 9K - เยลลี่":29,"MARBO 9K - ลูกอมเรนโบว์":29,"MARBO 9K - สตรอว์เบอร์รี่":29,"MARBO 9K - สปาร์คกิ้งเลม่อน":29,"MARBO 9K - หมากฝรั่งแตงโม":29,"MARBO 9K - องุ่น":29,"MARBO 9K - องุ่นลิ้นจี่":29,"MARBO 9K - องุ่นว่านหางจระเข้":29,"MARBO 9K - แอปเปิ้ลเขียว":29,"MARBO 9K - สตรอว์เบอร์รี่มิลค์เชค":29,"MARBO 9K - เมนทอลฟรีส":29,"MARBO 9K - องุ่นเคียวโฮ":29,"MARBO 9K - แอปเปิ้ลเลม่อน":29,"MARBO 9K - บลูเบอร์รี่มิ้นต์":29,"MARBO 9K -  สตรอว์เบอร์รี่กีวี่":29,"MARBO 10K - บลูไอซ์":28,"MARBO 10K - เบอร์รี่ชมพู":28,"MARBO 10K - เบอร์รี่รวม":28,"MARBO 10K - แตงโม":28,"MARBO 10K - แตงโมมิ้นต์":28,"MARBO 10K - โคล่า":28,"MARBO 10K - มัทฉะลาเต้":28,"MARBO 10K - เมนทอล":28,"MARBO 10K - เลม่อนมิ้นต์":28,"MARBO 10K - สตรอว์เบอร์รี่กีวี่":28,"MARBO 10K - องุ่น":28,"MARBO 10K - องุ่นเคียวโฮ":28,"เครื่อง M ZERO NANO - สีดำ":46,"เครื่อง M ZERO NANO - สีขาว":46,"เครื่อง M ZERO NANO - สีชมพู":46,"เครื่อง M ZERO NANO - สีฟ้า":46,"เครื่อง M ZERO PRO - สีเขียว":47,"เครื่อง M ZERO PRO - สีชมพู":47,"เครื่อง M ZERO PRO - สีแดง":47,"เครื่อง M ZERO PRO - สีเงิน":47,"เครื่อง M ZERO PRO - สีดำ":47,"เครื่อง M ZERO PRO - สีเหลืองดำ":47,"เครื่อง M ZERO PRO - สีฟ้าม่วง":47,"เครื่อง M ZERO PRO - สีดำชมพู":47,"เครื่อง M SWITCH - สีดำ":44,"เครื่อง M SWITCH KIT - ดับเบิ้ลมิ้นต์":40,"เครื่อง M SWITCH KIT - บลูเบอร์รี่เย็น":40,"เครื่อง M SWITCH KIT - พีชสตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - มะม่วงเสาวรส":40,"เครื่อง M SWITCH KIT - มิกซ์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่":40,"เครื่อง M SWITCH KIT - สตรอว์เบอร์รี่แตงโม":40,"เครื่อง M SWITCH KIT - หมากฝรั่งแตงโม":40,"เครื่อง M SWITCH KIT - องุ่น":40,"เครื่อง M SWITCH KIT - องุ่นลิ้นจี่":40,"เครื่อง M SWITCH KIT - องุ่นว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - เบอร์รี่ชมพู":40,"เครื่อง M SWITCH KIT - แตงโม":40,"เครื่อง M SWITCH KIT - แบล็คเบอร์รี่":40,"เครื่อง M SWITCH KIT - แอปเปิ้ลว่านหางจระเข้":40,"เครื่อง M SWITCH KIT - โคล่า":40,"เครื่อง M SWITCH KIT - องุ่นเคียวโฮ":40,"FREEBASE MARBO 30ML - ทอง":61,"FREEBASE MARBO 30ML - ชมพู":61,"FREEBASE MARBO 30ML - ฟ้า":61,"FREEBASE MARBO 30ML - ม่วง":61,"SALTNIC MARBO 30ML - เขียว":59,"SALTNIC MARBO 30ML - ชมพู":59,"SALTNIC MARBO 30ML - ดำ":59,"SALTNIC MARBO 30ML - ทอง":59,"SALTNIC MARBO 30ML - น้ำเงิน":59,"SALTNIC MARBO 30ML - ม่วง":59,"SALTNIC MARBO 30ML - เงิน":59,"SALTNIC MARBO 30ML - แดง":59,"SALTNIC MARBO 30ML 50% - ม่วง":59,"MARBO ZERO - เกรปฟรุต":11,"MARBO ZERO - โคล่า":11,"MARBO ZERO - ชาผลไม้":11,"MARBO ZERO - ชาอู่หลง":11,"MARBO ZERO - ซิก้าร์":11,"MARBO ZERO - แตงโม":11,"MARBO ZERO - น้ำแร่":11,"MARBO ZERO - บลูเบอร์รี่":11,"MARBO ZERO - พีช":11,"MARBO ZERO - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO - มะม่วง":11,"MARBO ZERO - มิกซ์เบอร์รี่":11,"MARBO ZERO - มิ้นต์":11,"MARBO ZERO - ลิ้นจี่":11,"MARBO ZERO - เลม่อน":11,"MARBO ZERO - ส้มยูสุ":11,"MARBO ZERO - สับปะรด":11,"MARBO ZERO - องุ่น":11,"MARBO ZERO - องุ่นว่านหางจระเข้":11,"MARBO ZERO - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - โคล่า":11,"MARBO ZERO 5% - แตงโม":11,"MARBO ZERO 5% - เบอร์รี่ชมพู":11,"MARBO ZERO 5% - พีชสตรอว์เบอร์รี่":11,"MARBO ZERO 5% - มิกซ์เบอร์รี่":11,"MARBO ZERO 5% - มิ้นต์":11,"MARBO ZERO 5% - สตรอว์เบอร์รี่กล้วย":11,"MARBO ZERO 5% - องุ่น":11,"MARBO ZERO 5% - องุ่นว่านหางจระเข้":11,"MARBO ZERO 5% - แอปเปิ้ลเขียว":11,"MARBO ZERO 5% - มิ้นต์ฟรีซ":11,"MARBO 9K (โคลน) - ดับเบิ้ลมิ้นต์":30,"MARBO 9K (โคลน) - บลูไอซ์":30,"MARBO 9K (โคลน) - พีช":30,"MARBO 9K (โคลน) - พีชสตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - มิกซ์เบอร์รี่":30,"MARBO 9K (โคลน) - ลูกอมเรนโบว์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่":30,"MARBO 9K (โคลน) - สปาร์คกิ้งเลม่อน":30,"MARBO 9K (โคลน) - หมากฝรั่งแตงโม":30,"MARBO 9K (โคลน) - องุ่น":30,"MARBO 9K (โคลน) - องุ่นลิ้นจี่":30,"MARBO 9K (โคลน) - องุ่นว่านหางจระเข้":30,"MARBO 9K (โคลน) - เบอร์รี่ชมพู":30,"MARBO 9K (โคลน) - เยลลี่":30,"MARBO 9K (โคลน) - แตงโม":30,"MARBO 9K (โคลน) - แฟนต้าส้ม":30,"MARBO 9K (โคลน) - แอปเปิ้ลเขียว":30,"MARBO 9K (โคลน) - โคล่า":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่มิลค์เชค":30,"MARBO 9K (โคลน) - เมนทอลฟรีส":30,"MARBO 9K (โคลน) - องุ่นเคียวโฮ":30,"MARBO 9K (โคลน) - แอปเปิ้ลเลม่อน":30,"MARBO 9K (โคลน) - บลูเบอร์รี่มิ้นต์":30,"MARBO 9K (โคลน) - สตรอว์เบอร์รี่กีวี่":30,"เครื่อง M SWITCH - สีดำ (โคลน)":44,"FREEBASE PHATJUICE 30ML - องุ่นยาว":62,"RELX BOOST POD - กล้วย":7,"RELX BOOST POD - บลูเบอร์รี่":7,"RELX BOOST POD - โคล่า":7,"RELX BOOST POD - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD - องุ่น":7,"RELX BOOST POD - ชามะลิ":7,"RELX BOOST POD - ลูกอมเลม่อนมิ้นต์":7,"RELX BOOST POD - น้ำแร่":7,"RELX BOOST POD - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD - สับปะรด":7,"RELX BOOST POD - ฝรั่ง":7,"RELX BOOST POD - ลูกอม":7,"RELX BOOST POD - แตงโม":7,"RELX BOOST POD - สตรอว์เบอร์รี่แตงโม":7,"RELX BOOST POD - เบอร์รี่ชมพู":7,"RELX BOOST POD - มะเฟือง":7,"RELX BOOST POD - คูลมิ้นต์":7,"RELX BOOST POD  - ลิ้นจี่":7,"RELX BOOST POD  - สเปียร์มิ้นต์":7,"RELX BOOST POD  - หมากฝรั่งแตงโม":7,"RELX BOOST POD  - แอปเปิ้ลว่านหางจระเข้":7,"RELX BOOST POD  - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD  - สตรอว์เบอร์รี่กล้วย":7,"RELX BOOST POD 5% - ดับเบิ้ลมิ้นต์":7,"RELX BOOST POD 5% - องุ่น":7,"RELX BOOST POD 5% - แตงโม":7,"RELX BOOST POD 5% - ยาสูบคลาสสิค":7,"RELX BOOST POD 5% - โคล่า":7,"RELX BOOST POD 5% - รวมมิตรมิกซ์เบอร์รี่":7,"RELX BOOST POD 5% - พีชสตรอว์เบอร์รี่":7,"RELX BOOST POD 5% - สตรอว์เบอร์รี่กล้วย":7,"RELX CLEAR 18K 3% - กาแฟโกปิโก้":8,"RELX CLEAR 18K 3% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 3% - แตงโม":8,"RELX CLEAR 18K 3% - น้ำส้มโซดา":8,"RELX CLEAR 18K 3% - น้ำแร่":8,"RELX CLEAR 18K 3% - สเปียร์มิ้นต์":8,"RELX CLEAR 18K 3% - สับปะรด":8,"RELX CLEAR 18K 3% - องุ่นอโล":8,"RELX CLEAR 18K 3% - องุ่น":8,"RELX CLEAR 18K 3% - แอปเปิ้ลเขียว":8,"RELX POD CLEAR 18K 3% - รวมมิตรเบอร์รี่":8,"RELX POD CLEAR 18K 3% - ไอติมสตรอว์เบอร์รี่":8,"RELX POD CLEAR 18K 3% - โคล่า":8,"RELX POD CLEAR 18K 3% - สตรอว์เบอร์รี่โซดา":8,"RELX POD CLEAR 18K 3% - มะม่วงเสาวรส":8,"RELX POD CLEAR 18K 3% - เมล่อน":8,"RELX CLEAR 18K 5% - ดับเบิ้ลมิ้นต์":8,"RELX CLEAR 18K 5% - แตงโม":8,"RELX CLEAR 18K 5% - องุ่น":8,"RELX DIVA 30K 3% - โคล่า":31,"RELX DIVA 30K 3% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 3% - แตงโม":31,"RELX DIVA 30K 3% - น้ำแร่":31,"RELX DIVA 30K 3% - น้ำส้มโซดา":31,"RELX DIVA 30K 3% - มะม่วงเสาวรส":31,"RELX DIVA 30K 3% - มิกซ์เบอร์รี่":31,"RELX DIVA 30K 3% - เมล่อน":31,"RELX DIVA 30K 3% - สเปียร์มิ้นต์":31,"RELX DIVA 30K 3% - องุ่น":31,"RELX DIVA 30K 3% - องุ่นอโล":31,"RELX DIVA 30K 3% - ไอติมสตรอว์เบอร์รี่":31,"RELX DIVA 30K 5% - กาแฟโกปิโก้":31,"RELX DIVA 30K 5% - โคล่า":31,"RELX DIVA 30K 5% - ดับเบิ้ลมิ้นต์":31,"RELX DIVA 30K 5% - แตงโม":31,"RELX DIVA 30K 5% - องุ่น":31,"RELX SMASH GO 12K - แอปเปิ้ล 3%":32,"RELX SMASH GO 12K - เสาวรส 3%":32,"RELX SMASH GO 12K - องุ่น 3%":32,"RELX SMASH GO 12K - องุ่นลิ้นจี่ 3%":32,"RELX SMASH GO 12K - พีชสตรอว์เบอร์รี่ 3%":32,"RELX SMASH GO 12K - มะม่วง 3%":32,"RELX SMASH GO 12K - แตงโม 3%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 3%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 3%":32,"RELX SMASH GO 12K - โคล่า 3%":32,"RELX SMASH GO 12K - ชาอู่หลง 3%":32,"RELX SMASH GO 12K - บลูเบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - เบอร์รี่ชมพู 3%":32,"RELX SMASH GO 12K - ฝรั่ง 3%":32,"RELX SMASH GO 12K - ลิ้นจี่ 3%":32,"RELX SMASH GO 12K - สตรอว์เบอร์รี่เย็น 3%":32,"RELX SMASH GO 12K - สับปะรดเย็น 3%":32,"RELX SMASH GO 12K - องุ่นอโล 3%":32,"RELX SMASH GO 12K - หมากฝรั่งแตงโม 3%":32,"RELX SMASH GO 12K - แตงโม 5%":32,"RELX SMASH GO 12K - ดับเบิ้ลมิ้นต์ 5%":32,"RELX SMASH GO 12K - องุ่น 5%":32,"RELX SMASH GO 12K - โคล่า 5%":32,"RELX SMASH GO 12K - คูลมิ้นต์ 5%":32,"RELX SMASH GO 12K - เบอร์รี่รวม 5%":32,"RELX SMASH GO 12K - ยาสูบคลาสสิค 5%":32,"RELX SMASH GO 12K - สเปียร์มิ้นต์ 5%":32,"RELX SPARTA 20K - โคล่า":33,"RELX SPARTA 20K - ชาอู่หลง":33,"RELX SPARTA 20K - ดับเบิ้ลมิ้นต์":33,"RELX SPARTA 20K - แตงโม":33,"RELX SPARTA 20K - น้ำแร่":33,"RELX SPARTA 20K - บลูเบอร์รี่":33,"RELX SPARTA 20K - พีชสตรอเบอร์รี่":33,"RELX SPARTA 20K - เยลลี่":33,"RELX SPARTA 20K - รวมมิตรเบอร์รี่":33,"RELX SPARTA 20K - ราสเบอร์รี่มิ้นติ์":33,"RELX SPARTA 20K - ลูกกวาด":33,"RELX SPARTA 20K - สตรอเบอร์รี่":33,"RELX SPARTA 20K - สัปปะรด":33,"RELX SPARTA 20K - องุ่น":33,"RELX SPARTA 20K - องุ่นลิ้นจี่":33,"RELX SPARTA 20K - แอปเปิ้ล":33,"RELX SPARTA 20K - เบอร์รี่ชมพู":33,"RELX SPARTA 20K - โพล่าร์มิ้นต์":33,"RELX SPARTA 20K - หมากฝรั่งแตงโม":33,"RELX SPARTA 20K - ลิ้นจี่":33,"RELX SPARTA 20K - องุ่นอโล":33,"เครื่อง RELX CREATOR 20K - สีดำ":48,"เครื่อง RELX CREATOR 20K - สีเทา-เหลือง":48,"เครื่อง RELX ESSENTIAL 2 - สีเทา":49,"เครื่อง RELX ESSENTIAL 2 - สีดำ":49,"เครื่อง RELX ESSENTIAL 2 - สีเงิน":49,"เครื่อง RELX ESSENTIAL 2 - สีฟ้าม่วง":49,"เครื่อง RELX INFINITY 2+ - สีเขียว":50,"เครื่อง RELX INFINITY 2+ - สีเงิน":50,"เครื่อง RELX INFINITY 2+ - สีดำ":50,"เครื่อง RELX INFINITY 2+ - สีเทา":50,"เครื่อง RELX INFINITY 2+ - สีบรอนซ์ทอง":50,"เครื่อง RELX INFINITY 2+ - สีโรสโกลด์":50,"เครื่อง RELX INFINITY 2+ - สีขาว":50,"RELX INFINITY - โคล่า":12,"RELX INFINITY - ชาเขียวมะลิ":12,"RELX INFINITY - ชาดอกชบาเย็น":12,"RELX INFINITY - ชาดำเย็น":12,"RELX INFINITY - ชาไทย":12,"RELX INFINITY - ชาพีช":12,"RELX INFINITY - ชามะนาวเย็น":12,"RELX INFINITY - ชาหลงจินเย็น":12,"RELX INFINITY - ชาอู่หลงเย็น":12,"RELX INFINITY - แตงโม":12,"RELX INFINITY - ถั่วเขียว":12,"RELX INFINITY - นํ้าส้มโซดา":12,"RELX INFINITY - น้ำเขียวโซดา":12,"RELX INFINITY - น้ำผึ้งส้มโอ":12,"RELX INFINITY - เผือก":12,"RELX INFINITY - ฝรั่ง":12,"RELX INFINITY - มะนาวเย็น":12,"RELX INFINITY - มะม่วง":12,"RELX INFINITY - เมล่อน":12,"RELX INFINITY - รูทเบียร์":12,"RELX INFINITY - ลิ้นจี่":12,"RELX INFINITY - ไวท์คอฟฟี่":12,"RELX INFINITY - สตรอว์เบอร์รี่":12,"RELX INFINITY - สไปรท์":12,"RELX INFINITY - เสาวรส":12,"RELX INFINITY - องุ่น":12,"RELX INFINITY - องุ่นเขียว":12,"RELX INFINITY - องุ่นแอปเปิ้ล":12,"RELX INFINITY - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - แตงโม":12,"RELX INFINITY 5% - เปปเปอร์มิ้นต์":12,"RELX INFINITY 5% - มิกซ์เบอร์รี่":12,"RELX INFINITY 5% - มิ้นต์เอ็กซ์ตร้า":12,"RELX INFINITY 5% - มิ้นต์ฟรีซ":12,"RELX INFINITY 5% - ยาสูบคลาสสิค":12,"RELX INFINITY 5% - ยาสูบร้อน":12,"RELX INFINITY 5% - เลม่อนมิ้นต์":12,"RELX INFINITY 5% - สเปียร์มิ้นต์":12,"RELX INFINITY 5% - องุ่น":12,"RELX INFINITY 5% - แอปเปิ้ลเขียว":12,"RELX INFINITY 5% - ซิตรัส":12,"RELX INFINITY 5% - ยาสูบมิ้นต์":12,"RELX INFINITY 5% - ราสเบอร์รี่มิ้นต์":12,"RELX INFINITY 5% - ไอซ์สปาร์คกิ้ง":12,"RELX INFINITY 5% - สตรอว์เบอร์รี่":12,"RELX INFINITY 5% - สับปะรด":12,"RELX LARGE - ลิ้นจี่":13,"RELX LARGE - องุ่น":13,"RELX LARGE - องุ่นแอปเปิ้ล":13,"RELX LARGE - แอปเปิ้ลเขียว":13,"RELX LARGE 5% - โคล่า":13,"RELX LARGE 5% - ชาหลงจิน":13,"RELX LARGE 5% - บลูเบอร์รี่":13,"RELX LARGE 5% - พีช":13,"RELX LARGE 5% - พีชสตรอว์เบอร์รี่":13,"RELX ULTRA 3% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 3% - แตงโม":14,"RELX ULTRA 3% - บลูเบอร์รี่":14,"RELX ULTRA 3% - เบอร์รี่ชมพู":14,"RELX ULTRA 3% - มะม่วงเขียว":14,"RELX ULTRA 3% - องุ่นอโล":14,"RELX ULTRA 5% - ดับเบิ้ลมิ้นต์":14,"RELX ULTRA 5% - พีชสตรอว์เบอร์รี่":14,"RELX ULTRA 5% - มิกซ์เบอร์รี่":14,"RELX ULTRA 5% - ลิ้นจี่":14,"RELX ULTRA 5% - สับปะรด":14,"RELX ULTRA 5% - องุ่นอโล":14,"RELX ULTRA 5% - แอปเปิ้ลอโล":14,"RELX ULTRA 5% - โคล่า":14,"RELX ULTRA 5% - เบอร์รี่ชมพู":14,"SONIC 8K - กัมมี่แบร์":34,"SONIC 8K - โคล่า":34,"SONIC 8K - แตงโม":34,"SONIC 8K - น้ำแร่":34,"SONIC 8K - มิกซ์เบอร์รี่":34,"SONIC 8K - มิ้นต์":34,"SONIC 8K - ยาคูลท์":34,"SONIC 8K - สตรอว์เบอร์รี่":34,"SONIC 8K - องุ่น":34,"SONIC 8K - แอปเปิ้ลเขียว":34,"STAR 2,500 - กล้วย":35,"STAR 2,500 - โคล่า":35,"STAR 2,500 - แตงโม":35,"STAR 2,500 - น้ำแร่":35,"STAR 2,500 - บลูเบอร์รี่":35,"STAR 2,500 - พีช":35,"STAR 2,500 - มะม่วง":35,"STAR 2,500 - มิกซ์เบอร์รี่":35,"STAR 2,500 - มิ้นต์":35,"STAR 2,500 - ลิ้นจี่":35,"STAR 2,500 - สตรอว์เบอร์รี่":35,"STAR 2,500 - องุ่น":35,"VAZER RELOAD 15K (หัวน้ำยา) - โคล่า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แตงโม":9,"VAZER RELOAD 15K (หัวน้ำยา) - บลูเบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เบอร์รี่รวม":9,"VAZER RELOAD 15K (หัวน้ำยา) - พีช":9,"VAZER RELOAD 15K (หัวน้ำยา) - มิ้นต์เย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - รูทเบียร์":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - ลูกอมสตรอว์เบอร์รี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - เลม่อนโซดา":9,"VAZER RELOAD 15K (หัวน้ำยา) - สับปะรด":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นเย็น":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นลิ้นจี่":9,"VAZER RELOAD 15K (หัวน้ำยา) - องุ่นโอซาก้า":9,"VAZER RELOAD 15K (หัวน้ำยา) - แอปเปิ้ลฟูจิ":9,"เครื่อง VAZER RELOAD - สีดำ":51,"VAZER RELOAD 15K (KIT) - โคล่า":41,"VAZER RELOAD 15K (KIT) - มิ้นต์เย็น":41,"VAZER RELOAD 15K (KIT) - ลูกอมสตรอว์เบอร์รี่":41,"VAZER RELOAD 15K (KIT) - องุ่นเย็น":41,"VAZER RELOAD 15K (KIT) - แตงโม":41,"VOSOON 23K - ชาหลงจิน":37,"VOSOON 23K - แตงโม":37,"VOSOON 23K - บลูเบอร์รี่เย็น":37,"VOSOON 23K - ฝรั่งเสาวรส":37,"VOSOON 23K - พีชสตรอว์เบอร์รี่":37,"VOSOON 23K - มิ้นต์ฟรีซ":37,"VOSOON 23K - ลิ้นจี่เย็น":37,"VOSOON 23K - องุ่นเย็น":37,"VOSOON 23K - แอปเปิ้ลอโล":37,"VOSOON 23K - โคล่า":37,"V PLUS 16K - กัมมี่แบร์":36,"V PLUS 16K - โคล่า":36,"V PLUS 16K - แตงโม":36,"V PLUS 16K - บลูเบอร์รี่":36,"V PLUS 16K - พีชสตรอว์เบอร์รี่":36,"V PLUS 16K - มิกซ์เบอร์รี่":36,"V PLUS 16K - มิ้นต์":36,"V PLUS 16K - ลิ้นจี่":36,"V PLUS 16K - ลูกอมเรนโบว์":36,"V PLUS 16K - สตรอว์เบอร์รี่":36,"V PLUS 16K - สตรอว์เบอร์รี่ราสเบอร์รี่":36,"V PLUS 16K - หมากฝรั่งแตงโม":36,"V PLUS 16K - องุ่น":36,"V PLUS 16K - องุ่นเคียวโฮ":36,"V PLUS 16K - แอปเปิ้ล":36,"V PLUS 16K - แอปเปิ้ลชิชา":36,"ZAR POUCH - FRESH MINT (3MG)":64,"ZAR POUCH - LEMON CRUSH (3MG)":64,"ZAR POUCH - COLA (3MG)":64,"ZAR POUCH - CITRUS (3MG)":64,"ZAR POUCH - WATERMELON (3MG)":64,"ZAR POUCH - FRESH MINT (6MG)":64,"ZAR POUCH - LEMON CRUSH (6MG)":64,"ZAR POUCH - COLA (6MG)":64,"ZAR POUCH - CITRUS (6MG)":64,"ZAR POUCH - WATERMELON (6MG)":64,"ZYN POUCH - SPEARMINT (1.5MG)":65,"ZYN POUCH - PEACH (1.5MG)":65,"ZYN POUCH - COFFEE (1.5MG)":65,"ZYN POUCH - COOL MINT (3MG)":65,"ZYN POUCH - SPEARMINT (3MG)":65,"ZYN POUCH - PEACH (3MG)":65,"ZYN POUCH - COFFEE (3MG)":65,"ZYN POUCH - COOL MINT (6MG)":65,"INSTA BAR 15K - เคลียร์ไอซ์":66,"INSTA BAR 15K - โคล่าเลม่อน":66,"INSTA BAR 15K - แตงโมเย็น":66,"INSTA BAR 15K - แตงโมสตรอว์เบอร์รี่มะม่วงเยลลี่":66,"INSTA BAR 15K - มิกซ์เบอร์รี่":66,"INSTA BAR 15K - ยาคูลท์":66,"INSTA BAR 15K - เยลลี่หมี":66,"INSTA BAR 15K - ลิ้นจี่ราสเบอร์รี่":66,"INSTA BAR 15K - หมากฝรั่งแตงโม":66,"INSTA BAR 15K - องุ่นแบล็คเคอร์แรนท์เย็น":66,"INSTA BAR 15K - แอปเปิ้ลเปรี้ยวเย็น":66,"INSTA BAR 15K - ไอติมมะนาว":66,"INSTA BAR 15K - มะม่วง":66,"INSTA BAR 15K - มิ้นต์":66,"INSTA BAR 15K - สตรอว์เบอร์รี่":66,"INSTA BAR 15K - องุ่น":66};
 // ⏰ k153: เวลาไทยตอนนี้ — ตัวเดียวให้ทุกจุดเรียก (เดิมคำนวณซ้ำในทางลัด k83 จุดเดียว จุดอื่นไม่รู้เวลาเลย)
 //   afterLast = เลยรอบส่งด่วนรอบสุดท้ายของวัน (ชำระก่อน 20.45) หรือยังไม่ถึงรอบเช้า (ก่อน 08.00)
 //   ⛔ ห้ามเอาไปคำนวณตอนโหลดไฟล์ (const ระดับบนสุด) — Cloudflare isolate อยู่ข้ามชั่วโมงได้ เวลาจะค้าง
 function thTime(now) {
   const d = new Date((typeof now === "number" ? now : Date.now()) + 7 * 3600 * 1000);
   const hh = d.getUTCHours(), mm = d.getUTCMinutes();
+  // 📅 k246 (P0-10 รอบสอง · เจ้าของร้านทักเอง 7 ส.ค.): เดิมคืนแค่ hh:mm
+  //   → AI ไม่รู้เลยว่าวันนี้วันที่เท่าไหร่ พอลูกค้าถาม "ส่งวันที่ 11 ได้ไหม" มันเดาวันในสัปดาห์เอง
+  //   เคสจริง: ตอบว่า "วันอาทิตย์ไม่มีรอบส่ง" ทั้งที่ 11 ส.ค. เป็น "วันอังคาร"
+  //   ⛔ ห้ามให้ AI คำนวณวันเอง — ต้องป้อนวันที่จริงเข้าไป
+  const DOW = ["อาทิตย์", "จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์"];
+  const MON = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+               "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+  const dd = d.getUTCDate(), mo = d.getUTCMonth(), yy = d.getUTCFullYear();
+  // วันที่ 1-31 ของเดือนนี้ตรงกับวันอะไร (ให้ AI ใช้ตอบ "วันที่ X เป็นวันอะไร" โดยไม่ต้องคิดเอง)
+  const daysInMo = new Date(Date.UTC(yy, mo + 1, 0)).getUTCDate();
+  const cal = [];
+  for (let i = 1; i <= daysInMo; i++)
+    cal.push(i + "=" + DOW[new Date(Date.UTC(yy, mo, i)).getUTCDay()]);
   return {
     hh, mm,
     hhmm: String(hh).padStart(2, "0") + "." + String(mm).padStart(2, "0"),
-    afterLast: hh > 20 || (hh === 20 && mm > 45) || hh < 8
+    afterLast: hh > 20 || (hh === 20 && mm > 45) || hh < 8,
+    dd, mo: mo + 1, yy,
+    dow: DOW[d.getUTCDay()],
+    dateTH: "วัน" + DOW[d.getUTCDay()] + "ที่ " + dd + " " + MON[mo] + " " + (yy + 543),
+    calendar: cal.join(" · ")
   };
 }
 // ⏰ k153: หมายเหตุต่อท้ายข้อความส่งด่วน เมื่อเลยรอบสุดท้ายของวันแล้ว (คืนค่าว่างถ้ายังอยู่ในรอบ)
@@ -558,6 +767,62 @@ function lateNote(now) {
   if (!t.afterLast) return "";
   return "\n\n🌙 ตอนนี้ " + t.hhmm + " น. เลยรอบส่งด่วนรอบสุดท้ายของวัน (20.45 น.) แล้วนะคะ 🙏🏻" +
          "\nรอบถัดไปจัดส่งออก 10.30 น. ของวันถัดไปค่ะ — สั่งซื้อ + ชำระเงินตอนนี้ได้เลย เดี๋ยวจัดคิวรอบแรกให้ค่ะ 💕";
+}
+// 🧾🧾 k267 · "ตอบคำถาม + เก็บออเดอร์" พร้อมกัน (คำสั่งเจ้าของร้าน 9 ส.ค.: ห้ามทิ้งอย่างใดอย่างหนึ่ง)
+//   ปัญหาที่พิสูจน์แล้วด้วย probe: ทางลัดคำถามยอดฮิต (รอบส่ง · ETA) ตอบแล้ว `return` ทันที
+//     → "เอา MARBO 9K องุ่น 2 ชิ้น ส่งกี่วันถึง" ได้คำตอบ ETA แต่ ord/slot **ว่างเปล่าทั้งคู่**
+//   ⛔ ทางแก้ที่ห้ามใช้: ปล่อยให้ AI ตอบเรื่องรอบส่ง/ETA เอง — ข้อความพวกนี้ตายตัวเพราะ AI พิมพ์เองเพี้ยน
+//   กลไกนี้จึง "พักข้อความจริงไว้" แล้วให้เทิร์นเดินต่อเข้าสายรับออเดอร์ตามปกติ
+//   ข้อความที่พักไว้จะถูกส่งไปพร้อมคำตอบ/การ์ดในเทิร์นเดียวกัน (ตัวหนังสือเดิมเป๊ะ ไม่ผ่าน AI)
+//   ⛔ ใช้ TURN ctx ที่มีอยู่แล้ว (อายุ 1 เทิร์น ลบอัตโนมัติใน finally) — ไม่มีสถานะใหม่ให้ desync
+function factNoteSet(userId, msg) {
+  try { const c = userId && TURN.get(userId); if (c && !c.factNote) c.factNote = String(msg || ""); } catch (e) {}
+}
+function factNoteTake(userId) {
+  try { const c = userId && TURN.get(userId); if (c && c.factNote) { const m = c.factNote; c.factNote = ""; return m; } } catch (e) {}
+  return "";
+}
+// 📦📦 k274 · ลูกค้าขอ "เปลี่ยนจากส่งด่วนกลับเป็นพัสดุ" (เคสจริง JW 11 ส.ค. 01.21)
+//   "จัดส่งพัสดุปกติค่ะไม่ส่งด่วนแล้ว" / "ไม่เอาแบบ Grab แล้ว" → ระบบเห็นคำว่า ส่งด่วน/Grab
+//   แล้วตอบค่าส่งด่วนซ้ำ 3 รอบจนลูกค้าพิมพ์ "เหนื่อยแล้ว" — ไม่มีทางไหนรู้จัก "การปฏิเสธ" เลย
+//   ⛔ แคบ: "ไม่" ต้องตามด้วยกริยาปฏิเสธ (เอา/รับ/ใช้/ส่ง/สะดวก) กัน "ไม่ทันรอบส่งด่วน" ไม่ให้ถูกตีเป็นขอเปลี่ยน
+function wantsParcelSwitch(t) {
+  const s = String(t || "");
+  if (/ไม่(?:เอา|รับ|ใช้|ส่ง|สะดวก|อยาก)[^\n]{0,10}(?:ด่วน|แกร[็ๆ]?[บป]|grab|ไรเดอร์|rider)/i.test(s)) return true;
+  if (/(?:เปลี่ยน|ขอเปลี่ยน)[^\n]{0,10}(?:เป็น)?(?:ส่ง)?พัสดุ/i.test(s)) return true;
+  if (/พัสดุ(?:ปกติ|ธรรมดา)|ส่งธรรมดา|ส่งแบบปกติ/i.test(s)) return true;
+  return false;
+}
+// 🔢 k267 · "ตอบจำนวน" ที่ต่อจากคำถามของบอท — ต้องมี **หน่วย** เสมอ และอยู่ต้นข้อความ
+//   ใช้เฉพาะตอน State = SELECTING_QTY (บอทเพิ่งถามจำนวน) เท่านั้น
+//   ⛔ ตั้งใจให้แคบ: "24190" (รหัสไปรษณีย์) · "134/2" (บ้านเลขที่) ไม่มีหน่วย = ไม่เข้าเงื่อนไข
+const RX_QTY_LEAD = /^\s*(?:เอา|ขอ|รับ|เอาเป็น)?\s*(\d{1,2})\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|คอต|ตลับ)/;
+function qtyLeadIn(t) { try { const m = String(t || "").match(RX_QTY_LEAD); return m ? +m[1] : 0; } catch (e) { return 0; } }
+// 💳💳 k273 · ช่องทางชำระเงิน — กฎเจ้าของร้านยืนยัน 10 ส.ค.: "รับโอนผ่านบัญชีธนาคารเท่านั้น"
+//   เคสจริงลูกค้า LALITA 19.39: ถาม "ชำระผ่าน TrueMoney ได้ไหมคะ" → AI ตอบ "ได้ค่ะ 💕"
+//   = รับปากช่องทางที่ร้านไม่มี ลูกค้าโอนเข้า TrueMoney มาร้านไม่ได้เงิน/ตรวจสลิปไม่ผ่านแน่นอน
+//   บทเรียนเดิม k15/k41/k55: กฎใน prompt เป็นแค่คำขอ โค้ดต้องเป็นคนบังคับ
+//   ⛔ ระวังคำกำกวม: "ปลายทาง" เดี่ยว ๆ = ที่อยู่จัดส่ง (ห้ามจับ) → จับเฉพาะ "เก็บเงิน/จ่าย ปลายทาง"
+const RX_PAY_CHANNEL = /ทรู\s*มันนี่?|true\s*money|truemoney|วอลเล็?[ตท]|wallet|เก็บเงินปลายทาง|จ่ายปลายทาง|ชำระปลายทาง|บัตรเครดิต|บัตรเดบิต|paypal|เพย์พาล|promptpay|พร้อมเพย์|ผ่อน(?:ชำระ|จ่าย|ได้|0)/i;
+const PAY_ONLY_BANK_MSG = "ขออภัยค่ะ 🙏🏻 ตอนนี้ร้านรับชำระเป็นการ \"โอนผ่านบัญชีธนาคาร\" เท่านั้นค่ะ\nพิมพ์ \"ขอเลขบัญชี\" ได้เลยนะคะ เดี๋ยวส่งบัญชีสำหรับโอนให้ทันทีค่ะ 💕";
+// ⚡ k273 · ยก "ค่าส่งด่วนที่แอดมินเพิ่งกรอก" (ป้ายนาที expw: — เขียนโดย /expfee) มาทับ exp: ฝั่งนี้
+//   เหตุผลเดียวกับ k270: แคช KV แยกเครื่อง ลูกค้าถามยอดทันทีหลังแอดมินกรอก → ฝั่งนี้ยังเห็นค่าเก่า 60 วิ
+//   การเขียนในเครื่องนี้ = อ่านต่อจากนี้เห็นสดทันที (read-your-writes) · เรียกได้หลายครั้ง ไม่มีผลข้างเคียงซ้ำ
+async function liftExpFresh(env, shopId, userId) {
+  try {
+    if (!env.CONV) return;
+    const _tn = Date.now();
+    const _ek = (tt) => "expw:" + shopId + ":" + userId + ":" + Math.floor(tt / 60000);
+    const _fw = (await env.CONV.get(_ek(_tn))) || (await env.CONV.get(_ek(_tn - 60000))) || (await env.CONV.get(_ek(_tn - 120000)));
+    if (!_fw) return;
+    const _fj = JSON.parse(_fw);
+    let _cur = null; try { const _c0 = await env.CONV.get("exp:" + shopId + ":" + userId); if (_c0) _cur = JSON.parse(_c0); } catch (e2) {}
+    if (typeof _fj.fee === "number" && (!_cur || _cur.pending || (+_cur.t || 0) < (+_fj.t || 0))) {
+      await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify(_fj), { expirationTtl: 7200 });
+      EXPFEE.set(shopId + ":" + userId, { fee: _fj.fee, t: +_fj.t || Date.now() });
+      console.log("K273_EXPFEE_FRESH fee=" + _fj.fee + " (ข้ามแคช KV)");
+    }
+  } catch (e) {}
 }
 // ⏰⏰ k153 ด่านขาออก — กันบอทรับปากว่า "ยังทันรอบวันนี้" ทั้งที่เลยรอบสุดท้ายไปแล้ว
 //   เคสจริง 3/8 23.14 (ยืนยันด้วยแคป LINE ว่าลูกค้าเห็นจริง): เลยรอบมา 2.5 ชม.
@@ -594,7 +859,7 @@ function bestSellerGate(reply, ask) {
   if (!named) return { reply, blocked: false };
   return {
     blocked: true, said: named,
-    reply: "ขออภัยค่ะ 🙏🏻 แอดมินไม่มีข้อมูลจัดอันดับยอดขายของร้านค่ะ\n\nแต่บอกงบที่ตั้งไว้ หรือแนวกลิ่นที่ชอบ (เช่น เย็น · ผลไม้ · องุ่น) มาได้เลยนะคะ เดี๋ยวแอดมินแนะนำรุ่นที่มีของจริงให้ค่ะ 💕"
+    reply: "ขออภัยค่ะ 🙏🏻 แอดมินไม่มีข้อมูลจัดอันดับยอดขายของร้านค่ะ\n\nแต่บอกงบที่ตั้งไว้ หรือแนวกลิ่นที่ชอบ (เช่น เย็น · ผลไม้ · หวาน) มาได้เลยนะคะ เดี๋ยวแอดมินแนะนำรุ่นที่มีของจริงให้ค่ะ 💕"
   };
 }
 // 🎁🎁 k163 ด่านขาออก — ห้ามกุโปรส่งฟรีที่ร้านไม่มี
@@ -606,6 +871,50 @@ function bestSellerGate(reply, ask) {
 //   ของจริง: พอตใช้แล้วทิ้ง 4 · บิ๊กพอต/KIT 4 · หัวพอตเล็ก 10 · ไส้บุหรี่ IQOS 2 · โคลน 20
 const PROMO_QTY_OK = new Set([2, 4, 10, 20]);
 const PROMO_TRUE_MSG = "โปรส่งฟรีของร้านคิดตามจำนวนชิ้นค่ะ 💕\n• พอตใช้แล้วทิ้ง ครบ 4 แท่ง\n• บิ๊กพอต/ชุด KIT ครบ 4 ชิ้น\n• หัวพอตเล็ก ครบ 10 หัว\n• ไส้บุหรี่ IQOS ครบ 2 ชิ้น\n\nสนใจรับกี่ชิ้นดีคะ ✨";
+// 🛵🛵 k245 · ด่านขาออก P0-10 — ห้ามอ้างว่าวันไหนส่งไม่ได้ (เคสจริง 7 ส.ค.)
+//   ร้านส่งด่วนทุกวัน ไม่มีข้อจำกัดเรื่องวัน มีแค่ "รอบเวลา"
+//   ค้นทั้งไฟล์แล้วไม่พบกฎเรื่องวันเลยแม้แต่จุดเดียว = AI แต่งขึ้นเอง 100%
+//   ⛔ กฎใน prompt อย่างเดียวเอาไม่อยู่ (บทเรียน k16 เรื่องกลิ่นมโน) จึงต้องมีด่านขาออกด้วย
+const DAY_CLAIM_RE = /(?:วัน)?(?:อาทิตย์|เสาร์|หยุด|นักขัตฤกษ์)[^\n]{0,26}(?:ไม่มี|ไม่ได้|ไม่ส่ง|งด|ปิด|หยุดส่ง)|(?:ไม่มี|ไม่ได้|ไม่ส่ง|งด|ปิด|หยุดส่ง)[^\n]{0,26}(?:วัน)?(?:อาทิตย์|เสาร์|นักขัตฤกษ์)|จันทร์[^\n]{0,6}ศุกร์[^\n]{0,20}(?:เท่านั้น|เฉพาะ)|เฉพาะ[^\n]{0,10}จันทร์[^\n]{0,6}ศุกร์/;
+function dayClaimGate(reply) {
+  const t = String(reply || "");
+  if (!DAY_CLAIM_RE.test(t)) return { reply, blocked: false };
+  const kept = t.split("\n").filter(l => !DAY_CLAIM_RE.test(l)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const fix = "ร้านเราจัดส่งได้ทุกวันเลยนะคะ 💕 รวมเสาร์-อาทิตย์และวันหยุดค่ะ\nขอแค่ชำระทันรอบส่งของวันนั้นก็ได้รับตามปกติเลยค่ะ ✨";
+  const empty = kept.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length < 12;
+  console.log("K245_DAY_CLAIM_BLOCKED");
+  return { reply: empty ? fix : kept + "\n\n" + fix, blocked: true };
+}
+// 🔁🔁 k248 · P0-13 · ด่านขาออกกันข้อความซ้ำ (เคสจริง 7 ส.ค. 21.08)
+//   อาการ: ข้อความเดียวมีประโยค "ขออนุญาต clarification นะคะ..." ซ้ำ 15 บรรทัดรวด
+//     และตัวอักษรเริ่มเพี้ยน ("ขออนุclar clarification") = โมเดลเข้าสู่ภาวะวนซ้ำ (degeneration)
+//   ⛔ กฎใน prompt กันไม่ได้ เพราะปัญหาเกิดตอนโมเดลกำลังพิมพ์ ไม่ใช่ตอนคิด
+//   วิธี: ตัดบรรทัดที่ซ้ำกัน (เทียบแบบตัดช่องว่าง/อีโมจิออก) เหลือครั้งแรกครั้งเดียว
+//   ⚠️ ต้องไม่ตัดบรรทัดรายการสินค้าที่ตั้งใจซ้ำโครง เช่น "• MARBO 9K — 350"
+//      จึงเทียบทั้งบรรทัดแบบเป๊ะ ไม่ได้เทียบแค่ขึ้นต้นเหมือนกัน
+function repeatGuard(reply) {
+  const t = String(reply || "");
+  if (!t) return { reply, blocked: false };
+  const norm = (l) => l.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️·•\-–—]/gu, "").trim();
+  const lines = t.split("\n");
+  const seen = new Map(), out = [];
+  let dropped = 0;
+  for (const l of lines) {
+    const k = norm(l);
+    if (k.length < 8) { out.push(l); continue; }      // บรรทัดสั้น/ว่าง ปล่อยผ่าน
+    const n = (seen.get(k) || 0) + 1;
+    seen.set(k, n);
+    if (n > 1) { dropped++; continue; }               // ซ้ำ = ตัดทิ้ง เหลือครั้งแรก
+    out.push(l);
+  }
+  if (!dropped) return { reply, blocked: false };
+  console.log("K248_REPEAT_BLOCKED dropped=" + dropped);
+  // ⚠️ k248: เดิมมีสาขา "ถ้าเหลือน้อยเกินไปให้ส่งข้อความขอโทษ" — ถอดออกแล้ว
+  //    เพราะเข้าไม่ถึงโดยโครงสร้าง: บรรทัดที่จะถูกตัดต้องยาว ≥8 ตัวอักษรอยู่แล้ว
+  //    ตัดแล้วจึงเหลือบรรทัดที่อ่านรู้เรื่องเสมอ · ⛔ ไม่เก็บโค้ดตายไว้ (บทเรียน ambiguityGate k230)
+  const r = out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { reply: r, blocked: true, dropped };
+}
 function fakePromoGate(reply) {
   const s = String(reply || "");
   if (!/ส่งฟรี|ฟรีค่าส่ง/.test(s)) return { reply, blocked: false };
@@ -873,7 +1182,13 @@ function priceGate(reply) {
 //       = กฎอยู่ใน prompt ล้วน ซึ่งบทเรียน k15/k88/k175/k190/k192 บอกแล้วว่าเอาไม่อยู่
 //  สรุป: ไม่มี "ด่านเดียว" ที่ตัดสินว่านี่คือเคสหลังการขาย — มันกระจายและส่วนใหญ่ตอบเอง
 //  ⛔ ขอบเขตการแก้: เฉพาะเส้นทางหลังการขาย ไม่แตะ prompt หลัก · โฟลว์สั่งซื้อ · Slot · Vision · Payment
-const AS_TRACK  = /เลขพัสดุ|เลขติดตาม|เลข ?tracking|tracking|เลขออเดอร์|เลขที่ออเดอร์|ตามออเดอร์|เช็คออเดอร์|เช็คสถานะ|สถานะออเดอร์|สถานะพัสดุ|สถานะสินค้า|ของถึงไหน|ถึงไหนแล้ว|ส่งหรือยัง|ส่งยัง|ส่งของยัง|จัดส่งยัง|ของมายัง|ของถึงยัง|ได้ของยัง/;
+// 🔁🔁 k259 BUG-1 (เคสจริง 8 ส.ค. 23.29): ลูกค้าถาม "ส่งยังไง" (= ถามวิธีจัดส่ง)
+//   แต่ /ส่งยัง/ จับคำว่า "ส่งยัง" ที่ซ้อนอยู่ในคำว่า "ส่งยังไง" → ถูกตีเป็น "ตามพัสดุ"
+//   → ส่งเข้าคิวแอดมิน + ขอเลขออเดอร์ ทั้งที่มี SHIP_MSG ตอบเองได้อยู่แล้ว (บรรทัด ~8825)
+//   ⛔ ภาษาไทยใช้ \b ไม่ได้ → ต้องใช้ negative lookahead แทนทุกครั้งที่คำหนึ่งซ้อนอยู่ในอีกคำ
+//   ⚠️ กติกาเดียวกับ k22 ที่เขียนไว้แล้วว่า "สั่งยังไง" ต้องมาก่อนทางลัดจัดส่ง
+const _NOT_HOWTO = "(?!ไง|งัย|ไร|ยัง)";
+const AS_TRACK  = new RegExp("เลขพัสดุ|เลขติดตาม|เลข ?tracking|tracking|เลขออเดอร์|เลขที่ออเดอร์|ตามออเดอร์|เช็คออเดอร์|เช็คสถานะ|สถานะออเดอร์|สถานะพัสดุ|สถานะสินค้า|ของถึงไหน|ถึงไหนแล้ว|ส่งหรือยัง|ส่งยัง" + _NOT_HOWTO + "|ส่งของยัง" + _NOT_HOWTO + "|จัดส่งยัง" + _NOT_HOWTO + "|ของมายัง|ของถึงยัง|ได้ของยัง");
 const AS_TROUBLE= /ยังไม่ได้(รับ)?(ของ|สินค้า|พัสดุ)|ของ(ยัง)?ไม่(ถึง|มา|ได้)|ของยังไม่มา|ของหาย|พัสดุหาย|ของไม่ครบ|ได้ไม่ครบ|ของขาด|ของเสีย|ของชำรุด|ของแตก|ใช้ไม่ได้|สูบไม่ขึ้น|หัวตัน|น้ำยาซึม|เครื่องไม่ติด|พัสดุตีกลับ|ตีกลับ/;
 // 🏠 k199: หลังจ่ายเงินแล้ว ขอแก้ข้อมูลจัดส่ง = หลังการขาย ⛔ ห้ามกลับเข้าโฟลว์สั่งซื้อ
 const AS_EDIT   = /เปลี่ยน(ชื่อ|ผู้รับ|เบอร์|ที่อยู่|จุดส่ง|ที่ส่ง)|แก้(ชื่อ|เบอร์|ที่อยู่|ข้อมูล(จัดส่ง|ผู้รับ)?)|ที่อยู่ผิด|ส่งผิดที่|ย้ายที่อยู่|เปลี่ยนที่จัดส่ง|ขอแก้ที่อยู่|ขอเปลี่ยนที่อยู่|ใช้เบอร์ใหม่|เบอร์ผิด|ชื่อผิด/;
@@ -1017,8 +1332,12 @@ function stockClaimGate(reply, userText, hist, sm, buf) {
     const มี = [], หมด = [], ไม่รู้ = [];
     for (const h of hit) {
       const q = findStockForItem(sm, mdl, h.f);
-      if (q === null) { ไม่รู้.push(h.bare); continue; }
-      if (q > B || stockOtherStrength(sm, mdl, h.f) > B) มี.push(h.bare); else หมด.push(h.bare);
+      // 🍇 k288 (เคสจริง 12 ส.ค.): ลูกค้าเห็น "กลิ่นองุ่น / องุ่น หมดชั่วคราวค่ะ" — ชื่อซ้ำ 2 รอบ
+      //   เพราะแคตตาล็อกมีทั้ง "องุ่น 3%" และ "องุ่น 5%" → ตัดเปอร์เซ็นต์แล้วเหลือชื่อเดียวกัน 2 ตัว
+      //   ตัดชื่อซ้ำทิ้ง (ยังบอกสถานะถูกต้องเหมือนเดิมทุกประการ แค่ไม่พิมพ์ชื่อซ้ำ)
+      if (q === null) { if (ไม่รู้.indexOf(h.bare) === -1) ไม่รู้.push(h.bare); continue; }
+      const _tgt = (q > B || stockOtherStrength(sm, mdl, h.f) > B) ? มี : หมด;
+      if (_tgt.indexOf(h.bare) === -1) _tgt.push(h.bare);
     }
     if (ไม่รู้.length) {                                     // ห้ามเดาสถานะ
       fixed.push(mdl + " " + ไม่รู้.join("/") + " (ไม่รู้จัก SKU)");
@@ -1128,8 +1447,113 @@ function stockContradictGate(reply, sm, buf, model) {
 //     3) ชื่อรุ่นนั้นเคยอยู่ในบทสนทนานี้มาก่อน
 //   หาหลักฐานไม่ได้ = ไม่ใช่ "เดาแล้วน่าจะถูก" แต่คือ "ลอกมาจากตัวอย่าง" → ขอรูปใหม่ ห้ามส่งชื่อรุ่นออกไป
 const RX_READTAG = /\[READ:\s*([^\]]{0,200})\]/i;
-const ASK_CLEAR_PHOTO = "ขออภัยค่ะ 🙏🏻 มองชื่อรุ่นในรูปไม่ชัดเจนพอค่ะ\nรบกวนถ่ายให้เห็นชื่อรุ่นบนกล่องชัดๆ อีกครั้ง หรือพิมพ์ชื่อรุ่นมาก็ได้นะคะ 💕";
-function visionEvidenceGate(reply, userText, hist) {
+// 🖼️ k291: ข้อความเดิมบอกให้ "ถ่ายกล่องชัดๆ" — แต่เคสจริงส่วนใหญ่ลูกค้าส่ง **รูปเมนูของร้าน**
+//   (แคปหน้าจอ ไม่ใช่ถ่ายกล่อง) → คำแนะนำใช้ไม่ได้เลย ลูกค้าไม่รู้จะทำยังไงต่อ
+//   เขียนใหม่ให้ครอบทั้ง 2 แบบ และเสนอทางที่สำเร็จแน่นอน (พิมพ์ชื่อ) ไว้ด้วยเสมอ
+const ASK_CLEAR_PHOTO = "ขออภัยค่ะ 🙏🏻 รูปนี้ระบบอ่านชื่อรุ่นไม่ชัดพอค่ะ\nรบกวนซูมให้เห็นชื่อรุ่นชัดๆ แล้วส่งใหม่ หรือพิมพ์ชื่อรุ่นมาก็ได้นะคะ 💕";
+// 🖼️ k264 (เคสจริง 9 ส.ค. 14.40-14.42): ลูกค้าส่งรูปเมนูวงแดงมา 3 รอบ โดนตอบ "ไม่ชัด" คำเดิมวน 3 ครั้ง
+//   กฎร้านเดิม (อยู่ใน prompt หลัก): "ลูกค้าตอบมาแล้วแต่ยังไม่ชัด ให้เปลี่ยนวิธีถาม ⛔ ห้ามถามคำเดิม"
+//   → ขอรูปชัดไปแล้วรอบหนึ่ง รอบถัดไปต้องเปลี่ยนวิธี: ชวนพิมพ์เป็นข้อความแทน (ทางที่สำเร็จแน่นอน)
+const ASK_CLEAR_PHOTO_ALT = "ขออภัยจริงๆ ค่ะ 🙏🏻 รูปนี้ระบบยังยืนยันรุ่นให้ไม่ได้ค่ะ\nรบกวนพิมพ์เป็นข้อความสั้นๆ ว่ารับ \"รุ่นอะไร กลิ่นอะไร\" มาได้เลยนะคะ เดี๋ยวจีทูจัดให้ทันทีค่ะ 💕";
+//   ตัวเลือกข้อความขอรูปใหม่: ถ้าเทิร์นก่อนหน้าบอทเพิ่งพูด "ไม่ชัดเจนพอ" ไปแล้ว → ใช้ข้อความสำรอง
+//   (แยกเป็นฟังก์ชันเพื่อให้จุดเรียกใน handleEvent สั้น — เทสโครงสร้าง jeetoo 644 คุมระยะ return; ไว้)
+function pickClearPhotoAsk(hist) {
+  try {
+    const h = Array.isArray(hist) ? hist : [];
+    for (let i = h.length - 1; i >= 0; i--) {
+      const m = h[i];
+      if (!m || m.role !== "assistant") continue;
+      // ⚠️ k291 บทเรียน: เดิมจับคำว่า "ไม่ชัดเจนพอ" ตรงๆ พอผมแก้ถ้อยคำข้อความ ตัวนับรอบก็ตายเงียบ
+      //   → ลูกค้าโดนข้อความเดิมซ้ำ และไม่มีวันถึงขั้นส่งต่อคน (เทส k291 จับได้)
+      //   แก้: จับได้ทั้งคำใหม่และคำเก่า (ประวัติเก่าที่บันทึกไว้ก่อนบิลด์นี้ต้องยังนับได้)
+      const _c291 = String(m.content || "");
+      if (_c291.indexOf("อ่านชื่อรุ่นไม่ชัดพอ") !== -1 || _c291.indexOf("ไม่ชัดเจนพอ") !== -1) return ASK_CLEAR_PHOTO_ALT;
+      break;
+    }
+  } catch (e) {}
+  return ASK_CLEAR_PHOTO;
+}
+// 🖼️ k276 (เคสจริง ABC Easy 11 ส.ค. 15.17): ลูกค้าวงกลิ่นบนเมนู SONIC 8K
+//   แต่คำตอบเป็นลิสต์กลิ่น KS Quik 6K (รุ่นจากบทสนทนาก่อนหน้า) ทั้งกระบิ
+//   ด่านหลักฐานเดิม "ปล่อยผ่าน" เพราะ KS Quik มีหลักฐานในประวัติจริง — แต่รูปตรงหน้าคือรุ่นอื่น
+//   กฎใหม่: **ตัวหนังสือที่อ่านได้จากรูป (READ) ชนะประวัติเสมอ** — รูปคือสิ่งที่ลูกค้ากำลังชี้ตอนนี้
+//   ถ้า READ ระบุรุ่น X ชัด แต่คำตอบไม่พูดถึง X เลย → โยนคำตอบทิ้ง สร้างคำตอบจากรูปตรงๆ ด้วยโค้ด
+//   (โค้ดตัดสินข้อเท็จจริง ไม่ใช่ให้ AI เรียบเรียงรุ่นเอง — บทเรียน k15/k88/k190)
+function _readModels(readTxt) {
+  const out = [];
+  const add = (k) => { if (k && FLAVORS[k] && out.indexOf(k) === -1) out.push(k); };
+  try { add(_MODEL_IN(readTxt)); } catch (e) {}
+  try { for (const [re, key] of TH_MODEL) { const r = new RegExp(re.source, re.flags.replace("g", "")); if (r.test(readTxt)) add(key); } } catch (e) {}
+  try { for (const k in FLAVORS) if (k.length >= 4 && readTxt.indexOf(k) !== -1) add(k); } catch (e) {}
+  return out;
+}
+function _readPrimacyReply(model, readTxt) {
+  const bare = [];
+  try {
+    const fl = (FLAVORS[model] && FLAVORS[model].f) || [];
+    const rn = normTH(readTxt);
+    for (const f of fl) {
+      const b = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+      if (b.length >= 2 && rn.indexOf(normTH(b)) !== -1 && bare.indexOf(b) === -1) bare.push(b);
+      if (bare.length >= 4) break;
+    }
+  } catch (e) {}
+  if (bare.length === 1) return "จากรูปที่ส่งมา เห็นเป็น " + model + " กลิ่น" + bare[0] + " ค่ะ 💕 รับกี่ชิ้นดีคะ";
+  if (bare.length > 1) return "จากรูปที่ส่งมา เห็นเป็น " + model + " กลิ่นที่วงไว้: " + bare.join(" / ") + " ค่ะ 💕 รับกลิ่นละกี่ชิ้นดีคะ";
+  return "จากรูปที่ส่งมา เห็นเป็น " + model + " ค่ะ 💕 สนใจกลิ่นไหน กี่ชิ้นดีคะ";
+}
+// 🧭 k304 · แคตตาล็อกเป็นคนตอบว่า "กลิ่นนี้เป็นของรุ่นไหนบ้าง" — อ่านจาก FLAVORS จริงทุกครั้ง
+//   ⛔ ห้าม hardcode ชื่อกลิ่น/ชื่อรุ่น · ร้านเพิ่มสินค้าใหม่ ตัวนี้รู้เองทันทีโดยไม่ต้องแก้โค้ด
+//   ⚠️ ต้องสร้างแบบ "ตอนเรียกใช้ครั้งแรก" ไม่ใช่ตอนโหลดไฟล์ — FLAVORS ถูกประกาศทีหลังบรรทัดนี้
+//      (สร้างตอนโหลด = ชน TDZ → แมพว่างเปล่าเงียบ ๆ · เจอตอนรันเทสจริงรอบแรก)
+let _FLAVOR_OWNERS = null;
+function _flavorOwners() {
+  if (_FLAVOR_OWNERS) return _FLAVOR_OWNERS;
+  const m = new Map();
+  try {
+    for (const k in FLAVORS) for (const f of ((FLAVORS[k] && FLAVORS[k].f) || [])) {
+      const b = normTH(FM_BARE(String(f)));
+      if (!b || b.length < 2) continue;
+      if (!m.has(b)) m.set(b, new Set());
+      m.get(b).add(k);
+    }
+  } catch (e) {}
+  _FLAVOR_OWNERS = m;
+  return m;
+}
+function _modelsOfFlavor(flavor) {
+  try { const s = _flavorOwners().get(normTH(FM_BARE(String(flavor || "")))); return s ? [...s] : []; }
+  catch (e) { return []; }
+}
+//   ดึง "ชื่อกลิ่นที่มีจริงในแคตตาล็อก" ออกจากข้อความ (เรียงยาว→สั้น กันชื่อสั้นซ้อนอยู่ในชื่อยาว)
+function _flavorsInText(text) {
+  const out = [];
+  try {
+    const n = normTH(String(text || ""));
+    if (!n) return out;
+    const keys = [..._flavorOwners().keys()].sort((a, b) => b.length - a.length);
+    for (const k of keys) {
+      if (k.length < 3) continue;
+      if (n.indexOf(k) === -1) continue;
+      if (out.some(x => x.indexOf(k) !== -1)) continue;   // เป็นส่วนหนึ่งของกลิ่นที่ยาวกว่าซึ่งเจอไปแล้ว
+      out.push(k);
+      if (out.length >= 6) break;
+    }
+  } catch (e) {}
+  return out;
+}
+// 🚫 k308 · "รูปใหม่ต้องยืนยันตัวเองด้วยตัวเอง" — ชื่อรุ่นจากแชทเก่า ≠ สิ่งที่เห็นในรูปนี้
+//   เคสจริง 12 ส.ค. 20.26: รูป INSTA BAR ตอบถูก → ลูกค้าส่งรูป DUAL SMASH ต่อทันที
+//     ถ้าตาเผลอตอบติดรุ่นเก่า ("INSTA BAR กลิ่นแตงโม") ด่านหลักฐานเดิม **ปล่อยผ่าน**
+//     เพราะ INSTA BAR มีอยู่ในประวัติแชทจริง → ได้รุ่นผิด+ราคาผิดแบบเงียบสนิท (อันตรายกว่าถามซ้ำ)
+//   ต้นเหตุเชิงโครงสร้าง: k192 ยอมรับหลักฐาน 3 ทาง และทางที่ 3 คือ "เคยอยู่ในบทสนทนานี้"
+//     ซึ่งเหมาะกับเทิร์นข้อความ แต่ใช้กับเทิร์นรูปไม่ได้ — คำถามของเทิร์นรูปคือ "ในรูปนี้มีอะไร"
+//   กติกา: เทิร์นรูป → หลักฐานยืนยันรุ่นมาจาก [READ:] ของรูปนี้ + ข้อความที่ลูกค้าพิมพ์มาในเทิร์นนี้เท่านั้น
+//     ยกเว้นลูกค้าอ้างถึงของเดิมชัดๆ ("อันเดิม" / "รุ่นเดิม" / "เหมือนเดิม") → ให้ใช้ประวัติได้ตามเดิม
+//   ⛔ ประวัติยังใช้เป็นบริบทสนทนาทุกอย่างเหมือนเดิม — ตัดเฉพาะบทบาท "หลักฐานยืนยันรุ่นจากรูป"
+//   ⛔ \b ใช้กับภาษาไทยไม่ได้ — เขียนเป็นชุดคำเต็มแทน
+const RX_BACKREF308 = /(?:รูป|อัน|ตัว|รุ่น|กลิ่น|แบบ)\s*(?:เมื่อกี้|เดิม|ก่อนหน้า|ที่แล้ว|ข้างบน|เดียวกัน|นั้น)|เหมือนเดิม|อย่างเดิม|ตามเดิม|ที่ส่งไป|ที่ทักไป|ตามรูปก่อน/;
+function visionEvidenceGate(reply, userText, hist, imgTurn) {
   try {
     let rep = String(reply || "");
     const tag = rep.match(RX_READTAG);
@@ -1138,13 +1562,35 @@ function visionEvidenceGate(reply, userText, hist) {
     if (!rep) return { blocked: false, reply: String(reply || "") };
     const said = [];
     for (const k in FLAVORS) if (k.length >= 4 && rep.indexOf(k) !== -1) said.push(k);
+    // 🖼️ k276: READ ชี้รุ่น X ชัดเจน แต่คำตอบไม่พูดถึง X เลย = คำตอบหลุดไปคุยรุ่นอื่น/รุ่นจากความจำ
+    //   → ใช้ข้อเท็จจริงจากรูปแทนคำตอบทั้งก้อน (ไม่ blocked — ให้ไหลต่อเข้าเช็คสต็อกตามปกติ)
+    //   ⛔ แคบ: ยิงเฉพาะตอน READ ระบุรุ่นได้ตรง ๆ เท่านั้น · READ ว่าง/กำกวม = พฤติกรรมเดิมทุกอย่าง
+    try {
+      const imgM = _readModels(readTxt);
+      if (imgM.length) {
+        const _n = (s) => String(s || "").toLowerCase().replace(/[\s()\-]/g, "");
+        const repN = _n(rep);
+        const hit = imgM.some(k => rep.indexOf(k) !== -1 || repN.indexOf(_n(k)) !== -1);
+        if (!hit) {
+          console.log("K276_VISION_READ_PRIMACY img=" + imgM.join(",") + " saidInstead=" + (said.join(",") || "-"));
+          return { blocked: false, reply: _readPrimacyReply(imgM[0], readTxt), said: "" };
+        }
+      }
+    } catch (e) {}
     if (!said.length) return { blocked: false, reply: rep, said: "" };     // ไม่ได้เอ่ยชื่อรุ่น = ไม่ต้องตรวจ
     // แหล่งหลักฐานทั้งหมด รวมเป็นข้อความเดียว
     let evid = " " + readTxt + " " + String(userText || "") + " ";
-    try {
-      const h = Array.isArray(hist) ? hist.slice(-8) : [];
-      for (const m of h) if (m && typeof m.content === "string") evid += " " + m.content + " ";
-    } catch (e) {}
+    // 🚫 k308: เทิร์นรูป = ประวัติแชทไม่นับเป็นหลักฐานยืนยันรุ่น (เว้นลูกค้าอ้างถึงของเดิมชัดๆ)
+    const _backRef308 = RX_BACKREF308.test(String(userText || ""));
+    if (imgTurn && !_backRef308) {
+      console.log("K308_IMAGE_SCOPE หลักฐานรุ่น=เฉพาะรูปนี้ read=" + (readTxt || "-").slice(0, 40));
+    } else {
+      try {
+        const h = Array.isArray(hist) ? hist.slice(-8) : [];
+        for (const m of h) if (m && typeof m.content === "string") evid += " " + m.content + " ";
+      } catch (e) {}
+      if (imgTurn) console.log("K308_BACKREF ลูกค้าอ้างถึงของเดิม → ใช้ประวัติได้ตามเดิม");
+    }
     const low = evid.toLowerCase();
     const norm = (s) => String(s || "").toLowerCase().replace(/[\s()\-]/g, "");
     const lowN = norm(evid);
@@ -1163,7 +1609,51 @@ function visionEvidenceGate(reply, userText, hist) {
       noProof.push(k);
     }
     if (!noProof.length) return { blocked: false, reply: rep, said: "" };
-    return { blocked: true, reply: ASK_CLEAR_PHOTO, said: noProof.join(","), read: readTxt.slice(0, 80) };
+    // 🧭🧭 k304 · "ชื่อกลิ่นก็เป็นหลักฐานได้ ถ้าแคตตาล็อกชี้รุ่นได้รุ่นเดียว"
+    //   เคสจริงโปรดักชัน 12 ส.ค. (3 เคส · 2 ยี่ห้อ · คนละร้าน):
+    //     ลูกค้าวงชื่อกลิ่นบนรูปเมนู → ตาที่อ่านรูปโฟกัสที่วงแดง ใส่แท็กมาแต่ชื่อกลิ่น
+    //     ไม่ได้ใส่ชื่อยี่ห้อ (ยี่ห้อบนเมนูเป็นโลโก้กราฟิก อ่านยากกว่าตัวหนังสือธรรมดา)
+    //     → ด่านนี้หาหลักฐานยืนยันรุ่นไม่เจอ → ทิ้งคำตอบที่ถูกต้อง แล้วไล่ลูกค้าไปถ่ายรูปใหม่
+    //     (19.39: [READ: แฟนต้าส้ม] · คำตอบเอ่ย MARBO 9K · retry ตาสำรองก็ได้แค่ชื่อกลิ่นอีก)
+    //   ต้นเหตุเชิงโครงสร้าง: ระบบยอมรับหลักฐานทางเดียวคือ "ตาต้องอ่านชื่อยี่ห้อออก"
+    //     ทั้งที่ชื่อกลิ่นที่อ่านได้ ตรวจกับแคตตาล็อกแล้วชี้รุ่นได้ชัดเจนกว่าเดิมอีก
+    //     (นับจากแคตตาล็อกจริง: กลิ่น 322 ชื่อ · ชี้รุ่นเดียวได้ 214 ชื่อ = 66%)
+    //   กติกาใหม่ (lookup แคตตาล็อกจริงทุกครั้ง ⛔ ไม่มีชื่อรุ่น/ชื่อกลิ่นอยู่ใน logic เลย):
+    //     กลิ่นในแท็กชี้ได้ "ตระกูลเดียว" และตรงกับรุ่นที่คำตอบเอ่ย → นับเป็นหลักฐาน เดินต่อ
+    //     กลิ่นชี้ได้หลายตระกูล ("องุ่น" อยู่ 29 รุ่น) → ⛔ ห้ามเดา ถามลูกค้าว่ารุ่นไหน
+    //     ไม่พบกลิ่นในแคตตาล็อก → ขอรูปชัดเหมือนเดิมทุกประการ
+    //   ⛔ ไม่ได้ลดมาตรฐาน: AI เดารุ่นที่กลิ่นไม่ได้ชี้มา = ยังตกเหมือนเดิม (เทส k304 ล็อกไว้)
+    try {
+      const _famOf = (k) => String(k || "").replace(/\s*\((?:โคลน|KIT)\)\s*$/i, "").trim();
+      const _fl304 = _flavorsInText(readTxt);
+      if (_fl304.length) {
+        const _left = [];
+        for (const k of noProof) {
+          let _ok = false;
+          for (const f of _fl304) {
+            const owners = _modelsOfFlavor(f);
+            if (!owners.length) continue;
+            const fams = [...new Set(owners.map(_famOf))];
+            if (fams.length === 1 && fams[0] === _famOf(k)) {
+              console.log("K304_FLAVOR_RESOLVED กลิ่น=" + f + " → " + k + " (แคตตาล็อกชี้รุ่นเดียว)");
+              _ok = true; break;
+            }
+            if (fams.length > 1) {
+              console.log("K304_FLAVOR_AMBIG กลิ่น=" + f + " อยู่ " + fams.length + " รุ่น → ถามลูกค้า");
+              return { blocked: true, said: noProof.join(","), read: readTxt.slice(0, 80),
+                reply: "กลิ่น \"" + f + "\" มีหลายรุ่นเลยค่ะ 💕\nรบกวนแจ้งชื่อรุ่นที่ต้องการอีกทีนะคะ เดี๋ยวจัดให้ทันทีค่ะ 🙏🏻" };
+            }
+          }
+          if (!_ok) _left.push(k);
+        }
+        if (!_left.length) return { blocked: false, reply: rep, said: "" };
+        noProof.length = 0; for (const k of _left) noProof.push(k);
+      }
+    } catch (e) {}
+    // 🖼️ k264: ขอรูปชัดไปเทิร์นก่อนแล้วยังตกอีก → เปลี่ยนวิธีถาม (กฎร้าน: ห้ามถามคำเดิม)
+    const ask = pickClearPhotoAsk(hist);
+    if (ask !== ASK_CLEAR_PHOTO) console.log("K264_ASK_VARIED");
+    return { blocked: true, reply: ask, said: noProof.join(","), read: readTxt.slice(0, 80) };
   } catch (e) { return { blocked: false, reply: String(reply || "") }; }
 }
 function specificModelGate(userText, reply) {
@@ -1379,7 +1869,87 @@ const LIQUID_MSG = "น้ำยาบุหรี่ไฟฟ้ามี 2 แ
   + "• อยากเลิกบุหรี่มวน / สูบพอตอยู่แล้ว → SALTNIC\n"
   + "• ชอบควันเยอะ เล่นเครื่องใหญ่ → FREEBASE\n\n"
   + "สนใจแบบไหน บอกแอดมินได้เลยค่ะ เดี๋ยวเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕";
-const MENU_MSG = "เมนูสินค้า\nต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕\nhttps://cutt.ly/menu4";
+const MENU_MSG = "เมนูสินค้า\nต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
+// 🖼️🖼️ k312 · "ขอดูรูปสินค้า" ต้องมีเจ้าของ (เคสจริงโปรดักชัน 13 ส.ค. 12.55 + 13.04)
+//   เคส A: "ขอดูตัวอย่าง Esko bar ทั้งตัวเครื่อง และหัว"  → G2 ลิสต์เครื่อง 7 รุ่น ไม่มี ESKO สักตัว
+//   เคส B: "ขอดูรูป เครื่อง M SWITCH 15K หน่อยครับ"        → G2 ตอบ "ทางร้านไม่มีรูปสินค้าให้ดูนะคะ"
+//   ต้นเหตุที่ตรวจแล้ว (ตัวเดียวกันทั้งสองเคส):
+//     ค้นทั้งไฟล์ — จุดที่ส่งรูปออกหาลูกค้าได้ = 0 · ระบบรับรูปได้อย่างเดียว ไม่มีคลังรูปสินค้า
+//     และ **ไม่มี intent "ขอดูรูป" อยู่ในระบบเลย** → คำขอชนิดนี้ไม่มีเจ้าของ ตกไปให้ AI แต่งเอง
+//     AI พูดตามจริงว่าไม่มีรูป (ถูกข้อเท็จจริง) แต่ไม่เสนอเมนูที่มีรูปอยู่ = เสียลูกค้าฟรีๆ
+//   กติกา (เจ้าของร้านเคาะ 13 ส.ค.): ขอดูรูป/ตัวอย่าง → ส่ง "ลิงก์เมนูเดิมที่ระบบมีอยู่แล้ว"
+//   ⛔ ไม่สร้างระบบส่งรูป ไม่สร้างคลังรูป ไม่มี URL ใหม่ (ดึงลิงก์ออกจาก MENU_MSG ตัวเดิม)
+//   ⛔ ไม่ hardcode ชื่อรุ่น/ยี่ห้อใดๆ · ไม่เดารุ่นจากประวัติแชท (อ่านเฉพาะข้อความเทิร์นนี้)
+const MENU_URL = (MENU_MSG.match(/https?:\/\/\S+/) || [""])[0];
+//   คำที่แปลว่า "อยากเห็นของ" — ⛔ \b ใช้กับภาษาไทยไม่ได้ จึงเขียนเป็นชุดคำเต็ม
+const RX_ASK_PHOTO312 = /(รูป|ภาพ|ตัวอย่าง)/;
+const RX_ASK_SHOW312  = /(ขอ|อยาก|ช่วย|มี)?\s*(ดู|ส่ง|ขอ)\s*(ตัวเครื่อง|ตัวสินค้า|หัว|สินค้า)/;
+//   ⛔ กันชนกับเส้นทางที่มีเจ้าของอยู่แล้ว — สลิป/พัสดุ/เคลม ห้ามถูกลากมาที่เมนู
+const RX_NOT_PHOTO312 = /สลิป|โอน|ชำระ|จ่ายเงิน|บัญชี|คิวอาร์|qr|พัสดุ|เลขติดตาม|ใบปะหน้า|ที่อยู่|เคลม|ชำรุด|แตก|รั่ว|เสีย|คืนเงิน|refund/i;
+//   ⛔ ถามกลิ่น/ราคา/สต็อก = คนละคำถาม มีเส้นทางของตัวเองอยู่แล้ว (ยกเว้นพูดคำว่า "รูป" ตรงๆ)
+const RX_INFO_ASK312 = /กลิ่น|ราคา|เท่า(ไหร่|ไร)|กี่บาท|มีอะไรบ้าง|สต็อก|เหลือ|พร้อมส่ง/;
+function askPhotoIntent312(text) {
+  try {
+    const t = String(text || "");
+    if (!t || RX_NOT_PHOTO312.test(t)) return false;
+    if (RX_ASK_PHOTO312.test(t)) return true;                       // พูดคำว่า รูป/ภาพ/ตัวอย่าง = ชัดเจน
+    if (RX_ASK_SHOW312.test(t) && !RX_INFO_ASK312.test(t)) return true;  // "ขอดูตัวเครื่อง/ขอดูหัว" ล้วนๆ
+    return false;
+  } catch (e) { return false; }
+}
+//   สร้างคำตอบ: ระบุรุ่นมาในเทิร์นนี้ → ทวนชื่อรุ่นให้ · ไม่ระบุ → ส่งเมนูแล้วถามว่าสนใจรุ่นไหน
+// 🧭🧭 k313 · First-turn Menu Gate — ทักเข้ามาครั้งแรกแบบกว้างๆ ให้เห็นเมนูก่อน
+//   ที่มา: ยิงแอทแล้วลูกค้าใหม่ทักเข้ามาเยอะ · ข้อความแรกมักเป็น "มีรุ่นไหนบ้าง / สนใจสั่งของ"
+//     ซึ่งไม่มีด่านไหนรับ → ตกไปให้ AI คุยเปล่าๆ ลูกค้าไม่เห็นของ = หลุดมือตั้งแต่ประโยคแรก
+//   ⛔ วางเป็น "ด่านสุดท้ายก่อน askAI" เท่านั้น — ของที่มีเจ้าของอยู่แล้วถูกรับไปก่อนหมด
+//      (การ์ดทักทาย · MENU_MSG · k312 ขอดูรูป · k273 · k24 · resolver รุ่น/ราคา ฯลฯ ไม่ถูกแตะเลย)
+//   ⛔ allow-list เท่านั้น (เจ้าของร้านเคาะ 13 ส.ค.) — ไม่ใช่ "ยิงทุกอย่างที่ไม่มีรุ่น"
+//      เหตุผล: negative match จะไปกินคำถามทั่วไปที่ยังไม่มีด่าน เช่น "ร้านอยู่ไหน / เก็บปลายทางไหม"
+//   ⛔ อ่านเฉพาะข้อความเทิร์นนี้ ไม่แตะประวัติแชทเพื่อเดารุ่น
+const RX_BROWSE313 = /มีรุ่นไหน|มีรุ่นอะไร|รุ่นไหนบ้าง|มีสินค้าอะไร|มีของอะไร|มีอะไรบ้าง|มีอะไรขาย|ขายอะไร|สนใจสั่งของ|สนใจสินค้า|สนใจซื้อ|อยากซื้อ|อยากได้ของ|ขอดูเมนู|ดูเมนู|ขอเมนู|ดูของหน่อย|ดูของก่อน|มีอะไรน่าสนใจ/;
+//   ⛔ ไม่มีคำว่า "แนะนำ" ใน allow-list โดยตั้งใจ — "มีอะไรแนะนำไหม" มีเส้นทางของตัวเองอยู่แล้ว
+//      (AI แนะนำสินค้าตามหมวด/งบ) การไปแย่งจะทำให้ลูกค้าได้ลิงก์แทนคำแนะนำ = แย่ลง
+//   ตัวกันฟลัดตอนลูกค้าส่งรัวพร้อมกัน (แนวเดียวกับ k311) — ตั้งค่าแบบทันทีก่อน await
+const MENU313 = new Map();
+const MENU313_TTL_MS = 3600000;
+function menuSent313(shopId, uid) {
+  const k = shopId + ":" + uid, now = Date.now(), prev = MENU313.get(k);
+  if (prev && now - prev < MENU313_TTL_MS) return true;
+  MENU313.set(k, now);
+  if (MENU313.size > 2000) { const k0 = MENU313.keys().next().value; MENU313.delete(k0); }
+  return false;
+}
+//   เงื่อนไขยิง: เทิร์นแรกจริง + เข้า allow-list + ไม่มีชื่อรุ่น/กลิ่นในข้อความนี้
+function firstTurnMenu313(history, text) {
+  try {
+    if (Array.isArray(history) && history.length) return false;      // ไม่ใช่เทิร์นแรก = จบ
+    const t = String(text || "");
+    if (!t || !RX_BROWSE313.test(t)) return false;                   // ไม่เข้า allow-list = ปล่อยไป AI
+    if (_MODEL_IN(t)) return false;                                  // ระบุรุ่นมา = ปล่อยเข้า flow เดิม
+    for (const [re, key] of TH_MODEL) { const r = new RegExp(re.source, re.flags.replace("g", "")); if (r.test(t)) return false; }
+    if (_flavorsInText(t).length) return false;                      // ระบุกลิ่นมา = ปล่อยเข้า flow เดิม
+    // ระบุหมวดสินค้ามา ("พอตใช้แล้วทิ้ง / หัวพอต / น้ำยา / เครื่อง") = เจาะจงพอแล้ว
+    //   ⛔ ใช้ topicInText() ตัวเดิมของระบบ ไม่สร้างคลังคำหมวดใหม่ให้เพี้ยนจากกัน
+    if (topicInText(t)) return false;
+    //   ตาข่ายรองระดับคำ: ลูกค้าเอ่ยคำที่แปลว่า "เริ่มเจาะจงประเภทแล้ว" → ปล่อยเข้า flow เดิม
+    //   ⛔ จำเป็นเพราะ topicInText อ่านบางสำนวนไม่ออก (เช่น "พอตแบบสูบแล้วทิ้ง" คืนค่าว่าง)
+    //      k313 มีไว้สำหรับคนที่ "ยังไม่ได้บอกอะไรเลย" เท่านั้น — เอ่ยประเภทมาแล้วถือว่าไม่ใช่
+    if (/พอต|หัว|เครื่อง|น้ำยา|บุหรี่|ใช้แล้วทิ้ง|สูบแล้วทิ้ง|ฟรีเบส|ซอลนิค|นิโคติน|iqos|pod|kit/i.test(t)) return false;
+    return true;
+  } catch (e) { return false; }
+}
+function firstTurnMenuReply313() {
+  return "ยินดีต้อนรับค่ะ ✨ ดูสินค้าทั้งหมดพร้อมราคาได้ที่เมนูนี้เลยนะคะ 💕\n" + MENU_URL
+       + "\n\nเลือกได้แล้วแจ้ง รุ่น + กลิ่น + จำนวน มาได้เลยค่ะ เดี๋ยวแอดมินจัดให้ทันทีค่ะ 🙏🏻";
+}
+function askPhotoReply312(text) {
+  let mdl = "";
+  try { mdl = _MODEL_IN(String(text || "")) || ""; } catch (e) {}
+  if (!mdl) { try { for (const [re, key] of TH_MODEL) { const r = new RegExp(re.source, re.flags.replace("g", "")); if (r.test(String(text || ""))) { mdl = key; break; } } } catch (e) {} }
+  return mdl
+    ? "ได้เลยค่ะ 💕 ดูรูป " + mdl + " ได้ที่เมนูนี้เลยนะคะ\n" + MENU_URL + "\n\nสนใจสั่งเลยไหมคะ แจ้งกลิ่นกับจำนวนมาได้เลยค่ะ ✨"
+    : "ได้เลยค่ะ 💕 ดูรูปสินค้าทั้งหมดได้ที่เมนูนี้เลยนะคะ\n" + MENU_URL + "\n\nสนใจรุ่นไหนเป็นพิเศษ บอกได้เลยค่ะ ✨";
+}
 // k175: รายชื่อรุ่นทั้งหมด เรียงยาวก่อนสั้น — ใช้ลบชื่อรุ่นออกจากบรรทัดก่อนอ่านตัวเลขราคา
 //   (ชื่อรุ่นมีตัวเลขปนอยู่เยอะ: STAR 2,500 · MARBO 9K · INFY 12K → ถ้าไม่ลบก่อนจะอ่านเป็นราคา)
 let MODEL_NAMES_LONGFIRST = [];
@@ -1387,7 +1957,7 @@ let MODEL_NAMES_LONGFIRST = [];
 const PRICE = {
   "RELX DIVA 30K": 490, "LANA IRIS 24K": 410, "CARNIVAL 20K": 399, "ESKO BAR 20K": 399,
   "INFY 20K": 399, "INFY BAR PRO 20K": 399, "JOIWAY TWINS 20K": 399, "MARBO 10K": 399,
-  "RELX SPARTA 20K": 399, "VOSOON 23K": 399, "V PLUS 16K": 370, "ELFBAR 15K": 350,
+  "RELX SPARTA 20K": 399, "VOSOON 23K": 399, "INSTA BAR 15K": 350, "V PLUS 16K": 370, "ELFBAR 15K": 350,
   "INFY 12K": 350, "MARBO 9K": 350, "DUAL SMASH 20K": 320, "JOIWAY 12K": 320,
   "RELX SMASH GO 12K": 320, "INFY BAR 15K": 299, "MARBO 9K (โคลน)": 290, "KS Quik 6K": 280,
   "ABC 8K": 250, "SONIC 8K": 300, "STAR 2,500": 150, "STAR 2500": 150,
@@ -1401,7 +1971,7 @@ const PRICE = {
   "เครื่อง RELX ESSENTIAL 2": 490, "เครื่อง ELFBAR JOINONE": 349, "เครื่อง M SWITCH 15K": 250,
   "เครื่อง RELX CREATOR 20K": 250, "เครื่อง VAZER RELOAD": 220, "เครื่อง DUAL SMASH": 200
 };
-const FLAVORS = {"ABC LEGO 20K":{"p":299,"f":["ดับเบิ้ลมิ้นต์ 3%","น้ำแร่ 3%","มิกซ์เบอร์รี่ 3%","องุ่น 3%","โคล่า 3%","ชามะลิ 3%","สับปะรด 3%","แตงโม 3%","ดับเบิ้ลมิ้นต์ 5%","มิกซ์เบอร์รี่ 5%","องุ่น 5%","แตงโม 5%"]},"ABC TANK 22K":{"p":320,"f":["ดับเบิ้ลมิ้นต์ 3%","บลูเบอร์รี่เย็น 3%","พีชสตรอว์เบอร์รี่ 3%","มิกซ์เบอร์รี่ 3%","แตงโม 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","โคล่า 3%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%","โคล่า 5%"]},"ELFBAR SWAP 25K":{"p":379,"f":["ฝรั่งมะม่วงส้ม","พีชสตรอว์เบอร์รี่","มะม่วง","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ชีสเค้ก","สตรอว์เบอร์รี่องุ่นแอปเปิ้ล","หมากฝรั่งแตงโม","องุ่น","ไอติมซอเลโร่","ไอติมสตรอว์เบอร์รี่","แอปเปิ้ลลิ้นจี่","โคล่าเย็น","มะนาวเย็น","ชามะลิ","ชาหลงจิน","ชาองุ่นกวนอิน","ดับเบิ้ลมิ้นต์","น้ำแร่","องุ่นเย็น"]},"ESKO BAR SWITCH 20K":{"p":350,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล","แยมบลูเบอร์รี่","เมนทอล","ช็อคโกแลตมิ้นต์","มะพร้าว","มะม่วง"]},"KS QUIK PRO 15K":{"p":350,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"]},"M SWITCH":{"p":350,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"]},"RELX BOOST POD":{"p":350,"f":["กล้วย 3%","บลูเบอร์รี่ 3%","โคล่า 3%","ดับเบิ้ลมิ้นต์ 3%","องุ่น 3%","ชามะลิ 3%","ลูกอมเลม่อนมิ้นต์ 3%","น้ำแร่ 3%","รวมมิตรมิกซ์เบอร์รี่ 3%","สับปะรด 3%","ฝรั่ง 3%","ลูกอม 3%","แตงโม 3%","สตรอว์เบอร์รี่แตงโม 3%","เบอร์รี่ชมพู 3%","มะเฟือง 3%","คูลมิ้นต์ 3%","ลิ้นจี่ 3%","สเปียร์มิ้นต์ 3%","หมากฝรั่งแตงโม 3%","แอปเปิ้ลว่านหางจระเข้ 3%","พีชสตรอว์เบอร์รี่ 3%","สตรอว์เบอร์รี่กล้วย 3%","ดับเบิ้ลมิ้นต์ 5%","องุ่น 5%","แตงโม 5%","ยาสูบคลาสสิค 5%","โคล่า 5%","รวมมิตรมิกซ์เบอร์รี่ 5%","พีชสตรอว์เบอร์รี่ 5%","สตรอว์เบอร์รี่กล้วย 5%"]},"RELX POD CLEAR 18K":{"p":390,"f":["กาแฟโกปิโก้ 3%","ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","น้ำส้มโซดา 3%","น้ำแร่ 3%","สเปียร์มิ้นต์ 3%","สับปะรด 3%","องุ่นอโล 3%","องุ่น 3%","แอปเปิ้ลเขียว 3%","รวมมิตรเบอร์รี่ 3%","ไอติมสตรอว์เบอร์รี่ 3%","โคล่า 3%","สตรอว์เบอร์รี่โซดา 3%","มะม่วงเสาวรส 3%","เมล่อน 3%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%"]},"VAZER RELOAD 15K":{"p":330,"f":["โคล่า","แตงโม","บลูเบอร์รี่","เบอร์รี่รวม","พีช","มิ้นต์เย็น","รูทเบียร์","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","เลม่อนโซดา","สับปะรด","องุ่นเย็น","องุ่นลิ้นจี่","องุ่นโอซาก้า","แอปเปิ้ลฟูจิ"]},"หัวพอต INFY PLUS":{"p":140,"f":["โคล่า","ชามะลิ","แตงโมลิ้นจี่","แตงโมสตรอว์เบอร์รี่","น้ำส้มโซดา","บลูเบอร์รี่","พีช","มะม่วงพีช","มิ้นต์","เยลลี่องุ่น","ลิ้นจี่","ลิ้นจี่ราสเบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่องุ่น","สไปร์ท","หมากฝรั่งองุ่น","องุ่นกัมมี่","องุ่นเคียวโฮ","องุ่นแอปเปิ้ล","แอปเปิ้ลแดง","ไอศกรีมสตรอว์เบอร์รี่","หมากฝรั่งเปรี้ยว","แอปเปิ้ลอโล","เชอร์รี่สตรอว์เบอร์รี่","หมากฝรั่งสับปะรด","ซีซอล์ทเลม่อน","ผลไม้รวม","แตงโมราสเบอร์รี่"]},"หัวพอต MARBO ZERO":{"p":140,"f":["เกรปฟรุต 3%","โคล่า 3%","ชาผลไม้ 3%","ชาอู่หลง 3%","ซิก้าร์ 3%","แตงโม 3%","น้ำแร่ 3%","บลูเบอร์รี่ 3%","พีช 3%","พีชสตรอว์เบอร์รี่ 3%","มะม่วง 3%","มิกซ์เบอร์รี่ 3%","มิ้นต์ 3%","ลิ้นจี่ 3%","เลม่อน 3%","ส้มยูสุ 3%","สับปะรด 3%","องุ่น 3%","องุ่นว่านหางจระเข้ 3%","แอปเปิ้ลเขียว 3%","โคล่า 5%","แตงโม 5%","เบอร์รี่ชมพู 5%","พีชสตรอว์เบอร์รี่ 5%","มิกซ์เบอร์รี่ 5%","มิ้นต์ 5%","สตรอว์เบอร์รี่กล้วย 5%","องุ่น 5%","องุ่นว่านหางจระเข้ 5%","แอปเปิ้ลเขียว 5%","มิ้นต์ฟรีซ 5%"]},"หัวพอต RELX INFINITY":{"p":140,"f":["โคล่า 3%","ชาเขียวมะลิ 3%","ชาดอกชบาเย็น 3%","ชาดำเย็น 3%","ชาไทย 3%","ชาพีช 3%","ชามะนาวเย็น 3%","ชาหลงจินเย็น 3%","ชาอู่หลงเย็น 3%","แตงโม 3%","ถั่วเขียว 3%","นํ้าส้มโซดา 3%","น้ำเขียวโซดา 3%","น้ำผึ้งส้มโอ 3%","เผือก 3%","ฝรั่ง 3%","มะนาวเย็น 3%","มะม่วง 3%","เมล่อน 3%","รูทเบียร์ 3%","ลิ้นจี่ 3%","ไวท์คอฟฟี่ 3%","สตรอว์เบอร์รี่ 3%","สไปรท์ 3%","เสาวรส 3%","องุ่น 3%","องุ่นเขียว 3%","องุ่นแอปเปิ้ล 3%","แอปเปิ้ลเขียว 3%","แตงโม 5%","เปปเปอร์มิ้นต์ 5%","มิกซ์เบอร์รี่ 5%","มิ้นต์เอ็กซ์ตร้า 5%","มิ้นต์ฟรีซ 5%","ยาสูบคลาสสิค 5%","ยาสูบร้อน 5%","เลม่อนมิ้นต์ 5%","สเปียร์มิ้นต์ 5%","องุ่น 5%","แอปเปิ้ลเขียว 5%","ซิตรัส 5%","ยาสูบมิ้นต์ 5%","ราสเบอร์รี่มิ้นต์ 5%","ไอซ์สปาร์คกิ้ง 5%","สตรอว์เบอร์รี่ 5%","สับปะรด 5%"]},"หัวพอต RELX LARGE":{"p":140,"f":["ลิ้นจี่","องุ่น","องุ่นแอปเปิ้ล","แอปเปิ้ลเขียว","โคล่า","ชาหลงจิน","บลูเบอร์รี่","พีช","พีชสตรอว์เบอร์รี่"]},"หัวพอต RELX ULTRA":{"p":120,"f":["ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","บลูเบอร์รี่ 3%","เบอร์รี่ชมพู 3%","มะม่วงเขียว 3%","องุ่นอโล 3%","ดับเบิ้ลมิ้นต์ 5%","พีชสตรอว์เบอร์รี่ 5%","มิกซ์เบอร์รี่ 5%","ลิ้นจี่ 5%","สับปะรด 5%","องุ่นอโล 5%","แอปเปิ้ลอโล 5%","โคล่า 5%","เบอร์รี่ชมพู 5%"]},"ABC 8K":{"p":250,"f":["กล้วย","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูไอซ์","มิกซ์เบอร์รี่","ลิ้นจี่","โคล่า","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นอโล"]},"CARNIVAL 20K":{"p":399,"f":["กัมมี่","โคล่า","ดับเบิ้ลมิ้นต์","แตงโมไอซ์","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","ส้มโซดา","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","สับปะรด","ยาคูลท์","แยมสตรอว์เบอร์รี่","แยมบลูเบอร์รี่","ลิ้นจี่ไอซ์","ไอติมเผือก","ไอติมสตรอว์เบอร์รี่","เมล่อน","เรดบลู"]},"DUAL SMASH 20K":{"p":320,"f":["แตงโม","มิ้นต์","โคล่า","นมกล้วย","น้ำแร่","องุ่น","องุ่นอโล","สตรอว์เบอร์รี่","แอปเปิ้ล","ชาหลงจิน","ฮันนี่เลม่อน","ยาคูลท์"]},"ELFBAR 15K":{"p":350,"f":["องุ่นว่านหางจระเข้","บลูเบอร์รี่เย็น","องุ่นเย็น","องุ่นเยลลี่","มะม่วงเขียว","ฝรั่งเย็น","โคล่าเลม่อน","ชามะนาว","แฟนต้าลิ้นจี่","พีชเย็น","องุ่นซากุระ","สตรอว์เบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","เบอร์รี่","เมล่อนแตงโม","แตงโม"]},"ESKO BAR 20K":{"p":399,"f":["โคล่า","แตงโม","แตงโมสตรอว์เบอร์รี่","บลูเบอร์รี่ไอซ์","บับเบิ้ลกัม","เบอร์รี่องุ่น","ฝรั่ง","มิกซ์เบอร์รี่","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ลว่านหางจระเข้","ลิ้นจี่เย็น","ดับเบิ้ลมิ้นต์","กล้วยเย็น","มะม่วง","น้ำแร่","เรดเลม่อนโซดา","มิ้นต์เอ็กซ์ตร้า 5%"]},"INFY 12K":{"p":350,"f":["โคล่า","แตงโมลิ้นจี่","น้ำแร่","บลูเบอร์รี่","พีช","มิกซ์เบอร์รี่","มิกซ์สตรอว์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นซากุระ","องุ่นโยโย่","องุ่นแอปเปิ้ล","ไอศกรีมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","สไปร์ท","ส้มโซดา","หมากฝรั่งแตงโม","เลม่อนชมพู","ราสเบอร์รี่มัลเบอร์รี่","กัมมี่แบร์","ชาอู่หลงพีช","องุ่นหน้าร้อน","บานาน่าท๊อฟฟี่","ลิ้นจี่ราสเบอร์รี่"]},"INFY 20K":{"p":399,"f":["บลูเบอร์รี่","แตงโมลิ้นจี่","ลิ้นจี่","มิกซ์เบอร์รี่","มิ้นต์","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นแอปเปิ้ล","องุ่นเคียวโฮ","องุ่นโยโย่","องุ่นลิ้นจี่","องุ่นอโล","พีช","แอปเปิ้ลอโล","สปาร์คกิ้งเลม่อน","น้ำแร่","โคล่า","สตรอว์เบอร์รี่กล้วย","เมนทอลฟรีซ","หมากฝรั่งองุ่น","หมากฝรั่งแตงโม","ชานมชาจี","ชาเขียวมัทฉะ"]},"INFY BAR 15K":{"p":299,"f":["โคล่าเลม่อน","ซีซอล์ทเลม่อน","แตงโม","แตงโมลิ้นจี่","พีชสตรอว์เบอร์รี่","บลูเบอร์รี่","แฟนต้าองุ่น","มะม่วงโยเกิร์ต","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมเปรี้ยว","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นลิ้นจี่","มะนาว","สับปะรดมะนาว","โคล่า","องุ่นแอปเปิ้ล"]},"INFY BAR PRO 20K":{"p":399,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","โคล่า","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","เบอร์รี่ชมพู","ลิ้นจี่เย็น","แตงโม","แตงโมสตรอว์เบอร์รี่","แตงโมลิ้นจี่","หมากฝรั่งแตงโม","สตรอว์เบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แตงโมมิ้นต์","ยาคูลท์","เรดบลู","มัทฉะลาเต้","ฝรั่งเสาวรส","ราสเบอร์รี่แตงโม","ไอติมสตรอว์เบอร์รี่"]},"JOIWAY 12K":{"p":320,"f":["โคล่าเลม่อน","โคล่า","ลิ้นจี่","แตงโม","แอปเปิ้ลเขียว","แฟนต้าเขียว","เมล่อนฮอกไกโด","มิ้นต์","ส้มโซดา","บลูเบอร์รี่","องุ่น","เสาวรส","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","ชามะนาว","คุกกี้"]},"JOIWAY TWINS 20K":{"p":399,"f":["โคล่า / แอปเปิ้ลเขียว","โคล่า / สตรอว์เบอร์รี่","ลิ้นจี่ / คุกกี้","ลูกอมเรนโบว์ / มิ้นต์","ลูกอมเรนโบว์ / สตรอว์เบอร์รี่","มิ้นต์ / สตรอว์เบอร์รี่","องุ่น / บลูเบอร์รี่","องุ่น / แตงโม","องุ่น / ลิ้นจี่","แอปเปิ้ลเขียว / คุกกี้","แอปเปิ้ลเขียว / สตรอว์เบอร์รี่","บลูเบอร์รี่ / แตงโม","บลูเบอร์รี่ / ลิ้นจี่","แตงโม / ลูกอมเรนโบว์","แตงโม / ลิ้นจี่","แตงโม / สตรอว์เบอร์รี่"]},"KS Quik 6K":{"p":280,"f":["โคล่าเลม่อน","ชานมอู่หลง","แตงโม","น้ำแร่","บลูเบอร์รี่","ฝรั่ง","มะนาว","มะม่วง","มิกซ์เบอร์รี่","เมนทอล","เมล่อน","ยาสูบครีม","ยาสูบคลาสสิค","ลิ้นจี่","สตรอว์เบอร์รี่","สับปะรด","องุ่น","ไอศกรีมสตรอว์เบอร์รี่"]},"LANA IRIS 24K":{"p":410,"f":["ชากวนอิน 3%","แตงโม 3%","น้ำแร่ 3%","ฝรั่ง 3%","มิกซ์เบอร์รี่ 3%","มิ้นต์ 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่ 3%","สับปะรด 3%","ส้มองุ่น 3%","องุ่น 3%","โคล่า 3%","เลม่อนโคล่า 3%","ชากวนอิน 5%","มิ้นต์ 5%"]},"MARBO 10K":{"p":399,"f":["บลูไอซ์","เบอร์รี่ชมพู","เบอร์รี่รวม","แตงโม","แตงโมมิ้นต์","โคล่า","มัทฉะลาเต้","เมนทอล","เลม่อนมิ้นต์","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ"]},"MARBO 9K":{"p":350,"f":["โคล่า","ดับเบิ้ลมิ้นต์","แตงโม","บลูไอซ์","เบอร์รี่ชมพู","พีช","พีชสตรอว์เบอร์รี่","แฟนต้าส้ม","มิกซ์เบอร์รี่","เยลลี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แอปเปิ้ลเขียว","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"]},"MARBO 9K (โคลน)":{"p":290,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","พีช","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","เยลลี่","แตงโม","แฟนต้าส้ม","แอปเปิ้ลเขียว","โคล่า","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"]},"RELX DIVA 30K":{"p":490,"f":["โคล่า 3%","ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","น้ำแร่ 3%","น้ำส้มโซดา 3%","มะม่วงเสาวรส 3%","มิกซ์เบอร์รี่ 3%","เมล่อน 3%","สเปียร์มิ้นต์ 3%","องุ่น 3%","องุ่นอโล 3%","ไอติมสตรอว์เบอร์รี่ 3%","กาแฟโกปิโก้ 5%","โคล่า 5%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%"]},"RELX SMASH GO 12K":{"p":320,"f":["แอปเปิ้ล 3%","เสาวรส 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","พีชสตรอว์เบอร์รี่ 3%","มะม่วง 3%","แตงโม 3%","เบอร์รี่รวม 3%","ดับเบิ้ลมิ้นต์ 3%","โคล่า 3%","ชาอู่หลง 3%","บลูเบอร์รี่เย็น 3%","เบอร์รี่ชมพู 3%","ฝรั่ง 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่เย็น 3%","สับปะรดเย็น 3%","องุ่นอโล 3%","หมากฝรั่งแตงโม 3%","แตงโม 5%","ดับเบิ้ลมิ้นต์ 5%","องุ่น 5%","โคล่า 5%","คูลมิ้นต์ 5%","เบอร์รี่รวม 5%","ยาสูบคลาสสิค 5%","สเปียร์มิ้นต์ 5%"]},"RELX SPARTA 20K":{"p":399,"f":["โคล่า","ชาอู่หลง","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูเบอร์รี่","พีชสตรอเบอร์รี่","เยลลี่","รวมมิตรเบอร์รี่","ราสเบอร์รี่มิ้นติ์","ลูกกวาด","สตรอเบอร์รี่","สัปปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ล","เบอร์รี่ชมพู","โพล่าร์มิ้นต์","หมากฝรั่งแตงโม","ลิ้นจี่","องุ่นอโล"]},"SONIC 8K":{"p":300,"f":["กัมมี่แบร์","โคล่า","แตงโม","น้ำแร่","มิกซ์เบอร์รี่","มิ้นต์","ยาคูลท์","สตรอว์เบอร์รี่","องุ่น","แอปเปิ้ลเขียว"]},"STAR 2,500":{"p":150,"f":["กล้วย","โคล่า","แตงโม","น้ำแร่","บลูเบอร์รี่","พีช","มะม่วง","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","สตรอว์เบอร์รี่","องุ่น"]},"V PLUS 16K":{"p":370,"f":["กัมมี่แบร์","โคล่า","แตงโม","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","หมากฝรั่งแตงโม","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ล","แอปเปิ้ลชิชา"]},"VOSOON 23K":{"p":399,"f":["ชาหลงจิน","แตงโม","บลูเบอร์รี่เย็น","ฝรั่งเสาวรส","พีชสตรอว์เบอร์รี่","มิ้นต์ฟรีซ","ลิ้นจี่เย็น","องุ่นเย็น","แอปเปิ้ลอโล","โคล่า"]},"ESKO BAR SWITCH 20K (KIT)":{"p":499,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล"]},"KS QUIK PRO 15K (KIT)":{"p":499,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"]},"M SWITCH 15K (KIT)":{"p":499,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"]},"VAZER RELOAD 15K (KIT)":{"p":450,"f":["โคล่า","มิ้นต์เย็น","ลูกอมสตรอว์เบอร์รี่","องุ่นเย็น","แตงโม"]},"เครื่อง DUAL SMASH":{"p":200,"f":[]},"เครื่อง ELFBAR JOINONE":{"p":349,"f":["สีเขียว","สีดำ","สีแดง","สีน้ำเงิน","สีม่วง","สีส้ม"]},"เครื่อง M SWITCH 15K":{"p":250,"f":[]},"เครื่อง M SWITCH 15K (โคลน)":{"p":200,"f":[]},"เครื่อง M ZERO NANO":{"p":690,"f":["สีดำ","สีขาว","สีชมพู","สีฟ้า"]},"เครื่อง M ZERO PRO":{"p":890,"f":["สีเขียว","สีชมพู","สีแดง","สีเงิน","สีดำ","สีเหลืองดำ","สีฟ้าม่วง","สีดำชมพู"]},"เครื่อง RELX CREATOR 20K":{"p":250,"f":["สีดำ","สีเทา-เหลือง"]},"เครื่อง RELX ESSENTIAL 2":{"p":490,"f":["สีเทา","สีดำ","สีเงิน","สีฟ้าม่วง"]},"เครื่อง RELX INFINITY 2+":{"p":990,"f":["สีเขียว","สีเงิน","สีดำ","สีเทา","สีบรอนซ์ทอง","สีโรสโกลด์","สีขาว"]},"เครื่อง VAZER RELOAD":{"p":220,"f":[]},"ไส้บุหรี่ IQOS INDO":{"p":1500,"f":["GREEN","BRIGHT WAVE","BLUE","BLACK GREEN","PURPLE WAVE","BRONZE","SIENNA","DIMENSION APRICITY","DIMENSION YUGEN","GOLDEN EDITION","RIVIERA PEARL","BERRINE EDITION","AUBURN EDITION","MULINT EDITION","SUN PEARL","BLACK RUBY","BLACK PURPLE","OASIS PEARL","BERMIN PEARL","PERINT PEARL"]},"ไส้บุหรี่ IQOS JP":{"p":2150,"f":["BALANCED REGULAR","BLACK MENTHOL","BLACK PURPLE MENTHOL","BLACK RUBY MENTHOL","FUSION MENTHOL","MENTHOL","MINT","OASIS PEARL","TROPICAL MENTHOL","PURPLE MENTHOL","REGULAR","RICH REGULAR","SMOOTH REGULAR","SUN PEARL","YELLOW MENTHOL","WARM REGULAR","BLACK FUCHSIA MENTHOL","BRIGHT MENTHOL","BLACK YELLOW MENTHOL","BLACK SUNSHINE MENTHOL","RUBY REGULAR","RIVIERA PEARL","CLEAR REGULAR","SHINE PEARL","VELVET PEARL","STARLING PEARL","STELLAR PEARL"]},"ไส้บุหรี่ IQOS MALAY":{"p":1700,"f":["ZING WAVE","TURQUOISE","RUSSET","BLUE","BLACK GREEN","PURPLE WAVE","SIENNA","OASIS PEARL","SUN PEARL","AMBER"]},"เครื่อง IQOS ILUMA I ONE":{"p":3200,"f":["สีฟ้า","สีส้ม","สีม่วง","สีดำ","สีเขียว"]},"เครื่อง IQOS ILUMA I PRIME":{"p":5200,"f":["สีดำ","สีฟ้า","สีเลือดหมู","สีเขียว","สีม่วง"]},"เครื่อง IQOS ILUMA I STANDARD":{"p":4200,"f":["สีดำ","สีฟ้า","สีเขียว","สีม่วงอ่อน","สีส้ม","สีม่วง"]},"SALTNIC ESKOLIQ 30ML":{"p":250,"f":["โคล่า","มิกซ์เบอร์รี่"]},"SALTNIC MARBO 30ML":{"p":270,"f":["เขียว","ชมพู","ดำ","ทอง","น้ำเงิน","ม่วง","เงิน","แดง","ม่วง 50%"]},"FREEBASE ESKOLIQ 30ML":{"p":150,"f":["โคล่า","มิกซ์เบอร์รี่","ไอซ์บลาสต์"]},"FREEBASE MARBO 30ML":{"p":170,"f":["ทอง","ชมพู","ฟ้า","ม่วง"]},"FREEBASE PHATJUICE 30ML":{"p":170,"f":[]},"NICOTINE POUCH - KARDINAL POUCH":{"p":199,"f":["MANGO (3MG)","PEPPERMINT (3MG)","COLA (3MG)","BLUEBERRY CITRUS (3MG)","ICE MINT (3MG)","PEPPERMINT (6MG)","COLA (6MG)","BLUEBERRY CITRUS (6MG)","ICE MINT (6MG)","MANGO (6MG)"]},"NICOTINE POUCH - ZAR POUCH":{"p":199,"f":["FRESH MINT (3MG)","LEMON CRUSH (3MG)","COLA (3MG)","CITRUS (3MG)","WATERMELON (3MG)","FRESH MINT (6MG)","LEMON CRUSH (6MG)","COLA (6MG)","CITRUS (6MG)","WATERMELON (6MG)"]},"NICOTINE POUCH - ZYN POUCH":{"p":179,"f":["SPEARMINT (1.5MG)","PEACH (1.5MG)","COFFEE (1.5MG)","COOL MINT (3MG)","SPEARMINT (3MG)","PEACH (3MG)","COFFEE (3MG)","COOL MINT (6MG)"]}};
+const FLAVORS = {"ABC LEGO 20K":{"p":299,"f":["ดับเบิ้ลมิ้นต์ 3%","น้ำแร่ 3%","มิกซ์เบอร์รี่ 3%","องุ่น 3%","โคล่า 3%","ชามะลิ 3%","สับปะรด 3%","แตงโม 3%","ดับเบิ้ลมิ้นต์ 5%","มิกซ์เบอร์รี่ 5%","องุ่น 5%","แตงโม 5%"]},"ABC TANK 22K":{"p":320,"f":["ดับเบิ้ลมิ้นต์ 3%","บลูเบอร์รี่เย็น 3%","พีชสตรอว์เบอร์รี่ 3%","มิกซ์เบอร์รี่ 3%","แตงโม 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","โคล่า 3%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%","โคล่า 5%"]},"ELFBAR SWAP 25K":{"p":379,"f":["ฝรั่งมะม่วงส้ม","พีชสตรอว์เบอร์รี่","มะม่วง","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ชีสเค้ก","สตรอว์เบอร์รี่องุ่นแอปเปิ้ล","หมากฝรั่งแตงโม","องุ่น","ไอติมซอเลโร่","ไอติมสตรอว์เบอร์รี่","แอปเปิ้ลลิ้นจี่","โคล่าเย็น","มะนาวเย็น","ชามะลิ","ชาหลงจิน","ชาองุ่นกวนอิน","ดับเบิ้ลมิ้นต์","น้ำแร่","องุ่นเย็น"]},"ESKO BAR SWITCH 20K":{"p":350,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล","แยมบลูเบอร์รี่","เมนทอล","ช็อคโกแลตมิ้นต์","มะพร้าว","มะม่วง"]},"KS QUIK PRO 15K":{"p":350,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"]},"M SWITCH":{"p":350,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"]},"RELX BOOST POD":{"p":350,"f":["กล้วย 3%","บลูเบอร์รี่ 3%","โคล่า 3%","ดับเบิ้ลมิ้นต์ 3%","องุ่น 3%","ชามะลิ 3%","ลูกอมเลม่อนมิ้นต์ 3%","น้ำแร่ 3%","รวมมิตรมิกซ์เบอร์รี่ 3%","สับปะรด 3%","ฝรั่ง 3%","ลูกอม 3%","แตงโม 3%","สตรอว์เบอร์รี่แตงโม 3%","เบอร์รี่ชมพู 3%","มะเฟือง 3%","คูลมิ้นต์ 3%","ลิ้นจี่ 3%","สเปียร์มิ้นต์ 3%","หมากฝรั่งแตงโม 3%","แอปเปิ้ลว่านหางจระเข้ 3%","พีชสตรอว์เบอร์รี่ 3%","สตรอว์เบอร์รี่กล้วย 3%","ดับเบิ้ลมิ้นต์ 5%","องุ่น 5%","แตงโม 5%","ยาสูบคลาสสิค 5%","โคล่า 5%","รวมมิตรมิกซ์เบอร์รี่ 5%","พีชสตรอว์เบอร์รี่ 5%","สตรอว์เบอร์รี่กล้วย 5%"]},"RELX POD CLEAR 18K":{"p":390,"f":["กาแฟโกปิโก้ 3%","ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","น้ำส้มโซดา 3%","น้ำแร่ 3%","สเปียร์มิ้นต์ 3%","สับปะรด 3%","องุ่นอโล 3%","องุ่น 3%","แอปเปิ้ลเขียว 3%","รวมมิตรเบอร์รี่ 3%","ไอติมสตรอว์เบอร์รี่ 3%","โคล่า 3%","สตรอว์เบอร์รี่โซดา 3%","มะม่วงเสาวรส 3%","เมล่อน 3%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%"]},"VAZER RELOAD 15K":{"p":330,"f":["โคล่า","แตงโม","บลูเบอร์รี่","เบอร์รี่รวม","พีช","มิ้นต์เย็น","รูทเบียร์","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","เลม่อนโซดา","สับปะรด","องุ่นเย็น","องุ่นลิ้นจี่","องุ่นโอซาก้า","แอปเปิ้ลฟูจิ"]},"หัวพอต INFY PLUS":{"p":140,"f":["โคล่า","ชามะลิ","แตงโมลิ้นจี่","แตงโมสตรอว์เบอร์รี่","น้ำส้มโซดา","บลูเบอร์รี่","พีช","มะม่วงพีช","มิ้นต์","เยลลี่องุ่น","ลิ้นจี่","ลิ้นจี่ราสเบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่องุ่น","สไปร์ท","หมากฝรั่งองุ่น","องุ่นกัมมี่","องุ่นเคียวโฮ","องุ่นแอปเปิ้ล","แอปเปิ้ลแดง","ไอศกรีมสตรอว์เบอร์รี่","หมากฝรั่งเปรี้ยว","แอปเปิ้ลอโล","เชอร์รี่สตรอว์เบอร์รี่","หมากฝรั่งสับปะรด","ซีซอล์ทเลม่อน","ผลไม้รวม","แตงโมราสเบอร์รี่"]},"หัวพอต MARBO ZERO":{"p":140,"f":["เกรปฟรุต 3%","โคล่า 3%","ชาผลไม้ 3%","ชาอู่หลง 3%","ซิก้าร์ 3%","แตงโม 3%","น้ำแร่ 3%","บลูเบอร์รี่ 3%","พีช 3%","พีชสตรอว์เบอร์รี่ 3%","มะม่วง 3%","มิกซ์เบอร์รี่ 3%","มิ้นต์ 3%","ลิ้นจี่ 3%","เลม่อน 3%","ส้มยูสุ 3%","สับปะรด 3%","องุ่น 3%","องุ่นว่านหางจระเข้ 3%","แอปเปิ้ลเขียว 3%","โคล่า 5%","แตงโม 5%","เบอร์รี่ชมพู 5%","พีชสตรอว์เบอร์รี่ 5%","มิกซ์เบอร์รี่ 5%","มิ้นต์ 5%","สตรอว์เบอร์รี่กล้วย 5%","องุ่น 5%","องุ่นว่านหางจระเข้ 5%","แอปเปิ้ลเขียว 5%","มิ้นต์ฟรีซ 5%"]},"หัวพอต RELX INFINITY":{"p":140,"f":["โคล่า 3%","ชาเขียวมะลิ 3%","ชาดอกชบาเย็น 3%","ชาดำเย็น 3%","ชาไทย 3%","ชาพีช 3%","ชามะนาวเย็น 3%","ชาหลงจินเย็น 3%","ชาอู่หลงเย็น 3%","แตงโม 3%","ถั่วเขียว 3%","นํ้าส้มโซดา 3%","น้ำเขียวโซดา 3%","น้ำผึ้งส้มโอ 3%","เผือก 3%","ฝรั่ง 3%","มะนาวเย็น 3%","มะม่วง 3%","เมล่อน 3%","รูทเบียร์ 3%","ลิ้นจี่ 3%","ไวท์คอฟฟี่ 3%","สตรอว์เบอร์รี่ 3%","สไปรท์ 3%","เสาวรส 3%","องุ่น 3%","องุ่นเขียว 3%","องุ่นแอปเปิ้ล 3%","แอปเปิ้ลเขียว 3%","แตงโม 5%","เปปเปอร์มิ้นต์ 5%","มิกซ์เบอร์รี่ 5%","มิ้นต์เอ็กซ์ตร้า 5%","มิ้นต์ฟรีซ 5%","ยาสูบคลาสสิค 5%","ยาสูบร้อน 5%","เลม่อนมิ้นต์ 5%","สเปียร์มิ้นต์ 5%","องุ่น 5%","แอปเปิ้ลเขียว 5%","ซิตรัส 5%","ยาสูบมิ้นต์ 5%","ราสเบอร์รี่มิ้นต์ 5%","ไอซ์สปาร์คกิ้ง 5%","สตรอว์เบอร์รี่ 5%","สับปะรด 5%"]},"หัวพอต RELX LARGE":{"p":140,"f":["ลิ้นจี่","องุ่น","องุ่นแอปเปิ้ล","แอปเปิ้ลเขียว","โคล่า","ชาหลงจิน","บลูเบอร์รี่","พีช","พีชสตรอว์เบอร์รี่"]},"หัวพอต RELX ULTRA":{"p":120,"f":["ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","บลูเบอร์รี่ 3%","เบอร์รี่ชมพู 3%","มะม่วงเขียว 3%","องุ่นอโล 3%","ดับเบิ้ลมิ้นต์ 5%","พีชสตรอว์เบอร์รี่ 5%","มิกซ์เบอร์รี่ 5%","ลิ้นจี่ 5%","สับปะรด 5%","องุ่นอโล 5%","แอปเปิ้ลอโล 5%","โคล่า 5%","เบอร์รี่ชมพู 5%"]},"ABC 8K":{"p":250,"f":["กล้วย","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูไอซ์","มิกซ์เบอร์รี่","ลิ้นจี่","โคล่า","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นอโล"]},"CARNIVAL 20K":{"p":399,"f":["กัมมี่","โคล่า","ดับเบิ้ลมิ้นต์","แตงโมไอซ์","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","ส้มโซดา","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","สับปะรด","ยาคูลท์","แยมสตรอว์เบอร์รี่","แยมบลูเบอร์รี่","ลิ้นจี่ไอซ์","ไอติมเผือก","ไอติมสตรอว์เบอร์รี่","เมล่อน","เรดบลู"]},"DUAL SMASH 20K":{"p":320,"f":["แตงโม","มิ้นต์","โคล่า","นมกล้วย","น้ำแร่","องุ่น","องุ่นอโล","สตรอว์เบอร์รี่","แอปเปิ้ล","ชาหลงจิน","ฮันนี่เลม่อน","ยาคูลท์"]},"ELFBAR 15K":{"p":350,"f":["องุ่นว่านหางจระเข้","บลูเบอร์รี่เย็น","องุ่นเย็น","องุ่นเยลลี่","มะม่วงเขียว","ฝรั่งเย็น","โคล่าเลม่อน","ชามะนาว","แฟนต้าลิ้นจี่","พีชเย็น","องุ่นซากุระ","สตรอว์เบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","เบอร์รี่","เมล่อนแตงโม","แตงโม"]},"ESKO BAR 20K":{"p":399,"f":["โคล่า","แตงโม","แตงโมสตรอว์เบอร์รี่","บลูเบอร์รี่ไอซ์","บับเบิ้ลกัม","เบอร์รี่องุ่น","ฝรั่ง","มิกซ์เบอร์รี่","เมล่อน","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ลว่านหางจระเข้","ลิ้นจี่เย็น","ดับเบิ้ลมิ้นต์","กล้วยเย็น","มะม่วง","น้ำแร่","เรดเลม่อนโซดา","มิ้นต์เอ็กซ์ตร้า 5%"]},"INFY 12K":{"p":350,"f":["โคล่า","แตงโมลิ้นจี่","น้ำแร่","บลูเบอร์รี่","พีช","มิกซ์เบอร์รี่","มิกซ์สตรอว์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นซากุระ","องุ่นโยโย่","องุ่นแอปเปิ้ล","ไอศกรีมสตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","สไปร์ท","ส้มโซดา","หมากฝรั่งแตงโม","เลม่อนชมพู","ราสเบอร์รี่มัลเบอร์รี่","กัมมี่แบร์","ชาอู่หลงพีช","องุ่นหน้าร้อน","บานาน่าท๊อฟฟี่","ลิ้นจี่ราสเบอร์รี่"]},"INFY 20K":{"p":399,"f":["บลูเบอร์รี่","แตงโมลิ้นจี่","ลิ้นจี่","มิกซ์เบอร์รี่","มิ้นต์","สตรอว์เบอร์รี่กีวี่","สตรอว์เบอร์รี่แตงโม","องุ่นแอปเปิ้ล","องุ่นเคียวโฮ","องุ่นโยโย่","องุ่นลิ้นจี่","องุ่นอโล","พีช","แอปเปิ้ลอโล","สปาร์คกิ้งเลม่อน","น้ำแร่","โคล่า","สตรอว์เบอร์รี่กล้วย","เมนทอลฟรีซ","หมากฝรั่งองุ่น","หมากฝรั่งแตงโม","ชานมชาจี","ชาเขียวมัทฉะ"]},"INFY BAR 15K":{"p":299,"f":["โคล่าเลม่อน","ซีซอล์ทเลม่อน","แตงโม","แตงโมลิ้นจี่","พีชสตรอว์เบอร์รี่","บลูเบอร์รี่","แฟนต้าองุ่น","มะม่วงโยเกิร์ต","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","ลิ้นจี่","ลูกอมเปรี้ยว","สตรอว์เบอร์รี่แตงโม","องุ่นเคียวโฮ","องุ่นลิ้นจี่","มะนาว","สับปะรดมะนาว","โคล่า","องุ่นแอปเปิ้ล"]},"INFY BAR PRO 20K":{"p":399,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","โคล่า","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","เบอร์รี่ชมพู","ลิ้นจี่เย็น","แตงโม","แตงโมสตรอว์เบอร์รี่","แตงโมลิ้นจี่","หมากฝรั่งแตงโม","สตรอว์เบอร์รี่","พีชสตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แตงโมมิ้นต์","ยาคูลท์","เรดบลู","มัทฉะลาเต้","ฝรั่งเสาวรส","ราสเบอร์รี่แตงโม","ไอติมสตรอว์เบอร์รี่"]},"JOIWAY 12K":{"p":320,"f":["โคล่าเลม่อน","โคล่า","ลิ้นจี่","แตงโม","แอปเปิ้ลเขียว","แฟนต้าเขียว","เมล่อนฮอกไกโด","มิ้นต์","ส้มโซดา","บลูเบอร์รี่","องุ่น","เสาวรส","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","ชามะนาว","คุกกี้"]},"JOIWAY TWINS 20K":{"p":399,"f":["โคล่า / แอปเปิ้ลเขียว","โคล่า / สตรอว์เบอร์รี่","ลิ้นจี่ / คุกกี้","ลูกอมเรนโบว์ / มิ้นต์","ลูกอมเรนโบว์ / สตรอว์เบอร์รี่","มิ้นต์ / สตรอว์เบอร์รี่","องุ่น / บลูเบอร์รี่","องุ่น / แตงโม","องุ่น / ลิ้นจี่","แอปเปิ้ลเขียว / คุกกี้","แอปเปิ้ลเขียว / สตรอว์เบอร์รี่","บลูเบอร์รี่ / แตงโม","บลูเบอร์รี่ / ลิ้นจี่","แตงโม / ลูกอมเรนโบว์","แตงโม / ลิ้นจี่","แตงโม / สตรอว์เบอร์รี่"]},"KS Quik 6K":{"p":280,"f":["โคล่าเลม่อน","ชานมอู่หลง","แตงโม","น้ำแร่","บลูเบอร์รี่","ฝรั่ง","มะนาว","มะม่วง","มิกซ์เบอร์รี่","เมนทอล","เมล่อน","ยาสูบครีม","ยาสูบคลาสสิค","ลิ้นจี่","สตรอว์เบอร์รี่","สับปะรด","องุ่น","ไอศกรีมสตรอว์เบอร์รี่"]},"LANA IRIS 24K":{"p":410,"f":["ชากวนอิน 3%","แตงโม 3%","น้ำแร่ 3%","ฝรั่ง 3%","มิกซ์เบอร์รี่ 3%","มิ้นต์ 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่ 3%","สับปะรด 3%","ส้มองุ่น 3%","องุ่น 3%","โคล่า 3%","เลม่อนโคล่า 3%","ชากวนอิน 5%","มิ้นต์ 5%"]},"MARBO 10K":{"p":399,"f":["บลูไอซ์","เบอร์รี่ชมพู","เบอร์รี่รวม","แตงโม","แตงโมมิ้นต์","โคล่า","มัทฉะลาเต้","เมนทอล","เลม่อนมิ้นต์","สตรอว์เบอร์รี่กีวี่","องุ่น","องุ่นเคียวโฮ"]},"MARBO 9K":{"p":350,"f":["โคล่า","ดับเบิ้ลมิ้นต์","แตงโม","บลูไอซ์","เบอร์รี่ชมพู","พีช","พีชสตรอว์เบอร์รี่","แฟนต้าส้ม","มิกซ์เบอร์รี่","เยลลี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","แอปเปิ้ลเขียว","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"]},"MARBO 9K (โคลน)":{"p":290,"f":["ดับเบิ้ลมิ้นต์","บลูไอซ์","พีช","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สปาร์คกิ้งเลม่อน","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","เยลลี่","แตงโม","แฟนต้าส้ม","แอปเปิ้ลเขียว","โคล่า","สตรอว์เบอร์รี่มิลค์เชค","เมนทอลฟรีส","องุ่นเคียวโฮ","แอปเปิ้ลเลม่อน","บลูเบอร์รี่มิ้นต์","สตรอว์เบอร์รี่กีวี่"]},"RELX DIVA 30K":{"p":490,"f":["โคล่า 3%","ดับเบิ้ลมิ้นต์ 3%","แตงโม 3%","น้ำแร่ 3%","น้ำส้มโซดา 3%","มะม่วงเสาวรส 3%","มิกซ์เบอร์รี่ 3%","เมล่อน 3%","สเปียร์มิ้นต์ 3%","องุ่น 3%","องุ่นอโล 3%","ไอติมสตรอว์เบอร์รี่ 3%","กาแฟโกปิโก้ 5%","โคล่า 5%","ดับเบิ้ลมิ้นต์ 5%","แตงโม 5%","องุ่น 5%"]},"RELX SMASH GO 12K":{"p":320,"f":["แอปเปิ้ล 3%","เสาวรส 3%","องุ่น 3%","องุ่นลิ้นจี่ 3%","พีชสตรอว์เบอร์รี่ 3%","มะม่วง 3%","แตงโม 3%","เบอร์รี่รวม 3%","ดับเบิ้ลมิ้นต์ 3%","โคล่า 3%","ชาอู่หลง 3%","บลูเบอร์รี่เย็น 3%","เบอร์รี่ชมพู 3%","ฝรั่ง 3%","ลิ้นจี่ 3%","สตรอว์เบอร์รี่เย็น 3%","สับปะรดเย็น 3%","องุ่นอโล 3%","หมากฝรั่งแตงโม 3%","แตงโม 5%","ดับเบิ้ลมิ้นต์ 5%","องุ่น 5%","โคล่า 5%","คูลมิ้นต์ 5%","เบอร์รี่รวม 5%","ยาสูบคลาสสิค 5%","สเปียร์มิ้นต์ 5%"]},"RELX SPARTA 20K":{"p":399,"f":["โคล่า","ชาอู่หลง","ดับเบิ้ลมิ้นต์","แตงโม","น้ำแร่","บลูเบอร์รี่","พีชสตรอเบอร์รี่","เยลลี่","รวมมิตรเบอร์รี่","ราสเบอร์รี่มิ้นติ์","ลูกกวาด","สตรอเบอร์รี่","สัปปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ล","เบอร์รี่ชมพู","โพล่าร์มิ้นต์","หมากฝรั่งแตงโม","ลิ้นจี่","องุ่นอโล"]},"SONIC 8K":{"p":300,"f":["กัมมี่แบร์","โคล่า","แตงโม","น้ำแร่","มิกซ์เบอร์รี่","มิ้นต์","ยาคูลท์","สตรอว์เบอร์รี่","องุ่น","แอปเปิ้ลเขียว"]},"STAR 2,500":{"p":150,"f":["กล้วย","โคล่า","แตงโม","น้ำแร่","บลูเบอร์รี่","พีช","มะม่วง","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","สตรอว์เบอร์รี่","องุ่น"]},"INSTA BAR 15K":{"p":350,"f":["เคลียร์ไอซ์", "โคล่าเลม่อน", "แตงโมเย็น", "แตงโมสตรอว์เบอร์รี่มะม่วงเยลลี่", "มิกซ์เบอร์รี่", "ยาคูลท์", "เยลลี่หมี", "ลิ้นจี่ราสเบอร์รี่", "หมากฝรั่งแตงโม", "องุ่นแบล็คเคอร์แรนท์เย็น", "แอปเปิ้ลเปรี้ยวเย็น", "ไอติมมะนาว", "มะม่วง", "มิ้นต์", "สตรอว์เบอร์รี่", "องุ่น"]},"V PLUS 16K":{"p":370,"f":["กัมมี่แบร์","โคล่า","แตงโม","บลูเบอร์รี่","พีชสตรอว์เบอร์รี่","มิกซ์เบอร์รี่","มิ้นต์","ลิ้นจี่","ลูกอมเรนโบว์","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่ราสเบอร์รี่","หมากฝรั่งแตงโม","องุ่น","องุ่นเคียวโฮ","แอปเปิ้ล","แอปเปิ้ลชิชา"]},"VOSOON 23K":{"p":399,"f":["ชาหลงจิน","แตงโม","บลูเบอร์รี่เย็น","ฝรั่งเสาวรส","พีชสตรอว์เบอร์รี่","มิ้นต์ฟรีซ","ลิ้นจี่เย็น","องุ่นเย็น","แอปเปิ้ลอโล","โคล่า"]},"ESKO BAR SWITCH 20K (KIT)":{"p":499,"f":["โคล่า","แตงโมเย็น","แตงโมเลม่อน","บลูเบอร์รี่","ฝรั่ง","มิกซ์เบอร์รี่","มิ้นต์","เมล่อน","โยเกิร์ต","ลิ้นจี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่กล้วย","สับปะรด","องุ่น","แอปเปิ้ลอโล"]},"KS QUIK PRO 15K (KIT)":{"p":499,"f":["โคล่าเลม่อน","ชานม","แตงโม","น้ำแร่","บลูเบอร์รี่","เมนทอล","โยเกิร์ต","ลิ้นจี่","ลิ้นจี่แบล็คเคอร์แรนท์","เลม่อนโซดา","สตรอว์เบอร์รี่","สับปะรด","องุ่น","องุ่นลิ้นจี่","แอปเปิ้ลเปรี้ยว","องุ่นเบอร์รี่"]},"M SWITCH 15K (KIT)":{"p":499,"f":["ดับเบิ้ลมิ้นต์","บลูเบอร์รี่เย็น","พีชสตรอว์เบอร์รี่","มะม่วงเสาวรส","มิกซ์เบอร์รี่","สตรอว์เบอร์รี่","สตรอว์เบอร์รี่แตงโม","หมากฝรั่งแตงโม","องุ่น","องุ่นลิ้นจี่","องุ่นว่านหางจระเข้","เบอร์รี่ชมพู","แตงโม","แบล็คเบอร์รี่","แอปเปิ้ลว่านหางจระเข้","โคล่า","องุ่นเคียวโฮ"]},"VAZER RELOAD 15K (KIT)":{"p":450,"f":["โคล่า","มิ้นต์เย็น","ลูกอมสตรอว์เบอร์รี่","องุ่นเย็น","แตงโม"]},"เครื่อง DUAL SMASH":{"p":200,"f":[]},"เครื่อง ELFBAR JOINONE":{"p":349,"f":["สีเขียว","สีดำ","สีแดง","สีน้ำเงิน","สีม่วง","สีส้ม"]},"เครื่อง M SWITCH 15K":{"p":250,"f":[]},"เครื่อง M SWITCH 15K (โคลน)":{"p":200,"f":[]},"เครื่อง M ZERO NANO":{"p":690,"f":["สีดำ","สีขาว","สีชมพู","สีฟ้า"]},"เครื่อง M ZERO PRO":{"p":890,"f":["สีเขียว","สีชมพู","สีแดง","สีเงิน","สีดำ","สีเหลืองดำ","สีฟ้าม่วง","สีดำชมพู"]},"เครื่อง RELX CREATOR 20K":{"p":250,"f":["สีดำ","สีเทา-เหลือง"]},"เครื่อง RELX ESSENTIAL 2":{"p":490,"f":["สีเทา","สีดำ","สีเงิน","สีฟ้าม่วง"]},"เครื่อง RELX INFINITY 2+":{"p":990,"f":["สีเขียว","สีเงิน","สีดำ","สีเทา","สีบรอนซ์ทอง","สีโรสโกลด์","สีขาว"]},"เครื่อง VAZER RELOAD":{"p":220,"f":[]},"ไส้บุหรี่ IQOS INDO":{"p":1500,"f":["GREEN","BRIGHT WAVE","BLUE","BLACK GREEN","PURPLE WAVE","BRONZE","SIENNA","DIMENSION APRICITY","DIMENSION YUGEN","GOLDEN EDITION","RIVIERA PEARL","BERRINE EDITION","AUBURN EDITION","MULINT EDITION","SUN PEARL","BLACK RUBY","BLACK PURPLE","OASIS PEARL","BERMIN PEARL","PERINT PEARL"]},"ไส้บุหรี่ IQOS JP":{"p":2150,"f":["BALANCED REGULAR","BLACK MENTHOL","BLACK PURPLE MENTHOL","BLACK RUBY MENTHOL","FUSION MENTHOL","MENTHOL","MINT","OASIS PEARL","TROPICAL MENTHOL","PURPLE MENTHOL","REGULAR","RICH REGULAR","SMOOTH REGULAR","SUN PEARL","YELLOW MENTHOL","WARM REGULAR","BLACK FUCHSIA MENTHOL","BRIGHT MENTHOL","BLACK YELLOW MENTHOL","BLACK SUNSHINE MENTHOL","RUBY REGULAR","RIVIERA PEARL","CLEAR REGULAR","SHINE PEARL","VELVET PEARL","STARLING PEARL","STELLAR PEARL"]},"ไส้บุหรี่ IQOS MALAY":{"p":1700,"f":["ZING WAVE","TURQUOISE","RUSSET","BLUE","BLACK GREEN","PURPLE WAVE","SIENNA","OASIS PEARL","SUN PEARL","AMBER"]},"เครื่อง IQOS ILUMA I ONE":{"p":3200,"f":["สีฟ้า","สีส้ม","สีม่วง","สีดำ","สีเขียว"]},"เครื่อง IQOS ILUMA I PRIME":{"p":5200,"f":["สีดำ","สีฟ้า","สีเลือดหมู","สีเขียว","สีม่วง"]},"เครื่อง IQOS ILUMA I STANDARD":{"p":4200,"f":["สีดำ","สีฟ้า","สีเขียว","สีม่วงอ่อน","สีส้ม","สีม่วง"]},"SALTNIC ESKOLIQ 30ML":{"p":250,"f":["โคล่า","มิกซ์เบอร์รี่"]},"SALTNIC MARBO 30ML":{"p":270,"f":["เขียว","ชมพู","ดำ","ทอง","น้ำเงิน","ม่วง","เงิน","แดง","ม่วง 50%"]},"FREEBASE ESKOLIQ 30ML":{"p":150,"f":["โคล่า","มิกซ์เบอร์รี่","ไอซ์บลาสต์"]},"FREEBASE MARBO 30ML":{"p":170,"f":["ทอง","ชมพู","ฟ้า","ม่วง"]},"FREEBASE PHATJUICE 30ML":{"p":170,"f":[]},"NICOTINE POUCH - KARDINAL POUCH":{"p":199,"f":["MANGO (3MG)","PEPPERMINT (3MG)","COLA (3MG)","BLUEBERRY CITRUS (3MG)","ICE MINT (3MG)","PEPPERMINT (6MG)","COLA (6MG)","BLUEBERRY CITRUS (6MG)","ICE MINT (6MG)","MANGO (6MG)"]},"NICOTINE POUCH - ZAR POUCH":{"p":199,"f":["FRESH MINT (3MG)","LEMON CRUSH (3MG)","COLA (3MG)","CITRUS (3MG)","WATERMELON (3MG)","FRESH MINT (6MG)","LEMON CRUSH (6MG)","COLA (6MG)","CITRUS (6MG)","WATERMELON (6MG)"]},"NICOTINE POUCH - ZYN POUCH":{"p":179,"f":["SPEARMINT (1.5MG)","PEACH (1.5MG)","COFFEE (1.5MG)","COOL MINT (3MG)","SPEARMINT (3MG)","PEACH (3MG)","COFFEE (3MG)","COOL MINT (6MG)"]}};
 
 // 🍇 กลิ่น/สีจริงทุกรุ่น (911 SKU) — ไม่ยัดใส่ prompt ทั้งก้อน แต่แนบเฉพาะรุ่นที่ลูกค้าพูดถึง (prompt ไม่บวม + แอดมินตอบกลิ่นได้แม่น)
 
@@ -1443,7 +2013,11 @@ const TH_MODEL = [
   //   เคสจริง 22.55: ลูกค้า "มีหัวมาโบมั้ยคะ" → บอทตอบ "MARBO 9K (350 บาท)" ซึ่งเป็นพอตทั้งแท่ง
   //   → ลูกค้าที่มีเครื่องอยู่แล้วซื้อไปใช้ไม่ได้ = เคลม/คืนเงิน (อาการเดียวกับ k143 แต่คนละทาง)
   //   ต้องมาก่อนกฎ "มาโบ" ทั้งหมด ไม่งั้นโดนกฎล่างจับไปเป็น MARBO 9K ก่อน
-  [/หัว\s*(มาโบ|มาร์โบ|marbo)/i, "M SWITCH"],
+  //   🔁 k259b (เจ้าของร้านยืนยันซ้ำ): "มาโบ" = MARBO 9K / 10K (พอตใช้แล้วทิ้ง)
+  //      "หัวมาโบ" = M SWITCH (หัวบิ๊กพอต) — และครอบคำที่ลูกค้าพูดแทรกกลางด้วย
+  //      "หัวพอตมาโบ" · "หัวน้ำยามาโบ" · "หัวใหญ่มาโบ" = M SWITCH เหมือนกันหมด
+  //      ⛔ เดิมจับเฉพาะ "หัว" ติด "มาโบ" เป๊ะ ๆ → มีคำคั่นแล้วหลุดไปเป็น MARBO 9K = ส่งผิดประเภท
+  [/หัว\s*(?:พอต|น้ำยา|บิ๊ก\s*พอต|บิ๊ก|ใหญ่)?\s*(มาโบ|มาร์โบ|marbo)/i, "M SWITCH"],
   // k209: ลูกค้าเขียนอังกฤษเต็ม "Marbo switch pod" — เดิมจับได้เฉพาะ "m switch" ที่มีเว้นวรรค
   [/มา(?:ร์)?โบ\s*สวิ[ชซต]|เอ็?ม\s*สวิ[ชซต]|m\s*swi[ct]?ch|mar?bo\s*swi[ct]?ch/i, "M SWITCH"],
   [/เอสโค่|เอสโก้|เอกโค|เอคโค|เอโคบาร์|esko\s*bar\s*switch|esko\s*swi/i, "ESKO BAR SWITCH 20K"],
@@ -1465,6 +2039,12 @@ const TH_MODEL = [
   //   เคสจริง 31/7: ลูกค้าถาม "หัวเลโก้เหลืออะไรบ้าง" → ระบบล็อกเป็น ABC LEGO ตัวเดียว
   //   แล้วยัดสต็อกว่า "หมดทุกกลิ่น" → แอดมินบอกลูกค้าว่าหมด ทั้งที่อีก 2 ยี่ห้อมีของ = เสียยอด
   [/abc\s*lego|เอบีซี\s*เลโก้|เลโก้\s*abc/i, "ABC LEGO 20K"],
+  // 🧱 k240 (เจ้าของร้านยืนยัน 7/8): ลูกค้าบางคนเรียก RELX BOOST POD ว่า "หัวเลโก้"
+  //   ⛔ "เลโก้" ลอยๆ ยังต้องกำกวมเหมือนเดิม (k48) — ต้องมีคำระบุแบรนด์คู่มาด้วยเท่านั้น
+  //   เหตุผลที่ห้ามใส่ alias เดี่ยว: ถ้าใส่ ลูกค้าที่หมายถึง ABC LEGO (299) จะได้ BOOST POD (350)
+  //     และได้สิทธิ์เครื่องฟรี 250 ที่ไม่ควรได้ = ผิดทั้งราคาและโปร
+  //   ⚠️ ต้องอยู่ "หลัง" แถว ABC LEGO ด้านบน เพื่อให้ abc+เลโก้ ชนะก่อนเสมอ
+  [/(relx|รีแลก[ซ์]?|บูส)[^\n]{0,12}(เลโก้|lego)|(เลโก้|lego)[^\n]{0,12}(relx|รีแลก[ซ์]?|บูส)/i, "RELX BOOST POD"],
   [/แทงค์|abc\s*tank/i, "ABC TANK 22K"],
   [/หัว\s*(abc|เอบีซี)|(abc|เอบีซี)\s*หัว|(abc|เอบีซี)[^\n]{0,10}(big\s*pod|bigpod|บิ๊กพอต)|(big\s*pod|bigpod|บิ๊กพอต)[^\n]{0,10}(abc|เอบีซี)|สนใจ\s*(abc|เอบีซี)/i, "ABC LEGO 20K"],
   [/หัว\s*(abc|เอบีซี)|(abc|เอบีซี)\s*หัว|(abc|เอบีซี)[^\n]{0,10}(big\s*pod|bigpod|บิ๊กพอต)|(big\s*pod|bigpod|บิ๊กพอต)[^\n]{0,10}(abc|เอบีซี)|สนใจ\s*(abc|เอบีซี)/i, "ABC TANK 22K"],
@@ -1475,6 +2055,13 @@ const TH_MODEL = [
   [/ดูอั?ล\s*สแมช|dual\s*smash/i, "DUAL SMASH 20K"],
   [/คาร์นิวัล|carnival/i, "CARNIVAL 20K"],
   [/ลาน่า|lana/i, "LANA IRIS 24K"],
+  // 🆕 k277 (11 ส.ค. เจ้าของร้านส่งไฟล์ XSelly + เมนู 350.-): สินค้าเข้าใหม่ INSTA BAR 15K
+  [/อินสตา\s*บาร?์?|insta\s*bar|อินตร?้?าบาร์/i, "INSTA BAR 15K"],
+  // ⭐ k277b (เคสจริง ABC Easy 11 ส.ค. 16.55): ลูกค้าพิมพ์ "สตาร์เหลือไรบ้าง" / "star" → ระบบไม่รู้จัก ถามซ้ำ 2 รอบ
+  //   k228 สร้างตัวถอดเสียงไว้แต่ไม่ได้ต่อสาย (ทำ Wrong Product เพิ่ม) → ใช้วิธีมาตรฐานเดียวกับทุกแบรนด์: ชื่อเล่นในตารางนี้
+  //   แบรนด์ STAR มีสินค้าตัวเดียว (STAR 2,500) = ไม่กำกวม · กัน "สตาร์ท/start" ด้วย lookahead
+  //   ⛔ จงใจไม่จับ "สตา" ตัวย่อสั้น — เทส k241/k252/k254 ล็อกไว้ว่าคำสั้นระดับนั้นต้องถามยืนยัน (Never Guess)
+  [/สตาร์(?!ท)|(?<![a-z])star(?![a-z0-9])/i, "STAR 2,500"],
   [/โซนิค|sonic/i, "SONIC 8K"],
   [/วีพลัส|v\s*plus/i, "V PLUS 16K"],
   [/โวซูน|vosoon/i, "VOSOON 23K"],
@@ -1486,7 +2073,10 @@ const TH_MODEL = [
   [/จอยเวย์|joiway/i, "JOIWAY 12K"],
   [/คาร์ดินอล|kardinal/i, "NICOTINE POUCH - KARDINAL POUCH"],
   [/\bzar\b|ซาร์/i, "NICOTINE POUCH - ZAR POUCH"],
-  [/\bzyn\b|ซิน\b/i, "NICOTINE POUCH - ZYN POUCH"],
+  // 🐛 k260: เดิมเขียน `ซิน\b` — \b หลังอักษรไทยไม่เกิดขอบคำ = โค้ดตายมาตลอด (บั๊กชนิดเดียวกับ AS_TRACK)
+  //   ⛔ (?![ก-๙]) ทั้งช่วงก็ใช้ไม่ได้ — "มีซินมั้ย" จะโดนบล็อกเพราะ "มั้ย" เป็นอักษรไทย
+  //   จึงกันเฉพาะคำที่ชนจริงในแคตตาล็อก: "ซินนามอน" (กลิ่น cinnamon) = ซิน ตามด้วย "นา"
+  [/\bzyn\b|ซิน(?!นา)/i, "NICOTINE POUCH - ZYN POUCH"],
   [/ไอคอส|iqos|ไอ\s*คอส/i, "ไส้บุหรี่ IQOS JP"],
   [/อิลูม่า|iluma\s*i?\s*prime|ไพร์?ม/i, "เครื่อง IQOS ILUMA I PRIME"],
   [/iluma\s*i?\s*standard|สแตนดาร์ด/i, "เครื่อง IQOS ILUMA I STANDARD"],
@@ -1538,6 +2128,56 @@ const CATQ = [
   [/(?:ไส้บุหรี่|ไส้)\s*$/,       "iqos"],
   [/(?:หัวพอต|หัวน้ำยา|หัว)\s*$/, "head"],
 ];
+// 🛡️ k241 BUG-2 · ตรวจว่า "คำที่จับได้เป็นแบรนด์ลอยๆ ที่มีหลายรุ่น" หรือไม่
+//   สร้างดัชนีจากแคตตาล็อกจริงครั้งเดียวแล้วแคช ⛔ ห้ามสร้างใหม่ทุกคำขอ (บทเรียน SOLD_OUT_MODELS 138ms)
+let _BRANDN_CACHE = null;
+function _brandCount(core) {
+  if (!_BRANDN_CACHE) {
+    _BRANDN_CACHE = {};
+    try {
+      for (const k of Object.keys(FLAVORS)) {
+        const c = _brandCore(k);
+        if (c) _BRANDN_CACHE[c] = (_BRANDN_CACHE[c] || 0) + 1;
+      }
+    } catch (e) { _BRANDN_CACHE = {}; }
+  }
+  return _BRANDN_CACHE[core] || 0;
+}
+// คำที่ทำให้ "ไม่ใช่แบรนด์ลอยๆ อีกต่อไป" — มีตัวเลขขนาด / คำบอกหมวด / คำบอก variant
+const _QUALIFIER_RE = /\d|หัว|เครื่อง|ตัวเครื่อง|ไส้|บาร์|bar|kit|คิท|คิต|ชุด|โคลน|เทียบ|clone|pro|plus|switch|สวิ|zero|ซีโร|บูส|boost|clear|เคลียร์|diva|ดีว่า|sparta|สปาร์|smash|สแมช|twin|ทวิน|swap|สวอป|iluma|อิลูม[่า]?|จูเนียร์|ultra|large|infinity|อินฟิน|jp|indo|malay|มาเลย?|อินโด|เจพี/i;
+// 🔒🔒 k241 · ขอบเขตของด่านนี้ — จงใจให้แคบ อ่านเหตุผลก่อนแก้
+//   รอบแรกผมทำด่านนี้ให้ครอบทุกแบรนด์ที่มีหลายรุ่น ผลคือ Regression ตก 1020 → 1014
+//   เพราะไปทับ "กฎธุรกิจที่ร้านตัดสินไว้แล้ว" — เทส 993/1024 ระบุชัดว่า "มาโบ" ลอยๆ = MARBO 9K (k217/k218)
+//   ⛔ ห้ามขยายรายการนี้เองโดยไม่ได้รับคำยืนยันจากเจ้าของร้าน
+//   รายการนี้มีเฉพาะเคสที่ (1) ยังไม่เคยมีใครตัดสินค่าตั้งต้นไว้ และ (2) ตอบผิดแล้วเสียเงินจริง
+const _AMBIG_BRANDS = [
+  // ไอคอส/iqos ลอยๆ → เดิมชี้ไส้บุหรี่ JP (2,150) ทั้งที่ INDO 1,500 · MALAY 1,700 → ต่างกันถึง 650
+  { re: /^(ไอ\s*คอส|iqos)$/i, why: "IQOS มีไส้ 3 แบบ ราคาต่างกัน 650" },
+  // "น้ำยาขวด" เป็นคำบอกหมวดล้วน → เดิมชี้ SALTNIC MARBO 30ML ทั้งที่หมวดนี้มี 5 รุ่น
+  { re: /^(น้ำยาขวด|หยดสูบ|น้ำยาหยด|แบบหยด|ขวดหยด)$/i, why: "น้ำยาขวดเป็นคำบอกหมวด ไม่ใช่ชื่อรุ่น" },
+];
+function _bareBrandAmbiguous(raw, key, hitTxt) {
+  const txt = String(hitTxt || "").trim();
+  if (!txt) return false;
+  if (_QUALIFIER_RE.test(txt)) return false;          // มีคำบอกเจาะจงอยู่ในคำที่จับได้ = ไม่ใช่แบรนด์ลอยๆ
+  let hit = null;
+  for (const b of _AMBIG_BRANDS) if (b.re.test(txt)) { hit = b; break; }
+  if (!hit) return false;                             // ไม่อยู่ในรายการที่ยืนยันแล้วว่ากำกวม = ปล่อยตามเดิม
+  // ⚠️ เดิมมีเช็ค _brandCount(core) < 2 ตรงนี้ — ถอดออกเพราะ _brandCore("ไส้บุหรี่ IQOS JP")
+  //    คืน "IQOSJP" (ทั้งก้อน) ไม่ใช่ "IQOS" → นับได้ 1 เสมอ → ด่านไม่เคยทำงาน
+  //    รายการ _AMBIG_BRANDS เป็นรายการที่ยืนยันด้วยมือแล้ว จึงเป็นด่านที่เพียงพอในตัวเอง
+  // ข้อความรอบๆ มีคำบอกเจาะจงไหม (เช่น "iqos ไส้" · "น้ำยาขวด ซอลนิค 30ml")
+  // 🏷️ k276 (เจอตอนตรวจก่อนเปิดร้าน 11 ส.ค. — พิสูจน์ด้วยการรัน handleEvent จริง):
+  //   "เครื่องไอคอสราคาเท่าไหร่" → คำว่า "เครื่อง" ถูกนับเป็นคำเจาะจง → ด่านนี้ปล่อยผ่าน
+  //   → ระบบแนบข้อมูล "ไส้บุหรี่ IQOS JP (2,150)" ให้ AI ทั้งที่ลูกค้าถามราคา **เครื่อง** (3,200-5,200)
+  //   = ราคาผิดหลักพัน · ต้นเหตุ: คำบอกหมวดเปล่า ๆ (เครื่อง/หัว/ไส้) แก้ความกำกวมไม่ได้จริง
+  //     เพราะจุดนี้อยู่ **หลัง** k218 _catSibling แล้ว — ถ้าหมวดชี้รุ่นได้ตัวเดียว k218 จัดการไปก่อนแล้ว
+  //     มาถึงตรงนี้ = หมวดนั้นมีหลายรุ่น (เครื่อง IQOS มี 3 รุ่น) → ยังกำกวม ต้องถามเหมือนเดิม
+  //   ⛔ แคบ: ตัดเฉพาะคำบอกหมวดเปล่า ๆ ออกจากการนับ — คำเจาะจงจริง (jp/indo/iluma/ไพร์ม/เลขรุ่น) ยังนับเหมือนเดิม
+  const _rest276 = String(raw || "").replace(txt, " ").replace(/ตัวเครื่อง|เครื่อง|หัวพอต|หัวน้ำยา|หัว|ไส้บุหรี่|ไส้/g, " ");
+  if (_QUALIFIER_RE.test(_rest276)) return false;
+  return true;
+}
 function _brandCore(k) {
   return String(k).toUpperCase()
     .replace(/^(เครื่อง|หัวพอต|หัวน้ำยา|ไส้บุหรี่)\s*/, "")
@@ -1569,6 +2209,60 @@ function _catSibling(text, key, matched) {
     if (sib.length === 1) { console.log("K218_CATQ " + want + " " + key + "→" + sib[0]); return sib[0]; }
     return "";                                              // 0 หรือมากกว่า 1 = ไม่ชัด ห้ามเดา
   } catch (e) { return ""; }
+}
+// 🧬 k259 · "แบรนด์เดียวกันไหม" — วัดจากส่วนหัวของชื่อที่ตัดคำบอกหมวด/เลขรุ่นออกแล้ว
+//   ⛔ ห้ามเทียบด้วยชื่อรุ่นตรง ๆ ในโค้ด — อ่านจากแคตตาล็อกทุกครั้ง
+//   เข้ม (auto-pick): แกนหนึ่งต้องเป็น "คำขึ้นต้น" ของอีกแกน และยาว ≥ 4 (INFY ⊂ INFYPLUS)
+//   หลวม (ทำลิสต์ให้ดูเฉย ๆ): คำขึ้นต้นร่วมกันยาว ≥ 4 (INFYPLUS ~ INFYBAR → INFY)
+function _brandKin(a, b, loose) {
+  const x = _brandCore(a), y = _brandCore(b);
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (!loose) return (x.length >= 4 && y.indexOf(x) === 0) || (y.length >= 4 && x.indexOf(y) === 0);
+  let n = 0; while (n < x.length && n < y.length && x[n] === y[n]) n++;
+  return n >= 4;
+}
+// รุ่นของแบรนด์เดียวกันที่อยู่ในหมวดที่ลูกค้าขอ (เรียงชื่อสั้นก่อน = ตัวหลักของตระกูล)
+function catKinIn(key, wantCat, raw, loose) {
+  try {
+    if (!key || !wantCat) return [];
+    const isClone = CLONE_MARK_RE.test(String(raw || ""));
+    return (MODEL_NAMES_LONGFIRST || []).filter(nm => {
+      if (nm === key) return false;
+      if (typeof PRICE[nm] !== "number") return false;
+      if (!isClone && /\(โคลน\)/.test(nm)) return false;
+      if (!_brandKin(key, nm, loose)) return false;
+      return topicSame(wantCat, topicOfModel(nm));
+    }).sort((a, b) => a.length - b.length);
+  } catch (e) { return []; }
+}
+// 🔒🔒 k259 · CATEGORY GATE — "คำบอกหมวดในข้อความ" ต้องบังคับผลของตัวจับรุ่นเสมอ
+//   เคสจริง 8 ส.ค. 23.23: ลูกค้าพิมพ์ "อินฟี่ใช้แล้วทิ้ง"
+//     ตัวจับรุ่นคืน "หัวพอต INFY PLUS" (หัวพอตเล็ก 140) เพราะแพทเทิร์น /อินฟี่/ คว้าไปก่อน
+//     คำว่า "ใช้แล้วทิ้ง" ที่ลูกค้าพิมพ์มาเอง **ไม่เคยถูกใช้ตัดสินอะไรเลย**
+//     → บอทตอบหมวดเดิมซ้ำ 3 เทิร์นติด ลูกค้าต้องพิมพ์ใหม่ 3 รอบ
+//   ⛔ ต้นเหตุไม่ได้อยู่ที่ slotCarry (ด่าน k216 ยิงถูกต้องแล้ว — ยืนยันด้วย log K216_TOPIC_SWITCH)
+//      อยู่ที่ "ตัวจับรุ่น" ซึ่งไม่มีขั้นตอนตรวจหมวดเลยแม้แต่ขั้นเดียว
+//   กติกา (ทั่วไป ไม่ผูกรุ่นใดรุ่นหนึ่ง):
+//     1) ลูกค้าไม่ได้บอกหมวด → ปล่อยผ่านเหมือนเดิมทุกประการ
+//     2) บอกหมวด และผลอยู่ในหมวดเดียวกันแล้ว → ผ่าน
+//     3) บอกหมวด แต่ผลอยู่คนละหมวด → หาตัวของแบรนด์เดียวกันในหมวดนั้น
+//        · เจอตัวเดียว → สลับให้ (หลักเดียวกับ k218 _catSibling)
+//        · เจอหลายตัว/ไม่เจอ → คืน "" ห้ามเดา แล้วให้ catNarrowHint เป็นคนเสนอรายการ
+//   ⛔ ยกเว้นหมวด "head" (หัวพอตลอย ๆ) — เป็นหมวดกว้างที่ครอบ 2 หมวดย่อยโดยตั้งใจ
+//      ตัดสินแทนลูกค้าไม่ได้ และมีกฎธุรกิจของร้านทับอยู่ (k152) → ปล่อยตามเดิม ห้ามแตะ
+function _catGate(key, raw) {
+  try {
+    if (!key) return key;
+    const want = topicInText(raw);
+    if (!want || want === "head") return key;
+    const have = topicOfModel(key);
+    if (!have || topicSame(want, have)) return key;
+    const sib = catKinIn(key, want, raw, false);
+    if (sib.length === 1) { console.log("K259_CAT_SWAP want=" + want + " " + key + "→" + sib[0]); return sib[0]; }
+    console.log("K259_CAT_BLOCK want=" + want + " got=" + have + " drop=" + key + " kin=" + sib.length);
+    return "";
+  } catch (e) { return key; }
 }
 // 🔤🔤 k228 · PRODUCT RESOLUTION — อ่านชื่อแบรนด์ที่ลูกค้าเขียนเป็นภาษาไทย
 //   ปัญหาที่แก้ (เคสจริง 7 ส.ค. 13.22-13.23):
@@ -1648,9 +2342,31 @@ function _catalogLongest(text, minLen) {
     if (n.length < 5) return "";
     if (!_CAT_CACHE) {
       _CAT_CACHE = [];
+      // ชื่อสินค้าจริงทั้งหมด (แบบปรับรูปแล้ว) — ใช้กันไม่ให้ "ชื่อย่อ" ไปทับ "ชื่อจริง"
+      const _CAT_REAL = new Set((MODEL_NAMES_LONGFIRST || []).map(x => _normCat(x)));
       for (const nm of (MODEL_NAMES_LONGFIRST || [])) {
         const k = _normCat(nm);
         if (k.length >= 5) _CAT_CACHE.push([k, nm]);
+        // 💰💰 k254 · INCIDENT A (บั๊กเงิน 850 บาท/ชิ้น · เคสจริง 8 ส.ค. ลูกค้า JW):
+        //   ลูกค้าพิมพ์ "RELX INFINITY 2+" (ตามที่เห็นในเมนู) → ระบบตอบ "หัวพอต RELX INFINITY" 140 บาท
+        //   ของจริงคือ "เครื่อง RELX INFINITY 2+" 990 บาท = ขายขาดทุน 850 ต่อชิ้น
+        //   k216 เคยแก้เคสนี้แล้ว แต่ครอบเฉพาะตอนลูกค้าพิมพ์คำว่า "เครื่อง" นำหน้า
+        //   ช่องโหว่ที่เหลือ: ลูกค้าพิมพ์ชื่อรุ่นตามเมนู ซึ่งไม่มีคำบอกหมวดนำหน้า
+        //     → ชื่อในแคตตาล็อก "เครื่อง RELX INFINITY 2+" หาไม่เจอในข้อความ
+        //     → ตกไปให้แพทเทิร์นกว้าง /relx infinity/ คว้าไปเป็นหัวพอต
+        //   ⛔ แก้ที่กติกา: เก็บ "ชื่อที่ตัดคำบอกหมวดออกแล้ว" เข้าดัชนีด้วย
+        //      ตัวแยกรุ่น (2+ · PRO · PLUS · เลขรุ่น) จึงทำงานได้โดยไม่ต้องพึ่งคำว่า "เครื่อง"
+        //   ⚠️ ยังใช้กติกา "ยาวกว่าชนะ" เดิมทุกประการ — "RELX INFINITY" เฉยๆ ยังได้หัวพอตเหมือนเดิม
+        //      เพราะชื่อสั้นกว่าเป็นตัวเดียวที่ปรากฏในข้อความ
+        //   ⚠️ เทส A14 จับได้ว่าเวอร์ชันแรกสร้าง regression: "เครื่อง M SWITCH 15K (โคลน)" ตัดหัวแล้ว
+        //     ได้ "M SWITCH 15K (โคลน)" ซึ่ง **เป็นชื่อสินค้าจริงอีกตัวหนึ่งพอดี** (หัว ไม่ใช่เครื่อง)
+        //     ชื่อย่อจึงไปแย่งชื่อจริงที่ยาวเท่ากัน แล้วชี้ผิดตัว = คนละราคา
+        //   ⛔ กติกา: ถ้าชื่อที่ตัดหัวแล้วไปตรงกับชื่อสินค้าจริงตัวอื่น ห้ามใส่เข้าดัชนีเด็ดขาด
+        //     ลูกค้าพิมพ์ชื่อนั้น = หมายถึงสินค้าตัวนั้นตรงๆ ไม่ใช่ตัวที่ตัดหัวมาชนกัน
+        const bare = String(nm).replace(/^(เครื่อง|หัวพอต|หัวน้ำยา|ไส้บุหรี่)\s*/, "").trim();
+        if (bare && bare !== nm && !_CAT_REAL.has(_normCat(bare))) {
+          const bk = _normCat(bare); if (bk.length >= 5) _CAT_CACHE.push([bk, nm]);
+        }
       }
       _CAT_CACHE.sort((a, b) => b[0].length - a[0].length);   // ยาวก่อนสั้น
     }
@@ -1661,7 +2377,7 @@ function _catalogLongest(text, minLen) {
   } catch (e) {}
   return "";
 }
-const _MODEL_IN = (s) => {
+const _MODEL_IN_RAW = (s) => {
   const raw = String(s || ""), nosp = raw.replace(/\s+/g, "");
   const rk = _K2(raw), nk = _K2(nosp);
   // k154: เดิม _MODEL_IN เทียบแค่ 4 แบบ (ดิบ/ตัดวรรค/แปลงเค) — ไม่เคยตัดวรรณยุกต์เลย
@@ -1696,7 +2412,21 @@ const _MODEL_IN = (s) => {
   if (_hitKey) {
     // k218: ลูกค้าเขียนคำบอกประเภทติดหน้าชื่อแบรนด์ ("เครื่องvazer") → เลือกตัวในประเภทนั้น
     const _sib = _catSibling(raw, _hitKey, _hitTxt);
-    return cloneSwap(_sib || _hitKey, raw);
+    if (_sib) return cloneSwap(_sib, raw);
+    // 🛡️🛡️ k241 BUG-2 · Never Guess Safety Layer
+    //   ปัญหา: แพทเทิร์นบางตัวจับ "ชื่อแบรนด์ลอยๆ" แล้วชี้ไปรุ่นเดียวทั้งที่แบรนด์นั้นมีหลายรุ่น
+    //     เคสจริงที่วัดได้ (k235): iqos→JP(2150) ทั้งที่ INDO 1500 · น้ำยาขวด→SALTNIC MARBO
+    //     เอ็มสวิช→M SWITCH(350) ทั้งที่เครื่อง 250 / KIT 499 · เอสโก้→BAR SWITCH ทั้งที่มี 3 รุ่น
+    //   กติกา: ถ้าคำที่จับได้เป็น "ระดับแบรนด์" (ไม่มีตัวเลขขนาด ไม่มีคำบอกหมวด ไม่มีชื่อไลน์)
+    //     และแบรนด์นั้นมีสินค้ามากกว่า 1 รุ่น → คืน "" เพื่อให้ชั้นบนถามลูกค้า ⛔ ห้ามเลือกเอง
+    //   ⚠️ ไม่ใช่ตัวถอดเสียงแบบ k228 — ตัวนี้ "ลดการเดา" ไม่ได้ "เพิ่มการเดา"
+    try {
+      if (_bareBrandAmbiguous(raw, _hitKey, _hitTxt)) {
+        console.log("K241_BRAND_AMBIG txt=" + String(_hitTxt).slice(0, 20) + " would=" + _hitKey);
+        return "";
+      }
+    } catch (e) {}
+    return cloneSwap(_hitKey, raw);
   }
   // 🔤 k228: ตัวถอดเสียงไทย (thBrandMatch) สร้างไว้แล้วแต่ **ยังไม่ต่อสาย**
   //   เหตุผล: ทดสอบแล้วทำให้ Gold120 Wrong Product Critical พุ่งจาก 0 → 8
@@ -1718,6 +2448,10 @@ const _MODEL_IN = (s) => {
   } catch (e) {}
   return "";
 };
+// 🔒 k259: ประตูเดียวของทั้งระบบ — ทุกคนเรียก _MODEL_IN เหมือนเดิม แต่ผลต้องผ่านด่านหมวดก่อนเสมอ
+//   ⛔ ห้ามเรียก _MODEL_IN_RAW จากที่อื่น ยกเว้นตัวทำลิสต์ (catNarrowHint) ที่ต้องรู้ว่า
+//      "ถ้าไม่มีด่านหมวด ระบบจะตอบตัวไหน" เพื่อหาแบรนด์ที่ลูกค้าหมายถึง
+const _MODEL_IN = (s) => _catGate(_MODEL_IN_RAW(s), s);
 // 🏷️ k209 (หลักฐาน Gold120 · ศัพท์ร้าน): "งานเทียบ · เทียบ · โคลน · ก๊อป · เกรดรอง" = สินค้ารุ่นโคลน
 //   เคสจริง "งั้นเอา9kงานเทียบที่290" และ "เอามาโบตัวโคลน" → ระบบตอบรุ่นแท้ (350) แทนโคลน (290)
 //   = คิดเงินผิด 60 บาท และส่งของผิดตัว  ⛔ P0
@@ -1761,16 +2495,29 @@ function looksLikeOrderText(t) {
     const sq = s.replace(/\d+\s*(k|เค)/gi, " ").replace(/\d[\d,]{2,}/g, " ");
     const hasQty = /\d{1,3}\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|คอต|ตลับ)/.test(sq)
                 || /(เอา|ขอ|สั่ง|รับ)[^\n]{0,20}?\d{1,3}/.test(sq);
-    if (!hasQty) return false;
-    if (_MODEL_IN(s)) return true;
+    // 🧾🧾 k265 (เคสจริงลูกค้า JW 9 ส.ค. 18.07): "MARBO 10K เบอร์รี่ชมพู 1 ส่งแกร็ปค่ะ"
+    //   จำนวนเป็นเลขลอย ๆ **ไม่มีหน่วย** และไม่มีคำสั่งซื้อนำหน้า → hasQty = false
+    //   → ทางลัดส่งด่วนคว้าไปตอบ "ได้รับหมุดแล้ว" แล้ว return = **ออเดอร์หายทั้งบรรทัด**
+    //   → แอดมินกรอกค่าส่ง /expfee → การ์ดถูกสร้างใหม่จาก ord เดิม = โชว์ของเก่า (ESKO BAR) ลูกค้างง
+    //   นี่คือบั๊กตระกูลเดียวกับ k160 เป๊ะ (ทางลัดกินข้อความที่เป็นการสั่งของ) แค่คนละรูปประโยค
+    //   ⛔ แคบโดยตั้งใจ: เลขลอยนับเป็นจำนวน **เฉพาะตอนมี "ชื่อกลิ่น" อยู่ในข้อความ**
+    //      (กัน "มาโบ 2 กลิ่นนี้มีมั้ย" = มีแต่ชื่อรุ่น ไม่มีกลิ่น · กันเลขในที่อยู่ · กัน "ส่งด่วน กทม.")
+    //      ชื่อรุ่นไม่บังคับ เพราะลูกค้ามักตอบกลิ่นต่อจากที่บอทเพิ่งเอ่ยรุ่นไว้ ("เบอร์รี่ชมพู 1 ส่งแกร็บ")
+    //   ⛔ ไม่นับ % (ความแรง เช่น "3%") และไม่นับเลขที่เป็นส่วนของเลขยาว (ตัดไปแล้วด้านบน)
+    const bareQty = /(?:^|[^\d.,%])\d{1,2}(?![\d.,]|\s*%)/.test(sq);
+    if (!hasQty && !bareQty) return false;
+    const hasModel = !!_MODEL_IN(s);
+    let hasFlavor = false;
     const tn = normTH(s);
     for (const k in FLAVORS) {
       for (const f of (FLAVORS[k].f || [])) {
         const nb = normTH(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim());
-        if (nb.length >= 4 && tn.indexOf(nb) !== -1) return true;
+        if (nb.length >= 4 && tn.indexOf(nb) !== -1) { hasFlavor = true; break; }
       }
+      if (hasFlavor) break;
     }
-    return false;
+    if (hasQty) return hasModel || hasFlavor;          // เดิมเป๊ะ — ไม่เปลี่ยนพฤติกรรม
+    return hasFlavor;                                   // k265: เลขลอย ต้องมีชื่อกลิ่นด้วยเสมอ
   } catch (e) { return false; }
 }
 function carryFlavor(text, hist) {
@@ -1961,6 +2708,19 @@ function nameIn(text) {
   if (head.length >= 4 && head.length <= 40 && /^[ก-๙a-zA-Z\s\.]+$/.test(head)
       && !/(ที่อยู่|จัดส่ง|ส่งด่วน|พัสดุ|โอน|สลิป|ขอบคุณ|สั่ง|บ้านเลขที่|เลขที่|ซอย|ถนน|หมู่)/.test(head))
     return head.replace(/\s*(ครับ|คร้าบ|คับ|ค่ะ|คะ|ค้าบ|จ้า|นะ)\s*$/g, "").trim();
+  // 🧾 k261 (เคสจริงโฟลว์ Grab): ลูกค้าพิมพ์ "บ้านเลขที่ก่อน ชื่อทีหลัง"
+  //   "134/2 สมชาย ใจดี 0812345678" → กฎ "ชื่ออยู่หน้าเลขตัวแรก" ใช้ไม่ได้เลย (ขึ้นต้นด้วยเลข)
+  //   → ระบบขอ "ชื่อผู้รับ" ซ้ำทั้งที่ลูกค้าให้มาแล้วในข้อความเดียวกัน = ผิดกฎห้ามถามซ้ำ
+  //   ⛔ กันแก้เกิน: ต้องเป็น "อย่างน้อย 2 คำ" ถึงนับเป็นชื่อคน
+  //      กัน "134/2 จรัญ" ที่ "จรัญ" คือชื่อถนน ไม่ใช่ชื่อผู้รับ (เคสจริง 9 ส.ค.)
+  for (const seg of String(t).split(/[\d,\n\/\\\-]+/)) {
+    const x = seg.trim().replace(/\s*(ครับ|คร้าบ|คับ|ค่ะ|คะ|ค้าบ|จ้า|นะ)\s*$/g, "").trim();
+    if (x.length < 4 || x.length > 40) continue;
+    if (!/^[ก-๙a-zA-Z\s\.]+$/.test(x)) continue;
+    if (!/\s/.test(x)) continue;
+    if (/(ที่อยู่|จัดส่ง|ส่งด่วน|พัสดุ|โอน|สลิป|ขอบคุณ|สั่ง|บ้านเลขที่|เลขที่|ซอย|ซ\.|ถนน|ถ\.|หมู่|ม\.|แขวง|เขต|ตำบล|ต\.|อำเภอ|อ\.|จังหวัด|จ\.|รหัสไปรษณีย์)/.test(x)) continue;
+    return x;
+  }
   return "";
 }
 // สรุปว่า "ยังขาดอะไร" สำหรับโหมดส่งด่วน — ใช้ทั้งตอนถามและตอนตัดสินว่าปิดออเดอร์ได้ไหม
@@ -1973,6 +2733,207 @@ function expressNeeds(known) {
   return miss;
 }
 // ข้อความถาม — ถามเฉพาะที่ขาด และบอกให้ชัดว่าบ้านเลขที่ต้องตรงกับหมุด
+// 📦📦 k247 · P0-11 · ผังตัดสินหลังได้รับสลิป (เจ้าของร้านกำหนด 7 ส.ค.)
+//   ได้สลิป → ดูประเภทจัดส่งก่อน แล้วค่อยรู้ว่าต้องมีข้อมูลอะไรบ้าง
+//     พัสดุ            → ชื่อ · เบอร์ · ที่อยู่เต็ม
+//     Grab + มีหมุดแล้ว → ชื่อ · เบอร์ · บ้านเลขที่ (ที่ตรงกับหมุด)
+//     Grab ยังไม่มีหมุด → ขอหมุดก่อน อย่างอื่นรอไว้
+//   ⛔ ถามเฉพาะที่ขาด · ห้ามถามซ้ำสิ่งที่ลูกค้าให้มาแล้ว · ครบแล้วให้ทวนยืนยัน ห้ามขอใหม่ทั้งชุด
+//   mode: "grab" | "parcel"   ·   known: { loc, name, tel, house, addr }
+// ═══════════════════════════════════════════════════════════════════════════
+//  k249 · CONVERSATION STATE ENGINE
+//  เหตุผลที่ต้องมี: บั๊กที่เหลือส่วนใหญ่ไม่ใช่เรื่องจับสินค้าผิด แต่เป็นเรื่อง
+//    "ระบบไม่รู้ว่าตัวเองถามอะไรค้างไว้" → ถามซ้ำ · ถามสิ่งที่รู้แล้ว · วนลูป
+//  ออกแบบให้เป็นกลาง ⛔ ไม่ผูกกับเคสของวันนี้ — เพิ่มชนิดใหม่ได้โดยไม่แตะตรรกะ
+// ═══════════════════════════════════════════════════════════════════════════
+const PENDING_TTL_MS = 30 * 60 * 1000;                 // เท่าอายุความจำสินค้า (k219)
+// ชนิดของสิ่งที่ค้างอยู่ + ข้อมูลที่ต้องได้ก่อนจะถือว่าจบ
+const PENDING_SPEC = {
+  waiting_slip:             { needs: [] },
+  waiting_location:         { needs: ["loc"] },
+  waiting_shipping_parcel:  { needs: ["name", "tel", "addr"] },
+  waiting_shipping_grab:    { needs: ["name", "tel", "house"] },
+  waiting_clarification:    { needs: ["answer"] },
+  waiting_promotion_choice: { needs: ["choice"] },
+  waiting_order_confirm:    { needs: ["confirm"] },   // P0-14 · ทวนรายการแล้วรอลูกค้ายืนยัน
+};
+function convNew() { return { pending: null, known: {}, t: 0, asked: {} }; }
+function convOk(s) { return !!s && typeof s === "object" && typeof s.known === "object"; }
+// ⛔ กติกาข้อ 1 · หนึ่งบทสนทนามีสิ่งที่ค้างอยู่ได้ "อย่างเดียว" — ตั้งใหม่ทับของเดิมเสมอ
+function convSet(s, type, now) {
+  const st = convOk(s) ? s : convNew();
+  if (!PENDING_SPEC[type]) return st;
+  st.pending = type;
+  st.t = typeof now === "number" ? now : Date.now();
+  st.asked = st.asked || {};
+  st.asked[type] = (st.asked[type] || 0) + 1;          // นับว่าถามเรื่องนี้ไปกี่ครั้งแล้ว
+  return st;
+}
+function convClear(s) {
+  const st = convOk(s) ? s : convNew();
+  st.pending = null; st.t = 0;
+  return st;
+}
+// หมดอายุ = ถือว่าไม่มีอะไรค้าง (กันค้างข้ามวัน)
+function convStale(s, now) {
+  if (!convOk(s) || !s.pending) return true;
+  return ((typeof now === "number" ? now : Date.now()) - (s.t || 0)) > PENDING_TTL_MS;
+}
+// ⛔ กติกาข้อ 5 · กำลังรอคำตอบเรื่องนี้อยู่ = ห้ามถามเรื่องเดิมซ้ำ
+function convIsWaiting(s, type, now) {
+  if (!convOk(s) || !s.pending) return false;
+  if (convStale(s, now)) return false;
+  return type ? s.pending === type : true;
+}
+// ═══════════════════════════════════════════════════════════════════════════
+//  🧭🧭 k263 · CONVERSATION STATE ENGINE — สถานะบทสนทนาหนึ่งเดียว อ่านได้ทุกที่
+//
+//  คำสั่งเจ้าของร้าน 9 ส.ค.: "ผมไม่ต้องการแก้เป็นรายบัคอีกแล้ว ผมต้องการ Architecture
+//  ที่ทำให้ Bug กลุ่มนี้หายทั้งตระกูล — ทุกข้อความใหม่ต้องผ่าน State ก่อนเสมอ
+//  ห้าม Intent ตอบข้าม State"
+//
+//  หลักออกแบบ (ตามคำสั่งเดิมของเจ้าของร้านเรื่อง state):
+//  ⛔ ไม่เก็บ state เป็นตัวแปรที่ 13 ให้ desync — **คำนวณจากข้อเท็จจริงใน KV ที่มีอยู่**
+//     ord: (ออเดอร์+สถานะเงิน) · cst: (คำถามที่ค้าง k249) · slot: (ตะกร้า k-P0) · mute/as: (ส่งต่อคน)
+//     ข้อเท็จจริงพวกนี้มีเจ้าของ/ผู้เขียนอยู่แล้วทั้งหมด state จึงตรงกับความจริงเสมอ
+//
+//  ┌─ ตารางการตัดสิน (ลำดับ = ความสำคัญ · ตัวบนชนะตัวล่าง) ────────────────┐
+//  │ AFTER_SALES            มิ้วต์ส่งต่อคน / เคสหลังการขายค้าง (as:)          │
+//  │ ORDER_COMPLETED        ord จ่ายแล้ว ✅ + พร้อมจัดส่ง/มีที่อยู่ครบ         │
+//  │ ORDER_PAID             ord จ่ายแล้ว ✅ (ยังเก็บข้อมูลส่งไม่ครบ)           │
+//  │ WAITING_GRAB_LOCATION  cst = waiting_location                            │
+//  │ WAITING_ADDRESS        cst = waiting_shipping_parcel / _grab             │
+//  │ WAITING_PAYMENT        ord รอโอน 💰 และไม่ได้รอยืนยัน (= ยืนยันแล้ว)      │
+//  │ WAITING_CONFIRM        cst = waiting_order_confirm / รอเลือกโปร          │
+//  │ ORDER_CREATED          ord มีอยู่ (ยังไม่เข้าเงื่อนไขบน)                  │
+//  │ SELECTING_QTY          ตะกร้ามีรุ่น+กลิ่น/สี แต่ยังไม่มีจำนวน             │
+//  │ SELECTING_FLAVOR       ตะกร้ามีรุ่น แต่ยังไม่มีกลิ่น/สี                   │
+//  │ SELECTING_PRODUCT      ตะกร้ามีหมวด (slot.cat) แต่ยังไม่ล็อกรุ่น          │
+//  │ BROWSING               ไม่มีอะไรค้างเลย                                  │
+//  └──────────────────────────────────────────────────────────────────────────┘
+//  แผนผัง transition เต็ม → `แผนผัง-State-จีทู.md` · เทสทุก transition → k263-state-engine.mjs
+function orderFlowStateOf(ord, cst, slot, opts) {
+  const o = opts || {};
+  try {
+    if (o.muted || o.asWaiting) return "AFTER_SALES";
+    if (ord && ordPaidActive(ord)) {
+      const shipDone = /พร้อมจัดส่ง|จัดส่งแล้ว|ส่งออกแล้ว/.test(String(ord.status || ""))
+        || !!(ord.ship && (ord.ship.addr || ord.ship.house));
+      return shipDone ? "ORDER_COMPLETED" : "ORDER_PAID";
+    }
+    const pending = (cst && !convStale(cst, o.now) && cst.pending) || "";
+    if (pending === "waiting_location") return "WAITING_GRAB_LOCATION";
+    if (pending === "waiting_shipping_parcel" || pending === "waiting_shipping_grab") return "WAITING_ADDRESS";
+    if (ord && /รอโอน/.test(String(ord.status || "")) && pending !== "waiting_order_confirm") return "WAITING_PAYMENT";
+    if (pending === "waiting_order_confirm" || pending === "waiting_promotion_choice"
+        || (ord && /รอเลือกโปร/.test(String(ord.status || "")))) return "WAITING_CONFIRM";
+    if (ord && ord.status) return "ORDER_CREATED";
+    const cur = slot && slotOk(slot) && slotCurrent(slot);
+    if (cur && cur.model) {
+      const need = requiredAttrs(cur.model);
+      const hasAttr = need.indexOf("color") !== -1 ? !!cur.color : (need.indexOf("flavor") !== -1 ? !!cur.flavor : true);
+      if (!hasAttr) return "SELECTING_FLAVOR";
+      if (need.indexOf("qty") !== -1 && !(cur.qty > 0)) return "SELECTING_QTY";
+      return "WAITING_CONFIRM";           // ครบทุกช่องแล้ว = รอลูกค้าเคาะ
+    }
+    if (slot && slot.cat) return "SELECTING_PRODUCT";
+  } catch (e) {}
+  return "BROWSING";
+}
+//  ชื่อไทยของ state — ใช้ใน log/prompt ให้คนอ่านรู้เรื่อง
+const G2_STATE_TH = {
+  BROWSING: "เดินดูของ", SELECTING_PRODUCT: "กำลังเลือกรุ่น", SELECTING_FLAVOR: "กำลังเลือกกลิ่น/สี",
+  SELECTING_QTY: "กำลังบอกจำนวน", WAITING_CONFIRM: "รอยืนยันรายการ", WAITING_PAYMENT: "รอชำระเงิน",
+  WAITING_ADDRESS: "รอที่อยู่จัดส่ง", WAITING_GRAB_LOCATION: "รอปักหมุด", ORDER_CREATED: "เปิดออเดอร์แล้ว",
+  ORDER_PAID: "ชำระเงินแล้ว", ORDER_COMPLETED: "ออเดอร์เรียบร้อย", AFTER_SALES: "หลังการขาย/ทีมงานดูแล",
+};
+//  🧱 k263 · ด่านขาออกตาม state — "ห้าม Intent ตอบข้าม State"
+//  ตัวอย่างจากคำสั่ง: ORDER_PAID/COMPLETED + ลูกค้าถามอะไรก็ตาม → ห้ามย้อนถาม รุ่น/กลิ่น/จำนวน/ชื่อ/เบอร์/ที่อยู่(ที่มีแล้ว)
+//                     WAITING_ADDRESS → ห้ามพูดเรื่องราคา/ชวนเลือกสินค้า ให้ทวงที่อยู่ที่ยังขาด
+//  ⛔ แคบโดยตั้งใจ: จับเฉพาะ "ประโยคคำถามย้อน flow" ไม่แตะคำตอบเนื้อหาอื่น · ลูกค้าตั้งใจสั่งเพิ่ม = ปล่อยผ่าน
+const RX_ASK_PRODUCT_FLOW = /(?:รุ่นไหน|รุ่นอะไร|ชื่อรุ่น|สินค้า(?:ตัว|รุ่น)ไหน|กลิ่น(?:ไหน|อะไร)|สี(?:ไหน|อะไร)|กี่ชิ้น|กี่อัน|กี่แท่ง|รับกี่|จำนวนเท่าไห?ร่)[^\n]{0,14}(?:คะ|ค่ะ|ดีคะ|ครับ|\?)?/;
+const RX_ASK_CONTACT = /(?:ชื่อผู้รับ|เบอร์โทร|เบอร์ติดต่อ|ที่อยู่จัดส่ง|ขอที่อยู่|แจ้งที่อยู่)/;
+function stateReplyGate(reply, state, wantsNew, hasShip) {
+  try {
+    const src = String(reply || "");
+    if (!src) return { blocked: false, reply: src };
+    if ((state === "ORDER_PAID" || state === "ORDER_COMPLETED" || state === "AFTER_SALES") && !wantsNew) {
+      const askFlow = RX_ASK_PRODUCT_FLOW.test(src);
+      const askContact = hasShip && RX_ASK_CONTACT.test(src);
+      if (askFlow || askContact) {
+        return { blocked: true, said: askFlow ? "ask_product_flow" : "ask_contact",
+          reply: "ออเดอร์ของคุณลูกค้าเรียบร้อยแล้วนะคะ ✅ ไม่ต้องแจ้งข้อมูลซ้ำค่ะ\n"
+               + "ถ้าต้องการสั่งเพิ่ม แจ้งชื่อรุ่นได้เลย หรือถามเรื่องการจัดส่ง/เคลมได้เลยนะคะ 💕" };
+      }
+    }
+    if ((state === "WAITING_ADDRESS" || state === "WAITING_GRAB_LOCATION") && !wantsNew) {
+      if (RX_ASK_PRODUCT_FLOW.test(src)) {
+        return { blocked: true, said: "ask_product_in_address_state",
+          reply: state === "WAITING_GRAB_LOCATION"
+            ? "รบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาให้หน่อยนะคะ 📍 เดี๋ยวทีมงานเช็คค่าส่งด่วนให้ทันทีค่ะ 💕"
+            : "รบกวนแจ้ง ชื่อผู้รับ + เบอร์โทร + ที่อยู่จัดส่ง ต่อได้เลยนะคะ 📦 รายการสินค้าอยู่ในระบบครบแล้วค่ะ 💕" };
+      }
+    }
+  } catch (e) {}
+  return { blocked: false, reply: String(reply || "") };
+}
+
+// ⛔ กติกาข้อ 3 · ถามเฉพาะที่ยังไม่รู้
+function convMissing(type, known) {
+  const spec = PENDING_SPEC[type];
+  if (!spec) return [];
+  const k = known || {};
+  return spec.needs.filter(f => !k[f]);
+}
+// ⛔ กติกาข้อ 2 · ลูกค้าให้ข้อมูลมาแล้ว → เก็บเข้า known · ครบแล้วเคลียร์เอง
+function convResolve(s, provided, now) {
+  const st = convOk(s) ? s : convNew();
+  st.known = Object.assign({}, st.known, provided || {});
+  if (!st.pending) return { state: st, resolved: false, missing: [] };
+  const miss = convMissing(st.pending, st.known);
+  if (!miss.length) { const done = st.pending; convClear(st); return { state: st, resolved: true, was: done, missing: [] }; }
+  st.t = typeof now === "number" ? now : st.t;          // ได้ข้อมูลบางส่วน = ต่ออายุ
+  return { state: st, resolved: false, missing: miss };
+}
+// ⛔ กติกาข้อ 4 · ก่อนส่งคำตอบ เทียบ "เจตนา" กับข้อความก่อนหน้าของบอท
+//   ไม่เทียบตัวอักษร เพราะ AI เปลี่ยนคำได้ แต่เจตนาเดิม — ใช้ลายเซ็นเจตนาแทน
+const INTENT_SIG = [
+  // P0-14 · ทวนรายการแล้วรอยืนยัน — ต้องมาก่อน ask_qty/ask_flavor เพราะประโยคทวนมักมีทั้งจำนวนและกลิ่น
+  //   ⛔ แคบไว้ก่อน: ต้องเป็น "สรุปยอดรวมแล้วถามยืนยัน" เท่านั้น ไม่ใช่เจอคำว่า "ใช่ไหม" ที่ไหนก็ได้
+  ["ask_order_confirm", /รวม\s*\d+\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)[^\n]{0,24}(?:ใช่ไหม|ถูกต้องไหม|ใช่มั้ย)|ยืนยันรายการ|ทวนคำสั่งซื้อ/],
+  ["ask_address",   /ที่อยู่จัดส่ง|ขอที่อยู่|แจ้งที่อยู่|บ้านเลขที่|รหัสไปรษณีย์/],
+  ["ask_location",  /โลเคชั่?น|ปักหมุด|แชร์หมุด|share location/i],
+  ["ask_name_tel",  /ชื่อผู้รับ|เบอร์โทร|เบอร์ติดต่อ/],
+  ["ask_model",     /หมายถึงรุ่นไหน|รุ่นอะไร|ชื่อรุ่นเต็ม|สินค้าตัวไหน|สินค้าประเภทไหน/],
+  ["ask_flavor",    /กลิ่นไหน|กลิ่นอะไร|เอากลิ่น/],
+  ["ask_qty",       /กี่ชิ้น|กี่อัน|กี่แท่ง|จำนวนเท่าไห?ร่|รับกี่/],
+  ["ask_promo",     /เลือกส่งฟรี|รับเครื่องฟรี|รับได้ 1 โปร/],
+  ["ask_slip",      /ส่งสลิป|แนบสลิป|หลักฐานการโอน/],
+  ["send_menu",     /cutt\.ly\/|เมนูสินค้า/],
+];
+function intentOf(text) {
+  const t = String(text || "");
+  const out = [];
+  for (const [name, re] of INTENT_SIG) if (re.test(t)) out.push(name);
+  return out.join("+");
+}
+// คืน true เมื่อ "เจตนาเหมือนเดิมเป๊ะ" และไม่มีเนื้อหาใหม่ → ไม่ควรส่งซ้ำ
+function sameIntent(prevReply, newReply) {
+  const a = intentOf(prevReply), b = intentOf(newReply);
+  if (!a || !b) return false;                          // ไม่มีเจตนาชัด = ปล่อยผ่าน
+  return a === b;
+}
+function shipNeeds(mode, known) {
+  const k = known || {};
+  const isGrab = String(mode || "").toLowerCase() === "grab";
+  if (isGrab && !k.loc) return { step: "need_location", missing: ["location"], ready: false };
+  const miss = [];
+  if (!k.name) miss.push("name");
+  if (!k.tel) miss.push("tel");
+  if (isGrab) { if (!k.house) miss.push("house_number"); }
+  else { if (!k.addr) miss.push("address"); }
+  return { step: miss.length ? "need_info" : "ready", missing: miss, ready: miss.length === 0 };
+}
 function expressAskMsg(known) {
   const miss = expressNeeds(known);
   if (!miss.length) return "";
@@ -1987,6 +2948,469 @@ function expressAskMsg(known) {
   // มีบ้านเลขที่แล้ว เหลือแค่ผู้รับ
   const w = who.map(x => x === "name" ? "ชื่อผู้รับ" : "เบอร์โทร").join(" + ");
   return "🛵 รอบนี้จัดส่งด่วนตามหมุดที่แชร์ไว้นะคะ 📍\nรบกวนขอ " + w + " สำหรับไรเดอร์ติดต่อด้วยค่ะ 💕";
+}
+// ═══════════════════════════════════════════════════════════════════════════
+//  k250 · CONVERSATION STATE INTEGRATION — ต่อ Engine ของ k249 เข้าเส้นทางจริง
+//  ⛔ ไม่มี Engine ใหม่ · ไม่เปลี่ยน Architecture — ชั้นนี้มีแค่ 3 หน้าที่
+//    (1) ที่เก็บ State ลง KV   (2) แปล "เจตนาข้อความ" ↔ "ชนิดสิ่งที่ค้าง"
+//    (3) ข้อความถามที่ถามเฉพาะสิ่งที่ยังขาด (สั่งการโดย shipNeeds ของ k249)
+//  บทเรียนที่ต้องกันไว้: k249 เทียบ "เจตนา" อย่างเดียว → คำตอบคนละสินค้าที่
+//    ลงท้ายเหมือนกัน ("สนใจกลิ่นไหนดีคะ") จะถูกมองว่าซ้ำและโดนกลืน
+//    ⇒ ทุกด่านซ้ำต้องผ่าน hasSubstance ก่อนเสมอ ห้ามบล็อกข้อความที่มีเนื้อหาใหม่
+// ═══════════════════════════════════════════════════════════════════════════
+const CONV_STATE_TTL = Math.ceil(PENDING_TTL_MS / 1000);
+async function convLoad(env, shopId, userId) {
+  try {
+    const v = env && env.CONV && await env.CONV.get("cst:" + shopId + ":" + userId);
+    if (v) { const o = JSON.parse(v); if (o && typeof o === "object" && typeof o.known === "object") return o; }
+  } catch (e) {}
+  return convNew();
+}
+async function convSave(env, shopId, userId, s) {
+  try {
+    if (!env || !env.CONV || !s) return;
+    await env.CONV.put("cst:" + shopId + ":" + userId, JSON.stringify(s), { expirationTtl: CONV_STATE_TTL });
+  } catch (e) {}
+}
+// เจตนาของข้อความ (k249 INTENT_SIG) → ชนิดของสิ่งที่ค้าง (k249 PENDING_SPEC)
+const PENDING_OF_INTENT = {
+  ask_order_confirm: "waiting_order_confirm",
+  ask_slip:     "waiting_slip",
+  ask_location: "waiting_location",
+  ask_address:  "waiting_shipping_parcel",
+  ask_name_tel: "waiting_shipping_parcel",
+  ask_promo:    "waiting_promotion_choice",
+  ask_model:    "waiting_clarification",
+  ask_flavor:   "waiting_clarification",
+  ask_qty:      "waiting_clarification",
+};
+function pendingOf(text) {
+  const sig = intentOf(text);
+  if (!sig) return "";
+  for (const part of sig.split("+")) if (PENDING_OF_INTENT[part]) return PENDING_OF_INTENT[part];
+  return "";
+}
+// พัสดุกับแกร็บคือ "เรื่องจัดส่ง" เรื่องเดียวกัน — ต้องนับเป็นหัวข้อเดียว ไม่งั้นกันซ้ำไม่ติด
+function pendingTopic(type) {
+  const t = String(type || "");
+  if (!t) return "";
+  if (t.indexOf("waiting_shipping") === 0) return "ship";
+  return t.replace(/^waiting_/, "");
+}
+// ⛔ หัวใจของด่านกันซ้ำ: "ข้อความนี้มีเนื้อหาใหม่ไหม"
+//   มีราคา · มีรายการ (บรรทัดขึ้นต้นด้วย •/-) · มีชื่อรุ่น · มียอดสรุป = มีเนื้อหา ห้ามบล็อกเด็ดขาด
+//   เคสที่ต้องรอด: MARBO 350 บาท → SONIC 290 บาท ทั้งคู่ลงท้าย "สนใจกลิ่นไหนดีคะ"
+function hasSubstance(text) {
+  const t = String(text || "");
+  if (!t) return false;
+  if (/\d{2,5}\s*บาท|฿\s*\d|รวมยอดชำระ|ทวนคำสั่งซื้อ|📦 สรุปออเดอร์/.test(t)) return true;
+  if (/^[ \t]*[•·\-–—▪]/m.test(t)) return true;
+  try { if (_MODEL_IN(t)) return true; } catch (e) {}
+  return false;
+}
+// คำตอบสั้นๆ ที่ไม่ใช่ "คำตอบ" จริง — ห้ามนับว่าลูกค้าตอบ clarification แล้ว
+const CONV_FILLER_RE = /^[\s]*(ครับ|คร้าบ|คับ|ค่ะ|คะ|ค้าบ|จ้า|จ้ะ|จ๊ะ|นะ|อืม|อ่อ|อ๋อ|ok|okay|โอเค|ได้|\?|\.|ๆ|5+|👍|🙏|❤️|😊)+[\s]*$/i;
+// ลูกค้าเพิ่งให้ข้อมูลอะไรมาบ้าง → ป้อนให้ convResolve (ไม่เดา ไม่แกะที่อยู่เอง)
+function provideOf(text, mtype) {
+  const out = {};
+  if (String(mtype || "") === "location") { out.loc = 1; return out; }
+  const t = String(text || "").trim();
+  if (!t) return out;
+  if (/0\d{8,9}/.test(t.replace(/[\s\-()]/g, ""))) out.tel = 1;
+  if (/บ้านเลขที่|เลขที่\s*\d|^\s*\d+\s*\/\s*\d+|\s\d+\s*\/\s*\d+/.test(t)) out.house = 1;
+  if (t.length >= 15 && /(ตำบล|ต\.|อำเภอ|อ\.|จังหวัด|จ\.|เขต|แขวง|รหัสไปรษณีย์|\b\d{5}\b)/.test(t)) out.addr = 1;
+  if (/ที่เดิม|ส่งที่เดิม|เหมือนเดิม/.test(t)) { out.addr = 1; out.name = 1; out.tel = 1; }
+  if (/ชื่อ(ผู้รับ)?\s*[:：]/.test(t)) out.name = 1;
+  if (!CONV_FILLER_RE.test(t)) out.answer = 1;      // ตอบ clarification = พิมพ์อะไรที่ไม่ใช่คำรับ
+  // ✅ P0-14 · ONE CONFIRMATION ONLY — ลูกค้ายืนยันแล้ว ห้ามเปิดคำถามยืนยันเดิมซ้ำ
+  if (confirmYes(t)) out.confirm = 1;
+  return out;
+}
+// 📦 ข้อความขอข้อมูลจัดส่ง — ถามเฉพาะที่ shipNeeds บอกว่ายังขาด ⛔ ห้ามขอใหม่ทั้งชุด
+const PARCEL_FORM_FULL = "รบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕\nหากส่งที่อยู่ไม่ครบถ้วนหรือไม่ถูกต้องจะทำให้สินค้าจัดส่งล่าช้านะคะ 🥹";
+const SHIP_LABEL = { name: "ชื่อผู้รับ", tel: "เบอร์โทร", house: "บ้านเลขที่", house_number: "บ้านเลขที่",
+  address: "ที่อยู่จัดส่ง (บ้านเลขที่ · ซอย/หมู่ · ตำบล · อำเภอ · จังหวัด · รหัสไปรษณีย์)" };
+// ⛔ ด่านตัดสิน "ถามซ้ำไหม" — แยกเป็นฟังก์ชันเดียวเพื่อให้เทสยิงตรงโค้ดจริงได้
+//   บล็อกก็ต่อเมื่อ ครบ 2 เงื่อนไข: (1) ไม่มีเนื้อหาใหม่เลย (2) เจตนาเหมือนเดิมเป๊ะ
+//   เจตนา "แคบลง" (ขอ ชื่อ+เบอร์+ที่อยู่ → ขอแค่ที่อยู่) = ลายเซ็นต่างกัน = ไม่ใช่ซ้ำ ต้องส่งได้
+const DUP_WAIT_MSG = "รอข้อมูลจากคุณลูกค้าอยู่นะคะ 🙏🏻 ตามข้อความด้านบนเลยค่ะ\nถ้าติดตรงไหนบอกได้เลยนะคะ เดี๋ยวช่วยดูให้ค่ะ 💕";
+// 🔁 k303 · "ลูกค้าถามใหม่" — ข้อความนี้เป็นการถามเรื่องใหม่จริงไหม (ไม่ใช่แค่ตอบรับ/พิมพ์ซ้ำ)
+//   ใช้คู่กับ dupAskDecide เท่านั้น ไม่ได้เป็น state ใหม่ อ่านจากข้อความที่มีอยู่แล้วล้วน ๆ
+function userAskedNew(userText, prevUserText) {
+  try {
+    const t = String(userText || "").trim();
+    if (t.length < 2) return false;                                   // ว่าง/สั้นมาก (สติกเกอร์ · อีโมจิเดี่ยว)
+    if (/^(?:ครับ|คับ|ค่ะ|คะ|จ้า|จ๊ะ|โอเค|โอเก|ตกลง|อืม|อ่อ|ได้|ok|okay|k|👍|🙏|555+)[\s\W]*$/i.test(t)) return false;  // ตอบรับล้วน ไม่ใช่คำถามใหม่
+    const p = String(prevUserText || "").trim();
+    if (p && normTH(p) === normTH(t)) return false;                   // พิมพ์ข้อความเดิมซ้ำเป๊ะ = ยังเป็นคำถามเดิม
+    return true;
+  } catch (e) { return false; }
+}
+// 🔁🔁 k303 · ด่านกันตอบซ้ำต้องดู "ข้อความลูกค้า" ด้วย ไม่ใช่ดูแต่คำตอบของบอท
+//   เคสจริงโปรดักชัน 12 ส.ค. 18.49 (มี Cloudflare log ยืนยัน):
+//     บอทเคยพูดว่า "...ให้แอดมินส่ง**เมนูสินค้า**ให้ดูเลยดีคะ"  → intentOf = send_menu
+//     ลูกค้าพิมพ์ใหม่ว่า "หัวพอต" (ถามละเอียดขึ้น) → คำตอบรอบใหม่ก็เข้าตัวจับ send_menu อีก
+//     → K250_DUP_ASK sig=send_menu why=prev → คำตอบถูกแทนด้วย "รอข้อมูลจากคุณลูกค้าอยู่นะคะ"
+//     = ไล่ให้ลูกค้ารอข้อมูลที่ลูกค้าเพิ่งให้ไปหมาด ๆ แล้วเทิร์นถัดไปตัน (K271 → K297)
+//   ต้นเหตุ: ฟังก์ชันนี้รับแค่ (state, prevBot, reply) — **ไม่เคยเห็นข้อความของลูกค้าเลย**
+//     ตัวจับเจตนาก็หยาบมาก (send_menu = /cutt\.ly\/|เมนูสินค้า/) ข้อความไหนเอ่ยคำนี้ก็เจตนาเดียวกันหมด
+//   กติกาใหม่ (แคบ): ถ้าลูกค้าพิมพ์ข้อความใหม่ที่มีเนื้อหา → ห้ามนับว่าบอท "ถามซ้ำ" จากเส้น dupPrev
+//   ⛔ เส้น dupState (บอทถามค้างอยู่จริง ๆ) ไม่ถูกแตะเลย — ยังกันการยิงคำถามเดิมรัว ๆ เหมือนเดิม
+//   ⛔ ลูกค้าเงียบ / สติกเกอร์ / ตอบรับล้วน / พิมพ์ซ้ำเป๊ะ = ยังบล็อกเหมือนเดิมทุกกรณี
+function dupAskDecide(state, prevBot, reply, now, userText, prevUserText) {
+  const sig = intentOf(reply);
+  const pending = pendingOf(reply);
+  const newInfo = hasSubstance(reply);
+  const userNew = userAskedNew(userText, prevUserText);
+  const dupPrev = !!prevBot && sameIntent(prevBot, reply) && !userNew;
+  const dupState = !!sig && convIsWaiting(state, null, now)
+                && pendingTopic((state || {}).pending) === pendingTopic(pending)
+                && String((state || {}).lastSig || "") === sig;
+  if (!newInfo && (dupPrev || dupState)) return { block: true, sig, pending, why: dupPrev ? "prev" : "state" };
+  return { block: false, sig, pending, why: "" };
+}
+// จดว่า "เพิ่งถามอะไรไป" — ⛔ ข้อ 4 · เปิดเรื่องใหม่ได้เมื่อไม่มีเรื่องเดิมค้างเท่านั้น
+function convNote(state, reply, now) {
+  const st = state || convNew();
+  const pt = pendingOf(reply);
+  if (!pt) return st;
+  if (!convIsWaiting(st, null, now)) convSet(st, pt, now);
+  st.lastSig = intentOf(reply);
+  return st;
+}
+function shipAskMsg(mode, known) {
+  const n = shipNeeds(mode, known);
+  if (n.ready) return "";
+  if (n.step === "need_location")
+    return "🛵 รอบนี้จัดส่งด่วนนะคะ 📍\nรบกวนแชร์โลเคชันที่จะให้ไรเดอร์ไปส่งเข้ามาในแชทนี้ก่อนได้เลยค่ะ 💕";
+  if (String(mode || "").toLowerCase() === "grab")
+    return expressAskMsg({ house: (known || {}).house || "", name: (known || {}).name || "", tel: (known || {}).tel || "" });
+  if (n.missing.length >= 3) return PARCEL_FORM_FULL;     // ไม่รู้อะไรเลย → ฟอร์มเต็มเหมือนเดิม
+  return "รบกวนขอ " + n.missing.map(x => SHIP_LABEL[x] || x).join(" + ") + " ด้วยนะคะ 📍\n"
+       + "ข้อมูลอื่นที่แจ้งไว้แล้วใช้ตามเดิมได้เลยค่ะ ไม่ต้องส่งซ้ำนะคะ 🙏🏻💕";
+}
+// ═══════════════════════════════════════════════════════════════════════════
+//  🧭🧭 k252 · CONTEXT BROKER — ที่เดียวที่ตัดสินว่า "บริบทไหนได้เข้า prompt"
+//  ปัญหาที่แก้ (พิสูจน์ด้วยการรันจริงใน P0 Investigation):
+//    ลูกค้าคุย MARBO อยู่ → ถาม "ร้านเปิดกี่โมง" → slotCarry คืน MARBO 9K
+//    → hint 1,307 ตัวอักษรของ MARBO ถูกแนบท้ายคำถาม 14 ตัวอักษร (93 เท่า)
+//      พร้อมคำสั่ง "ใช้ตอบได้เลย" → โมเดลทำตามคำสั่งอย่างถูกต้อง = ตอบเรื่องเวลา + แถม MARBO
+//  ต้นเหตุเชิงสถาปัตยกรรม: แต่ละแหล่งบริบทถามตัวเองว่า "ฉันมีข้อมูลไหม"
+//    ไม่ได้ถามว่า "ลูกค้าถามเรื่องนี้หรือเปล่า" = PUSH ไม่ใช่ PULL
+//  ⛔ รอบนี้เป็น Minimum Fix — ไม่รื้อสถาปัตยกรรม แค่ใส่ตัวกลางตัดสินก่อนแนบ
+// ═══════════════════════════════════════════════════════════════════════════
+//  ── เจตนาของข้อความ · หลายเจตนาพร้อมกันได้ (ข้อ 2) ────────────────────────
+//  "10K มีไหม แล้วเปิดกี่โมง" = product + store_hours → ต้องได้ทั้งคู่
+const INTENT_RULES = [
+  ["store_hours", /เปิดกี่โมง|ปิดกี่โมง|กี่โมงเปิด|กี่โมงปิด|เปิดถึงกี่โมง|ปิดถึงกี่โมง|เปิดกี่ทุ่ม|เวลาทำการ|เปิดทำการ|ร้านเปิด|ร้านปิด|เปิดวันไหน|opening\s*hour/i],
+  // 📍📍 k320 · เคสจริง 14 ส.ค. (ร้าน ABC EASY) — ลูกค้าพิมพ์ "ร้านอยู่แถวไหน"
+  //   กฎเดิมไม่มีคำว่า "แถว/โซน/ย่าน/จังหวัด" → เจตนาออกมาเป็น [] → product=ALLOW
+  //   ⇒ ทั้งบริบทสินค้าไหลเข้าพรอมต์ และไม่มีด่านไหนรู้ว่าลูกค้ากำลังถามที่ตั้ง
+  //   ⛔ ห้ามใส่ "ขอที่อยู่ / แจ้งที่อยู่ / ที่อยู่จัดส่ง" ที่นี่เด็ดขาด
+  //     คำพวกนั้นเป็นของ ask_address (สายที่อยู่จัดส่งของลูกค้า = สายเงิน) ชนกันเมื่อไหร่ออเดอร์พัง
+  //     จับได้เฉพาะ "ที่อยู่ร้าน" ที่ระบุชัดว่าเป็นของร้านเท่านั้น
+  ["store_info",  /ร้านอยู่(ที่)?ไหน|อยู่ที่ไหน|มีหน้าร้าน|หน้าร้าน|ที่ตั้งร้าน|ที่อยู่ร้าน|สาขา(ไหน|อยู่|ที่ไหน)|แผนที่ร้าน|พิกัดร้าน|ร้านชื่ออะไร|ไปที่ร้าน|ร้าน(?:อยู่|ตั้งอยู่)?\s*(?:แถว|ย่าน|โซน|เขต|จังหวัด|แถบ|ที่)\s*ไหน|ร้านอยู่จังหวัด|(?:ร้าน|ของ|สินค้า)?\s*ส่งจาก(?:ที่)?ไหน|ร้านอยู่แถบไหน|อยู่แถวไหน|อยู่โซนไหน|อยู่ย่านไหน|ร้านอยู่ใกล้|ร้านใกล้อะไร|ร้านอยู่ตรงไหน|ร้านอยู่ตรงพิกัด|(?:ขอ|ส่ง)\s*(?:โลเคชั่น|โลเคชัน|location|พิกัด|แผนที่|แผนที)\s*(?:ของ)?ร้าน|(?:โลเคชั่น|โลเคชัน|พิกัด|แผนที่)ร้าน/i],
+  ["greeting",    /^(สวัสดี|หวัดดี|วัสดี|ทัก|ทักทาย|hello+|hi+|hey+)\s*(ครับผม|ครับ|ค่ะ|คะ|คับ|ค้าบ|จ้า|ค่า)?[\s!.~ๆ]*$/i],
+  ["cancel",      /ยกเลิก|ไม่เอาแล้ว|ไม่สั่งแล้ว|ไม่รับแล้ว|ไม่ต้องแล้ว|cancel/i],
+  ["aftersale",   /เคลม|ของเสีย|ใช้ไม่ได้|เสียแล้ว|ชำรุด|คืนเงิน|ตีกลับ|ของไม่ครบ|ไม่ได้ของ|ของยังไม่ถึง|ยังไม่ได้รับ/],
+  ["shipping",    /ค่าส่ง|ส่งด่วน|แกร็บ|grab|พัสดุ|เลขพัสดุ|เลขแทร็ก|ที่อยู่|จัดส่ง|รอบส่ง|กี่วันถึง|ขนส่ง|ไปรษณีย์|เคอรี่|flash|j&t/i],
+  ["payment",     /โอน|สลิป|เลขบัญชี|บัญชีธนาคาร|ชำระ|จ่ายเงิน|พร้อมเพย์|promptpay/i],
+  ["promo",       /โปร(?!ไฟล)|ส่วนลด|แถม|ส่งฟรี|ลดราคา/],
+  // ⚠️ เทส 544/545 จับได้: "เอาองุ่น 2 อัน ส่งพัสดุธรรมดา" คือการ "สั่งของ" ไม่ใช่ "ถามเรื่องขนส่ง"
+  //   กฎเดิม /เอา\s*\d/ ไม่ติด เพราะมีชื่อกลิ่นคั่นอยู่ → ถูกจัดเป็น shipping ล้วน → บริบทสินค้าโดนระงับ
+  //   → ลูกค้าโดนถามกลิ่นซ้ำทั้งที่เพิ่งบอก = อาการเดียวกับที่เรากำลังแก้ แต่กลับด้าน
+  ["order",       /สั่งซื้อ|สั่งเลย|ยืนยันรายการ|ทวนรายการ|ออเดอร์|order|ตะกร้า|(?:เอา|รับ|ขอ|สั่ง)[^\n]{0,24}?\d+\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|ลูก|แพ็?ค)/i],
+];
+//  สัญญาณ "เรื่องสินค้า" แยก 2 ระดับ — ⚠️ จำเป็น เพราะคำว่า "เท่าไหร่" ใช้ได้ทั้งราคาของและค่าส่ง
+//    STRONG = ชี้ชัดว่าคุยเรื่องของ (ชื่อรุ่น · กลิ่น · หน่วยนับสินค้า)  → อนุญาตเสมอ
+//    WEAK   = อาจเป็นเรื่องอื่นก็ได้ ("เท่าไหร่" "มีไหม")               → อนุญาตเฉพาะตอนไม่มีเจตนาอื่นที่ขัด
+const PRODUCT_STRONG_RE = /กลิ่น|รสชาติ|รุ่นไหน|รุ่นอะไร|สต็อก|สต๊อก|พอต|น้ำยา|ไส้บุหรี่|บุหรี่ไฟฟ้า|หัวพอต|หัวน้ำยา|ใช้แล้วทิ้ง|บิ๊กพอต|ชุด\s?kit|\d+\s*k\b|\d+\s*(ชิ้น|แท่ง|หัว|ตัว|กล่อง|ลัง)|ยี่ห้อ|แบรนด์|นิโคติน/i;
+const PRODUCT_WEAK_RE   = /ราคา|เท่าไห?ร่|กี่บาท|มีของ|มีไหม|มีมั้ย|มีป่าว|มีปะ|เหลือ|หมดไหม|แนะนำ|ตัวไหน|อันไหน|ขายดี|สินค้า/i;
+//  เจตนาที่ "ห้ามลากบริบทสินค้าเดิมมา" (ข้อ 3)
+//   ⛔⛔ k319c เคยลองใส่ "ack_close" ลงลิสต์นี้ แล้วพังทันที 3 ชุด — ห้ามใส่ซ้ำ
+//     k252-G2  "ขอบคุณค่ะ" ต้อง ALLOW เสมอ (บทเรียน k228 — ไม่รู้เจตนา ≠ ตัดบริบท)
+//     k288-D1..D3  ลูกค้าพิมพ์ "ครับ" แล้วคำตอบเป็นความจริงเรื่องสต็อก → โดนตัดทิ้ง
+//     k261-L4  "ขอบคุณค่ะ" หลังการ์ด → บรรทัดในบล็อกออเดอร์ถูกตัด ด่านกันการ์ดซ้ำเลยไม่ยิง
+//   ⇒ k319c ย้ายไปตรวจเองใน ackCloseGate319c ซึ่งแคบกว่ามาก (ดูเงื่อนไขที่ฟังก์ชันนั้น)
+const DENY_PRODUCT_INTENTS = ["store_info", "store_hours", "greeting", "cancel", "aftersale", "shipping"];
+const GRANT_PRODUCT_INTENTS = ["product", "order"];
+//  ชุดชื่อกลิ่นทั้งร้าน (ทำครั้งเดียวแล้วเก็บไว้) — ยาว ≥ 4 ตัวหลัง normTH กันชนคำทั่วไป
+let _FLNAMES = null;
+function _flavorNameSet() {
+  if (_FLNAMES) return _FLNAMES;
+  const s = new Set();
+  try {
+    for (const k in FLAVORS) for (const f of (FLAVORS[k].f || [])) {
+      const n = normTH(FM_BARE(f));
+      if (n && n.length >= 4) s.add(n);
+    }
+  } catch (e) {}
+  _FLNAMES = s;
+  return s;
+}
+function intentsOf(text) {
+  const t = String(text || "").trim();
+  const out = [];
+  if (!t) return out;
+  for (const [name, re] of INTENT_RULES) if (re.test(t)) out.push(name);
+  // ชื่อรุ่น "หรือชื่อกลิ่น" ในข้อความ = หลักฐานแข็งที่สุดว่าคุยเรื่องของ
+  //   ⚠️ ชื่อกลิ่นสำคัญไม่แพ้ชื่อรุ่น — เทส 545 พิสูจน์แล้วว่า "เอาองุ่น 2 อัน ส่งพัสดุธรรมดา"
+  //     ถ้าดูแค่ชื่อรุ่นจะกลายเป็น "เรื่องขนส่ง" แล้วตัดบริบทสินค้าทิ้งทั้งที่ลูกค้ากำลังสั่งของ
+  let strong = PRODUCT_STRONG_RE.test(t);
+  if (!strong) { try { if (_MODEL_IN(t)) strong = true; } catch (e) {} }
+  if (!strong) { try { if (_flavorNameSet().size) { const n = normTH(t); for (const f of _flavorNameSet()) if (n.indexOf(f) !== -1) { strong = true; break; } } } catch (e) {} }
+  // ⛔ "ยกเลิก" ชนะ "ออเดอร์" เสมอ — คำว่า "ยกเลิกออเดอร์" มีทั้งสองคำ
+  //   ถ้าปล่อยให้ order ติดมาด้วย จะกลายเป็น "เรื่องสั่งของ" แล้วลากสินค้าที่เพิ่งยกเลิกกลับมา
+  const iCancel = out.indexOf("cancel");
+  if (iCancel !== -1) { const io = out.indexOf("order"); if (io !== -1) out.splice(io, 1); }
+  const hasDeny = out.some(x => DENY_PRODUCT_INTENTS.indexOf(x) !== -1);
+  // WEAK นับเป็น product ก็ต่อเมื่อไม่มีเจตนาอื่นที่ขัดกัน
+  //   "ค่าส่งเท่าไหร่" = shipping ล้วน ⛔ ไม่ใช่คำถามราคาสินค้า
+  if (strong || (PRODUCT_WEAK_RE.test(t) && !hasDeny)) out.push("product");
+  return out;
+}
+//  ⛔ Default DENY ที่ปลอดภัย: "ไม่รู้เจตนา" ≠ "ห้ามแนบ"
+//    เหตุผล: ถ้าตัดบริบทตอนไม่รู้เจตนา จะทำลาย carry ที่ k150/k157/k211 พึ่งพา
+//    (บทเรียน k228: กลับด้าน carry แล้วตอบผิดรุ่น 0 → 8)
+//    จึงห้ามแนบเฉพาะตอน "รู้ชัดว่าเป็นเรื่องอื่น" — บันทึกเป็น Known Risk ข้อ 1
+function ctxAllowProduct(intents) {
+  const a = Array.isArray(intents) ? intents : [];
+  if (a.some(x => GRANT_PRODUCT_INTENTS.indexOf(x) !== -1)) return true;   // เรื่องของ → อนุญาต
+  if (a.some(x => DENY_PRODUCT_INTENTS.indexOf(x) !== -1)) return false;   // เรื่องอื่นชัดๆ → ห้าม
+  return true;                                                            // ไม่ชัด → คงพฤติกรรมเดิม
+}
+function ctxDeniesProduct(intents) {
+  const a = Array.isArray(intents) ? intents : [];
+  return !a.some(x => GRANT_PRODUCT_INTENTS.indexOf(x) !== -1)
+      &&  a.some(x => DENY_PRODUCT_INTENTS.indexOf(x) !== -1);
+}
+//  ── ทะเบียนบริบท (Context Manifest) · ข้อ 1 · ทุกแหล่งต้องขออนุญาตก่อน ──────
+const CTX_MANIFEST = {
+  product_hint: { needs: "product" },   // flavorHint + aliasHint + brandHint
+  slot_carry:   { needs: "product" },   // สินค้าที่คุยค้างอยู่
+  stock_note:   { needs: "product" },
+  draft_note:   { needs: "product" },
+  history:      { needs: "filtered" },  // คัดเฉพาะเทิร์นที่เกี่ยว
+  cust_note:    { needs: "always" },    // ที่อยู่ลูกค้า — เล็กและไม่เคยทำให้สับสน
+  notice_note:  { needs: "always" },    // ประกาศแอดมิน — เจ้าของร้านสั่งให้เชื่อก่อน
+  pay_note:     { needs: "always" },    // มีเงื่อนไขสถานะออเดอร์ของตัวเองอยู่แล้ว
+};
+function ctxAllow(source, intents) {
+  const spec = CTX_MANIFEST[source];
+  if (!spec) return false;                       // ⛔ ไม่อยู่ในทะเบียน = ไม่อนุญาต
+  if (spec.needs === "always") return true;
+  if (spec.needs === "product") return ctxAllowProduct(intents);
+  return true;
+}
+//  ── ข้อ 4 · History ต้องคัดตามความเกี่ยวข้อง ไม่ใช่แค่ "ล่าสุด" ─────────────
+//  ⛔ Minimum Fix: ตัดเฉพาะเทิร์นที่ "เป็นเรื่องสินค้า" และเฉพาะตอนที่เทิร์นนี้ไม่ใช่เรื่องสินค้า
+//     ไม่ตัดอย่างอื่นเลย — ยิ่งตัดเยอะยิ่งเสี่ยงทำลายความต่อเนื่องที่ยังจำเป็น
+//  ⚠️ ใช้ตัวจำแนกเจตนาตัวเดียวกับขาเข้า — ห้ามเขียนกฎ "อะไรคือเรื่องสินค้า" ซ้ำสองที่
+//    เทสจับได้ว่าถ้าเทียบแค่ชื่อรุ่นเต็ม จะพลาด "มีมาโบไหม" และ "องุ่นเหลือไหม"
+//    (ลูกค้าพิมพ์ชื่อย่อ/ชื่อกลิ่นลอยๆ ซึ่งเป็นรูปแบบที่พบบ่อยที่สุดในแชทจริง)
+function msgIsProduct(h) {
+  const c = (h && typeof h.content === "string") ? h.content : "";
+  if (!c) return false;
+  try { for (const k in FLAVORS) if (c.indexOf(k) !== -1) return true; } catch (e) {}
+  try { return intentsOf(c).indexOf("product") !== -1; } catch (e) {}
+  return PRODUCT_STRONG_RE.test(c);
+}
+// 📍📍📍 k320 · STORE LOCATION — ที่ตั้งร้านต้องมาจากแหล่งความจริงเท่านั้น
+//   เคสจริง 14 ส.ค. (ABC EASY): ถาม "ร้านอยู่แถวไหน" 2 ครั้ง ได้คนละคำตอบ
+//     เคส A → "อยู่แถวปากเกร็ด-นนทบุรี"   เคส B → "อยู่แถวพระราม 3"
+//     แล้วถามต่อ "พระราม 3 ช่วงไหน" → ขยายเป็น "พระราม 3 ซอย 64"
+//   ต้นเหตุที่พิสูจน์ด้วยการกวาดทั้งไฟล์: ไม่มี field location/address ที่ไหนเลย
+//     SHOPS มีแค่ name / tokenEnv / secretEnv · พรอมต์ "# ข้อมูลร้าน" มีแค่เวลาทำการ
+//   ⇒ ที่ตั้งเป็นข้อเท็จจริงช่องเดียวในระบบที่ "ไม่มีข้อมูล" และ "ไม่มีกฎห้ามเดา" พร้อมกัน
+//     โมเดลจึงเติมช่องว่างเอง แล้วรอบถัดไปเห็นคำโกหกตัวเองในประวัติ เลยขยายต่อ
+//
+//   ความจริงที่เจ้าของร้านยืนยัน 14 ส.ค.: v20 และ abceasy "ไม่มีหน้าร้าน ขายออนไลน์เท่านั้น"
+//   ⛔ ห้าม G2 สร้าง/ขยาย ชื่อจังหวัด เขต ย่าน ถนน ซอย เลขที่ พิกัด เองเด็ดขาด
+const STORE_LOC_MSG320 = "ทางร้านไม่มีหน้าร้านค่ะ เป็นร้านออนไลน์ สามารถสั่งซื้อผ่าน LINE ได้เลยค่ะ 💕";
+// เผื่ออนาคตร้านไหนมีหน้าร้านจริง — ตั้ง env SHOP_LOC_<ID> แล้วใช้ได้เลยไม่ต้องแก้โค้ด
+//   ⛔ ระบบจะพูดข้อความนี้ "เป๊ะทั้งก้อน" เท่านั้น ห้ามขยายต่อ (ด่านขาออกบังคับอีกชั้น)
+function storeLoc320(env, shopId) {
+  try {
+    const ID = String(shopId || "").toUpperCase();
+    const v = env && env["SHOP_LOC_" + ID];
+    if (v && String(v).trim()) return String(v).trim();
+  } catch (e) {}
+  return STORE_LOC_MSG320;
+}
+// บรรทัดที่ "อ้างที่ตั้งของร้าน" — ต้องมีทั้งคำที่หมายถึงร้าน และคำบอกตำแหน่งในบรรทัดเดียวกัน
+//   ⛔ ต้องเข้มแบบนี้ ไม่งั้นจะไปกินที่อยู่จัดส่งของลูกค้า (สายเงิน)
+//   ⛔ ห้ามใช้ \b — ใช้กับภาษาไทยไม่ได้ · ⛔ ห้าม hardcode ชื่อจังหวัด/ย่านใด ๆ ใน logic
+//   ⚠️ รวม "พิกัดดิบ lat,lng" และลิงก์แผนที่ด้วย — กันกรณีโมเดลพ่นตัวเลขพิกัดออกมา
+//     (SHOP_LOC ในระบบค่าส่งไม่เคยเข้าพรอมต์ แต่ด่านต้องกันไว้อยู่ดี ห้ามเชื่อว่าโมเดลจะไม่ทำ)
+const RX_GEO320   = /ซอย|ถนน|ถ\.|แขวง|เขต|จังหวัด|จ\.|อำเภอ|ตำบล|ย่าน|แถว|แถบ|โซน|พิกัด|แผนที่|google\s*maps|maps\.app|goo\.gl\/maps|maps\.google|-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}|ตั้งอยู่|ที่ตั้ง|หน้าร้าน|สาขา|(?:อยู่|ตั้ง)\s*(?:ใกล้|ติดกับ|ติด|ตรงข้าม|เยื้อง)/i;
+//   ⛔ ต้องเป็น "อยู่ใกล้" เท่านั้น ห้ามจับคำว่า "ใกล้" เปล่า ๆ
+//     ไม่งั้น "ทางร้านมีรุ่นใกล้เคียงค่ะ" จะโดนตัดทิ้งทั้งที่เป็นเรื่องสินค้า
+const RX_STORESUBJ320 = /ร้าน|ทางเรา|ที่เรา|พวกเรา|shop|abc/i;
+// ⛔ ก้อนที่ห้ามแตะเด็ดขาด — ที่อยู่จัดส่งลูกค้า / ออเดอร์ / เขตส่งด่วน / ค่าส่ง / หมุดของลูกค้า
+//   ⚠️ "หมุด" กับลิงก์แผนที่ในข้อความออเดอร์ = พิกัดที่ "ลูกค้า" แชร์มา ไม่ใช่ที่ตั้งร้าน ห้ามแตะ
+const RX_ORDERCTX320 = /สรุปออเดอร์|ทวนคำสั่งซื้อ|ทวนออเดอร์|ชื่อผู้รับ|ที่อยู่จัดส่ง|ที่อยู่:|เบอร์:|ยอดรวม|เลขพัสดุ|แชร์โลเคชั่น|แชร์โลเคชัน|ปักหมุด|หมุด|จัดส่ง:|ค่าส่ง|ขนส่งเอกชน|ส่งด่วน/;
+// ลิงก์แผนที่ / พิกัดดิบ — ตัวชี้ตำแหน่งที่ไม่ต้องมีคำว่า "ร้าน" ก็อ่านออกว่าเป็นตำแหน่ง
+const RX_PIN320 = /google\s*maps|maps\.google|maps\.app|goo\.gl\/maps|google\.com\/maps|พิกัด|-?\d{1,2}\.\d{4,}\s*,\s*-?\d{2,3}\.\d{4,}/i;
+function lineClaimsStoreLoc320(line) {
+  const l = String(line || "");
+  if (!l.trim()) return false;
+  if (RX_ORDERCTX320.test(l)) return false;          // สายเงิน — ห้ามแตะ
+  return RX_STORESUBJ320.test(l) && RX_GEO320.test(l);
+}
+//  ── ด่านขาออก k320 · คำตอบเรื่องที่ตั้งต้องเป็นข้อความเดียวเสมอ (deterministic) ──
+//   ⛔ ยิงเฉพาะเทิร์นที่ลูกค้า "ถามที่ตั้ง" จริง (เจตนา store_info) เท่านั้น
+//   ⛔ ไม่แตะเทิร์นที่มีออเดอร์/ที่อยู่จัดส่ง/ค่าส่ง/ส่งด่วน แม้จะถามที่ตั้งมาพร้อมกัน
+//   ⚠️ ต้องยิง 2 กรณี ไม่ใช่กรณีเดียว — พิสูจน์จากเคสจริงเทิร์นที่ 2:
+//     ลูกค้าถามต่อว่า "พระราม 3 ช่วงไหน" → ไม่มีคำว่า "ร้าน" เลย เจตนาออกมาเป็น []
+//     ถ้ายิงเฉพาะตอนเจตนา = store_info คำตอบ "ร้านอยู่ช่วงพระราม 3 ซอย 64" จะหลุดไปเต็ม ๆ
+//   ⇒ กฎที่ถูกต้องคือ "G2 ห้ามอ้างที่ตั้งร้านที่ไม่ใช่ความจริง ไม่ว่าจะถูกถามหรือไม่"
+function locGate320(reply, intents, env, shopId) {
+  const t = String(reply || "");
+  if (!t) return { reply, blocked: false, why: "" };
+  const I = Array.isArray(intents) ? intents : [];
+  const asked = I.indexOf("store_info") !== -1;              // ลูกค้าถามที่ตั้งตรง ๆ
+  const lines = t.split("\n");
+  //  ⚠️ ตอนถูกถามที่ตั้ง ต้องเข้มขึ้นอีกชั้น: บรรทัดที่เป็น "ลิงก์แผนที่/พิกัดดิบ" ล้วน ๆ
+  //     ไม่มีคำว่าร้านอยู่ในบรรทัดก็ต้องตัด (เคส "ส่งโลเคชั่นร้านมา" → ตอบมาเป็นลิงก์เปล่า)
+  //     ⛔ ปลอดภัยเพราะหมุด/ลิงก์ของ "ลูกค้า" ถูกกันทั้งก้อนด้วย RX_ORDERCTX320 ไปแล้ว
+  const keep = lines.filter(l => !(lineClaimsStoreLoc320(l) || (asked && RX_PIN320.test(String(l)) && !RX_ORDERCTX320.test(String(l)))));
+  const dropped = lines.length - keep.length;
+  if (!asked && !dropped) return { reply, blocked: false, why: "" };
+  // ⛔ สายเงิน/จัดส่ง ห้ามแตะทั้งก้อน — กันอีกชั้นนอกเหนือจากที่กันรายบรรทัดไปแล้ว
+  if (RX_ORDERCTX320.test(t)) return { reply, blocked: false, why: "อยู่ในสายออเดอร์/ที่อยู่/ค่าส่ง" };
+  const truth = storeLoc320(env, shopId);
+  const rest = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  //  ถูกถาม → ต้องตอบความจริงเสมอ · ไม่ได้ถูกถาม → แค่ตัดคำอ้างที่ตั้งทิ้ง ไม่ต้องเทศนา
+  const out = (asked ? (rest ? truth + "\n\n" + rest : truth) : (rest || truth)).trim();
+  if (out === t) return { reply, blocked: false, why: "ตรงกับความจริงอยู่แล้ว" };
+  return { reply: out, blocked: true, why: dropped ? "ตัดบรรทัดอ้างที่ตั้ง " + dropped : "เติมความจริงเรื่องที่ตั้ง" };
+}
+//  ── กันที่ตั้งปลอมไหลกลับเข้าพรอมต์รอบถัดไป ──────────────────────────────
+//   เคสจริง: G2 แต่ง "พระราม 3" รอบแรก → รอบถัดไปเห็นคำของตัวเองในประวัติ
+//   แล้วตีความว่าเป็นข้อเท็จจริงที่ยืนยันแล้ว จึงขยายเป็น "ซอย 64"
+//   ⛔ ลบเฉพาะ "บรรทัด" ที่อ้างที่ตั้งร้าน ในข้อความของ G2 เท่านั้น
+//      ห้ามลบข้อความลูกค้า · ห้ามแตะข้อความที่มีออเดอร์/ที่อยู่จัดส่ง · ลบแล้วว่างให้ทิ้งทั้งก้อน
+//  ข้อความนี้คือ "ความจริงเรื่องที่ตั้งร้าน" ใช่หรือไม่ — ใช้กันตัวกันตอบซ้ำเข้าใจผิด (k320b)
+//   ⛔ ต้องเทียบกับแหล่งความจริงเท่านั้น ห้ามเดาจากคำว่า "ออนไลน์" ลอย ๆ
+function isLocTruth320(text, userId) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  if (t.indexOf(STORE_LOC_MSG320) === 0) return true;
+  try {
+    const c = userId && TURN.get(userId);
+    if (c && c.env318 && c.shop319) {
+      const v = storeLoc320(c.env318, c.shop319);
+      if (v && t.indexOf(v) === 0) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+function scrubLoc320(hist) {
+  const arr = Array.isArray(hist) ? hist : [];
+  const out = [];
+  for (const h of arr) {
+    try {
+      if (!h || String(h.role || "") !== "assistant") { out.push(h); continue; }
+      const c = String(h.content || "");
+      if (RX_ORDERCTX320.test(c)) { out.push(h); continue; }     // สายเงิน — ห้ามแตะ
+      const lines = c.split("\n");
+      const keep = lines.filter(l => !lineClaimsStoreLoc320(l));
+      if (keep.length === lines.length) { out.push(h); continue; }
+      const t = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+      if (t) out.push(Object.assign({}, h, { content: t }));      // เหลือเนื้อหา → เก็บเฉพาะส่วนที่เหลือ
+    } catch (e) { out.push(h); }
+  }
+  return out;
+}
+function histRelevant(hist, intents, n) {
+  //  📍 k320: ที่ตั้งร้านที่ G2 เคยพูด ไม่เคยเป็นข้อเท็จจริงที่เชื่อถือได้
+  //    ⛔ ต้องกรองทุกเทิร์น ไม่ใช่เฉพาะตอนถามที่ตั้ง — ไม่งั้นคำโกหกยังนอนรออยู่ในประวัติ
+  const arr = scrubLoc320(Array.isArray(hist) ? hist : []);
+  if (!ctxDeniesProduct(intents)) return arr.slice(-n);       // เรื่องของ / ไม่ชัด → เหมือนเดิมเป๊ะ
+  const kept = arr.filter(h => !msgIsProduct(h));
+  return kept.slice(-n);
+}
+//  ── ข้อ 6 · ด่านความเกี่ยวข้องขาออก ───────────────────────────────────────
+//  ตัด "บรรทัดที่เป็นเรื่องสินค้า" ออกจากคำตอบ เมื่อเทิร์นนี้ไม่ได้ถามเรื่องสินค้า
+//  ⛔ กันตัดเกิน 3 ชั้น: (1) ตัดเฉพาะตอน deny ชัดเจน (2) ต้องเหลือเนื้อหาพอ (3) พังเมื่อไหร่คืนของเดิม
+function lineIsProduct(line) {
+  const l = String(line || "");
+  if (!l.trim()) return false;
+  if (/\d{2,4}\s*บาท/.test(l)) return true;
+  try { for (const k in FLAVORS) if (l.indexOf(k) !== -1) return true; } catch (e) {}
+  try { for (const k in PRICE) if (l.indexOf(k) !== -1) return true; } catch (e) {}
+  if (/^[\s]*[•·\-–—▪]/.test(l) && PRODUCT_STRONG_RE.test(l)) return true;
+  return false;
+}
+function relevanceGate(reply, intents) {
+  const t = String(reply || "");
+  if (!t || !ctxDeniesProduct(intents)) return { reply, blocked: false, dropped: 0 };
+  const lines = t.split("\n");
+  const keep = [], drop = [];
+  for (const l of lines) (lineIsProduct(l) ? drop : keep).push(l);
+  if (!drop.length) return { reply, blocked: false, dropped: 0 };
+  const out = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  // ⛔ ตัดแล้วเหลือน้อยเกินไป = ตัดผิด ให้คืนของเดิม ห้ามส่งข้อความว่างใส่ลูกค้า
+  if (out.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length < 12)
+    return { reply, blocked: false, dropped: 0 };
+  return { reply: out, blocked: true, dropped: drop.length };
+}
+// 🙏🙏 k319c · ลูกค้า "รับทราบ/ปิดบท" แล้ว G2 เปิดการขายรอบใหม่เอง
+//   เคสจริงโปรดักชัน 13 ส.ค. 1.24: ลูกค้าพิมพ์ "อ้อครับ" / "ไม่รบกวนแล้วครับ"
+//   → G2 เด้งใบเสนอราคารุ่นใหม่กลับไปทุกครั้ง = ตื๊อลูกค้าที่บอกว่าจบแล้ว
+//
+//   ⛔⛔ ทางที่ลองแล้วพัง — ห้ามทำซ้ำ: เอา ack_close ไปใส่ INTENT_RULES + DENY_PRODUCT_INTENTS
+//        กว้างเกินไป ไปชนสัญญาเดิม 3 ชุด (k252-G2 · k288-D1..D3 · k261-L4) ดูหมายเหตุที่ลิสต์นั้น
+//   ⇒ ด่านนี้จึงตรวจเองทั้งหมด ไม่ยุ่งกับทะเบียนเจตนากลาง และแคบที่สุดเท่าที่แก้เคสจริงได้
+//
+//   เงื่อนไขต้องครบ "ทุกข้อ" ถึงจะยิง — ขาดข้อเดียวปล่อยผ่าน:
+//     ① ข้อความลูกค้าเป็นคำรับทราบ/ปิดบท "ทั้งข้อความ" (anchor ^...$)
+//     ② ต้องเคยคุยกันมาก่อนจริง — G2 เคยตอบไปแล้วอย่างน้อย 1 ครั้ง
+//        ⛔ ข้อนี้สำคัญ: เทิร์นแรกที่ลูกค้าพิมพ์ "ครับ" ยังไม่ใช่การปิดบท (เคส k288)
+//     ③ เทิร์นก่อนหน้า G2 ไม่ได้ถามค้างไว้ — ถ้าถามค้าง "ครับ" คือลูกค้ากำลังตอบ
+//     ④ คำตอบรอบนี้เป็น "สินค้าล้วน" จริง ๆ (ไม่มีเนื้อความอื่นเหลือ)
+//     ⑤ ไม่มีออเดอร์ / เลขบัญชี / ยอดโอน / เลขพัสดุ / ส่งต่อแอดมิน ปนอยู่
+//     ⑥ ไม่ใช่เทิร์นรูป
+const ACK_REPLY319C = "ยินดีค่ะ 🙏🏻 มีอะไรสอบถามเพิ่มทักมาได้เลยนะคะ 💕";
+// ① คำรับทราบ/ปิดบท — ⛔ ต้อง anchor ทั้งข้อความแบบเดียวกับ greeting
+//   "โอเคเอาเลยครับ" · "ครับ เอา MARBO 2 ชิ้น" · "ครับผม ยืนยันครับ" = ลูกค้าสั่งของ ห้ามจับ
+//   นี่คือเส้นแบ่งเรื่องเงิน — จับผิดเมื่อไหร่ ออเดอร์หายทันที
+const RX_ACK319C = /^(?:ครับผม|ครับ|คับ|ค้าบ|ค่ะ|คะ|ค่า|จ้า+|จ๊ะ|อือ+|อืม+|อ๋อ|อ้อ|โอเค|โอเคร|ok(?:ay)?|thx|thanks?|thank\s*you|ขอบคุณ(?:มาก)?|ขอบใจ|ไม่เป็นไร|รับทราบ|เข้าใจแล้ว)(?:\s*(?:ครับผม|ครับ|คับ|ค้าบ|ค่ะ|คะ|ค่า|จ้า|นะครับ|นะคะ|มาก|เลย|น้า))*[\s!.,~ๆ]*$/i;
+const RX_BYE319C = /^(?:ไม่รบกวน(?:แล้ว)?|ไว้(?:ค่อย)?(?:ทัก|คุย)(?:มา)?ใหม่|เดี๋ยว(?:ค่อย)?มาใหม่|ไว้มาใหม่|แค่นี้(?:ก่อน)?|พอ(?:แค่นี้)?ก่อน|ของเข้า(?:แล้ว)?(?:ค่อย)?แจ้ง(?:ที|ด้วย|มา)?)(?:\s*(?:ครับผม|ครับ|คับ|ค่ะ|คะ|จ้า|นะครับ|นะคะ|นะ|น้า))*[\s!.,~ๆ]*$/i;
+// ③ G2 ถามค้างไว้หรือเปล่า — ดูจากข้อความล่าสุดของ G2 เอง ไม่ใช่คำตอบรอบนี้
+const RX_BOTASK319C = /[?？]|ไหม|มั้ย|กี่ชิ้น|กี่อัน|อันไหน|แบบไหน|รุ่นไหน|กลิ่นไหน|สีไหน|ตัวไหน|เท่าไห?ร่|ขอ(?:ชื่อ|ที่อยู่|เบอร์|เลข)/;
+// ⑤ สิ่งที่ห้ามกลืนเด็ดขาด — ออเดอร์ · เลขบัญชี/ยอดโอน · เลขพัสดุ · ส่งต่อแอดมิน
+//   ⛔ ห้ามใส่ "หมดชั่วคราว/ของหมด" ที่นี่ — เคสจริง P1 คือ G2 พูดว่าหมดซ้ำแล้วพ่วงการขายใหม่
+//     ความจริงเรื่องสต็อกที่ "ยังไม่เคยบอก" ถูกกันไว้ด้วยเงื่อนไข ② และ ③ อยู่แล้ว (เคส k288)
+const RX_KEEP319C = /ทวนคำสั่งซื้อ|ทวนออเดอร์|\||บัญชี|โอน|ยอดรวม|พร้อมเพย์|เลขพัสดุ|แอดมิน|รอสักครู่/;
+function ackCloseGate319c(reply, userText, history, mtype) {
+  const t = String(reply || "");
+  if (!t) return { reply, blocked: false, why: "" };
+  // ① ข้อความลูกค้าต้องเป็นคำรับทราบ/ปิดบทล้วน ๆ
+  const u = String(userText || "").trim();
+  if (!u || !(RX_ACK319C.test(u) || RX_BYE319C.test(u))) return { reply, blocked: false, why: "" };
+  if (String(mtype || "") === "image") return { reply, blocked: false, why: "เทิร์นรูป" };
+  if (RX_KEEP319C.test(t)) return { reply, blocked: false, why: "มีออเดอร์/เงิน/พัสดุ" };
+  // ⛔ ต้องมีบรรทัดสินค้าจริงก่อน — ไม่งั้นคำตอบสั้น ๆ ที่ไม่เกี่ยวกับสินค้าเลย
+  //    (เช่น "รับทราบค่ะ") จะถูกนับว่า "สินค้าล้วน" แล้วโดนกลืนทิ้งฟรี ๆ
+  const lines319c = t.split("\n").filter(l => l.trim());
+  if (!lines319c.some(l => lineIsProduct(l))) return { reply, blocked: false, why: "ไม่มีบรรทัดสินค้า" };
+  // ต้องเป็นสินค้าล้วนจริง ๆ เท่านั้น — เหลือเนื้อความอื่นแม้นิดเดียวแปลว่า k252 จัดการได้อยู่แล้ว
+  const rest = lines319c.filter(l => !lineIsProduct(l)).join(" ");
+  if (rest.replace(/[\s\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}️]/gu, "").length >= 12)
+    return { reply, blocked: false, why: "ไม่ใช่สินค้าล้วน" };
+  // ② ต้องเคยคุยกันมาก่อนจริง — ไม่งั้น "ครับ" เทิร์นแรกจะถูกเข้าใจผิดว่าเป็นการปิดบท
+  let lastBot = "";
+  try {
+    const h = Array.isArray(history) ? history : [];
+    for (let i = h.length - 1; i >= 0; i--) {
+      if (String((h[i] || {}).role || "") === "assistant") { lastBot = String((h[i] || {}).content || ""); break; }
+    }
+  } catch (e) {}
+  if (!lastBot.trim()) return { reply, blocked: false, why: "ยังไม่เคยคุยกัน" };
+  // ③ G2 ถามค้างไว้ = ลูกค้ากำลังตอบอยู่ ห้ามตัดบท
+  if (RX_BOTASK319C.test(lastBot)) return { reply, blocked: false, why: "G2 ถามค้างไว้" };
+  return { reply: ACK_REPLY319C, blocked: true, why: "ปิดบท" };
 }
 let _AMBIG_CTX = null;   // k227: รอบนี้ระบบตีความไม่ได้หรือเปล่า (ให้ด่านขาออกตรวจซ้ำ)
 let _LAST_LOCK = null;   // P0: ผลการระบุสินค้าจาก flavorHint รอบล่าสุด (ผู้เรียกเอาไปเขียนลง Slot)
@@ -2014,12 +3438,50 @@ function slotStale(s, now) {
     return ((now || Date.now()) - last) > SLOT_ACTIVE_MS;
   } catch (e) { return false; }
 }
-const SLOT_MAX = 8;                      // เก็บสูงสุด 8 ตัว พอสำหรับ "อันแรก/ตัวที่สอง"
+// 🔴🔴 P0-14 (เจอตอนเขียนเทสเคสสั่งเหมา — เป็นบั๊กเงินคนละตัวกับ incident):
+//   เดิม 8 · "พอสำหรับ อันแรก/ตัวที่สอง" — แต่พอลูกค้าสั่ง "ทุกกลิ่นอย่างละ 1"
+//   slot.items.shift() จะทิ้งแถวเก่าเงียบๆ → สั่ง 12 กลิ่น เข้า Draft แค่ 8 = **เก็บเงินขาด 4 รายการ**
+//   รุ่นที่กลิ่นเยอะสุดในแคตตาล็อกจริงคือ 42 กลิ่น (หัวพอต RELX INFINITY) → ตั้ง 48 ให้ครอบคลุม
+//   ⛔ ห้ามลดกลับ ตราบใดที่ระบบยังรับคำสั่งแบบเหมา
+const SLOT_MAX = 48;                     // ต้อง ≥ จำนวนกลิ่นของรุ่นที่เยอะที่สุด (42) เสมอ
 // ความมั่นใจตามที่มาของข้อมูล — ยิ่งลูกค้าบอกเองยิ่งเชื่อได้มาก
 const SLOT_CONF = { customer_text: 0.95, menu: 0.9, image: 0.6, recommendation: 0.4 };
+// 🧭 k300 · คำที่แปลว่า "เลือกบางตัวจากที่เพิ่งเสนอ" (ใช้ร่วมกัน 2 จุด ห้ามเขียนแยกให้เพี้ยนกัน)
+//   ⛔ ระบบไม่มีทางรู้ว่า "อันแรก" คืออันไหนในสายตาลูกค้า → ห้ามเดาแทนลูกค้าเด็ดขาด
+const RX_PICK_SOME = /อันแรก|อันหลัง|อันที่|อันสุดท้าย|ตัวแรก|ตัวหลัง|ตัวที่|ตัวสุดท้าย|อันนี้|ตัวนี้|เฉพาะ|แค่/;
+// 🧭 k300 · "ข้อเสนอที่ยังรอคำตอบอยู่" — ประตูเดียวของทั้งระบบ ห้ามเขียนกติกาซ้ำที่อื่น
+//   คืนชื่อรุ่น เมื่อครบ 2 ข้อ:
+//     1) ลูกค้า **ไม่ได้เอ่ยชื่อรุ่นเอง** ในข้อความนี้ = คำตอบนี้ต้องพึ่งบริบท
+//     2) ข้อความล่าสุดของบอทเป็น "คำถาม/ข้อเสนอที่ค้างอยู่" จริง ๆ (ไม่ใช่ข้อความบอกข้อมูลเฉย ๆ)
+//   ⛔ ใช้ข้อความ "ล่าสุด" เท่านั้น — นี่คือหัวใจ: ข้อเสนอเก่าที่ถูกทับแล้วต้องหมดอำนาจทันที
+function pendingOfferModel(history, userText) {
+  try {
+    if (_MODEL_IN(puffToK(String(userText || "")))) return "";
+    let lb = "";
+    for (let i = (history || []).length - 1; i >= 0; i--) {
+      const h = history[i];
+      if (h && h.role === "assistant" && typeof h.content === "string") { lb = h.content; break; }
+    }
+    if (!lb) return "";
+    if (!/ใช่ไหม|ใช่มั้ย|ถูกต้องไหม|รับกี่|กี่ชิ้น|กี่อัน|กี่แท่ง|กี่หัว|กี่กล่อง|อย่างละกี่/.test(lb)) return "";
+    return _MODEL_IN(lb) || "";
+  } catch (e) { return ""; }
+}
 function slotNew() { return { v: 1, cur: -1, items: [], t: Date.now() }; }
 function slotOk(s) { return !!(s && s.v === 1 && Array.isArray(s.items)); }
 function slotCurrent(s) { return (slotOk(s) && s.cur >= 0 && s.cur < s.items.length) ? s.items[s.cur] : null; }
+// 🧭🧭 k259 · SLOT TOPIC — "หัวข้อหมวดล่าสุดของบทสนทนา" เก็บแยกจาก "รุ่นล่าสุดใน Slot"
+//   เคสจริง 8 ส.ค. 23.24: ลูกค้าเปลี่ยนหมวดไป "ใช้แล้วทิ้ง" แต่ยังไม่ได้เลือกรุ่นไหนเลย
+//     → Slot ยังมีแต่รุ่นเก่า (หัวพอตเล็ก) → ตัวทำลิสต์อ่านหมวดจากรุ่นเก่า → ตอบหมวดเดิมซ้ำ
+//   ⛔ ห้ามสร้าง state ชุดที่สอง — เก็บลง Slot ก้อนเดิม แล้วอาศัยการเซฟตอนออกของ k258b
+//   คืนค่า: true เมื่อหมวดเปลี่ยนจริง (ผู้เรียกต้อง slotMark())
+function slotTopicSet(s, cat) {
+  if (!slotOk(s) || !cat || cat === "head") return false;
+  if (s.cat === cat) { s.catT = Date.now(); return false; }
+  console.log("K259_SLOT_TOPIC " + (s.cat || "-") + "→" + cat);
+  s.cat = cat; s.catT = Date.now();
+  return true;
+}
 // บันทึกสินค้าที่ระบุได้ · ถ้าเป็นรุ่นเดิมให้ "อัปเดต" ไม่ใช่เพิ่มซ้ำ
 // ⚠️ ข้อมูลที่มั่นใจน้อยกว่า ห้ามทับข้อมูลที่มั่นใจมากกว่าในรอบเดียวกัน
 //    (กันรุ่นที่ระบบ "แนะนำ" ไปทับรุ่นที่ลูกค้า "พิมพ์มาเอง")
@@ -2054,7 +3516,10 @@ const SLOT_CARRY_GAP_MS = 60 * 1000;
 //   ⛔ ไม่แตะ catOf() เพราะตัวนั้นเป็นตัวจัดกลุ่ม "โปรส่งฟรี" คนละเรื่องกับหัวข้อสนทนา
 //      (catOf รวม น้ำยาขวด + นิโคตินพอช + เครื่อง IQOS เป็น "other" ก้อนเดียว ใช้แยกหัวข้อไม่ได้)
 const TOPIC_WORDS = [
-  ["disp",     /ใช้แล้วทิ้ง|ใช้แล้วทิ้ง|สูบทิ้ง|สูบละทิ้ง|พอตทิ้ง|แบบทิ้ง|ตัวทิ้ง|แท่งทิ้ง/],
+  // 🔤 k259 · "ใช้แล้ว" ลอย ๆ (ไม่มีคำว่า "ทิ้ง") = ลูกค้าย่อคำ — เคสจริง 8 ส.ค. 23.24 "ใช้แล้วที่มีไรบ้าง"
+  //   ⛔ ห้ามจับ "ใช้แล้ว" ทุกที่ ไม่งั้น "เครื่องนี้ใช้แล้วดีไหม" จะกลายเป็นเปลี่ยนหมวด
+  //      → บังคับว่าคำถัดไปต้องเป็นคำถามเรื่อง "ของที่มีขาย" เท่านั้น (ที่/มี/เหลือ/ไหน/อะไร/ไร/บ้าง)
+  ["disp",     /ใช้แล้วทิ้ง|ใช้แล้ว\s*(?=(ที่|มี|เหลือ|ไหน|อะไร|ไร|บ้าง|มั่ง|ราคา|แนะนำ|ตัว|รุ่น)|$)|สูบทิ้ง|สูบละทิ้ง|พอตทิ้ง|แบบทิ้ง|ตัวทิ้ง|แท่งทิ้ง|disposable/i],
   ["smallpod", /หัวเล็ก|หัวพอตเล็ก|หัวน้ำยาเล็ก|พอตหัวเล็ก/],
   ["bigpod",   /บิ๊กพอต|big\s?pod|หัวใหญ่|หัวน้ำยาใหญ่|ชุด\s?kit|เลโก้/i],
   // ⚠️ "หัวพอต / หัวน้ำยา / หัวเติม" ลอย ๆ = หัวเปลี่ยน แต่บอกไม่ได้ว่าเล็กหรือใหญ่
@@ -2069,20 +3534,59 @@ const TOPIC_WORDS = [
 //    จะถูกอ่านว่าลูกค้าเปลี่ยนหัวข้อไปคุยเรื่องเครื่อง แล้วทิ้งสินค้าที่คุยค้างไว้
 //    บทเรียนเดียวกับ fmQty: **เลขกับหน่วยนับไม่ใช่การบอกหมวดสินค้า**
 const TOPIC_STRIP_RE = /\d{1,3}\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลัง|เครื่อง|ชุด|ห่อ|ซอง|แพ็?ค)/g;
+// 🔤🔤 k259 · CATEGORY ALIAS — ลูกค้าสะกดคำบอก "หมวด" ผิด (เคสจริง 8 ส.ค. 23.24: "Bipod")
+//   ⛔ ห้ามเขียนตาราง alias ด้วยมือ — สร้างจาก TOPIC_WORDS ที่มีอยู่แล้ว
+//      (ดึงเฉพาะทางเลือกที่เป็นอักษรละตินล้วนออกมาเป็น "คำหลักของหมวด")
+//      สินค้าใหม่/คำเรียกใหม่ที่เติมลง TOPIC_WORDS จะได้ตัวทนสะกดผิดฟรีทันที
+//   กติกาความปลอดภัย (กันจับมั่ว):
+//     · เทียบเฉพาะโทเคนละตินล้วน  · ต้องยาว ≥ 5
+//     · ตรงเป๊ะ = ผ่านเสมอ · ผิดได้ 1 ตัวอักษร เฉพาะเมื่อคำใดคำหนึ่งยาว ≥ 6
+//       (กัน "touch" ↔ "pouch" ที่ยาวเท่ากัน 5 ตัว = คนละความหมายสิ้นเชิง)
+let _CATLAT_CACHE = null;
+function _catLatSeeds() {
+  if (_CATLAT_CACHE) return _CATLAT_CACHE;
+  const out = [];
+  for (const [name, re] of TOPIC_WORDS) {
+    for (const alt of String(re.source).split("|")) {
+      const w = alt.replace(/\\s\?|\\s\*|\s/g, "").replace(/\(\?[!=][^)]*\)/g, "").toLowerCase();
+      if (!/^[a-z]+$/.test(w) || w.length < 5) continue;
+      out.push([w, name]);
+    }
+  }
+  _CATLAT_CACHE = out;
+  return out;
+}
+// คืนหมวดที่ "คำละตินสะกดเพี้ยน" ในข้อความชี้ถึง — คืน "" ถ้าไม่ชัดหรือชี้ได้หลายหมวด
+function catAliasLat(text) {
+  try {
+    const seeds = _catLatSeeds();
+    if (!seeds.length) return "";
+    const toks = String(text || "").toLowerCase().match(/[a-z]{5,}/g) || [];
+    const hit = [];
+    for (const tk of toks) {
+      for (const [w, name] of seeds) {
+        let ok = tk === w;
+        if (!ok && Math.max(tk.length, w.length) >= 6 && Math.abs(tk.length - w.length) <= 1) ok = _lev(tk, w) <= 1;
+        if (ok && hit.indexOf(name) === -1) hit.push(name);
+      }
+    }
+    if (hit.length !== 1) return "";
+    return hit[0];
+  } catch (e) { return ""; }
+}
 // หมวดของ "สินค้าที่ค้างอยู่ในความจำ" — แยกตามหัวข้อสนทนา ไม่ใช่ตามโปรส่งฟรี
 function topicOfModel(key) {
   const k = String(key || "");
   if (!k) return "";
+  // ⚠️ 3 บรรทัดนี้ต้องมาก่อน catResolve เสมอ — หัวข้อสนทนาจัดหมวดต่างจากหมวดคิดเงินโดยตั้งใจ
+  //   pouch/liquid แยกกัน (คิดเงินรวมเป็น "other") · และ "เครื่อง IQOS" = device ไม่ใช่ other
+  //   ตรวจแล้วด้วยการเทียบผลเก่า-ใหม่ครบทั้ง 74 รุ่น ว่าตรงกันทุกตัว
   if (/ไส้บุหรี่/.test(k)) return "iqos";
   if (/POUCH/i.test(k)) return "pouch";
   if (/SALTNIC|FREEBASE/i.test(k)) return "liquid";
   if (/^เครื่อง/.test(k)) return "device";
-  if (/\(KIT\)/.test(k)) return "bigpod";
-  const bare = k.replace(/^(หัวพอต|หัวน้ำยา)\s*/, "").trim();
-  if (typeof BIGPOD !== "undefined" && (BIGPOD.indexOf(k) !== -1 || BIGPOD.indexOf(bare) !== -1)) return "bigpod";
-  if (typeof SMALLPOD !== "undefined" && (SMALLPOD.indexOf(k) !== -1 || SMALLPOD.indexOf(bare) !== -1)) return "smallpod";
-  if (/^หัวพอต/.test(k)) return "smallpod";
-  return "disp";
+  // 🏷️ P0-16: ที่เหลือใช้ตัวตัดสินตัวเดียวกับ catOf — เดิมเขียนกฎซ้ำ 2 ที่ เสี่ยงเพี้ยนจากกัน
+  return catResolve(k).cat;
 }
 // หมวดที่ "ข้อความของลูกค้า" ชี้ถึง — คืน "" ถ้าไม่ได้ระบุหมวด (ห้ามเดา)
 //   ⚠️ ถ้าชี้ได้มากกว่า 1 หมวด = กำกวม ให้ถือว่าไม่ได้ระบุ (Never Guess)
@@ -2091,6 +3595,9 @@ function topicInText(text) {
   if (!t.trim()) return "";
   const hit = [];
   for (const [name, re] of TOPIC_WORDS) if (re.test(t) && hit.indexOf(name) === -1) hit.push(name);
+  // 🔤 k259: ไม่มีคำไหนตรงเป๊ะเลย → ลองตัวทนสะกดผิดฝั่งละติน ("Bipod" → bigpod)
+  //   ⛔ ใช้เป็นตาข่ายรองเท่านั้น ห้ามให้มันไปทับผลที่ตรงเป๊ะอยู่แล้ว
+  if (!hit.length) { const _a = catAliasLat(t); if (_a) { console.log("K259_CAT_ALIAS " + _a); return _a; } }
   // "หัวพอตเล็ก" เข้าทั้ง smallpod และ head — ไม่ใช่กำกวม แต่คือตัวเจาะจงกับตัวกว้าง "ของเรื่องเดียวกัน"
   //   เอาตัวเจาะจงชนะตัวกว้าง — หลักเดียวกับ "วลียาวกว่าชนะ"
   //   ⛔ ยุบได้เฉพาะคู่ head+bigpod / head+smallpod เท่านั้น
@@ -2213,6 +3720,24 @@ function slotCarry(s, text, now) {
     console.log("K225_BROWSE_OTHER drop=" + cur.model);
     return null;
   }
+  // 🔀🔀 k241 BUG-3 · ขอดู "รายการทั้งหมวด" โดยระบุหมวดชัด = เลิกยึดสินค้าเดิม
+  //   เคสจริง: คุย MARBO 9K อยู่ → "ใช้แล้วทิ้งมีอะไรบ้าง" → ระบบยังถือ MARBO 9K
+  //   ต้นเหตุ (พิสูจน์ด้วย execution trace k234): ไม่มีด่านไหนยิงเลย ข้อความไหลตกมาถึง
+  //     ค่าตั้งต้นบรรทัดล่างสุด `models.length < 2 → return cur` = ถือต่อเพราะไม่มีอะไรห้าม
+  //   ⚠️ ด่าน k225 ด้านบนตัดเฉพาะ "other" ("มีแบรนด์อื่นมั้ย") ส่วน "มีอะไรบ้าง" ให้ค่า "list" จึงหลุด
+  //   กติกา: ต้องมี "คำบอกหมวด" อยู่ในประโยคด้วยเท่านั้น — คำนี้คือสัญญาณว่าลูกค้าเปลี่ยนจาก
+  //     "ถามเรื่องของชิ้นนี้" เป็น "ขอดูของประเภทนี้"
+  //   ⛔ "มีอะไรบ้าง" / "ที่เหลือมีอะไรบ้าง" ลอยๆ (ไม่มีคำบอกหมวด) ยังต้องถือของเดิมไว้เหมือนเดิม
+  //      เพราะอาจหมายถึง "กลิ่นของตัวที่คุยอยู่มีอะไรบ้าง" — เหตุผลนี้คนเขียน k225 บันทึกไว้และถูกต้อง
+  if (browseKind(t) === "list") {
+    try {
+      const _wantCat = topicInText(t);
+      if (_wantCat) {
+        console.log("K241_BROWSE_CATEGORY drop=" + cur.model + " cat=" + _wantCat);
+        return null;
+      }
+    } catch (e) {}
+  }
   // 🔀 k216 ด่านแรก: เปลี่ยนหมวดสินค้า = เปลี่ยนหัวข้อ → ห้ามลากของเดิมมา
   //   วางไว้ก่อนทุกด่าน เพราะถึงเทิร์นนี้จะเอ่ยชื่อรุ่นด้วย ถ้าคนละหมวดก็ยังต้องใช้ของในเทิร์นนี้อยู่ดี
   try {
@@ -2239,6 +3764,11 @@ function slotPut(s, item) {
   const it = {
     model: String((item && item.model) || ""),
     flavor: (item && item.flavor) ? String(item.flavor) : "",
+    // 🎨 k258: "สี" ของเครื่องมีช่องของตัวเอง — เดิมไม่มีเลย เลยถูกยัดลงช่องกลิ่นแล้วถามซ้ำวนไป
+    color: (item && item.color) ? String(item.color) : "",
+    // 🎁 k258: ของแถมอ้าง parent เสมอ (parent = ชื่อรุ่นสินค้าหลัก) · free = ห้ามคิดเงิน
+    parent: (item && item.parent) ? String(item.parent) : "",
+    free: !!(item && item.free),
     qty: (item && typeof item.qty === "number" && item.qty > 0) ? item.qty : null,
     price: (item && typeof item.price === "number") ? item.price
          : ((item && item.model && typeof PRICE[item.model] === "number") ? PRICE[item.model] : null),
@@ -2251,12 +3781,30 @@ function slotPut(s, item) {
   // k204: เดิมชี้ด้วย "ชื่อรุ่น" อย่างเดียว → สั่งรุ่นเดียวกันหลายกลิ่น (มะม่วง+โคล่า+แตงโม)
   //   จะทับกันเองเหลือรายการเดียว = ตกออเดอร์ (เคสจริง: สั่ง 20 หัว เหลือ 5 หัว)
   //   กติกาใหม่: ชี้ด้วย "รุ่น+กลิ่น" · ถ้าของเดิมยังไม่มีกลิ่น ให้เติมกลิ่นลงตัวเดิม (ไม่สร้างซ้ำ)
-  let i = slot.items.findIndex(x => x.model === it.model && (x.flavor || "") === it.flavor);
-  if (i === -1 && it.flavor) i = slot.items.findIndex(x => x.model === it.model && !x.flavor);
-  if (i === -1 && !it.flavor) i = slot.items.findIndex(x => x.model === it.model);
+  // 🎁 k258: ของแถมกับสินค้าที่ซื้อเพิ่ม เป็นคนละแถวเสมอ แม้จะเป็นรุ่นเดียวกัน
+  //   เคสจริง: ซื้อเครื่อง (แถมหัว 1) แล้วซื้อหัวเพิ่มอีก 2 → ต้องเป็น 2 บรรทัด ไม่ใช่ยุบเป็น 3 หัวคิดเงิน
+  const sameKind = (x) => !!x.free === !!it.free;
+  // 🧪🧪 k261 (พิสูจน์ด้วยการรัน): แคตตาล็อกเก็บกลิ่นพร้อมความแรง ("กล้วย 3%")
+  //   แต่ตัวเขียน Slot บางทางส่งชื่อกลิ่นดิบมา ("กล้วย") → คีย์ไม่ตรงกัน = แตกเป็น 2 แถว
+  //   เคสจริงที่รีโปรได้: "Boost pod กล้วย 10 หัว" → Slot มี 2 แถว x10 → การ์ดคิด 20 หัว
+  //   = wrong_qty + wrong_total ในออเดอร์เดียว (ตรงกับบั๊กเงินตระกูล k260c)
+  //   กติกา: "ชื่อกลิ่นเปล่า" กับ "ชื่อกลิ่น + ความแรง" ที่ฐานเดียวกัน = กลิ่นเดียวกัน
+  //   ⛔ แคบโดยตั้งใจ: ระบุความแรงมาทั้งคู่แต่คนละค่า ("องุ่น 3%" vs "องุ่น 5%") = คนละ SKU ห้ามยุบ
+  const fBase = (s) => String(s || "").replace(/\s*\d+(?:\.\d+)?%\s*$/, "").trim();
+  const fHasPct = (s) => /\d+(?:\.\d+)?%\s*$/.test(String(s || ""));
+  const flavorSame = (a, b) => {
+    const A = String(a || ""), B = String(b || "");
+    if (A === B) return true;
+    if (!A || !B) return false;
+    if (fHasPct(A) && fHasPct(B)) return false;          // ระบุความแรงมาทั้งคู่ = ต้องตรงเป๊ะเท่านั้น
+    return fBase(A) === fBase(B) && fBase(A).length >= 2;
+  };
+  let i = slot.items.findIndex(x => sameKind(x) && x.model === it.model && flavorSame(x.flavor, it.flavor));
+  if (i === -1 && it.flavor) i = slot.items.findIndex(x => sameKind(x) && x.model === it.model && !x.flavor);
+  if (i === -1 && !it.flavor) i = slot.items.findIndex(x => sameKind(x) && x.model === it.model);
   // ⛔ คงกฎ P0 เดิม: ข้อมูลที่มั่นใจน้อยกว่า (เช่นอ่านจากรูป) ห้ามสร้างรายการใหม่ซ้อนของที่ลูกค้าพิมพ์เอง
   //   ให้ชี้กลับไปที่รายการเดิมของรุ่นนั้น แล้วปล่อยให้ตัวกรอง better ด้านล่างเป็นคนบล็อกการทับ
-  if (i === -1) { const j = slot.items.findIndex(x => x.model === it.model && x.confidence > it.confidence); if (j !== -1) i = j; }
+  if (i === -1) { const j = slot.items.findIndex(x => sameKind(x) && x.model === it.model && x.confidence > it.confidence); if (j !== -1) i = j; }
   if (i === -1) {
     slot.items.push(it);
     if (slot.items.length > SLOT_MAX) slot.items.shift();
@@ -2265,9 +3813,16 @@ function slotPut(s, item) {
     const old = slot.items[i];
     // เขียนทับทีละช่อง เฉพาะช่องที่ของใหม่มีค่าและไม่ได้มั่นใจน้อยกว่าของเดิม
     const better = it.confidence >= old.confidence;
-    if (it.flavor && better) old.flavor = it.flavor;
+    // 🧪 k261: ห้ามลดความละเอียดของกลิ่น — "กล้วย 3%" (คีย์แคตตาล็อกจริง) ต้องไม่ถูกทับด้วย "กล้วย"
+    //   ⛔ ถ้าไม่กันตรงนี้ การยุบแถวด้านบนจะกลายเป็นการทำข้อมูลกลิ่นหาย (คนละบั๊ก ขนาดเท่ากัน)
+    if (it.flavor && better && !(fHasPct(old.flavor) && !fHasPct(it.flavor) && fBase(old.flavor) === fBase(it.flavor)))
+      old.flavor = it.flavor;
+    // 🎨 k258 · Confirmation แบบเจาะช่อง — ลูกค้าบอกสีมาทีหลัง ต้องเติมลงช่อง color เฉยๆ
+    //   ⛔ ห้ามล้างช่องอื่น (กลิ่น/จำนวน) ที่ลูกค้ายืนยันไปแล้ว = ห้าม reset ทั้งก้อน
+    if (it.color && better) old.color = it.color;
     if (it.qty !== null && better) old.qty = it.qty;
     if (it.price !== null) old.price = it.price;
+    if (it.parent && !old.parent) old.parent = it.parent;
     if (better) { old.source = it.source; old.confidence = it.confidence; }
     old.t = it.t;
     slot.cur = i;
@@ -2374,9 +3929,12 @@ const DRAFT_OP = [
   { re: /(เพิ่ม(อีก)?|บวก(อีก)?|เอาเพิ่ม|ขอเพิ่ม|เติม(อีก)?)\s*(\d{1,3})/,          op: "add",  n: 5 },
   { re: /(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)?\s*(เพิ่ม|อีก)/,                  op: "add",  n: 1 },
   { re: /(ลดเหลือ|เหลือ(แค่)?|เอาแค่|เป็น|แก้เป็น|ปรับเป็น|เอา)\s*(\d{1,3})/,        op: "set",  n: 3 },
-  { re: /(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)/,                                 op: "set",  n: 1 },
+  // 🔢 k262: ต้องมี "ขอบซ้ายที่ไม่ใช่ตัวเลข" เสมอ ไม่งั้นเลขยาวจะถูกกินเป็นจำนวนทีละ 3 ตัวท้าย
+  //   เคสจริง 9 ส.ค.: "24190" (รหัสไปรษณีย์) → อ่านได้ "190 ชิ้น" · เบอร์โทร/ยอดเงินก็เสี่ยงแบบเดียวกัน
+  //   (?:^|[^\d]) เป็นกลุ่มไม่จับ → ลำดับ n เดิมไม่เปลี่ยน
+  { re: /(?:^|[^\d])(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)/,                       op: "set",  n: 1 },
   // ตัวเลขลอยท้ายท่อน ("ตัวแรก 100") — ใช้ได้ก็ต่อเมื่อชี้แถวได้แน่นอนแล้วเท่านั้น
-  { re: /(\d{1,3})\s*$/,                                                            op: "set",  n: 1, needTarget: true }
+  { re: /(?:^|[^\d])(\d{1,3})\s*$/,                                                 op: "set",  n: 1, needTarget: true }
 ];
 const DRAFT_TOFLAVOR = /(?:เปลี่ยน|สลับ|แก้)[^\n]{0,30}?(?:เป็น|ไปเป็น)\s*([ก-๙a-zA-Z\s]{2,20}?)(?:\s*\d|$|[,·/])|เอา\s*([ก-๙a-zA-Z\s]{2,20}?)\s*แทน/;
 // ⚠️ P0 (ชุดข้อมูล Product Understanding จับได้): คำอ้างอิงไม่ใช่ชื่อกลิ่น
@@ -2447,9 +4005,26 @@ function draftPlan(text, s) {
       const mdl = tgt.idx >= 0 ? items[tgt.idx].model : "";
       const fl = (FLAVORS[mdl] && FLAVORS[mdl].f) || [];
       let pick = "";
-      for (const f of fl) {
-        const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
-        if (want.length >= 2 && normTH(bare).indexOf(want) !== -1) { pick = bare; break; }
+      const tryPick = (w) => {
+        if (!(w && w.length >= 2)) return "";
+        for (const f of fl) {
+          const bare = String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
+          if (normTH(bare).indexOf(w) !== -1) return bare;
+        }
+        return "";
+      };
+      pick = tryPick(want);
+      // 🏷️ k258: ลูกค้าพูดชื่อคุณสมบัตินำหน้าค่า — "เปลี่ยนเป็น**กลิ่น**โคล่า" · "เอา**สี**ดำแทน"
+      //   เดิมจับได้ "กลิ่นโคล่า" แล้วหาไม่เจอ → ตอบว่าไม่มีกลิ่นนี้ ทั้งที่มีอยู่จริง
+      //   ⛔ ลองแบบเต็มก่อนเสมอ ค่อยลองแบบตัดคำนำหน้า — เพราะค่าจริงของสีคือ "สีขาว" (มีคำว่าสีอยู่ในชื่อ)
+      //   ชื่อคำนำหน้าอ่านจาก ATTR_TH ⛔ ห้าม hardcode รายคำ
+      if (!pick) {
+        const labels = Object.values(ATTR_TH).map(x => normTH(x)).filter(x => x && x.length >= 2);
+        for (const lb of labels) {
+          if (want.indexOf(lb) !== 0) continue;
+          const p2 = tryPick(want.slice(lb.length));
+          if (p2) { pick = p2; break; }
+        }
       }
       if (pick) { op = "flavor"; val = pick; }
       else if (want.length >= 2) { op = "flavor_unknown"; val = (fm[1] || fm[2] || "").trim(); }
@@ -2558,9 +4133,47 @@ function locHint(text) {
 //   ⛔ ไม่แต่งราคาเอง ทุกตัวดึงจากตาราง PRICE ตรง ๆ
 //   ⛔ ถ้าไม่รู้ว่าหมวดไหน = ไม่ส่งอะไรเลย ให้ระบบถามกลับ (Never Guess)
 const CAT_LABEL = { disp: "พอตใช้แล้วทิ้ง", bigpod: "หัวน้ำยาใหญ่ (บิ๊กพอต)", smallpod: "หัวพอตเล็ก", device: "เครื่อง", liquid: "น้ำยาขวด", pouch: "นิโคตินพอช", iqos: "ไส้บุหรี่ IQOS" };
+// 🗂️ k254 · INCIDENT G — ลูกค้าถาม "ภาพรวมว่าร้านขายอะไรบ้าง / กี่ประเภท"
+//   ⛔ ต่างจาก BROWSE_LIST_RE ที่ถามรายชื่อรุ่นในหมวดเดียว — อันนี้ถามระดับ "หมวด"
+const CAT_OVERVIEW_RE = /(ขาย|มี)[^\n]{0,10}(สินค้า|ของ)[^\n]{0,6}(กี่|อะไรบ้าง|ไหนบ้าง)|กี่(ประเภท|หมวด|ชนิด|แบบ)|มี(ประเภท|หมวด|ชนิด)[^\n]{0,8}(อะไร|ไหน|กี่)|(ประเภท|หมวด)(สินค้า)?[^\n]{0,6}(มีอะไร|อะไรบ้าง|มีกี่)|ขายอะไรบ้าง|ขายอะไร(บ้าง)?คะ|ขายอะไร(บ้าง)?ครับ/;
+function categoryOverview() {
+  try {
+    const n = {};
+    for (const m of Object.keys(FLAVORS)) {
+      if (/\(โคลน\)/.test(m)) continue;
+      if (typeof PRICE[m] !== "number") continue;
+      const c = topicOfModel(m);
+      if (!c || !CAT_LABEL[c]) continue;
+      n[c] = (n[c] || 0) + 1;
+    }
+    const rows = Object.keys(n).sort((a, b) => n[b] - n[a]);
+    if (!rows.length) return "";
+    return "ร้าน ABC มีสินค้า " + rows.length + " ประเภทค่ะ 💕\n"
+      + rows.map(c => "• " + CAT_LABEL[c] + " (" + n[c] + " รุ่น)").join("\n")
+      + "\n\nสนใจประเภทไหนบอกได้เลยนะคะ เดี๋ยวลิสต์รุ่นที่มีของให้ดูค่ะ ✨";
+  } catch (e) { return ""; }
+}
+// 🔎🔎 k259 · "ขอดูตัวเลือกในหมวดนี้" — กว้างกว่า browseKind เดิม 2 รูปแบบที่เคสจริงพัง
+//   (ก) บอกหมวด + ถามว่าเหลืออะไร   — "หัวใหญ่ เหลือไร"  (browseKind เดิมคืน "" → ไม่มีลิสต์เลย)
+//   (ข) พิมพ์ชื่อหมวดมาลอย ๆ อย่างเดียว — "Big pod" / "Bipod"
+//   ⛔ ถ้าลูกค้าเอ่ยชื่อรุ่นมาด้วย = ถามถึงรุ่นนั้น ไม่ใช่ขอลิสต์ทั้งหมวด → ห้ามยิง
+const CAT_ASK_RE = /เหลือ|มีอะไร|มีไร|มีมั่ง|มีบ้าง|มีไหม|มีมั้ย|ตัวไหน|รุ่นไหน|อันไหน|แนะนำ|ราคา|กี่บาท|เท่าไห?ร่|ขอดู|ดูหน่อย/;
+function catBrowseKind(text) {
+  try {
+    const t = String(text || "");
+    const k = browseKind(t); if (k) return k;
+    let cat = ""; try { cat = topicInText(t) || ""; } catch (e) {}
+    if (!cat || cat === "head") return "";
+    if (_MODEL_IN_RAW(t)) return "";
+    if (CAT_ASK_RE.test(t)) return "list";
+    const bare = String(t).replace(/[\s!?.,ๆ๏]/g, "").replace(FM_POLITE_RE, "");
+    if (bare.length <= 16) return "list";
+    return "";
+  } catch (e) { return ""; }
+}
 function catalogHint(text, sm, buf, prevCat) {
   try {
-    const kind = browseKind(text);
+    const kind = catBrowseKind(text);
     if (!kind) return "";
     // หมวดมาจากไหน — ลูกค้าพิมพ์เอง > รุ่นที่เอ่ยในข้อความ > หมวดของรุ่นที่คุยค้างไว้
     let cat = "";
@@ -2595,6 +4208,43 @@ function catalogHint(text, sm, buf, prevCat) {
     out += "\n⛔ ห้ามเอ่ยรุ่นที่ไม่มีในลิสต์นี้ และห้ามแต่งราคาเอง";
     out += "\n⚡ ตอบสั้น เสนอ 3-5 รุ่นพอ แล้วถามว่าสนใจตัวไหน";
     console.log("K225_CATALOG_HINT cat=" + cat + " n=" + rows.length);
+    return out;
+  } catch (e) { return ""; }
+}
+// 🧭🧭 k259 · BRAND × CATEGORY NARROWING — "แบรนด์ที่ลูกค้าเอ่ย แต่คนละหมวดกับที่ขอ"
+//   เคสจริง 8 ส.ค. 23.23 "อินฟี่ใช้แล้วทิ้ง":
+//     ด่านหมวด (_catGate) บล็อก "หัวพอต INFY PLUS" ถูกต้องแล้ว — แต่ถ้าจบแค่นั้น
+//     AI จะไม่มีข้อมูลอะไรเลยแล้วไปเดาต่อ → ต้องส่ง "รุ่นของแบรนด์นั้นในหมวดที่ลูกค้าขอ" ไปให้
+//   ⛔ ห้ามเลือกให้ลูกค้าเองเมื่อมีมากกว่า 1 รุ่น — หน้าที่ของตัวนี้คือ "เสนอให้เลือก" เท่านั้น
+//   ⛔ ทุกชื่อ/ราคา ดึงจากแคตตาล็อกจริง ห้ามแต่งเอง · ลิสต์เฉพาะที่มีของ (บทเรียน k192)
+function catNarrowHint(text, sm, buf) {
+  try {
+    const t = String(text || "");
+    const want = topicInText(t);
+    if (!want || want === "head" || !CAT_LABEL[want]) return "";
+    const rawKey = _MODEL_IN_RAW(t);
+    if (!rawKey) return "";
+    if (topicSame(want, topicOfModel(rawKey))) return "";   // หมวดตรงอยู่แล้ว ไม่ต้องทำอะไร
+    const B = (typeof buf === "number") ? buf : 1;
+    const inStock = (m) => {
+      const fl = (FLAVORS[m] && FLAVORS[m].f) || [];
+      if (!fl.length) { let q = null; try { q = findStockForItem(sm, m, ""); } catch (e) {} return q === null || q > B; }
+      return fl.some(f => { let q = null; try { q = findStockForItem(sm, m, f); } catch (e) {} return q === null || q > B; });
+    };
+    const kin = catKinIn(rawKey, want, t, true).filter(inStock);
+    if (!kin.length) {
+      console.log("K259_NARROW_NONE want=" + want + " from=" + rawKey);
+      return "\n\n🧭 [ลูกค้าขอหมวด \"" + CAT_LABEL[want] + "\" แต่แบรนด์ที่เอ่ยถึงไม่มีสินค้าในหมวดนี้]"
+           + "\n⛔ ห้ามตอบด้วยรุ่นในหมวดอื่นเด็ดขาด (ลูกค้าบอกหมวดมาชัดแล้ว)"
+           + "\n✅ บอกตรง ๆ ว่าแบรนด์นี้ไม่มีในหมวดที่ขอ แล้วถามว่าจะดูแบรนด์อื่นในหมวดนี้ไหม";
+    }
+    let out = "\n\n🧭 [ลูกค้าระบุหมวด \"" + CAT_LABEL[want] + "\" — รุ่นของแบรนด์นี้ในหมวดนั้นที่มีของ]";
+    for (const m of kin.slice(0, 8)) out += "\n• " + m + " " + PRICE[m] + " บาท";
+    out += "\n⛔⛔ ห้ามตอบด้วย \"" + rawKey + "\" หรือรุ่นใดที่อยู่นอกหมวด \"" + CAT_LABEL[want] + "\" เด็ดขาด";
+    out += kin.length > 1
+      ? "\n✅ เสนอรายการนี้ให้ลูกค้าเลือก แล้วถามว่าสนใจตัวไหน ⛔ ห้ามเลือกแทนลูกค้า"
+      : "\n✅ ตอบด้วยรุ่นนี้ได้เลย";
+    console.log("K259_NARROW want=" + want + " from=" + rawKey + " n=" + kin.length);
     return out;
   } catch (e) { return ""; }
 }
@@ -2752,6 +4402,30 @@ function _lev(a, b) {                       // ระยะแก้ไข (ต�
 }
 // โครงพยัญชนะไทย — ตัดสระ/วรรณยุกต์ทิ้ง ("สัปรส"→สปรส · "สับปะรด"→สบปรด) เทียบกันแล้วใกล้กันมาก
 function _skel(x) { return String(x || "").replace(/[\u0E30-\u0E3A\u0E47-\u0E4E\u0E40-\u0E44\u0E46]/g, ""); }
+// \uD83C\uDFF7\uFE0F k296 \u2014 \u0E2B\u0E32 "\u0E41\u0E1A\u0E23\u0E19\u0E14\u0E4C" \u0E17\u0E35\u0E48\u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E40\u0E2D\u0E48\u0E22\u0E43\u0E19\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21 (\u0E40\u0E17\u0E35\u0E22\u0E1A\u0E01\u0E31\u0E1A\u0E41\u0E1A\u0E23\u0E19\u0E14\u0E4C\u0E08\u0E23\u0E34\u0E07\u0E43\u0E19\u0E41\u0E04\u0E15\u0E15\u0E32\u0E25\u0E47\u0E2D\u0E01 \u0E44\u0E21\u0E48 hardcode \u0E0A\u0E37\u0E48\u0E2D\u0E23\u0E38\u0E48\u0E19)
+//   \u0E43\u0E0A\u0E49\u0E01\u0E31\u0E19\u0E40\u0E04\u0E2A "\u0E25\u0E32\u0E01\u0E2B\u0E31\u0E27\u0E02\u0E49\u0E2D\u0E40\u0E01\u0E48\u0E32\u0E02\u0E49\u0E32\u0E21\u0E41\u0E1A\u0E23\u0E19\u0E14\u0E4C": \u0E25\u0E39\u0E01\u0E04\u0E49\u0E32\u0E1E\u0E34\u0E21\u0E1E\u0E4C "Relx" \u0E41\u0E15\u0E48\u0E23\u0E30\u0E1A\u0E1A\u0E25\u0E32\u0E01 MARBO 10K \u0E08\u0E32\u0E01\u0E40\u0E17\u0E34\u0E23\u0E4C\u0E19\u0E01\u0E48\u0E2D\u0E19\u0E21\u0E32\u0E15\u0E2D\u0E1A
+//   \u0E27\u0E34\u0E18\u0E35: \u0E14\u0E36\u0E07\u0E04\u0E33\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29\u0E04\u0E33\u0E41\u0E23\u0E01 (\u22653 \u0E15\u0E31\u0E27) \u0E02\u0E2D\u0E07\u0E17\u0E38\u0E01\u0E0A\u0E37\u0E48\u0E2D\u0E23\u0E38\u0E48\u0E19\u0E43\u0E19\u0E41\u0E04\u0E15\u0E15\u0E32\u0E25\u0E47\u0E2D\u0E01 = \u0E0A\u0E37\u0E48\u0E2D\u0E41\u0E1A\u0E23\u0E19\u0E14\u0E4C \u0E41\u0E25\u0E49\u0E27\u0E14\u0E39\u0E27\u0E48\u0E32\u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E21\u0E35\u0E04\u0E33\u0E44\u0E2B\u0E19\u0E1A\u0E49\u0E32\u0E07
+//   \u0E04\u0E33\u0E17\u0E31\u0E1A\u0E28\u0E31\u0E1E\u0E17\u0E4C\u0E44\u0E17\u0E22\u0E41\u0E1B\u0E25\u0E07\u0E01\u0E48\u0E2D\u0E19\u0E40\u0E17\u0E35\u0E22\u0E1A (\u0E0A\u0E38\u0E14\u0E40\u0E14\u0E35\u0E22\u0E27\u0E01\u0E31\u0E1A ALIAS \u0E02\u0E2D\u0E07 k126 \u2014 \u0E40\u0E09\u0E1E\u0E32\u0E30\u0E2A\u0E48\u0E27\u0E19\u0E41\u0E1A\u0E23\u0E19\u0E14\u0E4C)
+function _brandTokens296(txt) {
+  const out = [];
+  try {
+    let t = " " + String(txt || "").toLowerCase().replace(/[^a-z0-9\u0E01-\u0E59]+/g, " ") + " ";
+    const TH = { "\u0E21\u0E32\u0E42\u0E1A": "marbo", "\u0E21\u0E32\u0E23\u0E4C\u0E42\u0E1A": "marbo", "\u0E40\u0E23\u0E25\u0E0B\u0E4C": "relx", "\u0E23\u0E35\u0E41\u0E25\u0E04": "relx", "\u0E23\u0E35\u0E41\u0E25\u0E47\u0E01\u0E0B\u0E4C": "relx", "\u0E2D\u0E34\u0E19\u0E1F\u0E35\u0E48": "infy", "\u0E2D\u0E34\u0E19\u0E1F\u0E32\u0E22": "infy", "\u0E40\u0E2D\u0E2A\u0E42\u0E04": "esko", "\u0E42\u0E0B\u0E19\u0E34\u0E04": "sonic", "\u0E2D\u0E34\u0E19\u0E2A\u0E15\u0E32": "insta", "\u0E40\u0E2D\u0E25\u0E1F\u0E4C\u0E1A\u0E32\u0E23\u0E4C": "elfbar" };
+    for (const k in TH) if (t.indexOf(k) !== -1) t += " " + TH[k] + " ";
+    for (const key of FLAVOR_KEYS) {
+      const m = String(key).toLowerCase().match(/[a-z]{3,}/);
+      if (!m) continue;
+      const b = m[0];
+      if (out.indexOf(b) === -1 && t.indexOf(" " + b + " ") !== -1) out.push(b);
+    }
+  } catch (e) {}
+  return out;
+}
+// 🙏 k289 — คำที่ลูกค้าพิมพ์ประจำ แต่ "ไม่มีทางเป็นชื่อกลิ่น"
+//   ใช้กันตัวเทียบคำสะกดเพี้ยนไปจับคำสุภาพมาเป็นชื่อกลิ่น ("ครับ"→ฝรั่ง · "สนใจ"→ลิ้นจี่)
+//   ⛔ ห้ามเติมคำที่เป็นชื่อกลิ่นจริงลงมาเด็ดขาด — เทส k289 ตรวจกับแคตตาล็อกทุกชื่ออัตโนมัติ
+//   ⛔ ใช้ ^...$ เท่านั้น (ต้องตรงทั้งคำ) — ห้ามใช้ \b เพราะใช้กับภาษาไทยไม่ได้
+const RX_NOT_FLAVOR = /^(ครับ|คร้าบ|คับ|ค้าบ|ครับผม|ค่ะ|คะ|ค๊ะ|ค่า|ขา|จ้า|จ้าา|จ๊ะ|นะ|นะคะ|นะครับ|โอเค|โอเคครับ|ตกลง|สนใจ|ขอบคุณ|ขอบใจ|สวัสดี|หวัดดี|ยังไง|เท่าไหร่|เท่าไร|ราคา|จำนวน|ชิ้น|อัน|แท่ง|ตัว|กล่อง|ได้|รับ|เอา|อืม|อ่อ|โอ้|ใช่|ไม่ใช่|พัสดุ|ส่งด่วน|แกรป|ยืนยัน|โอน|สลิป|ที่อยู่|เบอร์)$/;
 function typoHint(text, sm, buf) {
   const s = String(text || "");
   if (s.length > 60) return "";
@@ -2903,14 +4577,25 @@ function styleHint(text, sm, buf) {
       const byModel = {};
       for (const h of hits) (byModel[h.m] = byModel[h.m] || []).push(h.f);
       let n = 0;
+      const _all318 = Object.keys(byModel).length;
       for (const m in byModel) {
         if (n++ >= 6) break;
         out += "\n• " + m + " (" + (FLAVORS[m] ? FLAVORS[m].p : "-") + " บาท): " + byModel[m].slice(0, 4).join(" · ");
       }
+      // 🍬 k318b: ลิสต์นี้ถูกตัดให้สั้นเพื่อไม่ให้ prompt ยาว — ต้องบอก AI ตามจริง
+      //   ⛔ เดิมตัดเหลือ 6 รุ่นจาก 46 แล้วสั่ง "ห้ามเอ่ยนอกลิสต์" = สั่งสิ่งที่ทำตามไม่ได้
+      //     AI จึงไปหยิบรุ่นอื่นจากข้อมูลส่วนอื่นของ prompt มาเติมเอง (เคสจริง 20.13)
+      //   กติกาใหม่: บอกตรง ๆ ว่านี่เป็นบางส่วน แล้วห้าม "แต่งชื่อ" แทนการห้าม "เอ่ยนอกลิสต์"
+      if (_all318 > n) out += "\n(นี่เป็นบางส่วน — ยังมีอีก " + (_all318 - n) + " รุ่น ถ้าลูกค้าอยากดูเพิ่มให้ถามว่าสนใจแนวไหน/งบเท่าไร)";
     }
   }
   if (!out) return "";
-  out += "\n⛔⛔ ห้ามเอ่ยชื่อกลิ่นที่ไม่ได้อยู่ในลิสต์นี้เด็ดขาด — เคยหลุดมาแล้ว: \"องุ่นแดง\" \"องุ่นมิ้นต์\" \"บลูราสเบอร์รี่\" ซึ่งร้านไม่มี ลูกค้าตอบกลับว่า \"มั่วมาก\"";
+  // 🍬 k318b: เดิมเขียนว่า "ห้ามเอ่ยชื่อกลิ่นที่ไม่อยู่ในลิสต์นี้" ทั้งที่ลิสต์ถูกตัดเหลือ 6 รุ่นจาก 46
+  //   = สั่งสิ่งที่ทำตามไม่ได้ AI เลยไปหยิบรุ่นอื่นจากข้อมูลส่วนอื่นของ prompt มาเติมเอง (เคสจริง 20.13)
+  //   ใหม่: ห้าม "แต่งชื่อ" (สิ่งที่ผิดจริง) แทนการห้าม "เอ่ยนอกลิสต์" (สิ่งที่ทำตามไม่ได้)
+  //   ⛔ ไม่ได้ผ่อนอะไร — ด่านขาออก k318b ตรวจทุกบรรทัดกับแคตตาล็อกจริงอยู่แล้ว
+  out += "\n⛔⛔ ห้ามแต่งชื่อกลิ่นขึ้นมาเองเด็ดขาด — เคยหลุดมาแล้ว: \"องุ่นแดง\" \"องุ่นมิ้นต์\" \"บลูราสเบอร์รี่\" ซึ่งร้านไม่มี ลูกค้าตอบกลับว่า \"มั่วมาก\""
+       + "\n⛔ ชื่อกลิ่นต้องคัดลอกมาให้ครบทั้งชื่อ ห้ามตัดให้สั้นลง (บางรุ่นมี 2 กลิ่นในแท่งเดียว ชื่อจริงคือ \"กลิ่นA / กลิ่นB\" — เขียนแค่ครึ่งเดียว = สินค้าคนละตัว)";
   out += "\n💡 เสนอ 3-5 กลิ่นพอ แล้วถามว่าเอากลิ่นไหน ไม่ต้องลิสต์ทั้งหมด";
   return out;
 }
@@ -3259,7 +4944,63 @@ function fmPick(text, models) {
   if (each && items.length > 1) { const q = parseInt(each[1], 10); if (q > 0 && q <= 999) for (const it of items) if (it.qty === null) it.qty = q; }
   return items;
 }
-function flavorHint(text, sm, buf){
+// ═══════════════════════════════════════════════════════════════════════════
+//  🧺🧺 P0-14 · AGGREGATE SELECTION — "เอาทุกกลิ่น อย่างละ 1"
+//  เคสจริง 7 ส.ค.: บอทลิสต์ MARBO 10K → ลูกค้า "เอากลิ่นละ 1 ทุกกลิ่น" → บอทสรุปถูก
+//    → ลูกค้า "ใช่" → ⛔ ไม่ออกการ์ด แล้วย้อนถาม "แจ้งกลิ่น + จำนวน" วนลูป
+//  ต้นเหตุที่พิสูจน์ด้วยการรันโค้ดจริง (ไม่ใช่อ่านเอา):
+//    fmPick("เอากลิ่นละ 1 ทุกกลิ่น") = 0 รายการ — ระบบ **ไม่มีการขยายรายการแบบเหมาเลย**
+//  ⛔ ห้ามผูกกับ MARBO — ทำงานกับทุกรุ่นที่มีรายการย่อย (กลิ่น/สี/รส/แบบ)
+//  ⛔ ห้ามเดา: ไม่รู้ว่า "ทุกกลิ่น" ของรุ่นไหน → ASK · ไม่บอกจำนวน → ถามจำนวน
+// ═══════════════════════════════════════════════════════════════════════════
+//  ALL_ITEMS = คำที่แปลว่า "เอาทั้งหมดในรายการที่เพิ่งเห็น"
+const AGG_ALL_RE = /ทุก\s*(กลิ่น|รส|สี|ตัว|อัน|แบบ|ชนิด|รุ่น|ลูก|แท่ง|หัว)|เอา\s*หมด|เอาทั้งหมด|ทั้งหมดเลย|ยกชุด|ครบทุก|เหมาหมด|เหมาทั้ง|all\s*flavou?rs?/i;
+//  EACH_QTY = "อย่างละ N" ทุกรูปแบบที่คนไทยเขียนจริง (ต้องมีคำหน่วยนำหน้า "ละ" เสมอ)
+//  ⛔ ห้ามจับ "ละ" ลอยๆ และห้ามจับเลขราคา — จำกัด 1-99 + ต้องมี ALL_ITEMS อยู่ด้วยเสมอ
+const AGG_EACH_RE = /(?:อย่าง|กลิ่น|รส|สี|ตัว|อัน|แบบ|ชนิด|ชิ้น|แท่ง|หัว|ลูก|กล่อง)\s*ละ\s*(\d{1,2})(?!\d)/;
+//  "ทุกกลิ่น 1 ชิ้น" — เขียนกลับด้าน ไม่มีคำว่า "ละ"
+const AGG_QTY_AFTER_RE = /ทุก\s*(?:กลิ่น|รส|สี|ตัว|อัน|แบบ|ชนิด)\s*(\d{1,2})(?!\d)\s*(?:ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|ลูก)?/;
+const AGG_EACH_WORD_RE = /(?:อย่าง|กลิ่น|รส|สี|ตัว|อัน|แบบ|ชนิด)\s*ละ\s*(?:หนึ่ง|นึง)/;
+function aggregateAsk(text) {
+  const t = String(text || "");
+  if (!AGG_ALL_RE.test(t)) return { all: false, each: null };
+  let each = null;
+  const m1 = t.match(AGG_EACH_RE), m2 = t.match(AGG_QTY_AFTER_RE);
+  if (m1) each = parseInt(m1[1], 10);
+  else if (m2) each = parseInt(m2[1], 10);
+  else if (AGG_EACH_WORD_RE.test(t)) each = 1;
+  if (!(each > 0 && each <= 99)) each = null;
+  return { all: true, each };
+}
+//  ขยายเป็นรายการจริง — ⛔ เฉพาะที่มีของ (กฎเดียวกับ k192: ห้ามขายของที่หมด)
+//  รวมกลิ่นที่ชื่อเหมือนกันแต่คนละความแรงเป็นแถวเดียว (ให้ด่าน k179 ไปถามความแรงต่อ)
+function expandAll(model, sm, buf, each) {
+  const v = FLAVORS[model];
+  if (!v || !v.f || !v.f.length) return { rows: [], gone: [] };
+  const B = (typeof buf === "number") ? buf : 1;
+  const inStock = (f) => { if (!sm) return true; try { const q = findStockForItem(sm, model, f); return q === null || q > B; } catch (e) { return true; } };
+  const rows = [], gone = [], seen = new Set();
+  for (const f of v.f) {
+    const bare = FM_BARE(f);
+    if (seen.has(bare)) { if (inStock(f)) { const r = rows.find(x => x.flavor === bare); if (!r && gone.indexOf(bare) === -1) rows.push({ model, flavor: bare, qty: each || null }); } continue; }
+    seen.add(bare);
+    const anyIn = (v.f || []).filter(x => FM_BARE(x) === bare).some(inStock);
+    if (anyIn) rows.push({ model, flavor: bare, qty: each || null });
+    else gone.push(bare);
+  }
+  return { rows, gone };
+}
+// ✅ P0-14 · CONFIRMATION — คำตอบรับที่ต้องนับว่า "ยืนยันแล้ว"
+//   ⚠️ บั๊กที่เจอตอน trace: ด่าน k125 ใช้ /^(เอา|...|ยืนยัน)\b/ ซึ่ง **ใช้กับภาษาไทยไม่ได้เลย**
+//     เพราะอักษรไทยไม่ใช่ \w → \b ไม่เคยเกิดขอบคำ → พิสูจน์แล้วว่า "เอาเลย/ยืนยัน" คืน false ทุกตัว
+//     มีแต่ "ok/okay" ที่ผ่าน = ข้อยกเว้นของ k125 ตายมาตลอด ⛔ ห้ามใช้ \b กับคำไทยอีก
+const CONFIRM_EXTRA_RE = /^(โอเค|โอเช|okay|ok|ตกลง|(?:เอา)?ตามนั้น|(?:เอา)?ตามนี้|จัด(?:มา)?เลย|เอาเลย|รับเลย|ยืนยัน(?:รายการ)?|confirm|ถูกแล้ว|ใช่เลย)\s*(?:ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|ค๊า|จ้า|จ้ะ|นะ|เลย|ขอบคุณ)*[\s!.ๆ?👍💕✅🙏]*$/i;
+function confirmYes(text) {
+  const t = String(text || "").trim();
+  if (!t) return false;
+  return CONFIRM_YES_RE.test(t) || CONFIRM_EXTRA_RE.test(t);
+}
+function flavorHint(text, sm, buf, uid){
   const t = normTH(text);
   const hits = [];
   const add = (k) => { if (k && FLAVORS[k] && hits.indexOf(k) === -1 && hits.length < 3) hits.push(k); };
@@ -3290,10 +5031,15 @@ function flavorHint(text, sm, buf){
       if (_spans.some(s => _overlap(s, span))) continue;   // ช่วงเดียวกัน → ตัวเจาะจงกว่าเอาไปแล้ว
       _spans.push(span);
     }
+    // 🏷️ k276: แบรนด์กำกวม (k241 ยืนยันแล้ว เช่น "ไอคอส/เครื่องไอคอส") ห้ามแนบข้อมูลรุ่นที่เดาให้ AI
+    //   เคสจริง: "เครื่องไอคอสราคาเท่าไหร่" → _MODEL_IN ตอบ "กำกวม" ถูกแล้ว
+    //   แต่ flavorHint (ลูปนี้) ไม่เคยเช็ค → แนบ "ไส้บุหรี่ IQOS JP (2,150)" ให้ AI ตอบราคาผิดตัว
+    //   ใช้ด่านเดียวกับ _MODEL_IN เป๊ะ ๆ ไม่สร้างกติกาใหม่
+    try { if (_bareBrandAmbiguous(raw, key, m[0])) { console.log("K276_HINT_AMBIG_SKIP " + key); continue; } } catch (e) {}
     add(key);
   }
   for (const k of FLAVOR_KEYS) { if (hits.length >= 3) break; if (t.indexOf(normTH(k)) !== -1) add(k); } // ชื่อรุ่นตรงๆ
-  _hintModels = hits.slice();   // k16: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
+  setHints314(uid, hits);   // k16 + k314: จดทั้งตัวรวม (ของเดิม) และแยกรายลูกค้า: จำไว้ว่ารอบนี้กำลังคุยถึงรุ่นไหน (ใช้กรองกลิ่นปลอมตอนขาออก)
   if (!hits.length) return "";
   const B = (typeof buf === "number") ? buf : 1;
   const qtyOf = (model, flavor) => {
@@ -3301,6 +5047,29 @@ function flavorHint(text, sm, buf){
     try { return findStockForItem(sm, model, flavor); } catch (e) { return null; }
   };
   let out = "\n\n[ข้อมูลกลิ่น+สต็อกจากระบบ — ห้ามบอกลูกค้าว่าได้มาจากไหน ใช้ตอบได้เลย]";
+  // 🏷️🏷️ P0-16 · ลูกค้าถามประเภทสินค้า → แนบ Product Attribute เข้า prompt
+  //   เดิม hint ไม่เคยบอกหมวดสินค้าเลย → LLM ต้องเดาจากชื่อรุ่น/เลข K = ที่มาของเคส DUAL SMASH
+  //   ⛔ ไม่ยืนยันหมวด = สั่งให้ถามกลับ ห้ามเดา
+  try {
+    if (attrQuestion(text)) {
+      out += "\n\n🏷️🏷️ [ประเภทสินค้า — ข้อมูลจากทะเบียนสินค้า ⛔ ถือเป็นความจริงสูงสุด ห้ามเดาเองจากชื่อรุ่นหรือเลข K]";
+      for (const k of hits) {
+        const a = productAttr(k);
+        if (a.known) {
+          out += "\n• " + a.product_name + " → **" + a.product_type + "**"
+               + "\n   ใช้แล้วทิ้ง: " + (a.is_disposable ? "ใช่" : "**ไม่ใช่**")
+               + " · เปลี่ยนหัวได้: " + (a.is_replaceable_pod ? "**ใช่**" : "ไม่ใช่")
+               + " · เป็นตัวเครื่อง: " + (a.is_device ? "ใช่" : "ไม่ใช่");
+        } else {
+          out += "\n• " + k + " → ⛔ **ทะเบียนสินค้ายังไม่ยืนยันประเภทของรุ่นนี้**"
+               + "\n   ⛔ ห้ามตอบว่าเป็นใช้แล้วทิ้งหรือหัวเปลี่ยนเด็ดขาด"
+               + "\n   ✅ ให้ตอบว่าขอเช็คให้ชัดก่อน แล้วถามชื่อรุ่นเต็มหรือขอรูปสินค้า";
+        }
+      }
+      out += "\n⛔ ห้ามอนุมานประเภทจาก: ชื่อรุ่น · เลข 8K/10K/20K/25K · ราคา · แบรนด์ · คำในชื่อสินค้า";
+      console.log("P0_16_ATTR_HINT " + hits.map(k => k + "=" + (catOfStrict(k) || "UNKNOWN")).join(","));
+    }
+  } catch (e) {}
   for (const k of hits){
     const v = FLAVORS[k];
     if (!v.f.length) { out += "\n• " + k + " (" + v.p + " บาท) — ไม่มีตัวเลือกกลิ่น/สี"; continue; }
@@ -3314,7 +5083,7 @@ function flavorHint(text, sm, buf){
   out += "\n⛔ ถ้ารุ่นนั้นหมดทุกกลิ่น ให้บอกตรงๆ ว่าหมดชั่วคราว แล้วเสนอรุ่นอื่นแทน ห้ามลิสต์กลิ่นออกมา";
   out += "\n⛔ ห้ามแต่งชื่อกลิ่นที่ไม่มีในลิสต์นี้ และห้ามบอกจำนวนสต็อกเป็นตัวเลข";
   // k69: เคสจริง — ตอบว่า "ชุด KIT องุ่นหมดค่ะ" โดยไม่บอกว่ารุ่นไหน ลูกค้างงว่าหมดของใคร
-  out += "\n⛔⛔ เวลาบอกว่า 'มี' หรือ 'หมด' **ต้องระบุชื่อรุ่นเต็มทุกครั้ง** (เช่น \"M SWITCH ชุด KIT กลิ่นองุ่นหมดค่ะ\") ห้ามพูดลอยๆ ว่า \"ชุด KIT หมด\" เพราะร้านมีหลายรุ่น ลูกค้าจะเข้าใจผิดว่าหมดทั้งหมด";
+  out += "\n⛔⛔ เวลาบอกว่า 'มี' หรือ 'หมด' **ต้องระบุชื่อรุ่นเต็มทุกครั้ง** (เช่น \"M SWITCH ชุด KIT กลิ่นนั้นหมดค่ะ\") ห้ามพูดลอยๆ ว่า \"ชุด KIT หมด\" เพราะร้านมีหลายรุ่น ลูกค้าจะเข้าใจผิดว่าหมดทั้งหมด";
   out += "\n⛔ ห้ามพูดว่า 'หมดทุกกลิ่น' ถ้าในลิสต์ ✅ ด้านบนยังมีกลิ่นเหลืออยู่แม้แต่กลิ่นเดียว";
   // ✍️ k24: ลูกค้าพิมพ์ชื่อกลิ่นแบบย่อ ("พีชสตอ" = พีชสตรอว์เบอร์รี่) — เดาให้ถูกก่อนตอบว่าหมด
   // เคสจริง 30/7: ลูกค้าพิมพ์ "พีชสตอ" แอดมินอ่านเป็น "กลิ่นพีช" แล้วบอกหมด ทั้งที่พีชสตรอว์เบอร์รี่มีของ
@@ -3348,6 +5117,36 @@ function flavorHint(text, sm, buf){
     //   เหตุที่ต้องให้คะแนน ไม่ใช่แค่เจอ/ไม่เจอ: "องุ่นว่าน" ไปตรงหัว 4 ตัว ("องุ่") ของ
     //   องุ่นลิ้นจี่ · องุ่นเคียวโฮ ด้วย → ถ้านับแค่ "เจอ" จะกลายเป็นกำกวมทั้งที่ลูกค้าพิมพ์ชัดมาก
     //   ตรง 9 ตัว (องุ่นว่าน) ย่อมชนะตรง 4 ตัว (องุ่) — ยาวกว่า = เจาะจงกว่า
+    // 🧺🧺 P0-14 · สั่งแบบเหมา ("เอาทุกกลิ่นอย่างละ 1") — ต้องมาก่อน fmPick
+    //   เพราะข้อความแบบนี้ไม่มีชื่อกลิ่นให้จับ fmPick จึงคืน 0 รายการเสมอ (พิสูจน์แล้วด้วยการรันจริง)
+    const _agg = aggregateAsk(text);
+    if (_agg.all) {
+      // ⛔ ไม่รู้ว่า "ทุกกลิ่น" ของรุ่นไหน → ASK ห้ามเดา ห้ามหยิบรุ่นมาลิสต์เอง
+      if (hits.length !== 1) {
+        console.log("P0_14_AGG_ASK models=" + hits.length);
+        return out + "\n\n❓❓ [ลูกค้าสั่งแบบเหมา ('ทุกกลิ่น/เอาหมด') แต่ระบบยังไม่รู้ว่าหมายถึงสินค้าตัวไหน]"
+          + "\n⛔ ห้ามเดารุ่น ห้ามลิสต์รุ่นใดรุ่นหนึ่งขึ้นมาเอง ห้ามออกบล็อกทวนคำสั่งซื้อ"
+          + "\n✅ ถามกลับสั้นๆ ว่า \"หมายถึงรุ่นไหนดีคะ 💕\" อย่างเดียว";
+      }
+      const _am = hits[0];
+      const _ex = expandAll(_am, sm, B, _agg.each);
+      if (!_ex.rows.length) {
+        console.log("P0_14_AGG_EMPTY " + _am);
+        return out + "\n\n❌ [" + _am + " หมดทุกกลิ่นตอนนี้] → บอกลูกค้าตรงๆ แล้วเสนอรุ่นอื่น ห้ามออกการ์ด";
+      }
+      // ✅ รายการนี้ = "ลูกค้าเลือกเองโดยอ้างถึงรายการที่บอทเพิ่งลิสต์" → เข้า Draft ได้เต็มตัว
+      _LAST_LOCK = { model: _am, flavor: _ex.rows[0].flavor, qty: _ex.rows[0].qty, items: _ex.rows, agg: true, t: Date.now() };
+      console.log("P0_14_AGG_EXPAND " + _am + " rows=" + _ex.rows.length + " each=" + (_agg.each || "-") + " gone=" + _ex.gone.length);
+      out += "\n\n🧺🧺 [ลูกค้าสั่งแบบเหมา — ระบบขยายรายการให้ครบแล้ว ⛔ ห้ามลิสต์กลิ่นซ้ำ ห้ามถามกลิ่นอีก]"
+           + "\n" + _am + " · มีของ " + _ex.rows.length + " กลิ่น"
+           + (_agg.each ? " · รับกลิ่นละ " + _agg.each + " ชิ้น · รวม " + (_ex.rows.length * _agg.each) + " ชิ้น" : "")
+           + _ex.rows.map((x, i) => "\n" + (i + 1) + ". " + x.model + " | " + x.flavor + (x.qty ? " | " + x.qty : " | (ยังไม่บอกจำนวน)")).join("")
+           + (_ex.gone.length ? "\n❌ หมดชั่วคราว ไม่รวมในรายการ: " + _ex.gone.join(" · ") + " → บอกลูกค้าตรงๆ ห้ามเงียบ" : "")
+           + "\n⛔⛔ ต้องทวนให้ครบทุกรายการ ห้ามตกหล่นแม้แต่รายการเดียว"
+           + (_agg.each ? "\n✅ ครบ 3 อย่างแล้ว (รุ่น+กลิ่น+จำนวน) → **ออกบล็อกทวนคำสั่งซื้อได้เลย ห้ามถามยืนยันซ้ำ**"
+                        : "\n✅ ยังขาดแค่ 'จำนวนต่อกลิ่น' → ถามสั้นๆ ว่า \"รับกลิ่นละกี่ชิ้นดีคะ 💕\" อย่างเดียว ห้ามถามกลิ่น");
+      return out;
+    }
     // 🎯 k204: ใช้ตัวจับคู่ตัวเดียวของระบบ (fmPick) — รองรับหลายรายการในข้อความเดียว
     const picks = fmPick(text, hits);
     let lockModel = "", lockFlavor = "", ambiguous = !picks.length;
@@ -3692,26 +5491,757 @@ function findPrice(modelText) {
   return null;
 }
 // หัวน้ำยาใหญ่ Big Pod (โปร 4 ชิ้นส่งฟรี) | หัวน้ำยาเล็ก (โปร 10 หัวส่งฟรี)
-const BIGPOD = ["RELX BOOST POD", "RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO"];
+// 🏷️ P0-16 (เจ้าของร้านยืนยัน 7 ส.ค.): DUAL SMASH 20K = BIGPOD · เป็นหัวเปลี่ยน ไม่ใช่ใช้แล้วทิ้ง
+//   เดิมไม่อยู่ในลิสต์นี้ → ตกค่าตั้งต้น "disp" → G2 ตอบลูกค้าว่า "เป็นพอตใช้แล้วทิ้ง" = ผิด
+//   ⚠️ ตรวจแล้วว่าไม่กระทบเงิน: โปรส่งฟรี disp≥4 กับ bigpod≥4 ใช้เกณฑ์เดียวกัน (ยืนยันด้วย promo-test)
+const BIGPOD = ["RELX BOOST POD", "RELX POD CLEAR 18K", "ELFBAR SWAP 25K", "ESKO BAR SWITCH 20K", "KS QUIK PRO 15K", "M SWITCH", "VAZER RELOAD 15K", "ABC TANK 22K", "ABC TANK", "ABC LEGO 20K", "ABC LEGO", "DUAL SMASH 20K"];
 const SMALLPOD = ["INFY PLUS", "MARBO ZERO", "RELX INFINITY", "RELX LARGE", "RELX ULTRA"];
+// 🏷️ P0-16 · รายชื่อ "พอตใช้แล้วทิ้ง" ที่เจ้าของร้าน **ยืนยันแล้ว**
+//   ⛔ ว่างอยู่โดยตั้งใจ — 25 รุ่นที่เหลือเคยได้ "disp" จากค่าตั้งต้นของ catOf ไม่ใช่จากข้อมูลจริง
+//      เคส DUAL SMASH พิสูจน์แล้วว่าค่าตั้งต้นนั้นเชื่อไม่ได้ → ต้องให้เจ้าของร้านยืนยันทีละรุ่น
+//   ⛔ ห้ามเติมเองเด็ดขาด · เติมได้เมื่อเจ้าของร้านสั่งเป็นลายลักษณ์อักษรเท่านั้น
+//   ระหว่างที่ยังว่าง: ถามประเภทของรุ่นเหล่านี้ → ระบบจะ ASK ไม่เดา (ถูกต้องตาม Never Guess)
+// 🏷️ PE-7 · เจ้าของร้านยืนยันหมวดครบ 24 รุ่น (8 ส.ค. 2569)
+//   เดิมว่างไว้โดยตั้งใจ เพราะ "ห้ามเดาประเภทสินค้า" (k253)
+//   ตอนนี้เจ้าของร้านยืนยันแล้วว่าทั้ง 24 รุ่นนี้คือ "พอตใช้แล้วทิ้ง" (สูบหมดแล้วทิ้งทั้งแท่ง)
+//   ⛔ ห้ามเติมชื่อรุ่นใหม่เองเด็ดขาด — ต้องให้เจ้าของร้านยืนยันทีละตัวเท่านั้น
+//   เหตุที่ต้องยืนยัน: เคสจริง 10 วัน ลูกค้าทักท้วงว่า "ทำไม Marbo 9k ถึงเป็น kit"
+const DISPOSABLE = [
+  "MARBO 9K", "MARBO 9K (โคลน)", "MARBO 10K",
+  "KS Quik 6K", "RELX SMASH GO 12K", "SONIC 8K", "ABC 8K",
+  "INFY 20K", "INFY 12K", "INFY BAR PRO 20K", "INFY BAR 15K",
+  "ESKO BAR 20K", "RELX SPARTA 20K", "RELX DIVA 30K",
+  "JOIWAY TWINS 20K", "JOIWAY 12K", "V PLUS 16K",
+  "STAR 2,500", "STAR 2500", "LANA IRIS 24K", "CARNIVAL 20K",
+  "VOSOON 23K", "ELFBAR 15K", "INSTA BAR 15K",
+  // ⛔ "M SWITCH 15K (โคลน)" ไม่อยู่ในนี้ — เจ้าของร้านแก้ว่าเป็น "เครื่อง" ดู DEVICE_NOPREFIX
+];
+
+// 🖥️ PE-7 · เครื่องที่ชื่อไม่ได้ขึ้นต้นด้วยคำว่า "เครื่อง"
+//   เจ้าของร้านยืนยัน 8 ส.ค.: "M SWITCH 15K (โคลน) คือเครื่องโคลนของหัว M SWITCH
+//   มีเครื่องโคลนกับแท้" — ราคา 200 ตรงกับ "เครื่อง M SWITCH 15K (โคลน)" ที่มีอยู่แล้ว
+//   (แคตตาล็อกมีชื่อเดียวกัน 2 แบบ มี/ไม่มีคำนำหน้า)
+//   ⛔ ห้ามเติมเอง ต้องให้เจ้าของร้านยืนยันทีละตัว
+const DEVICE_NOPREFIX = [
+  "M SWITCH 15K (โคลน)",
+];
+// ═══════════════════════════════════════════════════════════════════════════
+//  🏷️🏷️ P0-16 · PRODUCT ATTRIBUTE TRUTH — ประเภทสินค้าต้องมาจากข้อมูล ไม่ใช่การเดา
+//  เคสจริง 7 ส.ค.: "DUAL SMASH 20K เป็นสูบทิ้งหรือหัวน้ำยา"
+//    → G2 ตอบ "เป็นพอตใช้แล้วทิ้ง" ⛔ ผิด · ของจริงคือ BIGPOD (พอตเปลี่ยนหัว)
+//  ต้นเหตุ 3 ชั้น (พิสูจน์ด้วยการรันจริง):
+//    ① ข้อมูลผิด — DUAL SMASH 20K ไม่อยู่ใน BIGPOD → ตกที่ `return "disp"` ท้ายฟังก์ชัน
+//    ② สถาปัตยกรรม — catOf มี **ค่าตั้งต้นเป็น "disp"** = เดาแทนเงียบๆ ทุกรุ่นที่ไม่มีกฎจับ
+//       วัดแล้ว: 25 จาก 74 รุ่น ได้ "disp" มาจากค่าตั้งต้นนี้ ไม่ใช่จากข้อมูลจริง
+//    ③ prompt — hint ไม่เคยบอกหมวดสินค้าเลยแม้แต่ครั้งเดียว → LLM ต้องเดาจากชื่อ/เลข K
+//  ⛔ กฎเหล็ก: Product Attribute มีสิทธิ์สูงกว่า LLM inference ทุกกรณี
+// ═══════════════════════════════════════════════════════════════════════════
+//  ตัวแยก "รู้จริง" ออกจาก "เดา" — ที่เดียวที่ตัดสินหมวด เพื่อไม่ให้ 2 ฟังก์ชันเพี้ยนจากกัน
+//  confirmed = มีกฎ/รายชื่อรองรับจริง · false = ตกค่าตั้งต้น (ห้ามเอาไปตอบลูกค้า)
+// 🏷️🏷️ k282 · เติม "คำนำหน้าหมวด" กลับเข้าไปในชื่อรุ่นที่ AI พิมพ์ตกไป
+//   กติกาเจ้าของร้าน: หมวดเครื่องต้องขึ้นต้นว่า "เครื่อง" · หัวพอต/ไส้บุหรี่ก็เช่นกัน
+//   ทำ 2 อย่างพร้อมกัน: (1) ลูกค้าอ่านแล้วไม่สับสน (2) ชื่อตรงคีย์แคตตาล็อก = การ์ดคิดราคาถูกตัว
+//   ⛔ สร้างตารางจากแคตตาล็อกตอนบูต ไม่เขียนชื่อรุ่นไว้ในโค้ด — เพิ่มสินค้าใหม่แล้วทำงานเองทันที
+const CAT_PREFIX_RE = /^(เครื่อง|หัวพอต|ไส้บุหรี่)\s+/;
+let _NAMES282 = [];      // ชื่อที่ระบบรู้จักทั้งหมด (ชื่อเต็ม + ชื่อที่ตัดคำนำหน้าออก) เรียงยาว→สั้น
+let _BARE282 = {};       // ชื่อเปล่า → ชื่อเต็มที่ถูกต้อง
+(function _build282() {
+  try {
+    const set = new Set();
+    for (const k in FLAVORS) {
+      set.add(k);
+      const m = k.match(CAT_PREFIX_RE);
+      if (!m) continue;
+      const bare = k.replace(CAT_PREFIX_RE, "").trim();
+      if (bare.length < 4) continue;
+      set.add(bare);
+      if (!_BARE282[bare]) _BARE282[bare] = { full: k, word: m[1] };
+    }
+    _NAMES282 = Array.from(set).sort((a, b) => b.length - a.length);
+  } catch (e) {}
+})();
+function fixCatPrefix(rep) {
+  try {
+    const s = String(rep || "");
+    if (!s || !_NAMES282.length) return s;
+    let out = "", i = 0;
+    while (i < s.length) {
+      let hit = "";
+      for (const nm of _NAMES282) { if (nm.length <= s.length - i && s.startsWith(nm, i)) { hit = nm; break; } }  // ยาวสุดก่อน
+      if (!hit) { out += s[i]; i++; continue; }
+      const info = _BARE282[hit];
+      if (info) {
+        // มีคำนำหน้าอยู่แล้ว (หรือคำที่สื่อความเดียวกัน) → ปล่อยไว้ ไม่เติมซ้ำ
+        const before = out.slice(-14);
+        if (!new RegExp("(เครื่อง|ตัวเครื่อง|หัวพอต|หัวน้ำยา|ไส้บุหรี่|ไส้)\\s*$").test(before)) {
+          out += info.word + " " + hit; i += hit.length; continue;
+        }
+      }
+      out += hit; i += hit.length;
+    }
+    return out;
+  } catch (e) { return String(rep || ""); }
+}
+function catResolve(key) {
+  const k = String(key || "");
+  if (/ไส้บุหรี่/.test(k)) return { cat: "iqos", confirmed: true };
+  if (/POUCH|SALTNIC|FREEBASE|IQOS/i.test(k)) return { cat: "other", confirmed: true };
+  if (/^เครื่อง/.test(k)) return { cat: "device", confirmed: true };
+  // 🖥️ เครื่องที่ชื่อไม่มีคำนำหน้า "เครื่อง" — ต้องมาก่อนกฎ (KIT) และ DISPOSABLE
+  if (DEVICE_NOPREFIX.indexOf(k) !== -1) return { cat: "device", confirmed: true };
+  if (/\(KIT\)/.test(k)) return { cat: "bigpod", confirmed: true };
+  const bare = k.replace(/^(หัวพอต|หัวน้ำยา)\s*/, "").trim();
+  if (BIGPOD.indexOf(k) !== -1 || BIGPOD.indexOf(bare) !== -1) return { cat: "bigpod", confirmed: true };
+  if (SMALLPOD.indexOf(k) !== -1 || SMALLPOD.indexOf(bare) !== -1) return { cat: "smallpod", confirmed: true };
+  if (/^หัวพอต/.test(k)) return { cat: "smallpod", confirmed: true };
+  if (DISPOSABLE.indexOf(k) !== -1) return { cat: "disp", confirmed: true };
+  // ⛔ ไม่มีกฎไหนจับได้ = **ไม่รู้จริง** — คิดเงินยังใช้ "disp" ได้ (พฤติกรรมเดิม ห้ามแตะเงิน)
+  //    แต่ห้ามเอาไปตอบลูกค้าว่าเป็นประเภทอะไรเด็ดขาด
+  return { cat: "disp", confirmed: false };
+}
+// หมวดแบบ "ไม่เดา" — ไม่รู้ = คืน "" (ใช้ตอบคำถามประเภทสินค้าเท่านั้น)
+function catOfStrict(key) { const r = catResolve(key); return r.confirmed ? r.cat : ""; }
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🧩 k258 · ATTRIBUTE ENGINE V2 — คุณสมบัติที่ต้องถาม อ่านจากทะเบียน ไม่ใช่ if
+//
+//  เคสจริง 8 ส.ค. (สกรีนช็อตลูกค้า JW):
+//    ลูกค้า "เครื่อง relx infinity 2+ สีขาว"
+//    → G2 ถาม "สีขาว หมายถึงกลิ่นไหนคะ" ⛔ เอาสีของเครื่องไปตีเป็นกลิ่น
+//    ต้นเหตุ: แคตตาล็อกเก็บ "สี" ของเครื่องไว้ในช่อง flavour (6 จาก 11 รุ่น)
+//             และ slot ไม่มีช่อง color เลย → เก็บค่าที่ยืนยันแล้วไม่ได้ → ถามซ้ำวนไป
+//
+//  ⛔ ห้ามเขียน if (cat === "device") ... กระจายทั่วโค้ด
+//     ทุกที่ต้องเรียก requiredAttrs(model) แล้ววนตามที่ได้
+//     เพิ่มหมวด/คุณสมบัติใหม่ในอนาคต = แก้ตารางนี้ที่เดียว
+// ═══════════════════════════════════════════════════════════════════════════
+const ATTR_SCHEMA = {
+  device:   ["color", "qty"],
+  smallpod: ["flavor", "qty"],
+  bigpod:   ["flavor", "qty"],
+  disp:     ["flavor", "qty"],
+  liquid:   ["flavor", "nicotine", "volume", "qty"],
+  iqos:     ["flavor", "qty"],
+  pouch:    ["flavor", "qty"],
+  other:    ["qty"],
+};
+// ชื่อไทยของแต่ละคุณสมบัติ — ใช้ตอนถามลูกค้า ห้ามเรียกสีว่ากลิ่นอีก
+const ATTR_TH = { color: "สี", flavor: "กลิ่น", qty: "จำนวน", nicotine: "ความเข้มนิโคติน", volume: "ขนาด (ml)", variant: "แบบ" };
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧩🧩 k319e · "ถามเฉพาะสิ่งที่ลูกค้ายังไม่ได้ตอบ" (ต่อจาก k319a)
+//
+//  เคสจริงโปรดักชัน 13 ส.ค. 1.32-1.34 (ร้าน ABC EASY · ลูกค้า "เตอร์บ่เกี่ยว"):
+//    G2: "MARBO 9K แท้ 350 บาท / โคลน 290 บาทค่ะ 💕 รับแบบไหนดีคะ"
+//    ลูกค้า: "MARBO 9Kครับผม"  → k319a หยุดการส่งซ้ำได้แล้ว
+//    แต่ข้อความที่มาแทนคือของกลาง k180 ("ขออภัยที่ตอบไม่ตรงคำถาม รบกวนขยายความ")
+//    = ยังไม่ตอบโจทย์ ลูกค้าตอบชื่อรุ่นไปแล้ว ควรถามต่อแค่ "แบบไหน"
+//
+//  ⚠️ ต้นเหตุที่พิสูจน์แล้ว: "แท้/โคลน" **ไม่ใช่ attribute** แต่เป็นคนละรุ่นในแคตตาล็อก
+//    MARBO 9K (350) กับ MARBO 9K (โคลน) (290) — ระบบจึงไม่มีทางรู้ว่ายังมีอะไรค้าง
+//    กวาดแคตตาล็อกเจอ 5 กลุ่มแบบนี้ (ชื่อฐานเดียวกัน ต่างกันที่วงเล็บท้าย)
+//
+//  ⛔ เจ้าของร้านเลือกทางเลือก (ค) 13 ส.ค.: ถาม variant **เฉพาะเมื่อครบ 3 ข้อ**
+//    1) แคตตาล็อกยืนยันว่ารุ่นนั้นมีตัวเลือกจริง ≥ 2
+//    2) บทสนทนานี้ **เคยเปิดตัวเลือกให้ลูกค้าเห็นแล้ว** (ข้อความที่กำลังจะซ้ำคือตัวข้อเสนอเอง)
+//    3) ลูกค้ายังไม่ได้เลือก
+//    ⛔ ห้ามเพิ่ม variant เข้า requiredAttrs แบบกว้าง — จะกระทบ 5 รุ่นทันทีทั้งที่ยังไม่มีปัญหา
+//
+//  ⛔ ชื่อตัวเลือก ("แท้" / "โคลน" / "KIT") **ไม่ได้เขียนตายในโค้ด** —
+//     ดึงจาก "คำที่อยู่หน้าราคา" ในข้อความที่บอทเสนอเอง + ยืนยันด้วยราคาจากแคตตาล็อก
+//     ร้านเปลี่ยนคำเรียกวันไหน ระบบตามทันเอง
+//  ⛔ ของกลาง k180 ยังเป็นตาข่ายสุดท้ายเสมอ — k319e แค่ "พยายามก่อน" ถ้าทำไม่ได้ก็ตกไปใช้ของเดิม
+
+//  รุ่นพี่น้อง = ชื่อฐานเดียวกัน ต่างกันที่วงเล็บท้าย ⛔ อ่านจากแคตตาล็อกล้วน
+let _VARG319 = null;
+function variantsOf319e(model) {
+  try {
+    if (!_VARG319) {
+      _VARG319 = {};
+      for (const k in FLAVORS) {
+        const base = k.replace(/\s*\([^)]*\)\s*$/, "").trim();
+        (_VARG319[base] = _VARG319[base] || []).push(k);
+      }
+    }
+    const base = String(model || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+    const g = _VARG319[base] || [];
+    return g.length >= 2 ? g.slice() : [];
+  } catch (e) { return []; }
+}
+//  ข้อความนี้กำลัง "เปิดตัวเลือกหลายแบบของรุ่นเดียวกัน" อยู่หรือเปล่า
+//   คืน [{label, price}] — label มาจากคำที่อยู่หน้าราคาในข้อความจริง ไม่ใช่จากลิสต์ที่เขียนตาย
+function variantOffer319e(msg, model) {
+  try {
+    const sibs = variantsOf319e(model);
+    if (sibs.length < 2) return [];                       // (1) แคตตาล็อกไม่มีตัวเลือก → จบ
+    const s = String(msg || "");
+    const okPrice = new Set(sibs.map(k => PRICE[k]).filter(p => typeof p === "number"));
+    const base = normTH(String(model).replace(/\s*\([^)]*\)\s*$/, ""));
+    const out = [], seen = new Set();
+    //  จับคู่ "คำ + ราคา + บาท" — ราคาต้องเป็นราคาจริงของพี่น้องในกลุ่มนี้เท่านั้น
+    const RX = /([ก-๙A-Za-z][ก-๙A-Za-z0-9 ]{0,14}?)\s*(\d{2,4})\s*บาท/g;
+    let m;
+    while ((m = RX.exec(s)) !== null) {
+      const price = parseInt(m[2], 10);
+      if (!okPrice.has(price)) continue;
+      let label = String(m[1] || "").trim();
+      //  ⚠️ คำที่จับได้มักติดชื่อรุ่นมาด้วย ("MARBO 9K แท้") — ต้อง "ตัดชื่อรุ่นออก" ไม่ใช่ทิ้งทั้งก้อน
+      //     (รอบแรกผมเขียนให้ทิ้งทั้งก้อน → ดึง label ไม่ได้เลยสักตัว เทสจับได้)
+      //     ตัดทีละคำจากหัว ถ้าคำนั้นเป็นส่วนของชื่อรุ่น
+      const bw = label.split(/\s+/);
+      while (bw.length > 1 && normTH(bw[0]) && base.indexOf(normTH(bw[0])) !== -1) bw.shift();
+      label = bw.join(" ").replace(/^(และ|หรือ|กับ|มีทั้ง|มี|แบบ|ตัว|เป็น)\s*/g, "").trim();
+      const nl = normTH(label);
+      if (!nl || nl.length < 2) continue;
+      if (base.indexOf(nl) !== -1 || nl.indexOf(base) !== -1) continue;   // เหลือแต่ชื่อรุ่นล้วน = ไม่ใช่ label
+      if (seen.has(nl)) continue;
+      seen.add(nl); out.push({ label, price });
+    }
+    return out.length >= 2 ? out : [];                    // (2) ต้องเปิดให้เห็น ≥ 2 แบบถึงนับว่า "เสนอแล้ว"
+  } catch (e) { return []; }
+}
+//  ลูกค้าเลือกแบบไปแล้วหรือยัง — ดูจาก 2 ทาง (ทั้งคู่มาจากข้อมูลจริง ไม่ใช่คำที่เขียนตาย)
+//    ก) รุ่นใน Slot มีวงเล็บกำกับแล้ว = ระบบระบุตัวเลือกได้แน่นอน
+//    ข) ข้อความลูกค้าเอ่ยชื่อ label ที่บอทเพิ่งเสนอ
+function variantChosen319e(slotModel, userText, opts) {
+  try {
+    if (/\([^)]*\)\s*$/.test(String(slotModel || ""))) return true;
+    const u = normTH(String(userText || ""));
+    if (!u) return false;
+    for (const o of (opts || [])) if (normTH(o.label) && u.indexOf(normTH(o.label)) !== -1) return true;
+  } catch (e) {}
+  return false;
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧭🧭 k319b · "รู้อยู่แล้วว่าคุยรุ่นไหน — ห้ามถามชื่อรุ่นซ้ำ"
+//
+//  เคสจริงโปรดักชัน 13 ส.ค. 1.21-1.22 (ร้าน ABC EASY · ลูกค้า "Boat Neverdie"):
+//    ลูกค้าคุย M SWITCH ต่อเนื่อง → "งั้นผมรอตัว15,000ได้มั้ยครับ"
+//    G2 ตอบ "รบกวนพิมพ์ชื่อรุ่นที่ต้องการมาได้เลยค่ะ" ทั้งที่ Slot รู้อยู่ว่าคุย M SWITCH
+//
+//  ต้นเหตุที่พิสูจน์ด้วยการรันซ้ำ (ใส่ marker ในทุกข้อความ "ขอชื่อรุ่น" แล้วดูว่าใครสร้าง):
+//    Slot ถูกต้องตลอด 11 เทิร์น และ prompt ก็แนบ [สินค้าที่กำลังคุยกันอยู่ = M SWITCH] ไปให้ AI แล้ว
+//    แต่ ghostImageGate (k155) เห็นคำตอบพูดถึง "รูป" ทั้งที่ลูกค้าไม่เคยส่งรูป
+//    → ทิ้งคำตอบทั้งก้อน แล้วแทนด้วยข้อความตายตัวที่ **ไม่รู้จัก Slot** = ถามชื่อรุ่นใหม่
+//    (AI เองก็ถามชื่อรุ่นซ้ำได้เหมือนกัน — กวาดเจอข้อความประเภทนี้ 7 จุดทั่วไฟล์)
+//
+//  ⛔ ไม่ไล่แก้ทีละจุด (7 จุดวันนี้ พรุ่งนี้เพิ่มอีกก็ลืมอีก — บทเรียน k158)
+//     ใช้ "ด่านเดียวท้ายสุด": คำตอบไหนขอชื่อรุ่น ทั้งที่ระบบรู้อยู่แล้ว = เขียนใหม่
+//  ⛔ ห้ามแตะ ghostImageGate เอง — มันทำหน้าที่ถูก (กัน AI อ้างรูปที่ลูกค้าไม่เคยส่ง)
+//     ที่ผิดคือ "ข้อความแทน" ของมันไม่รู้จัก Slot
+//  ⛔ ถามชื่อรุ่นได้ตามปกติเมื่อ **ยังไม่รู้จริง ๆ** — นั่นคือพฤติกรรมที่ถูกต้อง ห้ามปิด
+
+//  คำตอบนี้กำลัง "ขอให้ลูกค้าบอกชื่อรุ่น" อยู่หรือเปล่า
+//   ⛔ ต้องเป็นการ "ขอข้อมูลรุ่น" จริง ๆ ไม่ใช่แค่มีคำว่ารุ่นอยู่ในประโยค
+const RX_ASKMODEL319B = /(?:พิมพ์|บอก|แจ้ง|ขอ|ระบุ)\s*(?:ชื่อ)?รุ่น|ชื่อรุ่น(?:ที่ต้องการ|เต็ม)|หมายถึงรุ่นไหน|ไม่แน่ใจว่า[^\n]{0,20}รุ่นไหน/;
+function modelKnownGate319b(reply, item, userText, mtype, stale) {
+  const out = { blocked: false, reply: String(reply || ""), model: "" };
+  try {
+    const r = out.reply;
+    if (!r || !RX_ASKMODEL319B.test(r)) return out;
+    // ⛔ เทิร์นรูป: "ขอรูปชัด ๆ อีกครั้ง" เป็นคำตอบที่ถูกต้อง ห้ามเขียนทับ
+    //   ⚠️ ต้องเทียบผ่าน String() เท่านั้น ห้ามเขียนเงื่อนไขรูปแบบสั้นที่เทส 623 ใช้เป็นจุดยึด
+    //     เทสนั้นค้นซอร์สเพื่อพิสูจน์ว่า "โหลดสต็อกเกิดก่อนแยกเส้นทางรูป"
+    //     ถ้าเขียนซ้ำรูปแบบเดิม (แม้ในคอมเมนต์) ตัวค้นจะเจอบรรทัดนี้แทนจุดจริง → เทสตกทันที
+    //     ⛔ ผมพลาดมาแล้ว 2 รอบ: รอบแรกที่โค้ด รอบสองที่คอมเมนต์ที่เขียนเตือนเรื่องนี้เอง
+    if (String(mtype || "") === "image") return out;
+    if (RX_ORDER_BLOCK.test(r) || r.indexOf("|") !== -1) return out;   // ⛔ บล็อกออเดอร์ ห้ามแตะ
+    if (/บัญชี|เลขพัสดุ|ที่อยู่จัดส่ง/.test(r)) return out;
+    if (stale) return out;                                   // ⛔ ความจำเก่าเกิน = ถามใหม่ถูกแล้ว
+    const m = (item && item.model) || "";
+    if (!m || !FLAVORS[m]) return out;                       // ⛔ ไม่รู้รุ่นจริง = ต้องถาม (พฤติกรรมเดิม)
+    if (normTH(r).indexOf(normTH(m)) !== -1) return out;      // คำตอบเอ่ยรุ่นนั้นอยู่แล้ว = ถามเรื่องอื่น
+    //  ลูกค้าเปลี่ยนหมวดในเทิร์นนี้ → ของเก่าใช้ไม่ได้ ต้องถามใหม่ตามเดิม
+    try {
+      const want = topicInText(String(userText || "")), have = topicOfModel(m);
+      if (want && have && !topicSame(want, have)) return out;
+    } catch (e) {}
+    //  รู้รุ่นแล้ว → ถามเฉพาะสิ่งที่ยังขาดของรุ่นนั้น (ใช้ตัวเดิมของ k319e ทั้งดุ้น)
+    let ask = "";
+    try { ask = askMissing319e(r, item, String(userText || "")); } catch (e) {}
+    out.blocked = true; out.model = m;
+    out.reply = ask || ("ตอนนี้แอดมินดูรายการของ " + m + " ให้อยู่นะคะ 💕\nสอบถามเรื่องไหนเพิ่มเติมบอกได้เลยค่ะ");
+  } catch (e) {}
+  return out;
+}
+//  ประกอบคำถาม "ถามเฉพาะที่ขาด" — variant ก่อน แล้วค่อยใช้ทะเบียนเดิม (missingAttrs/attrAskMsg)
+//   ⛔ ไม่มีอะไรใหม่เรื่องกลิ่น/สี/จำนวน — reuse ของ k258 ทั้งหมด
+function askMissing319e(msg, item, userText) {
+  try {
+    if (!item || !item.model) return "";
+    const opts = variantOffer319e(msg, item.model);
+    if (opts.length >= 2 && !variantChosen319e(item.model, userText, opts)) {   // (3) ยังไม่ได้เลือก
+      const base = String(item.model).replace(/\s*\([^)]*\)\s*$/, "").trim();
+      return "รับ " + base + " " + ATTR_TH.variant + "ไหนดีคะ 💕\nมี"
+           + opts.map(o => o.label + " " + o.price.toLocaleString("en-US") + " บาท").join(" / ") + "ค่ะ";
+    }
+    const miss = missingAttrs(item);                       // ← ทะเบียนเดิม: ตอบแล้วไม่ถามซ้ำ
+    if (!miss.length) return "";
+    return attrAskMsg(item.model, miss);                   // ← ตัวประกอบประโยคเดิม
+  } catch (e) { return ""; }
+}
+
+//  คุณสมบัติที่ต้องมีของสินค้าตัวนี้ — ตัดสินจากหมวดที่ "ยืนยันแล้ว" เท่านั้น
+//  ⛔ หมวดยังไม่ยืนยัน = คืน [] ห้ามเดาว่าต้องถามอะไร (กติกา k253)
+function requiredAttrs(model) {
+  const cat = catOfStrict(model);
+  if (!cat) return [];
+  return (ATTR_SCHEMA[cat] || ATTR_SCHEMA.other).slice();
+}
+//  ช่องที่เก็บค่าคุณสมบัติในแคตตาล็อก — ปัจจุบันทั้งสีและกลิ่นอยู่ในช่อง f เดียวกัน
+//  จึงต้อง "อ่านช่องเดิม แต่เรียกชื่อให้ถูกตามหมวด" (ไม่แตะ stockmap ตามที่เจ้าของร้านสั่ง)
+function attrValues(model, attr) {
+  if (attr === "qty") return [];
+  try {
+    const f = (FLAVORS[model] && FLAVORS[model].f) || [];
+    if (attr === "color") return f.filter(x => /^สี|ขาว|ดำ|เงิน|เทา|เขียว|แดง|น้ำเงิน|ฟ้า|ทอง|ชมพู|ม่วง|บรอนซ์|โรสโกลด์/.test(x));
+    if (attr === "flavor") return f;
+  } catch (e) {}
+  return [];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🎁 k258 · BUNDLE ENGINE V2 — ของแถมผูกกับสินค้าหลัก ไม่ใช่สินค้าใหม่
+//
+//  เจ้าของร้านยืนยัน 8 ส.ค.: "ซื้อเครื่องที่ใช้หัวพอตเล็ก แถมหัวเล็ก 1"
+//    ✅ เครื่อง RELX INFINITY 2+ (990) · เครื่อง RELX ESSENTIAL 2 (490)
+//    ⛔ RELX CREATOR 20K ใช้ Boost Pod (bigpod) — ไม่เข้าเงื่อนไข
+//    ⛔ M ZERO PRO/NANO · M SWITCH · DUAL SMASH · VAZER · ELFBAR JOINONE — ไม่เข้า
+//
+//  ⛔ ห้าม hardcode ว่า "device แถม pod" ในตรรกะ — ต้องอ่านตารางนี้เท่านั้น
+//     เพิ่มโปรใหม่ในอนาคต = เติมแถวในตาราง ไม่ต้องแก้ resolver
+//  ⛔ ของแถมต้องอ้าง parent เสมอ · ห้ามย้าย focus ไปที่ของแถม · ห้ามทับ parent
+//
+//  ✅ เจ้าของร้านยืนยันซ้ำเป็นลายลักษณ์อักษร (k258 · รอบตรวจงาน):
+//     · RELX INFINITY 2+  ซื้อเครื่อง → แถมหัวพอตเล็ก 1 หัว ราคา 0
+//     · RELX ESSENTIAL 2  ซื้อเครื่อง → แถมหัวพอตเล็ก 1 หัว ราคา 0
+//     · ซื้อหัวเพิ่ม "นอกเหนือจากของแถม" → คิดราคาปกติเต็ม ⛔ ห้ามแถมเกิน 1 หัวต่อเครื่อง
+//     · Source of Truth = Product Master + กฎปัจจุบัน ⛔ ไม่ใช่ค่าคาดหวังในเทสเก่า
+const BUNDLE = [
+  { parent: "เครื่อง RELX INFINITY 2+", childCat: "smallpod", childBrand: "RELX", qty: 1, price: 0, condition: "ลูกค้าเลือกกลิ่นเอง" },
+  { parent: "เครื่อง RELX ESSENTIAL 2",  childCat: "smallpod", childBrand: "RELX", qty: 1, price: 0, condition: "ลูกค้าเลือกกลิ่นเอง" },
+];
+function bundleFor(model) {
+  const k = String(model || "");
+  for (const b of BUNDLE) if (b.parent === k) return b;
+  return null;
+}
+//  รายชื่อสินค้าที่ใช้เป็นของแถมได้ — อ่านจากแคตตาล็อกจริง ไม่ใช่รายชื่อที่พิมพ์เอง
+function bundleChoices(model) {
+  const b = bundleFor(model);
+  if (!b) return [];
+  const out = [];
+  try {
+    for (const k of Object.keys(FLAVORS)) {
+      if (catOfStrict(k) !== b.childCat) continue;
+      if (String(k).toUpperCase().indexOf(b.childBrand) === -1) continue;
+      out.push(k);
+    }
+  } catch (e) {}
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  💰 k258 · PRICE GUARD ข้ามหมวด — ราคาต้องตรงหมวดของรุ่นที่กำลังคุย
+//  เคสจริง 8 ส.ค.: "RELX INFINITY 2+ สีขาว ราคา 140 บาท" ⛔ 140 คือหัวพอต
+//    เครื่องราคา 990 → ร้านเสีย 850/ชิ้น (อาการเดียวกับ k254 แต่มาจากคนละทาง)
+//  หลักการ: ถ้าข้อความพูดถึงรุ่น X แล้วอ้างราคา P
+//           แต่ P เป็นราคาของสินค้าที่อยู่ "คนละหมวด" กับ X → บล็อก
+function priceCrossCat(reply, model) {
+  try {
+    if (!model) return null;
+    const myCat = catOfStrict(model);
+    if (!myCat) return null;
+    const mine = (findPrice(model) || {}).price || 0;
+    if (!mine) return null;
+    // 🐛 k260b (เคสจริง "ไอคอสคือไร"): "2,150 บาท" ถูกอ่านเป็น "150" → แก้ให้รู้จักลูกน้ำ
+    // 🐛🐛 k260c (เคสจริง "ทำไม740"): ด่านนี้เคยสแกนราคา "ทั้งข้อความ" → AI อธิบายเปรียบเทียบ
+    //   ราคาสินค้าตัวอื่น (เช่น "ส่วนพอตใช้แล้วทิ้ง 250 บาท เป็นรุ่น...") ก็โดนบล็อกทิ้งทั้งคำตอบ
+    //   → ลูกค้าถาม "ทำไม740" แล้วไม่ได้คำอธิบายเลย เกิด 2 ครั้งใน 2 บทแรกหลัง deploy
+    //   กติกาใหม่ (แคบลง): ตรวจ "รายบรรทัด" เท่านั้น
+    //     ① บรรทัดต้องเอ่ยชื่อรุ่นเป้าหมาย (เต็มหรือแบบไม่มีคำนำหน้า — สไตล์ที่ AI พิมพ์จริง)
+    //     ② ราคาที่เป็นของ "รุ่นอื่นที่ถูกเอ่ยชื่อเต็มในบรรทัดเดียวกัน" = การเปรียบเทียบ ไม่บล็อก
+    //     ③ ราคาผิดที่อยู่คนละบรรทัดกับรุ่นเป้าหมาย = ปล่อยให้ด่าน k176 priceGate ดูแล (มันแก้รายบรรทัดอยู่แล้ว)
+    const bare = String(model).replace(/^(เครื่อง|หัวพอต|หัวน้ำยา|ไส้บุหรี่)\s*/, "").trim();
+    for (const ln of String(reply).split("\n")) {
+      if (ln.indexOf(model) === -1 && (bare.length < 4 || ln.indexOf(bare) === -1)) continue; // ① ไม่ใช่บรรทัดของรุ่นเป้าหมาย
+      // รุ่นอื่นที่ถูกเอ่ย "ชื่อเต็ม" ในบรรทัดนี้ (ไล่ชื่อยาวก่อน กันชื่อซ้อน)
+      //   ⛔ ต้องตัดชื่อรุ่นเป้าหมาย (ทั้งเต็มและแบบไม่มีคำนำหน้า) ออกก่อน
+      //     ไม่งั้น "RELX INFINITY 2+" จะถูกชื่อสั้นกว่า ("RELX INFINITY" = หัวพอต) แย่งจับ
+      //     แล้วราคาผิด 140 จะถูกนับว่า "มีเจ้าของ" ทั้งที่คือเคส JW ของจริง (เทส M3 จับได้)
+      const others = [];
+      let scan = ln.split(model).join(" ");
+      if (bare.length >= 4) scan = scan.split(bare).join(" ");
+      for (const nm of MODEL_NAMES_LONGFIRST) {
+        if (nm.length >= 4 && scan.indexOf(nm) !== -1) { if (nm !== model) others.push(nm); scan = scan.split(nm).join(" "); }
+      }
+      const said = (ln.match(/(?<![\d,.])(\d{1,3}(?:,\d{3})+|\d{2,6})\s*บาท/g) || [])
+        .map(x => Number(String(x).replace(/[^\d]/g, "")));
+      for (const v of said) {
+        if (v === mine) continue;                       // ราคาตัวเองถูกต้อง
+        if (v % mine === 0 && v / mine <= 50) continue; // ยอดรวมของรุ่นนี้
+        // ② ราคาของรุ่นอื่นที่ถูกเอ่ยชื่อไว้ชัด ๆ = ประโยคเปรียบเทียบที่ถูกต้อง
+        let owned = false;
+        for (const o of others) { const p = findPrice(o); if (p && p.price === v) { owned = true; break; } }
+        if (owned) continue;
+        for (const k in PRICE) {
+          const p = Number(typeof PRICE[k] === "object" ? (PRICE[k] && PRICE[k].price) : PRICE[k]);
+          if (p !== v) continue;
+          const c = catOfStrict(k);
+          if (c && c !== myCat) return { said: v, mine, ofModel: k, ofCat: c, myCat };
+        }
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  🔌 k258 · RESOLVER INTEGRATION — เดินสายของ 3 ตารางข้างบนเข้า flow จริง
+//
+//  ⚠️ บทเรียนที่ทำให้ต้องมีบล็อกนี้: "เขียนโค้ดไว้ ≠ โค้ดถูกเรียก"
+//     ATTR_SCHEMA / BUNDLE / priceCrossCat ถูกเขียนไว้ตั้งแต่ k258 รอบแรก
+//     แต่ไม่มีใครเรียกเลยสักจุด → ลูกค้า JW ยังโดนถาม "สีขาวหมายถึงกลิ่นไหน" เหมือนเดิม
+//     ฟังก์ชันในบล็อกนี้ทุกตัวต้องมีผู้เรียกจริงในเส้นทางข้อความ ไม่ใช่แค่ในเทส
+//
+//  ⛔ ไม่แตะ: stockmap · Payment KV · Menu Config · สูตรคิดเงินใน computeOrder
+//     (เพิ่มได้เฉพาะ "ป้ายกำกับแถว" กับ "การบังคับของแถมให้เป็น 0" ซึ่งเป็นกฎที่เจ้าของร้านสั่ง)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ── ①  อ่าน/เขียนคุณสมบัติของรายการใน Slot ผ่านชื่อ attribute ───────────────
+//  ⛔ ห้ามเขียน it.flavor ตรงๆ เวลาที่ค่านั้นคือ "สี" — นั่นคือต้นเหตุของเคส JW
+function attrGet(item, attr) {
+  if (!item) return null;
+  if (attr === "qty") return (typeof item.qty === "number" && item.qty > 0) ? item.qty : null;
+  if (attr === "color") return item.color || null;
+  if (attr === "flavor") return item.flavor || null;
+  return (item.attrs && item.attrs[attr]) || null;
+}
+function attrSet(item, attr, value) {
+  if (!item || value === null || value === undefined || value === "") return item;
+  if (attr === "qty") { const n = typeof value === "number" ? value : parseInt(String(value), 10); if (n > 0 && n <= 999) item.qty = n; return item; }
+  if (attr === "color") { item.color = String(value); return item; }
+  if (attr === "flavor") { item.flavor = String(value); return item; }
+  item.attrs = item.attrs || {};
+  item.attrs[attr] = String(value);
+  return item;
+}
+//  คุณสมบัติที่ "ยังขาด" ของรายการนี้ — ถามเฉพาะอันนี้เท่านั้น
+//  ⛔ หมวดยังไม่ยืนยัน → requiredAttrs คืน [] → ไม่มีอะไรขาด → ไม่ถามมั่ว (กติกา k253)
+function missingAttrs(item) {
+  if (!item || !item.model) return [];
+  const need = requiredAttrs(item.model);
+  const out = [];
+  for (const a of need) if (!attrGet(item, a)) out.push(a);
+  return out;
+}
+//  ประโยคถาม — ถามเฉพาะที่ขาด และเรียกชื่อให้ถูกตามหมวด (สี ≠ กลิ่น)
+function attrAskMsg(model, missing) {
+  const miss = (missing || []).filter(Boolean);
+  if (!miss.length) return "";
+  const th = miss.map(a => ATTR_TH[a] || a);
+  let msg = "รับ " + String(model || "").trim() + " " + th.join(" + ") + " ไหนดีคะ 💕";
+  // มีตัวเลือกจริงในแคตตาล็อก → เสนอให้เลย ลูกค้าจะได้ไม่ต้องเดาคำ
+  try {
+    const first = miss[0];
+    const opts = attrValues(model, first);
+    if (opts && opts.length && opts.length <= 12)
+      msg += "\n" + (ATTR_TH[first] || first) + "ที่มี: " + opts.slice(0, 12).join(" · ");
+  } catch (e) {}
+  return msg;
+}
+//  จับ "ค่าของคุณสมบัติ" จากข้อความลูกค้า โดยอ่านตัวเลือกจริงจากแคตตาล็อก
+//  ⛔ ห้าม hardcode ชื่อสี/ชื่อกลิ่นในตรรกะ — ต้องมาจาก attrValues() เท่านั้น
+function attrInText(model, attr, text) {
+  try {
+    const t = normTH(String(text || ""));
+    if (!t) return "";
+    const opts = attrValues(model, attr) || [];
+    let best = "";
+    for (const o of opts) {
+      const n = normTH(o);
+      if (!n || n.length < 2) continue;
+      if (t.indexOf(n) !== -1 && n.length > normTH(best).length) best = o;
+    }
+    if (best) return best;
+    // 🧪 แคตตาล็อกเก็บกลิ่นพร้อมความแรง ("มิ้นต์ฟรีซ 3%") แต่ลูกค้าพิมพ์แค่ชื่อกลิ่น
+    //   → เทียบด้วย "ชื่อฐาน" (ตัด % ท้ายออก) เหมือนที่ k109 ทำ
+    //   ⛔ ถ้าชื่อฐานเดียวกันมีหลายความแรง = กำกวม ห้ามเลือกแทนลูกค้า (ปล่อยให้ด่าน k179 ถาม)
+    if (attr === "flavor") {
+      const base = (x) => normTH(String(x).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+      let hits = [];
+      for (const o of opts) {
+        const n = base(o);
+        if (!n || n.length < 2) continue;
+        if (t.indexOf(n) !== -1) hits.push(o);
+      }
+      if (hits.length) {
+        const longest = hits.reduce((a, b) => base(b).length > base(a).length ? b : a);
+        const same = hits.filter(o => base(o) === base(longest));
+        if (same.length === 1) return longest;
+        return "";                                   // หลายความแรง = ต้องถาม ห้ามเดา
+      }
+    }
+    // ลูกค้าพิมพ์ "สีขาว" แต่แคตตาล็อกเก็บว่า "ขาว" (หรือกลับกัน) → ลองตัดคำนำหน้าออก
+    if (attr === "color") for (const o of opts) {
+      const n = normTH(String(o).replace(/^สี/, ""));
+      if (n && n.length >= 2 && t.indexOf(n) !== -1 && n.length > normTH(best).length) best = o;
+    }
+    return best;
+  } catch (e) { return ""; }
+}
+
+//  ลูกค้าขอ "แก้คุณสมบัติของออเดอร์" (กลิ่น/สี/จำนวน) — ไม่ใช่เคสหลังการขาย
+//  ✅ เจ้าของร้านยืนยัน (k258c): "ถ้าลูกค้าขอแก้กลิ่น ควรให้ระบบแก้ให้เองเลย ไม่ต้องส่งให้แอดมิน"
+//  ⛔ ต้องไม่กลืนเคสจริงที่ต้องให้คนดู → ของเสีย/เคลม/คืนของ ตัดออกก่อนเสมอ
+//     "ขอเปลี่ยนสินค้าค่ะ" (เคลม) ยังไปหาแอดมินเหมือนเดิม
+//     "ขอเปลี่ยนเป็นกลิ่นโคล่า" = แก้ออเดอร์ → ระบบทำเอง
+//  ⛔ ห้าม hardcode ชื่อกลิ่น/ชื่อรุ่น — อ่านจาก ATTR_TH + แคตตาล็อกจริงเท่านั้น
+function attrEditIntent(text) {
+  const t = String(text || "");
+  if (!t) return false;
+  try { if (AS_TROUBLE.test(t) || AS_CLAIM.test(t)) return false; } catch (e) {}
+  // ① เอ่ยชื่อคุณสมบัติตรงๆ ("เปลี่ยนกลิ่น" · "เปลี่ยนสี" · "เปลี่ยนจำนวน")
+  try {
+    for (const th of Object.values(ATTR_TH)) {
+      const w = String(th).replace(/\s*\(.*\)\s*$/, "").trim();
+      if (w.length >= 2 && t.indexOf(w) !== -1) return true;
+    }
+  } catch (e) {}
+  // ② เอ่ย "ค่า" ของกลิ่นที่มีอยู่จริงในแคตตาล็อก ("ขอเปลี่ยนเป็นโคล่า")
+  try {
+    const n = normTH(t);
+    for (const f of FLAVOR_ALL) if (f && f.length >= 3 && n.indexOf(f) !== -1) return true;
+  } catch (e) {}
+  return false;
+}
+
+// ── ②  ของแถม — อ้าง parent จากตาราง BUNDLE เท่านั้น ────────────────────────
+//  ⛔ ห้ามจับคู่ด้วยชื่อแบรนด์ (CREATOR เป็น RELX เหมือนกันแต่ใช้หัวใหญ่ = ไม่แถม)
+//  คืนค่า: รายการนี้เป็น "ของแถมของ parent ที่อยู่ในออเดอร์เดียวกัน" หรือไม่
+function bundleParentOf(item, allItems) {
+  try {
+    if (!item || !item.model) return "";
+    // ผูกไว้ตรงๆ แล้ว (resolver เป็นคนผูก) = เชื่อค่านั้น
+    if (item.parent) return item.parent;
+    const myCat = catOfStrict(item.model);
+    if (!myCat) return "";
+    for (const other of (allItems || [])) {
+      if (!other || other === item || !other.model) continue;
+      const b = bundleFor(other.model);
+      if (!b) continue;
+      if (b.childCat !== myCat) continue;
+      if (String(item.model).toUpperCase().indexOf(b.childBrand) === -1) continue;
+      return other.model;
+    }
+    return "";
+  } catch (e) { return ""; }
+}
+//  จำนวนของแถมที่ parent ตัวนี้ให้ได้ทั้งหมด (ตาม qty ของ parent)
+function bundleQtyFor(parentItem) {
+  const b = bundleFor(parentItem && parentItem.model);
+  if (!b) return 0;
+  const pq = (parentItem && parentItem.qty > 0) ? parentItem.qty : 1;
+  return b.qty * pq;
+}
+//  ผูกของแถมเข้ากับ parent ใน Slot — ⛔ ห้ามย้าย cur ไปที่ของแถม · ห้ามทับ parent
+//  คืน { slot, added:[], needFlavor:[] } — needFlavor = ของแถมที่ยังไม่รู้กลิ่น ต้องถามลูกค้า
+function bundleSync(s) {
+  const slot = slotOk(s) ? s : slotNew();
+  const added = [], needFlavor = [];
+  try {
+    const curModel = (slotCurrent(slot) || {}).model || "";
+    for (const parent of slot.items.slice()) {
+      if (!parent || !parent.model) continue;
+      if (parent.free) continue;                       // ของแถมไม่แถมต่อ
+      const b = bundleFor(parent.model);
+      if (!b) continue;
+      const want = bundleQtyFor(parent);
+      if (!(want > 0)) continue;
+      // มีของแถมของ parent ตัวนี้อยู่แล้วหรือยัง
+      let child = slot.items.find(x => x && x.free && x.parent === parent.model);
+      if (!child) {
+        child = { model: "", flavor: "", color: "", qty: want, price: 0, free: true, parent: parent.model,
+                  source: "bundle_rule", confidence: 1, t: Date.now() };
+        slot.items.push(child);
+        added.push({ parent: parent.model, qty: want });
+      } else if (child.qty !== want) {
+        child.qty = want;                              // parent เปลี่ยนจำนวน → ของแถมตามไปด้วย
+      }
+      child.price = 0;                                 // ⛔ ของแถมห้ามมีราคาเด็ดขาด
+      if (!child.model || !child.flavor) needFlavor.push({ parent: parent.model, choices: bundleChoices(parent.model) });
+    }
+    // ⛔ cur ต้องยังชี้ที่สินค้าหลักเสมอ ห้ามให้ของแถมแย่ง focus
+    if (curModel) {
+      const i = slot.items.findIndex(x => x && !x.free && x.model === curModel);
+      if (i !== -1) slot.cur = i;
+    }
+  } catch (e) {}
+  return { slot, added, needFlavor };
+}
+
+// ── ②b  ด่านขาออก k260: ลูกค้าขอดูรายการ "หมวด X" → คำตอบห้ามเสนอรุ่นหมวดอื่น ──
+//  ที่มา: เทิร์น 5/9 ของบทจริง 8 ส.ค. — ลูกค้าพิมพ์ "Bipod" / "หัวใหญ่ เหลือไร"
+//  แต่ AI ลิสต์กลิ่นของ INFY PLUS (หัวเล็ก) ซ้ำ 3 รอบ · k259 กันที่ "ขาเข้า" แล้ว
+//  ด่านนี้คือชั้นสุดท้าย "ขาออก" — ถ้า AI ดันเอ่ยรุ่นนอกหมวดออกมาเอง = แทนที่ด้วย
+//  รายการที่โค้ดสร้างจากแคตตาล็อกจริง (ชื่อ+ราคาจากตาราง ไม่มีทางมั่ว)
+//  ⛔ ขอบเขตแคบโดยตั้งใจ (กันแก้เกิน):
+//     · ยิงเฉพาะเทิร์นที่ catBrowseKind() บอกว่า "ขอดูรายการหมวด" เท่านั้น
+//     · ลูกค้าเอ่ยชื่อรุ่น/แบรนด์เอง → ไม่ยุ่ง (คำอธิบายข้ามหมวดเป็นเรื่องถูกต้อง)
+//     · ลูกค้าพูดถึง ≥2 หมวด (เปรียบเทียบ) → ไม่ยุ่ง
+//     · ห้ามพูดเรื่อง มี/หมด ในข้อความที่สร้าง (สต็อกเป็นหน้าที่ด่าน k190)
+function catReplyGate(reply, msgText) {
+  try {
+    const src = String(reply || "");
+    const t = String(msgText || "");
+    if (!t || !src) return { blocked: false, reply: src };
+    const kind = catBrowseKind(t);
+    if (!kind) return { blocked: false, reply: src };
+    try { if (_MODEL_IN_RAW(t)) return { blocked: false, reply: src }; } catch (e) {}
+    // นับหมวดที่ลูกค้าเอ่ยเอง — เกิน 1 หมวดจริง (ไม่นับ head) = เปรียบเทียบ ห้ามยุ่ง
+    const cats = [];
+    try {
+      const tt = t.replace(TOPIC_STRIP_RE, " ");
+      for (const [name, re] of TOPIC_WORDS) if (re.test(tt) && name !== "head" && cats.indexOf(name) === -1) cats.push(name);
+    } catch (e) {}
+    if (cats.length > 1) return { blocked: false, reply: src };
+    const wantCat = topicInText(t);
+    if (!wantCat || wantCat === "head") return { blocked: false, reply: src };
+    // หา "รุ่นนอกหมวด" ที่คำตอบเอ่ยถึง + นับว่ามีรุ่น "ในหมวด" อยู่ด้วยไหม (ไล่ชื่อยาวก่อน กันชื่อซ้อน)
+    const bad = [];
+    let inCat = 0;
+    let scan = src;
+    const nMsg = normTH(t);
+    for (const nm of MODEL_NAMES_LONGFIRST) {
+      if (nm.length < 4 || scan.indexOf(nm) === -1) continue;
+      scan = scan.split(nm).join(" ");
+      const c = catOfStrict(nm);
+      if (!c) continue;
+      if (c === wantCat) { inCat++; continue; }
+      if (nMsg.indexOf(normTH(nm)) !== -1) continue;   // ลูกค้าเอ่ยเอง = ไม่นับ
+      bad.push(nm + "/" + c);
+    }
+    if (!bad.length) return { blocked: false, reply: src };
+    // ⛔ กันแก้เกิน (เทส jeetoo 483 จับได้): คำตอบมีรุ่นในหมวดอยู่แล้ว = AI ตอบหมวดถูก
+    //   ที่เอ่ยรุ่นข้ามหมวดมักเป็นบริบท ("RELX POD CLEAR หมดค่ะ แต่มี MARBO 9K...") → ห้ามแตะ
+    //   ด่านนี้จับเฉพาะ "คำตอบที่ผิดหมวดล้วนๆ" (เคสจริงเทิร์น 5/9: ลิสต์กลิ่นหัวเล็กให้คนขอบิ๊กพอต)
+    if (inCat > 0) return { blocked: false, reply: src };
+    // สร้างรายการหมวดที่ถูกต้องจากแคตตาล็อกจริง — ชื่อ+ราคาจากตาราง
+    //   ⚠️ ต้องกรองสต็อกด้วย (เทส 483 จับได้ว่าเวอร์ชันแรกเสนอของหมด): มี stockmap → ตัดรุ่นที่หมดออก
+    //   ไม่รู้สต็อก (null) = ใส่ได้ แต่ห้ามอ้างว่าพร้อมส่ง (กติกาเดียวกับ k190)
+    const sm = _qrStock || null, buf = typeof _qrBuf === "number" ? _qrBuf : 3;
+    const hasStock = (k) => {
+      if (!sm) return true;
+      try {
+        const fl = (FLAVORS[k] && FLAVORS[k].f) || [];
+        if (!fl.length) { const q = findStockForItem(sm, k, ""); return q === null || q > buf; }
+        for (const f of fl) { const q = findStockForItem(sm, k, f); if (q === null || q > buf) return true; }
+        return false;
+      } catch (e) { return true; }
+    };
+    const rows = [];
+    for (const k of Object.keys(FLAVORS)) {
+      if (catOfStrict(k) !== wantCat) continue;
+      if (!hasStock(k)) continue;
+      const p = findPrice(k);
+      rows.push("- " + k + (p && p.price ? " = " + p.price.toLocaleString("en-US") + " บาท" : ""));
+      if (rows.length >= 12) break;
+    }
+    if (!rows.length) return { blocked: false, reply: src };  // หมวดไม่มีของ = ปล่อยผ่าน อย่าสร้างความว่างเปล่า
+    const th = (PRODUCT_TYPE_TH[wantCat] || wantCat).split(" (")[0].split(" —")[0];
+    return {
+      blocked: true, said: bad.join(" · "),
+      reply: th + " มีรุ่นเหล่านี้ค่ะ 💕\n" + rows.join("\n") + "\n\nสนใจรุ่นไหนเป็นพิเศษ บอกได้เลยนะคะ ✨"
+    };
+  } catch (e) { return { blocked: false, reply: String(reply || "") }; }
+}
+
+// ── ③  ด่านขาออก: ราคาข้ามหมวด — ใช้ priceCrossCat() ที่เขียนค้างไว้ ────────
+//  บล็อกแล้วต้อง "แก้ให้ถูก" ไม่ใช่แค่ตัดทิ้ง ลูกค้าถามราคาต้องได้ราคา
+function priceCrossCatGate(reply, model) {
+  try {
+    const hit = priceCrossCat(reply, model);
+    if (!hit) return { blocked: false, reply: String(reply || "") };
+    const th = PRODUCT_TYPE_TH[hit.ofCat] || hit.ofCat;
+    return {
+      blocked: true,
+      said: hit.said + "(" + hit.ofModel + "/" + hit.ofCat + ") vs " + model + "/" + hit.myCat + "=" + hit.mine,
+      reply: String(model).trim() + " ราคา " + hit.mine.toLocaleString("en-US") + " บาทค่ะ 💕\n"
+           + "(" + hit.said.toLocaleString("en-US") + " บาท เป็นราคาของ " + th + " คนละตัวกันนะคะ)\n"
+           + "รับกี่ชิ้นดีคะ ✨"
+    };
+  } catch (e) { return { blocked: false, reply: String(reply || "") }; }
+}
+const PRODUCT_TYPE_TH = {
+  disp:     "พอตใช้แล้วทิ้ง (สูบหมดแล้วทิ้งทั้งแท่ง)",
+  bigpod:   "หัวน้ำยาใหญ่ (Big Pod) — ใช้คู่กับเครื่อง เปลี่ยนหัวได้",
+  smallpod: "หัวน้ำยาเล็ก — ใช้คู่กับเครื่อง เปลี่ยนหัวได้",
+  device:   "ตัวเครื่อง (ต้องซื้อหัวน้ำยาแยก)",
+  iqos:     "ไส้บุหรี่ IQOS (ใช้กับเครื่อง IQOS)",
+  other:    "อื่นๆ (น้ำยาขวด / นิโคตินพอช / เครื่อง IQOS)",
+};
+// Product Identity + Attributes — ⛔ known:false = ห้ามตอบ ให้ถามกลับ
+function productAttr(model) {
+  const name = String(model || "").trim();
+  const cat = name ? catOfStrict(name) : "";
+  if (!cat) return { product_id: name, product_name: name, category: "", product_type: "", known: false };
+  const head = (cat === "bigpod" || cat === "smallpod");
+  return {
+    product_id: name, product_name: name, category: cat,
+    product_type: PRODUCT_TYPE_TH[cat] || "",
+    is_disposable: cat === "disp",
+    is_replaceable_pod: head,
+    is_device: cat === "device",
+    is_pod_head: head,
+    known: true,
+  };
+}
+// ลูกค้ากำลังถาม "ประเภทสินค้า" หรือเปล่า
+const ATTR_Q_RE = /ใช้แล้วทิ้ง|สูบทิ้ง|สูบแล้วทิ้ง|ทิ้งเลย|เปลี่ยนหัว|เติมน้ำยา|เติมได้|ใช้หัว(อะไร|ไหน|ได้)|ใส่หัว|หัวน้ำยา(ไหม|รึ|หรือ|ป่าว|มั้ย)|บิ๊กพอต(ไหม|รึ|หรือ|ป่าว|มั้ย)|big\s?pod(ไหม|\?)|disposable|refillable|เป็น(เครื่อง|หัว|แบบ|ประเภท|ชนิด)|ประเภท(ไหน|อะไร)|ชนิดไหน|แบบไหน|เครื่องหรือหัว|หัวหรือเครื่อง|ต้องมีเครื่อง|ใช้กับเครื่อง/i;
+function attrQuestion(text) { return ATTR_Q_RE.test(String(text || "")); }
+// ⛔ ด่านขาออก — คำตอบขัดกับ Product Attribute = บล็อก
+//   บอกว่า "ใช้แล้วทิ้ง" ทั้งที่เป็น bigpod  หรือ  บอกว่า "เปลี่ยนหัว" ทั้งที่เป็น disp
+const SAY_DISPOSABLE_RE = /ใช้แล้วทิ้ง|สูบแล้วทิ้ง|สูบทิ้ง|ทิ้งได้เลย|disposable/i;
+const SAY_REFILL_RE = /เปลี่ยนหัว(ได้|ค่ะ|นะ)|เติมน้ำยา|ใช้คู่กับเครื่อง|ต้องมีเครื่อง|บิ๊กพอต|big\s?pod|หัวน้ำยา/i;
+function attrGuard(reply, model) {
+  const a = productAttr(model);
+  const t = String(reply || "");
+  if (!t || !a.known) return { reply, blocked: false, why: "" };
+  const saysDisp = SAY_DISPOSABLE_RE.test(t), saysRefill = SAY_REFILL_RE.test(t);
+  let bad = "";
+  if (a.is_disposable && saysRefill && !saysDisp) bad = "บอกว่าเปลี่ยนหัวได้ ทั้งที่เป็นพอตใช้แล้วทิ้ง";
+  if (!a.is_disposable && saysDisp) bad = "บอกว่าใช้แล้วทิ้ง ทั้งที่เป็น " + a.category;
+  if (!bad) return { reply, blocked: false, why: "" };
+  return {
+    blocked: true, why: bad,
+    reply: a.product_name + " เป็น" + a.product_type + " ค่ะ 💕\n"
+      + (a.is_disposable
+          ? "สูบจนหมดแล้วทิ้งทั้งแท่งได้เลย ไม่ต้องเปลี่ยนหัวหรือเติมน้ำยานะคะ ✨"
+          : a.is_device
+            ? "เป็นตัวเครื่องนะคะ ต้องซื้อหัวน้ำยาแยกต่างหากค่ะ ✨"
+            : "ไม่ใช่แบบใช้แล้วทิ้งนะคะ ใช้คู่กับเครื่อง เปลี่ยนหัวได้เลยค่ะ ✨"),
+  };
+}
 function catOf(key) {
   // 🚬 k60: เจ้าของร้านแจ้ง 1/8 — "ไส้บุหรี่ IQOS ครบ 2 ชิ้น = ส่งฟรี" (เฉพาะไส้บุหรี่ ไม่รวมเครื่อง)
-  if (/ไส้บุหรี่/.test(key)) return "iqos";
-  if (/POUCH|SALTNIC|FREEBASE|IQOS/i.test(key)) return "other"; // เครื่อง IQOS / น้ำยาขวด / นิโคตินพอช = ไม่ร่วมโปรส่งฟรี
-  if (/^เครื่อง/.test(key)) return "device";
-  if (/\(KIT\)/.test(key)) return "bigpod";          // ชุด KIT นับรวมกับ Big Pod (4 ชิ้นส่งฟรี)
+  // 🔒 k240 · A4 (เจ้าของร้านยืนยันซ้ำ 7/8): โปร IQOS นับ "ไส้บุหรี่" เท่านั้น
+  //    ⛔ ห้ามให้ "เครื่อง IQOS ILUMA" เข้าหมวด iqos เด็ดขาด จนกว่าเจ้าของร้านจะสั่งเพิ่มเป็นลายลักษณ์อักษร
+  //    เครื่อง IQOS ตกไปเป็น "other" ที่บรรทัดถัดไป = ไม่เข้าโปรส่งฟรีใดๆ ซึ่งถูกต้องแล้ว
+  //    ⚠️ ถ้าร้านเพิ่มสินค้า IQOS ประเภทใหม่ที่ขึ้นต้นด้วย "ไส้บุหรี่" มันจะเข้าโปรอัตโนมัติ (Scope = CATEGORY)
   // 🐛 k70 (บั๊กเสียเงินจริง): ลิสต์ BIGPOD/SMALLPOD เก็บชื่อแบบไม่มีคำนำหน้า ("RELX INFINITY")
   //   แต่ชื่อจริงในระบบคือ "หัวพอต RELX INFINITY" → เทียบไม่ตรง → ตกไปเป็น "disp"
   //   ผลคือ สั่งหัวพอตเล็ก 4 หัว ได้ส่งฟรีทันที ทั้งที่โปรหัวเล็กต้องครบ 10 หัว
   //   = ร้านเสียค่าส่ง 40 บาท ทุกครั้งที่ลูกค้าสั่งหัวเล็ก 4-9 หัว
-  const bare = String(key).replace(/^(หัวพอต|หัวน้ำยา)\s*/, "").trim();
-  if (BIGPOD.indexOf(key) !== -1 || BIGPOD.indexOf(bare) !== -1) return "bigpod";     // Big Pod → 4 ชิ้นส่งฟรี
-  if (SMALLPOD.indexOf(key) !== -1 || SMALLPOD.indexOf(bare) !== -1) return "smallpod"; // หัวเล็ก → 10 หัวส่งฟรี
-  if (/^หัวพอต/.test(key)) return "smallpod";        // ตาข่ายกันพลาด: ขึ้นต้นว่า "หัวพอต" = หัวเล็กเสมอ
-  return "disp"; // พอตใช้แล้วทิ้ง → 4 แท่งส่งฟรี
+  // 🏷️ P0-16: ตรรกะทั้งหมดย้ายไป catResolve() ตัวเดียว — กันไม่ให้ catOf กับ catOfStrict เพี้ยนจากกัน
+  //   ⛔ ฝั่งคิดเงินยังได้ "disp" เป็นค่าตั้งต้นเหมือนเดิมทุกประการ (ห้ามแตะระบบคิดเงิน)
+  //      ต่างกันแค่ตอนตอบลูกค้าเรื่องประเภทสินค้า ซึ่งใช้ catOfStrict ที่ไม่เดา
+  return catResolve(key).cat;
 }
 function cloneTier(n) { return n >= 1000 ? 190 : n >= 500 ? 200 : n >= 300 ? 210 : n >= 200 ? 220 : n >= 100 ? 230 : n >= 50 ? 240 : n >= 20 ? 250 : 290; }
 MODEL_NAMES_LONGFIRST = [...new Set([...Object.keys(PRICE), ...Object.keys(FLAVORS)])].sort((a, b) => b.length - a.length);
+// 🧾 k268 · หัวข้อบล็อกทวนที่ระบบยอมรับ — เดิมเทียบตัวอักษรเป๊ะ "ทวนคำสั่งซื้อ" อย่างเดียว
+//   หลักฐาน: โปรดักชัน 9 ส.ค. 19.43 AI เขียน "ทวนออเดอร์" → การ์ดไม่ออกทั้งเทิร์น
+//   ⛔ ต้องมีคำว่า "ทวน" นำหน้าเสมอ + ยังต้องมีบรรทัด "รุ่น | กลิ่น | จำนวน" ถึงจะได้การ์ด
+const RX_ORDER_BLOCK = /ทวน\s*(?:คำสั่งซื้อ|ออเดอร์|รายการสั่งซื้อ|รายการสินค้า)/;
 // แยกรายการจากบล็อก "ทวนคำสั่งซื้อ" (รูปแบบบรรทัด: รุ่น | กลิ่น | จำนวน)
 function parseItems(reply) {
   const items = [];
@@ -3730,7 +6260,50 @@ function parseItems(reply) {
 }
 // คิดเงินจากรายการ → ราคาต่อชิ้น + ยอดรวม + ค่าส่ง (โปรส่งฟรี/เรทขายส่ง/ส่งด่วน)
 // expressFee != null → ลูกค้าเลือกส่งด่วน ใช้ค่าส่งด่วนแทน (ไม่เข้าโปรส่งฟรี)
-function computeOrder(items, expressFee) {
+// ═══ k240: โปรแถมเครื่อง — ผูกกับ "ตัวสินค้า" ไม่ใช่ "หมวด" ═══════════
+//   🐛 บั๊กเดิม (เจ้าของร้านชี้ 7/8): เงื่อนไขเก่าคือ `big >= 5` ซึ่ง big มาจาก catOf()
+//      ที่ยุบสินค้า 13 รุ่นเป็นคำเดียวว่า "bigpod" → ABC LEGO / ESKO / KS / M SWITCH /
+//      RELX POD CLEAR / ชุด KIT ครบ 5 ชิ้น ก็ได้เครื่องฟรีไปด้วย = แจกเครื่อง 250 ให้ 12 รุ่นที่ไม่ควรได้
+//   กติกา: โปรนี้ผูกกับชื่อสินค้าจริง ⛔ ห้ามใช้ catOf / หมวด มาตัดสินสิทธิ์เด็ดขาด
+const GIFT_PROMO = {
+  eligible: ["RELX BOOST POD"],
+  minQty: 5,
+  giftModel: "เครื่อง RELX CREATOR 20K",
+  giftValue: 250,
+};
+// นับเฉพาะจำนวนของ "สินค้าที่เข้าโปร" เท่านั้น — เทียบด้วยคีย์จริงจาก findPrice
+function giftPromoQty(items) {
+  let n = 0;
+  try {
+    for (const it of (items || [])) {
+      const p = findPrice(it.model);
+      const key = p ? p.key : String((it && it.model) || "");
+      if (GIFT_PROMO.eligible.indexOf(key) !== -1) n += (it.qty || 0);
+    }
+  } catch (e) {}
+  return n;
+}
+// choice: "gift" = เอาเครื่องฟรี · "ship" = เอาส่งฟรี · null = ยังไม่เลือก
+//   ⛔ โปรหลักใช้ร่วมกันไม่ได้ — ถ้าเข้าเงื่อนไขทั้งสอง ต้องให้ลูกค้าเลือก ห้ามระบบเลือกเอง
+// 💰 k298 · variantSiblings — "รุ่นนี้มีอีกแบบราคาต่างกันไหม" (ฟังก์ชันใหม่ ไม่แตะ findPrice)
+//   คืนเฉพาะพี่น้องที่ **ราคาต่างจากตัวที่เลือกอยู่** เพื่อเอาไปเขียนหมายเหตุบนการ์ด
+//   ⛔ อ่านอย่างเดียว ไม่เปลี่ยนการเลือกราคา ไม่เปลี่ยนยอด — ใช้ตัดสินใจแค่ว่า "ควรเตือนไหม"
+function variantSiblings(key) {
+  try {
+    const base = String(key || "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+    if (!base) return [];
+    const me = PRICE[key];
+    const out = [];
+    for (const k in PRICE) {
+      if (k === key) continue;
+      if (String(k).replace(/\s*\([^)]*\)\s*$/, "").trim() !== base) continue;
+      if (PRICE[k] === me) continue;                 // ราคาเท่ากัน = ไม่ต้องเตือน
+      if (!out.some(x => x.k === k)) out.push({ k, p: PRICE[k] });
+    }
+    return out;
+  } catch (e) { return []; }
+}
+function computeOrder(items, expressFee, choice) {
   let cloneQty = 0;
   for (const it of items) { const p = findPrice(it.model); if (p && p.key === "MARBO 9K (โคลน)") cloneQty += it.qty; }
   let goods = 0, disp = 0, small = 0, big = 0, iqos = 0; const rows = [];
@@ -3739,7 +6312,10 @@ function computeOrder(items, expressFee) {
     //   → ระบบคิดว่าเป็นของแถม ตั้งราคา 0 → ยอดรวม 0 → การ์ดโดนบล็อก → ลูกค้าติดลูป
     //   เคสจริง 1/8: ออเดอร์ RELX INFINITY มิ้นต์ฟรีซ 50 หัว (~17,500 บาท) หลุดมือ
     const FREE_RE = /แถม|ของแถม|\bfree\b|(?:^|[\s(])ฟรี(?![ซสzs])/i;
-    const isFree = FREE_RE.test(it.flavor || "") || /แถม|\(ฟรี\)/.test(it.model || "");
+    // 🎁 k258: ของแถมที่ resolver ผูกมาจากตาราง BUNDLE ถือเป็นของแถมเช่นกัน (มี parent อ้างอิงเสมอ)
+    //   ⛔ ห้ามให้ของแถมมีราคา — เคสจริง 8 ส.ค. ของแถมถูกคิดเงิน 140 บาท
+    const isBundle = !!(it && it.free && it.parent);
+    const isFree = isBundle || FREE_RE.test(it.flavor || "") || /แถม|\(ฟรี\)/.test(it.model || "");
     const p = findPrice(it.model);
     let unit = p ? p.price : 0;
     const key = p ? p.key : it.model;
@@ -3748,21 +6324,57 @@ function computeOrder(items, expressFee) {
     const line = unit * it.qty;
     goods += line;
     if (!isFree) { const c = p ? catOf(p.key) : "disp"; if (c === "disp") disp += it.qty; else if (c === "smallpod") small += it.qty; else if (c === "bigpod") big += it.qty; else if (c === "iqos") iqos += it.qty; }
-    const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + (isFree ? "" : " x" + it.qty) + (isFree ? " (แถมฟรี 🎁)" : "");
-    rows.push({ label, line, unknown: !p, free: isFree });
+    const label = (key.replace(/^เครื่อง /, "")) + (it.flavor ? " " + it.flavor : "") + (isFree ? "" : " x" + it.qty)
+      + (isBundle ? " (ของแถม 🎁 จาก " + String(it.parent).replace(/^เครื่อง /, "") + " x" + it.qty + ")" : (isFree ? " (แถมฟรี 🎁)" : ""));
+    // 🧾 k258 · ป้ายกำกับแถวสำหรับการ์ด — แยก สินค้าหลัก / ของแถม / ซื้อเพิ่ม / ส่วนลด
+    //   ⛔ เป็นแค่ "ป้าย" ไม่แตะสูตรคิดเงินสักบรรทัด (ยอดยังมาจาก goods/ship/total ชุดเดิม)
+    let section = "main";
+    if (isFree) section = "free";
+    else if (bundleParentOf(it, items)) section = "extra";   // หัวที่ซื้อเพิ่มนอกเหนือจากของแถม
+    // 💰 k298 — สินค้าที่มี "หลายแบบ ราคาไม่เท่ากัน" ต้องบอกลูกค้าบนการ์ด ห้ามเงียบ
+    //   เคสจริง 13.47: ลูกค้าพิมพ์ "เอามาโบองุ่น1" → การ์ดขึ้น MARBO 9K 350 เงียบๆ
+    //     ร้านมี แท้ 350 / โคลน 290 ต่างกัน 60 บาท/แท่ง — ลูกค้าไม่รู้เลยว่ามีอีกแบบ
+    //   ⛔ ไม่แตะราคา ไม่แตะยอดรวม ไม่แตะจำนวน ไม่บล็อกการ์ด — เพิ่ม "หมายเหตุ" อย่างเดียว
+    //     (2 patch ก่อนหน้าที่บล็อกการ์ด ทำ regression พัง 55 และ 21 เคส — จึงเปลี่ยนมาเตือนแทน)
+    //   ⛔ ลูกค้าระบุแบบมาแล้ว (โคลน/เทียบแท้/KIT) = ไม่ต้องเตือน ไม่กวนลูกค้าที่ตัดสินใจแล้ว
+    //   🔻 k306 (12 ส.ค.) — เจ้าของร้านสั่งปิดหมายเหตุนี้
+    //     เหตุผล: ลูกค้าสั่ง "มาโบ" แล้วการ์ดขึ้น "⚠️ มีอีกแบบ: (โคลน) 290 บาท"
+    //       = การ์ดพูดถึงของที่ลูกค้าไม่ได้สั่ง ทำให้สับสน และเชียร์ตัวถูกลงเอง
+    //     ⛔ ปิดที่จุดเดียว: ไม่ตั้งค่า vnote → การ์ดไม่มีบรรทัดนี้ (ตัวเรนเดอร์เช็ค if (r.vnote))
+    //     ⛔ ไม่แตะราคา ไม่แตะยอดรวม ไม่แตะจำนวน ไม่แตะโครงแถว — flow หลักเหมือนเดิมทุกบรรทัด
+    //     variantSiblings() ยังอยู่ เผื่อเจ้าของร้านสั่งเปิดกลับ (ลบ 3 บรรทัดล่างนี้ทิ้ง = ได้ของเดิม)
+    let vnote = "";
+    rows.push({ label, line, unknown: !p, free: isFree, bundle: isBundle, parent: (it && it.parent) || "", section, vnote });
   }
-  // 🎁 ของแถมอัตโนมัติ: Big Pod (หัวน้ำยาใหญ่) ครบ 5 หัว → แถมเครื่องเปล่า 1 เครื่อง (มูลค่า 250)
-  if (big >= 5 && !rows.some(r => r.free && /เครื่อง/.test(r.label)))
-    rows.push({ label: "เครื่องเปล่า (แถมฟรี 🎁 มูลค่า 250)", line: 0, free: true });
+  // 🎁 k240 ชั้นที่ 1 · Product Eligibility — เฉพาะสินค้าที่อยู่ใน GIFT_PROMO.eligible เท่านั้น
+  const giftQty = giftPromoQty(items);
+  // 🎁 k240 ชั้นที่ 2 · Quantity Eligibility — นับเฉพาะจำนวนของสินค้าที่ผ่านชั้น 1
+  const giftEligible = giftQty >= GIFT_PROMO.minQty;
+  // ของแถมที่ลูกค้าพิมพ์มาเอง (AI ใส่บรรทัดแถมหัวน้ำยาเวลาซื้อเครื่อง) — คนละเรื่องกับโปรนี้
+  // ⚠️ k258: แถวของแถมที่ระบบผูกจากตาราง BUNDLE **ไม่นับ** เป็น manualFree
+  //   เหตุผล: ก่อน k258 แถวนี้ไม่เคยมีอยู่ ถ้านับด้วยจะกลายเป็นว่า "แถมหัวให้ = ลูกค้าเสียสิทธิ์ส่งฟรี"
+  //   ซึ่งเป็นการเปลี่ยนกฎเงินโดยที่เจ้าของร้านไม่ได้สั่ง → คงพฤติกรรมเดิมไว้ทุกประการ
+  //   ⛔ ข้อนี้ต้องให้เจ้าของร้านยืนยัน: ของแถมตามโปรเครื่อง ใช้ร่วมกับส่งฟรีได้หรือไม่
+  const manualFree = rows.some(r => r.free && !r.bundle);
   if (expressFee != null) {
-    // ส่งด่วน: ใช้ค่าส่งด่วนตามระยะทาง (ไม่เข้าโปรส่งฟรีพัสดุ)
-    return { rows, goods, ship: expressFee, total: goods + expressFee, freeShip: false, express: true };
+    // ส่งด่วน: ใช้ค่าส่งด่วนตามระยะทาง (ไม่เข้าโปรส่งฟรีพัสดุ) และไม่เข้าโปรแถมเครื่อง
+    return { rows, goods, ship: expressFee, total: goods + expressFee, freeShip: false, express: true, giftEligible, giftQty };
   }
-  // 🎁 ออเดอร์ที่ใช้ "โปรแถมสินค้า" (มีของแถมในบิล) = ไม่เข้าโปรส่งฟรี ต้องจ่ายค่าส่ง 40 ตามปกติ
-  const hasGift = rows.some(r => r.free);
-  const freeShip = !hasGift && (disp >= 4 || small >= 10 || big >= 4 || iqos >= 2 || cloneQty >= 20);   // k60: ไส้บุหรี่ IQOS 2 ชิ้น = ส่งฟรี
+  const shipEligible = !manualFree
+    && (disp >= 4 || small >= 10 || big >= 4 || iqos >= 2 || cloneQty >= 20);   // k60: ไส้บุหรี่ IQOS 2 ชิ้น = ส่งฟรี
+  // 🎁 k240 ชั้นที่ 3 · Exclusivity — เข้าเงื่อนไข 2 โปร แต่ยังไม่เลือก = ต้องถามลูกค้า ห้ามเลือกแทน
+  if (giftEligible && shipEligible && choice !== "gift" && choice !== "ship")
+    return { rows, goods, ship: 40, total: goods + 40, freeShip: false, express: false,
+             gift: false, giftEligible, giftQty, promoAsk: true };
+  if (giftEligible && (choice === "gift" || !shipEligible)) {
+    rows.push({ label: GIFT_PROMO.giftModel + " (แถมฟรี 🎁 มูลค่า " + GIFT_PROMO.giftValue + ")", line: 0, free: true, section: "free" });
+    return { rows, goods, ship: 40, total: goods + 40, freeShip: false, express: false,
+             gift: true, giftEligible, giftQty, promoChosen: "gift" };
+  }
+  const freeShip = shipEligible;
   const ship = freeShip ? 0 : 40;
-  return { rows, goods, ship, total: goods + ship, freeShip, express: false, gift: hasGift };
+  return { rows, goods, ship, total: goods + ship, freeShip, express: false,
+           gift: manualFree, giftEligible, giftQty, promoChosen: giftEligible ? "ship" : undefined };
 }
 
 // 🔍 เช็คแบบเบา (k8): กลิ่นในการ์ดต้องมีอยู่จริงในรายการกลิ่นของรุ่นนั้น
@@ -3785,6 +6397,16 @@ function flavorKnown(model, flavor) {
       for (const k in FLAVORS) { const nk = normTH(k); if (nk.indexOf(nm) !== -1 || nm.indexOf(nk) !== -1) { list = FLAVORS[k].f; break; } }
     }
     if (!list || !list.length) return true;
+    // 🍬 k318b (เส้นออเดอร์ = เรื่องเงิน): รุ่นที่กลิ่นเป็นแบบ "A / B" (2 กลิ่นในแท่งเดียว)
+    //   ชื่อครึ่งเดียวต้องไม่ผ่านแบบเงียบ ๆ — ไม่งั้นการ์ดจะออกเป็น SKU ที่ร้านไม่มี
+    //   ชี้ได้ตัวเดียว = รู้แน่ว่าลูกค้าหมายถึงอะไร → ผ่าน (ตัวเรียกจะได้ชื่อเต็มจาก flavorResolve318b)
+    //   ชี้ได้หลายตัว/ไม่ตรงเลย → false → ระบบถามลูกค้ากลับ ⛔ ห้ามเดาแทนลูกค้า
+    if (list.some(x => RX_COMBO318.test(x))) {
+      const rv = flavorResolve318b(key, flavor);
+      if (rv.st === "exact" || rv.st === "resolved") return true;
+      console.log("K318B_COMBO_HALF_BLOCKED " + key + " · \"" + flavor + "\" (" + rv.st + ")");
+      return false;
+    }
     for (const fl of list) {
       const n = normTH(fl);
       if (n.indexOf(f) !== -1 || f.indexOf(n) !== -1) return true;
@@ -3793,6 +6415,116 @@ function flavorKnown(model, flavor) {
     return false;
   } catch (e) { return true; }
 }
+// ═══════════════════════════════════════════════════════════════════════════
+// 🍬🍬 k318b · "บรรทัด รุ่น: กลิ่น" ต้องตรงแคตตาล็อกของรุ่นนั้นจริง
+//
+//  เคสจริงโปรดักชัน 13 ส.ค. 20.13 (ลูกค้า "Jee" · ถาม "มีบุหรี่เย็นอะไรบ้างคะ"):
+//    G2 ตอบ 6 บรรทัด ถูก 5 ผิด 1 → "JOIWAY TWINS 20K: มิ้นต์"
+//    ของจริงรุ่นนี้เป็นพอต 2 กลิ่นในแท่งเดียว ชื่อเต็มคือ "ลูกอมเรนโบว์ / มิ้นต์"
+//    และ "มิ้นต์ / สตรอว์เบอร์รี่" — ไม่มี SKU ที่ชื่อ "มิ้นต์" เฉย ๆ = ลูกค้าสั่งของที่ไม่มี
+//
+//  ต้นเหตุที่พิสูจน์แล้ว — บรรทัดรูปแบบนี้ **ไม่มีด่านไหนตรวจเลยสักตัว**:
+//    · k16 (stripFakeFlavors) ตรวจเฉพาะบรรทัดที่เป็น "ชื่อกลิ่นล้วน" และข้ามบรรทัดยาวเกิน 20 ตัว
+//      "JOIWAY TWINS 20K: มิ้นต์" ยาว 24 ตัว → ถูกข้ามทันที
+//    · ต่อให้ไม่ข้าม k16 ก็เทียบกับ "กลิ่นทั้งร้าน" ไม่ใช่ "กลิ่นของรุ่นนั้น" → "มิ้นต์" มีจริงในรุ่นอื่น จึงผ่าน
+//    ทดสอบยืนยัน: ยัด "MARBO 10K: ทุเรียนไฟไหม้" เข้าไป → หลุดออกไปถึงลูกค้าเช่นกัน
+//
+//  ⛔ กติกาจากเจ้าของร้าน 13 ส.ค.:
+//    · ชื่อกลิ่นต้องอ้างอิงแคตตาล็อกจริงเท่านั้น ห้ามเดา
+//    · ชื่อครึ่งเดียว → เขียนกลับเป็นชื่อเต็มเมื่อชี้ได้ชัดตัวเดียว
+//    · กำกวม (ตรงได้หลายตัว) → ห้ามเดา
+//  ⛔ generic ล้วน อ่านจากแคตตาล็อก ไม่มีชื่อรุ่น/ชื่อกลิ่นเขียนตายในตรรกะ
+
+//  ตัวแยก "กลิ่นคู่" — รุ่นแบบ 2 กลิ่นในแท่งเดียว เก็บชื่อเป็น "A / B"
+//    ⛔ ห้ามผูกกับรุ่นใดรุ่นหนึ่ง — ดูจากรูปแบบชื่อในแคตตาล็อกเท่านั้น
+const RX_COMBO318 = /\s*\/\s*/;
+//  แปลชื่อกลิ่นที่ AI พูด → ชื่อจริงในแคตตาล็อกของ "รุ่นนั้น"
+//    คืน { st, flavor }  ·  st = exact | resolved | ambiguous | unknown
+function flavorResolve318b(model, name) {
+  const out = { st: "unknown", flavor: "", cands: [] };
+  try {
+    const list = (FLAVORS[model] && FLAVORS[model].f) || [];
+    const n = normTH(String(name || ""));
+    if (!list.length || n.length < 2) return out;
+    // ① ตรงเป๊ะ
+    for (const f of list) if (normTH(f) === n) { out.st = "exact"; out.flavor = f; return out; }
+    // ② ต่างแค่ความแรงต่อท้าย ("องุ่น" ↔ "องุ่น 3%") — กติกาเดิมของ k109/k261
+    const base = (x) => normTH(String(x).replace(/\s*\d+(?:\.\d+)?%\s*$/, ""));
+    let hit = list.filter(f => base(f) === base(name));
+    if (hit.length === 1) { out.st = "resolved"; out.flavor = hit[0]; return out; }
+    if (hit.length > 1) { out.st = "ambiguous"; out.cands = hit; return out; }
+    // ③ ชื่อครึ่งเดียวของ "กลิ่นคู่" — ชี้ได้ตัวเดียวค่อยเขียนกลับเป็นชื่อเต็ม
+    hit = list.filter(f => RX_COMBO318.test(f) && f.split(RX_COMBO318).some(p => base(p) === base(name)));
+    if (hit.length === 1) { out.st = "resolved"; out.flavor = hit[0]; return out; }
+    if (hit.length > 1) { out.st = "ambiguous"; out.cands = hit; return out; }
+  } catch (e) {}
+  return out;
+}
+//  ตัวคั่นรายการกลิ่นที่ AI ใช้จริง (จาก prompt ของเราเอง + ที่เจอในคำตอบจริง)
+const RX_FSEP318 = /\s*(?:·|•|,|、|\/{2}|\s\|\s)\s*/;
+//  ด่านขาออก — ตรวจทุกบรรทัดรูปแบบ "<ชื่อรุ่น>: <กลิ่น> · <กลิ่น>"
+//   ⛔ ไม่แตะบรรทัดอื่นเลย · ไม่แตะบล็อกทวนออเดอร์ · ไม่แตะสายเงิน
+function modelFlavorLineGate318b(reply) {
+  const res = { text: String(reply || ""), fixed: [], dropped: [], asked: [] };
+  try {
+    const r = res.text;
+    if (!r) return res;
+    if (RX_ORDER_BLOCK.test(r) || r.indexOf("|") !== -1) return res;      // ⛔ บล็อกออเดอร์ = เรื่องเงิน ห้ามแตะ
+    if (/บัญชี|เลขพัสดุ|ที่อยู่จัดส่ง/.test(r)) return res;
+    const lines = r.split("\n");
+    let touched = false;
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/^(\s*(?:[-•●*▪]|[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]️?)?\s*)(.+?)\s*[:：]\s*(.+?)\s*$/u);
+      if (!m) continue;
+      const head = m[1], label = m[2], tail = m[3];
+      // ชื่อรุ่นต้องเป็นรุ่นจริงในแคตตาล็อก และต้องชี้ได้ตัวเดียว (กันชื่อซ้อน — กับดัก k316)
+      const ms = modelsInLine318b(label);
+      if (ms.length !== 1) continue;
+      const model = ms[0];
+      const parts = tail.split(RX_FSEP318).map(x => x.trim()).filter(Boolean);
+      if (!parts.length) continue;
+      // ต้องดู "เหมือนรายการกลิ่น" จริง ๆ — มีตัวเลข/ราคา/เงื่อนไข = คำบรรยาย ไม่ใช่ลิสต์กลิ่น
+      if (parts.some(p => p.length > 28 || /บาท|฿|ชิ้น|http/i.test(p))) continue;
+      const keep = [];
+      for (const p of parts) {
+        const rv = flavorResolve318b(model, p);
+        if (rv.st === "exact") { keep.push(rv.flavor); continue; }
+        if (rv.st === "resolved") { keep.push(rv.flavor); res.fixed.push(model + ": " + p + " → " + rv.flavor); touched = true; continue; }
+        if (rv.st === "ambiguous") { res.asked.push(model + ": " + p + " (ตรงได้ " + rv.cands.length + " ตัว)"); touched = true; continue; }
+        res.dropped.push(model + ": " + p); touched = true;
+      }
+      if (keep.length) lines[i] = head + label + ": " + keep.join(" · ");
+      else { lines[i] = " "; }                                       // ไม่เหลือกลิ่นจริงเลย → ตัดบรรทัดทิ้ง
+    }
+    if (!touched) return res;
+    res.text = lines.filter(x => x !== " ").join("\n").replace(/\n{3,}/g, "\n\n").trim();
+    // มีกลิ่นที่กำกวม → ต้องถามลูกค้ากลับ ⛔ ห้ามเดาแทนลูกค้า
+    if (res.asked.length) res.text += "\n\nมีบางกลิ่นที่ชื่อใกล้เคียงกันหลายตัวค่ะ 🙏🏻 บอกรุ่นที่สนใจมาได้เลย เดี๋ยวแอดมินลิสต์ชื่อกลิ่นเต็ม ๆ ให้ค่ะ 💕";
+  } catch (e) {}
+  return res;
+}
+//  หา "ชื่อรุ่นในแคตตาล็อก" ที่ปรากฏในข้อความสั้น ๆ — เรียงยาว→สั้น จองช่วงกันนับซ้อน
+//   ⚠️ กับดัก k316: ชื่อรุ่นซ้อนกันเอง ถ้านับตรง ๆ จะได้หลายตัวทั้งที่มีรุ่นเดียว
+let _MDL318 = null;
+function modelsInLine318b(s) {
+  try {
+    const t = normTH(String(s || ""));
+    if (!t) return [];
+    if (!_MDL318) _MDL318 = Object.keys(FLAVORS).filter(k => k.length >= 5)
+      .map(k => [k, normTH(k)]).sort((a, b) => b[1].length - a[1].length);
+    const taken = [], hits = [];
+    for (const [key, nk] of _MDL318) {
+      let from = 0, i;
+      while ((i = t.indexOf(nk, from)) !== -1) {
+        const a = i, b = i + nk.length;
+        if (!taken.some(([x, y]) => a < y && b > x)) { taken.push([a, b]); if (hits.indexOf(key) === -1) hits.push(key); }
+        from = i + 1;
+      }
+    }
+    return hits;
+  } catch (e) { return []; }
+}
+
 // 🛑 k16: ตัวกรองบังคับ "ห้ามกลิ่นที่ไม่มีจริงหลุดออกไปหาลูกค้า"
 // เคสจริง 29/7: ลูกค้าถาม "บูส พอต องุ่นมีมั้ย" → แอดมินเสนอ องุ่นแดง/องุ่นแอปเปิ้ล/องุ่นมิ้นต์ (ไม่มีสักตัวใน BOOST POD)
 // พอโดนทักว่าไม่มี ยังยืนยันว่ามีอีก + มโนเพิ่ม (มิ้นต์บริสุทธิ์ แอปเปิ้ลมิ้นต์) → กฎใน prompt เอาไม่อยู่
@@ -3805,6 +6537,30 @@ const FLAVOR_ALL = (() => { const s = new Set(); for (const k in FLAVORS) for (c
 const MODEL_LIST = Object.keys(FLAVORS).join(" · ");
 const MODEL_WORDS = (() => { const s = new Set(); for (const k in FLAVORS) s.add(normTH(k)); for (const b in BRAND_OF) s.add(normTH(b)); return s; })();
 let _hintModels = [];   // รุ่นที่ระบบตรวจพบว่ากำลังคุยถึงรอบนี้ (ตั้งค่าใน flavorHint)
+// 🧹🧹 k314 · "รุ่นที่กำลังคุยถึง" ต้องเป็นของใครของมัน — ห้ามค้างข้ามเทิร์นและห้ามรั่วข้ามลูกค้า
+//   เคสจริงโปรดักชัน 13 ส.ค. 15.54-15.56 (พิสูจน์ด้วยการรันซ้ำ 100%):
+//     ลูกค้าคุย STAR 2,500 (หมด) → ส่งรูป KS Quik → ตาอ่าน KS Quik ถูกทุกอย่าง
+//     แต่ด่าน k117 เห็น _hintModels ค้างเป็น [STAR 2,500] → ตีว่า "ตอบผิดรุ่น"
+//     → ทับคำตอบที่ถูกทิ้ง แล้วตอบ "STAR 2,500 หมดชั่วคราวทุกกลิ่น" แทน
+//   ⚠️ ร้ายแรงกว่านั้น: _hintModels เป็นตัวแปรระดับไฟล์ (อยู่ในหน่วยความจำของ worker)
+//     ตั้งค่าเฉพาะตอน flavorHint() ทำงานบนข้อความ · เทิร์นรูปไม่เรียก → ค่าเก่าค้าง
+//     ทดลองแล้วพบว่า **ลูกค้า B รับค่าที่ลูกค้า A ตั้งไว้ได้จริง** (บทเรียนเดียวกับ _LAST_LOCK)
+//   วิธีแก้ (ไม่แตะ k117 — มันทำหน้าที่ถูกแล้ว แค่ถูกป้อนข้อมูลผิด):
+//     ชั้น 1 · รีเซ็ตทุกครั้งที่ event เข้ามา → ไม่มีค่าค้างจากเทิร์น/ลูกค้าก่อนหน้า
+//     ชั้น 2 · เก็บแยกรายลูกค้า (HINTS314) → ด่าน k117 อ่านของ uid ตัวเองเท่านั้น
+//     ชั้น 3 · เทิร์นรูป: ตั้งจากรุ่นที่อ่านได้จากรูปนี้ · อ่านไม่ได้ = ว่าง (ห้ามใช้ของเก่าแทน)
+const HINTS314 = new Map();
+function setHints314(uid, arr) {
+  try {
+    const a = Array.isArray(arr) ? arr.slice() : [];
+    _hintModels = a;                                  // ของเดิม (ด่านอื่นยังอ่านตัวนี้อยู่)
+    if (!uid) return;
+    HINTS314.set(uid, a);
+    if (HINTS314.size > 2000) { const k0 = HINTS314.keys().next().value; HINTS314.delete(k0); }
+  } catch (e) {}
+}
+//   ⛔ ไม่มี fallback ไปที่ตัวแปรรวม — ถ้าเทิร์นนี้ไม่ได้ตั้งค่า ให้ถือว่า "ไม่รู้" ไม่ใช่ "ใช้ของคนอื่น"
+function getHints314(uid) { try { return HINTS314.get(uid) || []; } catch (e) { return []; } }
 // ═══ k42: ความจำของแอดมิน ═══════════════════════════════════════════
 // เดิมประวัติแชทหมดอายุใน 1 ชม. → ลูกค้าคุยเช้า กลับมาบ่าย แอดมินจำไม่ได้เลย ต้องถามซ้ำ
 // ยืดเป็น 24 ชม. แต่ต้องกัน "จำผิด" ด้วย: ข้อมูลสต็อก/ราคาเมื่อวานเอามายืนยันวันนี้ไม่ได้
@@ -4003,6 +6759,44 @@ function fixStockNames(sm) {
   return sm;
 }
 // ⛔ กฎกันแอดมิน "เดารายละเอียดที่ไม่มีข้อมูลจริง" (เพิ่มท้ายพรอมต์ทุกครั้ง)
+// ═══ k245 · กฎที่มาจาก Production Incident จริง (P0-9 ถึง P0-12) ═══════════
+//   ⛔ ทุกข้อมาจากลูกค้าจริงเจอแล้ว ห้ามลบ ห้ามผ่อน
+const K245_RULES =
+  "\n\n# 🛒 P0-9 · แนะนำสินค้าได้เฉพาะของที่ขายได้จริง (เคสจริง 7 ส.ค.)\n"
++ "⛔⛔ ห้ามแนะนำ/เสนอ/ยกตัวอย่างสินค้าที่ **ไม่ได้อยู่ในรายการที่ระบบส่งมาให้ในข้อความนี้**\n"
++ "   เคสจริง: แนะนำ ESKO BAR 20K ให้ลูกค้า พอลูกค้าบอก 'เอา Esko' กลับตอบว่าหมด = เสียลูกค้าทันที\n"
++ "   กติกา: ถ้าระบบไม่ได้ส่งรายการสินค้าหรือข้อมูลสต็อกมาในข้อความนี้ **ห้ามแนะนำรุ่นใดๆ จากความจำตัวเอง**\n"
++ "   ให้ตอบว่า 'ขอเช็คของที่พร้อมส่งให้ก่อนนะคะ 🙏🏻 สนใจประเภทไหนดีคะ' แทน\n"
++ "⛔ คำแนะนำกับสถานะสต็อก ต้องมาจากข้อมูลชุดเดียวกันเสมอ — ห้ามแนะนำจากที่หนึ่ง แล้วเช็คของจากอีกที่หนึ่ง\n"
+
++ "\n# 🛵 P0-10 · ร้านส่งด่วนทุกวัน ไม่มีข้อจำกัดเรื่องวัน (เคสจริง 7 ส.ค.)\n"
++ "⛔⛔⛔ ร้านนี้ **จัดส่งด่วนได้ทุกวัน รวมเสาร์-อาทิตย์และวันหยุด**\n"
++ "   ⛔ ห้ามพูดว่า 'วันอาทิตย์ไม่มีรอบส่ง' · 'เสาร์อาทิตย์ส่งไม่ได้' · 'จันทร์-ศุกร์เท่านั้น' · 'วันหยุดไม่ส่ง' เด็ดขาด\n"
++ "   ⛔ ห้ามสร้างกฎเรื่องวันขึ้นมาเอง ไม่ว่ากรณีใด — ร้านมีข้อจำกัดแค่ 'เวลารอบส่ง' เท่านั้น ไม่มีข้อจำกัดเรื่องวัน\n"
++ "   ถ้าลูกค้าถามว่าส่งวันที่ X ได้ไหม → ตอบตามรอบเวลาปกติ ไม่ต้องดูว่าวันนั้นเป็นวันอะไร\n"
+
++ "\n# 📦 P0-11 · โอนแล้ว → เช็คประเภทจัดส่งก่อน แล้วค่อยขอข้อมูล (เจ้าของร้านกำหนด 7 ส.ค.)\n"
++ "**ผังตัดสิน — เดินตามนี้เท่านั้น:**\n"
++ "  1) ส่งแบบ **พัสดุ** → ต้องมี **ชื่อผู้รับ · เบอร์โทร · ที่อยู่ครบ**\n"
++ "  2) ส่งแบบ **Grab และมีโลเคชันแล้ว** → ต้องมี **ชื่อผู้รับ · เบอร์โทร · บ้านเลขที่** (ที่ตรงกับหมุด)\n"
++ "     ⛔ Grab ไม่ต้องขอที่อยู่เต็ม — มีหมุดแล้วขอแค่บ้านเลขที่พอ\n"
++ "  3) ส่งแบบ **Grab แต่ยังไม่มีโลเคชัน** → **ขอโลเคชันก่อน** ⛔ ยังไม่ต้องถามชื่อ/เบอร์/บ้านเลขที่\n"
++ "เมื่อลูกค้าส่งสลิป หรือบอกว่าโอนแล้ว ให้ดูประเภทจัดส่งก่อนเสมอ แล้วค่อยรู้ว่าต้องมีอะไรบ้าง\n"
++ "  · ขาดบางอย่าง → ถามเฉพาะที่ขาด ⛔ ห้ามถามซ้ำสิ่งที่ลูกค้าให้มาแล้ว\n"
++ "  · ครบแล้ว → ทวนยืนยันข้อมูลให้ลูกค้าดู แล้วบอกว่ากำลังดำเนินการจัดส่ง ⛔ ห้ามขอที่อยู่ใหม่ทั้งชุด\n"
++ "  · ⛔ ห้ามข้ามขั้นตอนนี้ ห้ามจบบทสนทนาโดยยังไม่มีข้อมูลจัดส่ง\n"
+
++ "\n# 🔁 P0-13 · ถามซ้ำไม่ได้ (เคสจริง 7 ส.ค. 21.08)\n"
++ "⛔⛔⛔ **ห้ามพิมพ์ประโยคเดิมซ้ำในข้อความเดียวกันเด็ดขาด** ไม่ว่ากรณีใด\n"
++ "⛔ ถามขอความชัดเจน (clarification) เรื่องเดียวกัน **ได้ครั้งเดียวต่อรอบสนทนา**\n"
++ "   ถ้าถามไปแล้วยังไม่ได้คำตอบ ให้รอลูกค้าตอบ ⛔ ห้ามถามซ้ำ\n"
++ "   ถ้าลูกค้าตอบมาแล้วแต่ยังไม่ชัด ให้**เปลี่ยนวิธีถาม** หรือส่งต่อทีมงาน ⛔ ห้ามถามคำเดิม\n"
++ "\n# 🔒 P0-12 · จำสถานะออเดอร์ ห้ามย้อนกลับ (เคสจริง 7 ส.ค.)\n"
++ "สถานะที่ผ่านแล้ว **ห้ามย้อนกลับไปถามใหม่** เว้นแต่ลูกค้าเป็นคนขอแก้เอง:\n"
++ "  · ได้ที่อยู่แล้ว → ห้ามขอที่อยู่ซ้ำ\n"
++ "  · รับสลิปแล้ว → ห้ามถามว่าโอนหรือยัง\n"
++ "  · ยืนยันออเดอร์แล้ว → ห้ามให้กดยืนยันใหม่ ห้ามถามรุ่น/กลิ่น/จำนวนซ้ำ\n"
++ "⛔ ถ้าไม่แน่ใจว่าผ่านขั้นไหนแล้ว ให้ทวนสิ่งที่มีอยู่ให้ลูกค้ายืนยัน ⛔ ห้ามเริ่มเก็บข้อมูลใหม่ทั้งหมด\n";
 const NO_GUESS_RULE = "\n\n# ⛔ ห้ามเดา\n" +
 "- ห้ามแต่งชื่อกลิ่น/สี/โปรเอง ใช้ได้เฉพาะที่ระบบส่งมาให้ ถ้าไม่มีข้อมูล ตอบว่า 'เดี๋ยวทีมงานเช็คให้อีกครั้งนะคะ 🙏🏻'\n" +
 "- 🔌 หัวใช้กับเครื่องอะไร: **หัวน้ำยาทุกยี่ห้อใช้กับเครื่องของยี่ห้อตัวเอง** (เช่น หัว M SWITCH→เครื่อง M SWITCH · หัว ESKO→เครื่อง ESKO · หัว RELX→เครื่อง RELX)\n" +
@@ -4080,7 +6874,8 @@ const EXPRESS_MSG = "อนุญาตแจ้งรอบส่งด่ว�
 // 📝 k22: วิธีสั่งซื้อผ่านแชท — ข้อความตายตัว (ไม่ผ่าน AI) ให้ลูกค้าใหม่จากแอดเข้าใจว่าต้องคุยยังไง
 const HOWTO_MSG =
 "วิธีสั่งซื้อกับร้าน ABC ค่ะ 📝 ง่ายมากเลยนะคะ\n\n" +
-"1️⃣ บอกสิ่งที่ต้องการ\nพิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยค่ะ\nเช่น \"MARBO 9K องุ่น 2 ชิ้น\"\n💡 ไม่รู้ชื่อรุ่นก็ได้ค่ะ ส่งรูปสินค้าหรือรูปเมนูมา แอดมินอ่านให้เองเลย 📷\n\n" +
+// 🍇 k288: ตัวอย่างห้ามใช้ชื่อกลิ่นจริง — ข้อความนี้เข้าประวัติแชท แล้ว AI หยิบไปคิดว่าลูกค้าสั่งจริง
+"1️⃣ บอกสิ่งที่ต้องการ\nพิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยค่ะ\nเช่น \"MARBO 9K กลิ่นที่ต้องการ 2 ชิ้น\"\n💡 ไม่รู้ชื่อรุ่นก็ได้ค่ะ ส่งรูปสินค้าหรือรูปเมนูมา แอดมินอ่านให้เองเลย 📷\n\n" +
 "2️⃣ ตรวจรายการ\nแอดมินจะสรุปเป็นการ์ดให้ พร้อมราคาและค่าส่ง\nถ้าถูกต้องแล้ว กดปุ่ม \"✅ ยืนยันรายการ\" ในการ์ดได้เลยค่ะ\n\n" +
 "3️⃣ โอนเงิน\nพอกดยืนยัน ระบบจะส่งเลขบัญชีให้ทันที\nโอนแล้ว ส่งสลิปมาในแชทนี้ได้เลยนะคะ 🧾\n\n" +
 "4️⃣ แจ้งที่อยู่\nพอสลิปผ่าน แอดมินจะขอที่อยู่จัดส่ง กรอกตามฟอร์มที่ส่งให้ได้เลยค่ะ\n\n" +
@@ -4180,13 +6975,13 @@ const SYSTEM_PROMPT = `คุณคือ "แอดมิน" แอดมิ�
 เมื่อลูกค้าถามกว้างๆ ว่ามีสินค้าอะไรบ้าง / ขอดูเมนู / มีพอตอะไรบ้าง / มีกลิ่นอะไรบ้าง / ขอรายการสินค้า ให้ตอบด้วยข้อความนี้ทันที (ตอบแบบนี้เป๊ะ):
 "เมนูสินค้า
 ต้องการสั่งซื้อสินค้า สามารถดูเมนูจากลิงก์นี้ได้เลยค่ะ 💕
-https://cutt.ly/menu4"
+https://cutt.ly/abc-menu"
 แต่ถ้าลูกค้าถามเจาะจงรุ่น/ราคา (เช่น "MARBO 9K เท่าไหร่") ให้ตอบราคาจากรายการสินค้าได้เลย ไม่ต้องส่งลิงก์
 
 ⛔⛔ k54 — "ขอให้แนะนำ" ไม่ใช่ "ขอดูเมนู" อย่าสับสน:
 ถ้าลูกค้าใช้คำว่า แนะนำ / รุ่นไหนดี / ตัวไหนดี / เอาอะไรดี / มือใหม่ควรเริ่มรุ่นไหน / recommend
 ⛔ ห้ามตอบด้วยข้อความ "เมนูสินค้า + ลิงก์" เฉยๆ เด็ดขาด — ลูกค้าขอให้ช่วยเลือก ไม่ได้ขอลิงก์ การโยนลิงก์ = ปัดลูกค้าทิ้ง เสียการขาย
-✅ ต้องทำแทน: (1) เสนอ 3-5 รุ่นที่มีของจริงพร้อมราคา (ใช้เฉพาะรุ่นจากข้อมูลสต็อกที่แนบมา) (2) แล้วถามกลับ 1 คำถามเพื่อเลือกให้แคบลง เช่น "ชอบแนวหวานผลไม้หรือเย็นมิ้นต์คะ" / "งบประมาณเท่าไหร่คะ" / "เคยสูบรุ่นไหนมาก่อนไหมคะ"
+✅ ต้องทำแทน: (1) เสนอ 3-5 รุ่นที่มีของจริงพร้อมราคา (ใช้เฉพาะรุ่นจากข้อมูลสต็อกที่แนบมา) (2) แล้วถามกลับ 1 คำถามเพื่อเลือกให้แคบลง เช่น "ชอบแนวหวานผลไม้หรือแนวเย็นคะ" / "งบประมาณเท่าไหร่คะ" / "เคยสูบรุ่นไหนมาก่อนไหมคะ"
 ✅ จะแนบลิงก์เมนูต่อท้ายด้วยก็ได้ แต่ต้องมีคำแนะนำจริงมาก่อนเสมอ
 
 # คำที่ลูกค้าเรียก (สแลง) → รุ่นที่หมายถึง (สำคัญ อย่าตอบตัวเดียวถ้าคำนั้นหมายถึงหลายรุ่น)
@@ -4230,13 +7025,14 @@ https://cutt.ly/menu4"
 ⛔ RELX BOOST POD / ABC LEGO / หัวราคา 299-390 = "Big Pod" (โปร 4 ชิ้น) ไม่ใช่หัวน้ำยาเล็ก (10 หัว) — อย่าสับสน
 เวลาลูกค้าซื้อใกล้ครบเงื่อนไข ให้เชียร์ให้ครบเพื่อรับส่งฟรี (เช่น ซื้อสูบทิ้ง 3 แท่ง → "รับเพิ่มอีก 1 แท่งครบ 4 แท่ง ส่งฟรีเลยนะคะ 💕")
 
-## 🎁 โปรแถมสินค้า (ได้ของแถม แต่ ⛔ ไม่ได้ส่งฟรี — ต้องจ่ายค่าส่ง 40 เสมอ)
-⛔⛔ กฎเหล็ก: ออเดอร์ไหนที่ได้ของแถมตามโปรนี้ = **ไม่เข้าโปรส่งฟรีทุกกรณี** ต่อให้จำนวนชิ้นครบเงื่อนไขโปรหลักก็ตาม (เลือกได้อย่างเดียว: ของแถม หรือ ส่งฟรี)
-ถ้าลูกค้าถามว่าทำไมไม่ได้ส่งฟรี ให้ตอบว่า "ออเดอร์นี้ได้รับของแถมตามโปรแล้วค่ะ 🎁 โปรแถมกับโปรส่งฟรีใช้ร่วมกันไม่ได้นะคะ ค่าส่ง 40 บาทค่ะ 🙏🏻"
-- Big Pod (ABC LEGO / RELX BOOST POD / RELX POD CLEAR ฯลฯ) ครบ 5 หัว → แถมเครื่องเปล่า 1 (มูลค่า 250) → ⛔ ระบบเติมให้ในการ์ดเอง คุณไม่ต้องใส่บรรทัด แค่บอกลูกค้าว่า "เข้าโปรรับเครื่องเปล่าฟรีนะคะ 🎁"
-  ⛔⛔⛔ โปรแถมเครื่องเปล่าใช้ได้กับ **หัวน้ำยา Big Pod เท่านั้น** — ห้ามเอาไปใช้กับพอตใช้แล้วทิ้งเด็ดขาด
-  ห้ามพูดว่า "MARBO 9K / สูบทิ้ง ครบ 5 แท่ง แถมเครื่องเปล่า" หรือ "สั่ง 20 แท่งแถมเครื่อง 4 เครื่อง" เพราะ **ไม่มีโปรนี้** (พอตใช้แล้วทิ้งไม่ต้องใช้เครื่อง จึงไม่มีเครื่องแถม)
-  ⛔ ห้ามคิดสูตรของแถมขึ้นมาเอง เช่น "ทุก 5 แท่ง = 1 เครื่อง" — มีเฉพาะโปรที่เขียนไว้ในหน้านี้เท่านั้น
+## 🎁 โปรแถมเครื่อง — **เฉพาะ RELX BOOST POD เท่านั้น** (k240 · เจ้าของร้านยืนยัน)
+⛔⛔⛔ กฎเหล็กข้อ 1 · **สินค้าที่เข้าโปรนี้มีตัวเดียวคือ RELX BOOST POD** (ลูกค้าบางคนเรียก "บูสพอด" / "หัวเลโก้ relx")
+  ห้ามใช้กับ ABC LEGO · ABC TANK · ESKO BAR SWITCH · KS QUIK PRO · M SWITCH · VAZER RELOAD · ELFBAR SWAP · RELX POD CLEAR · ชุด KIT ทุกตัว
+  ⛔ ห้ามใช้คำว่า "Big Pod" หรือ "บิ๊กพอต" เป็นเงื่อนไขของโปรนี้เด็ดขาด — Big Pod เป็นชื่อ "หมวด" ไม่ใช่ชื่อสินค้าที่เข้าโปร
+- RELX BOOST POD ครบ 5 หัว → ลูกค้า **เลือกได้ 1 อย่าง**: (ก) ส่งฟรี  หรือ  (ข) รับเครื่อง RELX CREATOR 20K ฟรี 1 เครื่อง (มูลค่า 250) โดยจ่ายค่าส่ง 40
+⛔⛔⛔ กฎเหล็กข้อ 2 · **คุณห้ามเลือกแทนลูกค้าเด็ดขาด** — ระบบจะถามลูกค้าเองว่าเอาโปรไหน คุณไม่ต้องถามซ้ำและไม่ต้องเดา
+  ถ้าลูกค้าถามว่าได้ทั้งสองอย่างไหม ตอบว่า "โปรหลักรับได้ 1 อย่างต่อ 1 ออเดอร์นะคะ 🙏🏻 เลือกส่งฟรี หรือรับเครื่องฟรีดีคะ"
+  ⛔ ห้ามพูดว่า "บิ๊กพอตครบ 5 หัวแถมเครื่อง" · ห้ามพูดว่า "MARBO 9K / สูบทิ้ง ครบ 5 แท่ง แถมเครื่อง" · ห้ามคิดสูตรของแถมขึ้นมาเอง
 - ซื้อเครื่อง (Device) → แถมฟรี 1 หัวน้ำยาเล็ก → ถามลูกค้าก่อนว่าเอาหัวกลิ่นไหน แล้วเพิ่มบรรทัดของแถมในลิสต์ (ใส่คำว่า "แถมฟรี" ต่อท้ายกลิ่น) เช่น:
 - หัวพอต INFY PLUS | องุ่น แถมฟรี | 1
 ระบบจะคิดราคาของแถม = 0 อัตโนมัติ
@@ -4270,7 +7066,7 @@ https://cutt.ly/menu4"
 ## 🧮 การคิดเงิน — ⛔ ระบบคิดให้เอง คุณห้ามคิด/ห้ามพิมพ์ตัวเลขยอดรวมเด็ดขาด
 คุณมีหน้าที่แค่ลิสต์รายการ (รุ่น | กลิ่น | จำนวน) ระบบจะคิดราคา+ค่าส่ง+โปร+ของแถม+ทำการ์ดให้เอง
 ⛔⛔ ห้ามพิมพ์ตัวเลข "ยอดสินค้า / ค่าส่ง XX บาท / รวม / มูลค่า" ในข้อความทุกกรณี (แม้ตอนอธิบายหรือทวนออเดอร์) เพราะคุณคิดผิดบ่อย + ระบบโชว์ยอดในการ์ดอยู่แล้ว — ถ้าจะพูดถึงยอด ให้พูดแค่ "เดี๋ยวสรุปยอดในการ์ดให้นะคะ 💕"
-⛔ ของแถม (เครื่องเปล่าเมื่อซื้อ Big Pod ครบ 5) ระบบเติมให้ในการ์ดเอง คุณไม่ต้องใส่บรรทัดของแถม แค่บอกลูกค้าว่า "เข้าโปรรับเครื่องเปล่าฟรีด้วยนะคะ 🎁"
+⛔ ของแถม (เครื่อง RELX CREATOR 20K เมื่อซื้อ **RELX BOOST POD** ครบ 5 หัว) ระบบจัดการเองทั้งหมด — ระบบจะถามลูกค้าเองว่าเอาส่งฟรีหรือเอาเครื่อง คุณไม่ต้องใส่บรรทัดของแถม ไม่ต้องถาม ไม่ต้องเลือกแทน
 แต่คุณควร "รู้โปร" เพื่อเชียร์ลูกค้าให้ครบโปร (ไม่ต้องบอกตัวเลขยอด):
 - สูบทิ้งครบ 4 แท่ง (คละยี่ห้อ) = ส่งฟรี → ถ้าลูกค้าซื้อ 3 แท่ง เชียร์ "เพิ่มอีก 1 แท่งครบ 4 ส่งฟรีเลยนะคะ 💕"
 - MARBO 9K โคลน ซื้อส่ง 20 แท่งขึ้นไป ได้เรทถูกลง → ถ้าลูกค้าถามซื้อส่ง แจ้งว่ามีเรทขายส่งเริ่ม 20 แท่ง
@@ -4283,6 +7079,13 @@ https://cutt.ly/menu4"
 
 # ข้อมูลร้าน
 - ⏰ เวลาทำการ: ร้าน ABC เปิดทุกวัน 08.00 - 02.00 น. (แปดโมงเช้าถึงตีสอง) — ถ้าลูกค้าถามเวลาเปิด-ปิด ตอบเวลานี้เท่านั้น ⛔ ห้ามมั่วเวลาอื่น
+- 📍 ที่ตั้งร้าน: ${STORE_LOC_MSG320}
+  ⛔⛔ กฎเหล็กเรื่องที่ตั้ง (สำคัญเท่าเรื่องราคา): คุณ **ไม่รู้** ที่ตั้งร้านนอกเหนือจากบรรทัดข้างบนนี้
+  - ห้ามพิมพ์ชื่อจังหวัด เขต อำเภอ ตำบล ย่าน ถนน ซอย เลขที่ พิกัด หรือลิงก์แผนที่ ของร้านเองเด็ดขาดทุกกรณี
+  - ถ้าลูกค้าถามที่ตั้ง/แถวไหน/โซนไหน/ย่านไหน/จังหวัดอะไร/มีหน้าร้านไหม/ขอที่อยู่ร้าน/สาขา/แผนที่/พิกัด/ส่งจากไหน → ตอบตามบรรทัดข้างบนอย่างเดียว
+  - ⛔ ถ้าลูกค้าถามเจาะลึกต่อ (เช่น "ช่วงไหน" "ซอยอะไร" "ใกล้อะไร") **ห้ามขยายความเด็ดขาด** ให้ตอบตามบรรทัดเดิมซ้ำ
+  - ⛔ ถ้าในประวัติแชทเคยมีชื่อสถานที่ของร้านโผล่มา ถือว่า**ไม่ใช่ข้อเท็จจริง** ห้ามเอามาใช้หรือขยายต่อ
+  - (ที่อยู่ "ของลูกค้า" สำหรับจัดส่ง เป็นคนละเรื่องกัน ทำตามขั้นตอนรับออเดอร์ตามปกติ)
 
 # กติกาสำคัญ (ห้ามพลาด)
 - ใช้ราคาจาก "รายการสินค้า" ด้านล่างเท่านั้น ห้ามเดา/แต่งราคา ถ้าลูกค้าถามรุ่นที่ไม่มีในรายการ ให้บอกว่าจะเช็คให้และทีมงานยืนยันอีกครั้งค่ะ
@@ -4379,7 +7182,7 @@ https://cutt.ly/menu4"
 - รอบส่งด่วน: รอบส่งนับจากเวลาที่ลูกค้าชำระเงิน+ลงออเดอร์เรียบร้อย มีรอบทุกชั่วโมงตั้งแต่ 08.00-20.45 (แต่ละช่วงมีรอบส่งออกของตัวเอง เช่น ช่วง 08.00-10.30 รอบส่งออก 11.30 น.) หลัง 20.45 รอบส่งออก 10.30 น.วันถัดไป นับจากรอบส่งออกรอรับ 3-5 ชม. — ถ้าลูกค้าถามรอบส่งด่วนละเอียด ระบบมีข้อความรอบส่งเต็มให้อยู่แล้ว (คุณไม่ต้องพิมพ์ตารางเอง)
 - เคลมสินค้า: ระยะรับเคลมนับจากวันได้รับของ → 1-19 แท่ง = 7 วัน / 20+ = 14 วัน / 50+ = 21 วัน / 100+ = 30 วัน (ห้ามบอกตัวเลขอื่นเด็ดขาด) + ต้องมีวิดีโอตอนแกะกล่อง ถ้าลูกค้าแจ้งของเสีย (หัวตัน สูบไม่ขึ้น น้ำยาซึม เครื่องไม่ติด) ให้ถามก่อนว่า "รุ่นไหน อาการเป็นแบบไหนคะ" 1 ครั้ง แล้วส่งต่อทีมงานหลังการขาย
 - 📋 หลักฐานที่ต้องใช้เคลม (ถ้าลูกค้าถามว่าต้องเตรียมอะไร ตอบครบตามนี้): (1) รูป/คลิปสภาพกล่องที่ได้รับ + ใบปะหน้าที่อยู่ เห็นข้อมูลชัดเจน (2) คลิปตอนแกะกล่อง เห็นชัดว่าได้รับสินค้าอะไร กี่ชิ้น ครบไหม (3) คลิปสินค้าที่มีปัญหา พร้อมอธิบายอาการในคลิป → ส่งหลักฐานทั้งหมดในแชทนี้ รอผลประสานงานภายใน 24 ชม.ค่ะ ⛔ ถ้าไม่มีหลักฐานครบตามเงื่อนไข ทางร้านไม่สามารถเคลมให้ได้ค่ะ
-- 🗣 รีวิว/กลุ่มลูกค้า: ถ้าลูกค้าถามถึงกลุ่ม/รีวิว/เครดิตร้าน หรืออยากรีวิวให้ ส่งลิงก์ Openchat ของร้านได้: https://cutt.ly/abc-openchat11
+- 🗣 รีวิว/กลุ่มลูกค้า: ถ้าลูกค้าถามถึงกลุ่ม/รีวิว/เครดิตร้าน หรืออยากรีวิวให้ ส่งลิงก์ Openchat ของร้านได้: https://cutt.ly/abc-openchat12
 - 📱 ไอจี/เฟซบุ๊ก/เพจ/ช่องทางอื่น (k123 — เจ้าของร้านยืนยัน 3/8): **ร้านไม่มีไอจี ไม่มีเพจเฟซบุ๊ก** ขายผ่าน LINE ช่องทางเดียวเท่านั้น
   ⛔ ห้ามบอกว่า "เดี๋ยวส่งลิงก์ให้" · ห้ามแต่งชื่อไอจี/เพจขึ้นมาเอง · ห้ามบอกให้ไปค้นหาเอง
   ✅ ตอบทำนองนี้ แล้วดึงกลับมาที่การขายทันที: "ทางร้านขายผ่าน LINE ช่องทางเดียวค่ะ 💕 สั่งซื้อและสอบถามได้ที่นี่เลยนะคะ"
@@ -4462,7 +7265,7 @@ https://cutt.ly/menu4"
 - SONIC 8K = 300 บาท (มี 10 กลิ่น/สี)
 - STAR 2,500 = 150 บาท (มี 12 กลิ่น/สี)
 
-[หัวน้ำยาใหญ่ = Big Pod 🔵 (โปรส่งฟรี 4 ชิ้น | ครบ 5 หัวแถมเครื่องเปล่า)]
+[หัวน้ำยาใหญ่ = Big Pod 🔵 (โปรส่งฟรี 4 ชิ้น | ⛔ โปรแถมเครื่องมีเฉพาะ RELX BOOST POD เท่านั้น ไม่ใช่ Big Pod ทุกตัว)]
 - RELX POD CLEAR 18K (หัวน้ำยา) = 390 บาท 🔵Big Pod (มี 19 กลิ่น/สี)
 - ELFBAR SWAP 25K (หัวน้ำยา) = 379 บาท 🔵Big Pod (มี 20 กลิ่น/สี)
 - ESKO BAR SWITCH 20K (หัวน้ำยา) = 350 บาท 🔵Big Pod (มี 20 กลิ่น/สี)
@@ -4794,12 +7597,17 @@ export default {
         let pay = "";
         try { pay = await payOf(env, id); } catch (e) {}
         const ready = !!slip && !!pay;
+        // 🔎 k272 (เคสจริง ABC Easy 10 ส.ค.): ตั้งตัวแปรครบแล้วแต่ระบบยังบอก "ยังไม่ได้ตั้ง"
+        //   → ต้องมีวิธีดูว่า worker "เห็น" ตัวแปรไหนบ้างจริง ๆ (บอกแค่ มี/ไม่มี ไม่โชว์ค่า)
+        const _sidD = id.toUpperCase();
         out.push({
           ร้าน: id,
           ชื่อ: list[id].name,
           เว็บฮุค: "/w/" + id,
           ข้อมูลโอน: pay ? "ตั้งแล้ว ✅" : "⛔ ยังไม่ได้ตั้ง (การ์ดเลขบัญชีจะไม่ออก)",
           ตรวจสลิป: slip ? ("ตั้งแล้ว ✅ (สาขา " + slip.branch + " · จาก " + slip.src + ")") : "⛔ ยังไม่ได้ตั้ง (ตรวจสลิปอัตโนมัติไม่ได้)",
+          ตัวแปรที่เห็น: "KEY_" + _sidD + "=" + (env["SLIPOK_KEY_" + _sidD] ? "มี" : "ไม่มี")
+            + " · BRANCH_" + _sidD + "=" + (env["SLIPOK_BRANCH_" + _sidD] ? "มี" : "ไม่มี"),
           พร้อมเปิด: ready ? "พร้อม ✅" : "⛔ ยังไม่พร้อม",
         });
       }
@@ -4819,11 +7627,31 @@ export default {
         let ex = {}; try { const v = await env.CONV.get("exp:" + shop + ":" + uid); if (v) ex = JSON.parse(v); } catch (e) {}
         // k101: หมุดนอกเขต (เกิน 60 กม.) → ไม่ให้กรอกค่าส่งด่วนเลย กันเลขหลุดถึงลูกค้า
         if (ex && (ex.outzone || (typeof ex.km === "number" && ex.km > 60))) return J({ ผล: "❌ หมุดลูกค้าอยู่นอกเขตส่งด่วน (~" + (ex.km || "?") + " กม.) — พื้นที่นี้ส่งพัสดุเท่านั้น แจ้งลูกค้าว่าส่งพัสดุ 40 บาทนะคะ" }, 400);
+        // 🛵 k294: จำ "ค่าส่งเดิมที่เคยแจ้งลูกค้าไปแล้ว" ไว้ก่อนเขียนทับ (ใช้ตอนประกอบข้อความด้านล่าง)
+        //   ⚠️ ต้องอ่านตรงนี้เท่านั้น — บรรทัดถัดไปทับค่าทันที (ผมเคยวางผิดจุดมาแล้วรอบหนึ่ง)
+        const _prevFee294 = (ex && typeof ex.fee === "number" && ex.fee > 0 && ex.fee !== fee) ? ex.fee : 0;
         ex.fee = fee; ex.pending = false; ex.t = Date.now();
         EXPFEE.set(shop + ":" + uid, { fee, t: Date.now() });   // k107
         await env.CONV.put("exp:" + shop + ":" + uid, JSON.stringify(ex), { expirationTtl: 7200 });
+        // ⚡ k273 (เคสจริง LALITA 10 ส.ค. 19.34): แอดมินกรอกค่าส่งปุ๊บ ลูกค้าถามยอดรวมทันที
+        //   → ฝั่งเว็บฮุค (คนละเครื่อง) ยังอ่าน exp: ค่าเก่าจากแคช KV ได้ถึง 60 วิ
+        //   → ตอบ "ยอดรวมยังสรุปไม่ได้" ทั้งที่ราคาออกแล้ว = ลูกค้าต้องบวกเลขเอง
+        //   ใช้ป้ายนาทีแบบ k270: คีย์ใหม่ไม่เคยถูกแคช ฝั่งเว็บฮุคอ่านเจอสดเสมอ
+        try {
+          const _tw = Date.now();
+          await env.CONV.put("expw:" + shop + ":" + uid + ":" + Math.floor(_tw / 60000), JSON.stringify(ex), { expirationTtl: 600 });
+          await env.CONV.put("expw:" + shop + ":" + uid + ":" + (Math.floor(_tw / 60000) + 1), JSON.stringify(ex), { expirationTtl: 600 });
+        } catch (e) {}
         // มีออเดอร์รอโอนค้างอยู่ → คิดยอดใหม่ด้วยค่าส่งด่วนจริง + ออกการ์ดใหม่
-        let msgs = [{ type: "text", text: "ค่าส่งด่วนของคุณลูกค้าคือ " + fee + " บาทค่ะ 🛵" }];
+        // 🛵 k294 (เคสจริง 12 ส.ค. 2.23 น.): แอดมินกดส่งค่าส่ง 2 รอบ (180 แล้วแก้เป็น 88)
+        //   ลูกค้าเห็น 2 ราคาซ้อนกันโดยไม่มีคำอธิบาย → ไม่รู้ว่าต้องโอนยอดไหน
+        //   ถ้าโอนตามเลขแรกที่เห็น = โอนเกิน แล้วต้องมาคืนเงินกันทีหลัง
+        //   แก้: ครั้งที่ 2 เป็นต้นไปให้บอกตรงๆ ว่า "ขอแก้ราคา" พร้อมยกเลิกราคาเดิมให้ชัด
+        //   ⛔ ไม่ได้ห้ามแอดมินแก้ราคา (บางทีกดผิดจริง) — แค่ทำให้ลูกค้าไม่สับสนเรื่องเงิน
+        if (_prevFee294) console.log("K294_EXPFEE_CORRECTED " + _prevFee294 + " → " + fee);
+        let msgs = [{ type: "text", text: _prevFee294
+          ? "ขออภัยด้วยนะคะ 🙏🏻 ขอแก้ค่าส่งด่วนเป็น " + fee + " บาทค่ะ 🛵\n(ยกเลิกราคา " + _prevFee294 + " บาทที่แจ้งไปก่อนหน้านะคะ — ยึดยอดล่าสุดนี้ค่ะ)"
+          : "ค่าส่งด่วนของคุณลูกค้าคือ " + fee + " บาทค่ะ 🛵" }];
         let total = null;
         const ov = await env.CONV.get("ord:" + shop + ":" + uid);
         if (ov) {
@@ -5072,6 +7900,31 @@ export default {
       if (!buf) return new Response("not found", { status: 404 });
       return new Response(buf, { headers: { "Access-Control-Allow-Origin": "*", "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" } });
     }
+    // 🔎 k284 · หน้าเปิดรายงานประจำวัน — จีทูเสิร์ฟเอง ไม่ต้องแก้ไฟล์หลังบ้าน
+    //   ที่มา: เจ้าของร้านเปิดหลังบ้านจากลิงก์ที่โฮสต์ไว้ที่อื่น → แก้ไฟล์ในเครื่องแล้วเขาไม่เห็น
+    //   ทางออก: หน้าฟอร์มสั้น ๆ ใส่รหัสแล้วกดดู (ฟอร์ม HTML ล้วน ไม่มีสคริปต์)
+    //   ⛔ ตัวหน้าไม่มีข้อมูลร้านเลย — ต้องใส่รหัสถูกก่อนถึงเห็นรายงาน (ด่านเดิมที่ /ctl/)
+    if (url0.pathname === "/rv") {
+      let ids = [];
+      try { ids = Object.keys(shopList(env) || {}); } catch (e) {}
+      if (!ids.length) ids = ["v20"];
+      const opts = ids.map(s => '<option value="' + s + '">' + s + "</option>").join("");
+      const html = '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        + "<title>จีทู · รายงานประจำวัน</title><style>"
+        + "body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#0f1115;color:#e8eaed;margin:0;padding:24px;line-height:1.6}"
+        + "h1{font-size:20px;margin:0 0 6px}.sub{color:#9aa0a6;font-size:13px;margin-bottom:18px}"
+        + "label{display:block;font-size:13px;color:#9aa0a6;margin:14px 0 4px}"
+        + "input,select{width:100%;box-sizing:border-box;padding:13px;border-radius:10px;border:1px solid #2b2f36;background:#191c22;color:#e8eaed;font-size:16px}"
+        + "button{width:100%;margin-top:18px;padding:15px;border:0;border-radius:10px;background:#5ad17f;color:#0f1115;font-size:16px;font-weight:700}"
+        + "</style><h1>🔎 รายงานประจำวันของจีทู</h1>"
+        + '<div class="sub">ดูว่าวันนี้มีแชทไหนที่จีทูตอบพลาดบ้าง · อ่านอย่างเดียว ไม่กระทบการตอบลูกค้า</div>'
+        + '<form action="/ctl/review" method="get">'
+        + '<label>รหัสหลังบ้าน (ตัวเดียวกับที่ใช้เข้าหน้าแอดมิน)</label><input name="key" type="password" required>'
+        + "<label>ร้าน</label><select name=\"shop\">" + opts + "</select>"
+        + '<label>ช่วงเวลา</label><select name="h"><option value="24">วันนี้ (24 ชม.)</option><option value="72">ย้อนหลัง 3 วัน</option></select>'
+        + "<button>📋 ดูรายงาน</button></form>";
+      return new Response(html, { headers: { "Content-Type": "text/html; charset=utf-8" } });
+    }
     // ── แผงควบคุมแอดมิน (ใช้กับหน้า jeetoo-control.html) ──
     if (url0.pathname.startsWith("/ctl/")) {
       const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, POST, OPTIONS", "Access-Control-Allow-Headers": "*" };
@@ -5263,8 +8116,81 @@ export default {
         // แอดมินกดว่า "ดูแลเสร็จแล้ว" แชทเดียว → แอดมินกลับมาตอบแชทนั้น
         if (act === "done") {
           const uid = url0.searchParams.get("uid");
-          if (uid) { await env.CONV.delete("mute:" + shop + ":" + uid); UNMUTED.set(wakeKey(shop, uid), Date.now()); MUTED.delete(wakeKey(shop, uid)); MUTED_UIDS.delete(uid); }   // k201
+          if (uid) {
+            await env.CONV.delete("mute:" + shop + ":" + uid); UNMUTED.set(wakeKey(shop, uid), Date.now()); MUTED.delete(wakeKey(shop, uid)); MUTED_UIDS.delete(uid);   // k201
+            // ⚡ k270: วาง "ป้ายปลุก" ของนาทีนี้และนาทีถัดไป — ฝั่งเว็บฮุคอ่านเจอทันทีแม้แคชคีย์มิ้วต์ยังค้าง
+            //   เขียน 2 ใบกัน "กดตอนวินาทีที่ 59" แล้วลูกค้าพิมพ์ตอนนาทีถัดไปพอดี · อายุ 5 นาทีก็หายเอง
+            try {
+              const _t = Date.now();
+              const _v = JSON.stringify({ t: _t });
+              await env.CONV.put("wk:" + shop + ":" + uid + ":" + Math.floor(_t / 60000), _v, { expirationTtl: 300 });
+              await env.CONV.put("wk:" + shop + ":" + uid + ":" + (Math.floor(_t / 60000) + 1), _v, { expirationTtl: 300 });
+              console.log("K270_WAKE_SET shop=" + shop);
+            } catch (e) {}
+          }
           return J({ ok: 1 });
+        }
+        // 🔎🔎 k283 · ตัวเฝ้าดูรายวัน — "วันนี้จีทูพลาดกี่เคส"
+        //   ปัญหาที่แก้ (เจ้าของร้าน 11 ส.ค. ก่อนเปิดจริง): บั๊กทุกตัวที่แก้กันมาทั้งวัน
+        //   เจอเพราะเจ้าของร้านนั่งไล่แคปเอง — วันเปิดแอดลูกค้าเป็นร้อยแชท ไล่ไม่ไหวแน่
+        //   ⛔ อ่านอย่างเดียว: ใช้ log: ที่จดไว้อยู่แล้ว ไม่เขียน KV ไม่แตะเส้นตอบลูกค้าเลย
+        //      ต่อให้ตัวนี้พังทั้งก้อน จีทูก็ยังขายของได้ปกติ (อยู่คนละเส้นทางกับ handleEvent)
+        if (act === "review") {
+          const hours = Math.min(parseInt(url0.searchParams.get("h") || "24", 10) || 24, 72);
+          const since = Date.now() - hours * 3600000;
+          const rows = await readAll("log:" + shop + ":", 300);
+          // สัญญาณว่าลูกค้าไม่พอใจ/ระบบพลาด — ทุกตัวมาจากเคสจริงที่เคยเจอ
+          const RX_CONFUSE = /(?:^|[\s!?.,])งง(?:[\s!?.,]|$)|ไม่ใช่|ทำไม|เหนื่อย|มั่ว|ผิดรุ่น|ไม่ตรง|ตอบหน่อย|ยังไม่ตอบ|ไม่ตอบ|อ่านมั้ย|ฮัลโหล/i;   // ⛔ ห้ามใช้ \b กับอักษรไทย (กฎ k260) — ใช้ขอบคำแบบช่องว่าง/เครื่องหมายแทน
+          const RX_HUMAN   = /แอดมิน|คนจริง|คุยกับคน|เจ้าของร้าน/i;
+          const RX_SILENT  = /⚠️ \[ระบบ\] เทิร์นนี้ไม่มีข้อความตอบออกไปเลย/;
+          const norm = (s) => String(s || "").replace(/[\s!?.,ๆ~]/g, "").toLowerCase();
+          const cases = [];
+          let chats = 0, turns = 0;
+          for (const { name, v } of rows) {
+            let arr = []; try { arr = JSON.parse(v) || []; } catch (e) { continue; }
+            const recent = arr.filter(x => x && (x.t || 0) >= since);
+            if (!recent.length) continue;
+            chats++; turns += recent.length;
+            const uid = name.split(":").pop();
+            const hits = [];
+            let seenUser = {}, lastBot = "";
+            for (let i = 0; i < recent.length; i++) {
+              const u = String(recent[i].u || ""), b = String(recent[i].b || "");
+              if (RX_SILENT.test(b)) hits.push("จีทูไม่ตอบเลย");
+              else if (!b.trim() && u.trim()) hits.push("ไม่มีคำตอบออกไป");
+              if (RX_CONFUSE.test(u)) hits.push("ลูกค้าไม่เข้าใจ/ทวงคำตอบ");
+              if (RX_HUMAN.test(u)) hits.push("ลูกค้าขอคุยกับคน");
+              const nu = norm(u);
+              if (nu.length >= 2) { seenUser[nu] = (seenUser[nu] || 0) + 1; if (seenUser[nu] === 2) hits.push("ลูกค้าพิมพ์ซ้ำ"); }
+              if (b && b === lastBot) hits.push("จีทูตอบข้อความเดิมซ้ำ");
+              lastBot = b;
+            }
+            if (!hits.length) continue;
+            const uniq = Array.from(new Set(hits));
+            // ให้น้ำหนัก: ไม่ตอบ = หนักสุด (ลูกค้าถูกทิ้ง) → เรียงให้เจ้าของร้านดูตัวสำคัญก่อน
+            const weight = (uniq.indexOf("จีทูไม่ตอบเลย") !== -1 || uniq.indexOf("ไม่มีคำตอบออกไป") !== -1) ? 100
+                         : (uniq.indexOf("ลูกค้าไม่เข้าใจ/ทวงคำตอบ") !== -1) ? 50 : 10;
+            cases.push({
+              uid, อาการ: uniq, น้ำหนัก: weight + uniq.length,
+              เวลาแรก: new Date(recent[0].t + 7 * 3600000).toISOString().slice(11, 16),
+              เวลาล่าสุด: new Date(recent[recent.length - 1].t + 7 * 3600000).toISOString().slice(11, 16),
+              บทสนทนา: recent.slice(-12).map(x => ({
+                เวลา: new Date((x.t || 0) + 7 * 3600000).toISOString().slice(11, 16),
+                ลูกค้า: String(x.u || "").slice(0, 160),
+                จีทู: String(x.b || "").slice(0, 200) || "— ไม่ตอบ —"
+              }))
+            });
+          }
+          cases.sort((a, b) => b.น้ำหนัก - a.น้ำหนัก);
+          const out = {
+            ร้าน: shop, ช่วงเวลา: hours + " ชม.ล่าสุด", build: BUILD,
+            แชททั้งหมด: chats, ข้อความทั้งหมด: turns,
+            เคสน่าสงสัย: cases.length,
+            สรุปอาการ: (() => { const c = {}; for (const x of cases) for (const a of x.อาการ) c[a] = (c[a] || 0) + 1; return c; })(),
+            เคส: cases.slice(0, 40)
+          };
+          if (url0.searchParams.get("json") === "1") return J(out);
+          return new Response(reviewHtml(out), { headers: { ...CORS, "Content-Type": "text/html; charset=utf-8" } });
         }
         // 📦 รายการออเดอร์ที่แอดมินปิดการขายได้ รอแอดมินลง XSelly
         if (act === "orders") {
@@ -5511,6 +8437,9 @@ const _BRANDS_OK = (() => {
 })();
 // รุ่นที่ "ไม่ใช่เครื่อง" (หัวน้ำยา/พอตใช้แล้วทิ้ง) — ห้ามมีคำว่า "เครื่อง" นำหน้า
 const _NOT_DEVICE = Object.keys(FLAVORS).filter(k => !/^เครื่อง/.test(k)).sort((a, b) => b.length - a.length);
+// 🏷️ k316: รายชื่อ "เครื่อง" จริงในแคตตาล็อก — ใช้กันด่าน (2) ตัดคำว่าเครื่องออกจากชื่อจริง
+//   เรียงยาว→สั้น เพื่อให้ชื่อที่เจาะจงกว่าชนะเสมอ ("...15K (โคลน)" ต้องชนะ "...15K")
+const _DEVICE_KEYS = Object.keys(FLAVORS).filter(k => /^เครื่อง/.test(k)).sort((a, b) => b.length - a.length);
 // k99: คำอังกฤษที่ "ไม่ใช่ชื่อแบรนด์" — มาจากชื่อกลิ่นจริงในระบบ + คำใช้งานทั่วไป
 const _WORDS_OK = (() => {
   const s = new Set();
@@ -5550,11 +8479,36 @@ function factGate(reply) {
     }).join("\n");
 
     // (2) 🔌 เรียก "เครื่อง" กับของที่เป็นหัวน้ำยา/พอต → ตัดคำว่าเครื่องออก
+    //  🏷️🏷️ k316 (เคสจริงโปรดักชัน 13 ส.ค. 18.58 · ลูกค้า "นฤเบศวร์"):
+    //    ลูกค้าถาม "เครื่องเปลี่ยนหัว M ล่ะครับ" → k282 เติมชื่อให้ถูกเป็น "เครื่อง M SWITCH 15K"
+    //    แต่ด่านนี้ตัดคำว่า "เครื่อง" ทิ้งทันที เหลือ "M SWITCH 15K" → ลูกค้าแยกไม่ออกว่าเครื่องหรือหัว
+    //    ต้นเหตุ: ชื่อในแคตตาล็อก "ซ้อนกัน" — "M SWITCH" (หัว) เป็นคำนำหน้าของ "M SWITCH 15K" (เครื่อง)
+    //      ด่านนี้เห็น "เครื่อง M SWITCH…" แล้วนึกว่ากำลังเรียกหัวว่าเครื่อง ทั้งที่เป็นชื่อเครื่องจริง
+    //    ⚠️ เรื่องเงิน: findPrice("M SWITCH 15K") → คีย์ "M SWITCH" = 350 · ของจริงคือ 250
+    //      กวาดแคตตาล็อกแล้วเจอ 3 คู่ที่ชนแบบนี้ ต่างกันสูงสุด 850 บาท (RELX INFINITY 2+)
+    //    แก้: ก่อนตัด ต้องเช็คก่อนว่าข้อความตรงนั้นเป็น "ชื่อเครื่องจริงในแคตตาล็อก" หรือไม่
+    //      เป็นชื่อจริง = ห้ามตัด · ไม่ใช่ = ตัดเหมือนเดิมทุกประการ
+    //    ⛔ ไม่ hardcode ชื่อรุ่น — สร้างรายชื่อจากแคตตาล็อกตอนบูต (_DEVICE_KEYS)
+    //    ⛔ ไม่แตะ k282 · ไม่แตะราคา/สต็อก · ไม่แตะ cart/order/payment/shipping
     for (const k of _NOT_DEVICE) {
       const bare = k.replace(/^(หัวพอต|หัวน้ำยา)\s*/, "");
       if (bare.length < 5) continue;
       const re = new RegExp("เครื่อง\\s*(" + bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
-      if (re.test(out)) { out = out.replace(re, "$1"); hit.device++; console.log("FACT_DEVICE_FIXED " + bare); }
+      if (!re.test(out)) continue;
+      re.lastIndex = 0;                       // ⚠️ regex มีธง g → ต้องรีเซ็ตก่อนใช้ซ้ำ ไม่งั้นข้ามผลลัพธ์
+      let _kept316 = 0, _cut316 = 0;
+      out = out.replace(new RegExp(re.source, "gi"), (m0, g1, idx, whole) => {
+        // ข้อความตั้งแต่ตำแหน่งนี้ไป ตรงกับ "ชื่อเครื่องจริง" ตัวไหนในแคตตาล็อกหรือเปล่า
+        //   (เทียบตัวยาวก่อนเสมอ — "เครื่อง M SWITCH 15K (โคลน)" ต้องชนะ "เครื่อง M SWITCH 15K")
+        const tail = String(whole).slice(idx);
+        for (const dev of _DEVICE_KEYS) {
+          if (normTH(tail).indexOf(normTH(dev)) === 0) { _kept316++; return m0; }   // ชื่อจริง → คงไว้
+        }
+        _cut316++; return g1;                                                       // ไม่ใช่ชื่อจริง → ตัดตามเดิม
+      });
+      if (_kept316) console.log("K316_DEVICE_NAME_KEPT " + bare + " (ชื่อเครื่องจริงในแคตตาล็อก " + _kept316 + " จุด)");
+      //   ⚠️ ต้องนับจากจำนวนที่ "ตัดจริง" ในลูป ห้ามใช้ re.test(out) ทีหลัง — ตัดสำเร็จแล้วจะ test ไม่เจอ
+      if (_cut316) { hit.device++; console.log("FACT_DEVICE_FIXED " + bare); }
     }
 
     // (3) 🚫 ชื่อแบรนด์ที่ร้านไม่มี (AI แต่งขึ้น) → นับไว้ + เตือนใน log (ไม่ตัดข้อความ กันตัดผิด)
@@ -5727,6 +8681,37 @@ const EVAL_CASES = [
     เป้าหมาย:"สั่งพอตใช้แล้วทิ้ง 3 อันก่อน แล้วค่อยขอเพิ่มเป็น 4 อัน",
     ต้องได้:"พอครบ 4 อันต้องออกการ์ดใหม่ที่ค่าส่งเป็น 0 และยอดรวมลดลงตาม",
     ห้าม:"ยังคิดค่าส่ง 40 หลังครบ 4 อัน · ไม่ออกการ์ดใหม่" },
+  // ═══ k255 — เคสจาก Production Incident จริง (ยิงผ่าน handleEvent เส้นทางเดียวกับลูกค้าจริง) ═══
+  //   ⛔ บทเหล่านี้คือ Acceptance Test ของ incident ที่ลูกค้าเจอแล้ว ห้ามลบ
+  //   ใช้ /eval?flow=<id> ยิงทีละบท หรือไล่ 21-27 เพื่อยืนยันว่าแก้ได้จริงหลัง Deploy
+  { id:21, หมวด:"INCIDENT-A", ชื่อ:"💰 ราคาเครื่อง vs หัวพอต (ลูกค้าพิมพ์ชื่อตามเมนู)", ตา:3,
+    เป้าหมาย:"เห็นในเมนูว่ามีเครื่อง RELX INFINITY 2+ อยากรู้ราคา · พิมพ์ชื่อรุ่นตามที่เห็นในเมนูเป๊ะๆ คือ \"RELX INFINITY 2+\" โดยไม่พิมพ์คำว่าเครื่องนำหน้า",
+    ต้องได้:"ต้องตอบราคา 990 บาท และเข้าใจว่าลูกค้าหมายถึงตัวเครื่อง",
+    ห้าม:"ตอบราคา 140 บาท · บอกว่าเป็นหัวพอต · สับสนระหว่างเครื่องกับหัว" },
+  { id:22, หมวด:"INCIDENT-A", ชื่อ:"⛔ กันแก้เกิน — หัวพอตต้องยังเป็น 140", ตา:3,
+    เป้าหมาย:"อยากได้หัวพอตเปลี่ยนของ RELX INFINITY (หัวน้ำยาเล็ก ไม่ใช่ตัวเครื่อง) ถามราคา",
+    ต้องได้:"ต้องตอบราคา 140 บาท และเข้าใจว่าเป็นหัวพอตเล็ก",
+    ห้าม:"ตอบราคา 990 บาท · บอกว่าเป็นตัวเครื่อง" },
+  { id:23, หมวด:"INCIDENT-D", ชื่อ:"🏷️ ถามประเภทสินค้า ไม่ใช่ถามวิธีใช้", ตา:3,
+    เป้าหมาย:"อยากรู้ว่า DUAL SMASH เป็นพอตแบบใช้แล้วทิ้ง หรือแบบเปลี่ยนหัวได้ · ถามสั้นๆ ว่า \"DUAL SMASH เปลี่ยนหัวไหม\"",
+    ต้องได้:"ต้องบอกว่าเป็นหัวน้ำยาใหญ่ (Big Pod) ใช้คู่กับเครื่อง เปลี่ยนหัวได้ และไม่ใช่แบบใช้แล้วทิ้ง",
+    ห้าม:"ส่งคู่มือวิธีใช้งานทั่วไปแทนคำตอบ · บอกว่าเป็นพอตใช้แล้วทิ้ง · เลี่ยงไม่ตอบว่าเป็นประเภทไหน" },
+  { id:24, หมวด:"INCIDENT-F", ชื่อ:"🙋 เรียกแอดมินสั้นๆ ว่า \"แอดครับ\"", ตา:2,
+    เป้าหมาย:"อยากคุยกับคนจริง พิมพ์สั้นๆ แค่ \"แอดครับ\" อย่างเดียว ไม่ถามเรื่องสินค้า",
+    ต้องได้:"ต้องรับเรื่องแล้วบอกว่าส่งต่อให้ทีมงานคนจริงเข้ามาดูแล",
+    ห้าม:"ตอบว่า \"มีค่ะ\" แล้วถามชื่อรุ่นที่สนใจ · ตอบเรื่องสินค้า · ส่งเมนู" },
+  { id:25, หมวด:"INCIDENT-G", ชื่อ:"🗂️ ถามภาพรวมว่าร้านขายกี่ประเภท", ตา:2,
+    เป้าหมาย:"เพิ่งเข้ามาใหม่ ยังไม่รู้จักสินค้าเลย อยากรู้ว่าร้านขายสินค้ากี่ประเภท ถามว่า \"ขายสินค้ากี่ประเภท\"",
+    ต้องได้:"ต้องบอกจำนวนประเภทเป็นตัวเลข พร้อมลิสต์ชื่อหมวดสินค้าให้ดู",
+    ห้าม:"ตอบลอยๆ ว่ามีหลายหมวด แล้วโยนให้ลูกค้าพิมพ์ชื่อรุ่นเอง โดยไม่บอกว่ามีหมวดอะไรบ้าง" },
+  { id:26, หมวด:"INCIDENT-I", ชื่อ:"🧭 เปลี่ยนเรื่องกลางแชท ห้ามลากสินค้าเดิมมา", ตา:4,
+    เป้าหมาย:"ถามราคามาโบก่อน · พอได้คำตอบแล้วเปลี่ยนเรื่องไปถามว่าร้านเปิดกี่โมง",
+    ต้องได้:"คำตอบเรื่องเวลาเปิดร้านต้องพูดถึงเวลาทำการเท่านั้น และตอบให้จบในตัว",
+    ห้าม:"เอาชื่อรุ่น ราคา หรือรายชื่อกลิ่น มาต่อท้ายคำตอบเรื่องเวลาเปิดร้าน" },
+  { id:27, หมวด:"INCIDENT-L", ชื่อ:"⛔ Never Guess — ประเภทที่ยังไม่ยืนยัน ต้องถาม", ตา:3,
+    เป้าหมาย:"อยากรู้ว่า MARBO 9K เป็นพอตแบบใช้แล้วทิ้งหรือแบบเปลี่ยนหัว",
+    ต้องได้:"ถ้าทะเบียนสินค้ายังไม่ยืนยันประเภทของรุ่นนี้ ต้องบอกตรงๆ ว่าขอเช็คให้ชัดก่อน หรือขอชื่อรุ่นเต็ม/รูปสินค้า — การถามกลับถือว่าถูกต้อง",
+    ห้าม:"ฟันธงว่าเป็นประเภทไหนทั้งที่ไม่มีข้อมูลยืนยัน" },
 ];
 
 // ═══════ k191 — Order Flow Test: วัดว่า "ปิดออเดอร์ได้จริงไหม" ไม่ใช่แค่ตอบถูก ═══════
@@ -5964,7 +8949,9 @@ function evalTruth(convText, sm, buf) {
     + "• ค่าส่งพัสดุธรรมดา 40 บาท\n"
     + "• ส่งฟรีเมื่อครบ: พอตใช้แล้วทิ้ง ≥4 ชิ้น · หัวพอตเล็ก ≥10 · หัวน้ำยาใหญ่ ≥4 · ไส้บุหรี่ IQOS ≥2\n"
     + "• ออเดอร์ที่มีของแถมอยู่ในบิล = ไม่เข้าโปรส่งฟรี ต้องจ่ายค่าส่ง 40\n"
-    + "• หัวน้ำยาใหญ่ครบ 5 หัว = แถมเครื่องเปล่า 1 เครื่อง (มูลค่า 250)\n"
+    + "• **RELX BOOST POD เท่านั้น** ครบ 5 หัว = ลูกค้าเลือกได้ 1 อย่าง (ส่งฟรี หรือ รับเครื่อง RELX CREATOR 20K ฟรี 1 เครื่อง มูลค่า 250 + ค่าส่ง 40)\n"
+    + "  ⛔ โปรแถมเครื่องนี้ไม่ใช่ของ Big Pod ทุกตัว — ABC LEGO / ESKO / KS / M SWITCH / RELX POD CLEAR / ชุด KIT ไม่เข้าโปรนี้\n"
+    + "  ⛔ ระบบถามลูกค้าเองว่าเอาโปรไหน ห้ามเลือกแทน ห้ามให้ทั้งสองโปรพร้อมกัน\n"
     + "• ส่งด่วนคิดตามระยะทาง ไม่เข้าโปรส่งฟรี · ส่งด่วนมีเฉพาะเขตกรุงเทพฯ-ปริมณฑล\n"
     + "• ร้านไม่มีเก็บเงินปลายทาง · ไม่มีส่วนลด · ห้ามเอ่ยชื่อบริษัทขนส่ง · ห้ามบอกจำนวนสต็อกที่เหลือ\n"
     + "• เรื่องเงินคืนและเคสลูกค้าไม่พอใจ ต้องส่งต่อให้ทีมงานคนจริงเสมอ\n"
@@ -6363,6 +9350,24 @@ function flowSummary(rows) {
   };
 }
 async function handleEvent(ev, env, TOKEN, shopId) {
+  // 📮📮 k311 · event เดิม (ส่งซ้ำ / redelivery / gateway ยิงซ้ำ) = ประมวลผลได้ครั้งเดียว
+  //   วางไว้ที่นี่เพราะเป็น "ประตูจริงของ 1 event" — ทุกทางที่เรียกเข้ามาถูกกันหมด
+  //   ⛔ ไม่มี id ให้ยึด → ปล่อยผ่านตามเดิม ห้ามกินข้อความจริงของลูกค้าทิ้งเด็ดขาด
+  //   ⛔ กุญแจผูกกับร้าน (shopId) ด้วย — คนละร้านที่ id ชนกันต้องไม่ถูกมองว่าซ้ำ
+  if (evSeen311(ev, shopId)) {
+    console.log("K311_DUP_EVENT_SKIP key=" + evKey311(ev, shopId).slice(0, 40) + " type=" + String((ev && ev.type) || "?"));
+    return;
+  }
+  // 📮 k318a ชั้น 2: ชั้นบนกันได้เฉพาะใน worker ตัวเดียวกัน — ชั้นนี้กันข้าม worker
+  //   วางถัดจากชั้นแรกทันที (ชั้นแรกเร็วกว่าเพราะไม่แตะ KV) ⛔ KV พัง = ปล่อยผ่าน
+  const _claim318 = await evClaim318(env, ev, shopId);
+  if (_claim318.dup) {
+    console.log("K318A_DUP_EVENT_KV key=" + evKey311(ev, shopId).slice(0, 40) + " type=" + String((ev && ev.type) || "?"));
+    return;
+  }
+  // 🧹 k314 ชั้น 1: ล้าง "รุ่นที่กำลังคุยถึง" ทุกครั้งที่ event เข้ามา
+  //   ⛔ กันค่าค้างจากเทิร์นก่อน/ลูกค้าคนก่อนใน worker ตัวเดียวกัน
+  _hintModels = [];
   const _uid = (ev && ev.source && ev.source.userId) || "";
   if (!_uid) return handleEventCore(ev, env, TOKEN, shopId);
   const _m = ev && ev.message;
@@ -6372,11 +9377,77 @@ async function handleEvent(ev, env, TOKEN, shopId) {
     : _m.type === "image" ? "[รูปภาพ]"
     : _m.type === "sticker" ? "[สติกเกอร์]"
     : _m.type === "location" ? "[ตำแหน่งที่ตั้ง]" : "[" + _m.type + "]";
-  const _ctx = { key: "conv3:" + shopId + ":" + _uid, userText: _utext, replies: [], written: false };
+  // 💾 k258b: slot/slotDirty = Product Slot ที่รอเซฟ (ดูเหตุผลเต็มที่ handleEventCore บรรทัด ~8990)
+  const _ctx = { key: "conv3:" + shopId + ":" + _uid, userText: _utext, replies: [], written: false, slot: null, slotDirty: false, sentOk: false };   // k271: sentOk = ส่งถึงลูกค้าจริง
+  // 📮 k318a: พก "ตราจอง event นี้" ติดเทิร์นไว้ ให้ทางส่งสำรองตรวจได้ว่ายังเป็นเจ้าของอยู่ไหม
+  _ctx.evKey318 = _claim318.key; _ctx.evTok318 = _claim318.tok; _ctx.env318 = env;
+  _ctx.shop319 = shopId;   // 🔁 k319a: ตัวกันตอบซ้ำต้องรู้ว่าเป็นร้านไหน (คีย์ KV ผูกร้าน+ลูกค้า)
   TURN.set(_uid, _ctx);
   try {
     return await handleEventCore(ev, env, TOKEN, shopId);
   } finally {
+    // 💾💾 k258b · เซฟ Product Slot ไม่ว่าจะออกทางไหน
+    //   ต้องมาก่อนการเซฟประวัติแชท เพราะ "ลูกค้าสั่งอะไร" สำคัญกว่า "คุยอะไรไป"
+    //   ⛔ ห้ามย้ายไปไว้ใน handleEventCore — ที่นั่นมี return 19 จุดที่ข้ามการเซฟ (นั่นคือบั๊กเดิม)
+    try {
+      if (env.CONV && _ctx.slotDirty && _ctx.slot) {
+        await slotSave(env, shopId, _uid, _ctx.slot);
+        console.log("K258B_SLOT_SAVED_ON_EXIT items=" + (((_ctx.slot && _ctx.slot.items) || []).length));
+      }
+    } catch (e5) {}
+    // 🔇🔍 k271 · ตัวจับ "เทิร์นที่เงียบ" (เจ้าของร้านเจอจริง 10 ส.ค.: ลูกค้าพิมพ์แล้วจีทูไม่ตอบเลย)
+    //   ปัญหาเดิมของการไล่บั๊กแบบนี้: เล่นซ้ำในเครื่องแล้วตอบปกติทุกครั้ง
+    //     → แปลว่าเกิดเฉพาะตอนรันจริง (ยิงข้อความกลับ LINE ไม่สำเร็จ / โมเดลล่ม / error กลางทาง)
+    //     → ไม่มีร่องรอยให้ดูย้อนหลังเลย ต้องรบกวนเจ้าของร้านไปเปิด log สด = ไม่ควรเป็นแบบนั้น
+    //   ตัวนี้จดไว้ใน "ประวัติแชท" ที่แผงหลังบ้านเปิดดูได้อยู่แล้ว (log:) ⛔ ไม่ส่งอะไรหาลูกค้า
+    //   ⛔ เงียบแบบตั้งใจ (แอดมินกำลังดูแล/ปิดบอท) ไม่นับ — เช็คคีย์มิ้วต์ก่อนเสมอ
+    try {
+      // 📮 k311: ก่อนจะสรุปว่า "เทิร์นนี้เงียบ" ต้องเช็คก่อนว่าลูกค้าเพิ่งได้รับอะไรจากเราไปหรือเปล่า
+      //   เทิร์นที่รันซ้อนกันจะเห็น sentOk=false ทั้งที่เพื่อนร่วมก้อนตอบลูกค้าไปแล้ว → ห้ามยิงซ้ำ
+      let _justSent311 = false;
+      try { const _ls = LASTSENT.get(_uid); _justSent311 = !!_ls && (Date.now() - _ls) < LASTSENT_WINDOW_MS; } catch (e8) {}
+      if (_justSent311 && !_ctx.sentOk) console.log("K311_ACK_SUPPRESSED uid=" + String(_uid).slice(0, 8) + " (เพิ่งส่งข้อความถึงลูกค้าไปแล้ว)");
+      // 🔇 k318a: event ที่ระบบไม่มีเส้นทางตอบอยู่แล้ว (กดปุ่ม/วิดีโอ/เสียง/ไฟล์) = ต้องเงียบ
+      //   "เงียบเพราะไม่มีคำตอบ" กับ "เงียบเพราะพัง" คนละเรื่องกัน — ตาข่ายมีไว้จับอย่างหลังเท่านั้น
+      //   ⛔ ใช้ทะเบียนตัวเดียวกับที่ Core ใช้ตัดสิน จะได้ไม่มีทางเพี้ยนจากกันอีก
+      const _ackOK318 = isAnswerable318(ev);
+      if (!_ackOK318 && _ctx.userText && !_ctx.sentOk) {
+        console.log("K318A_NO_ACK_SILENT type=" + String((ev && ev.type) || "?")
+          + "/" + String((ev && ev.message && ev.message.type) || "-") + " (ระบบไม่มีเส้นทางตอบ event ชนิดนี้ — เงียบตามที่เจ้าของร้านสั่ง)");
+      }
+      if (env.CONV && _ackOK318 && _ctx.userText && !_ctx.sentOk && !_justSent311) {
+        let _muted271 = false;
+        try { _muted271 = !!(await env.CONV.get("mute:" + shopId + ":" + _uid)) || MUTED_UIDS.has(_uid); } catch (e6) {}
+        if (!_muted271) {
+          console.log("K271_SILENT_TURN uid=" + String(_uid).slice(0, 8) + " msg=" + String(_ctx.userText).slice(0, 60));
+          await appendChatLog(env, shopId, _uid, _ctx.userText, "⚠️ [ระบบ] เทิร์นนี้ไม่มีข้อความตอบออกไปเลย (ยังไม่ได้ถูกปิดปาก) — ต้องตรวจ");
+          // 🛟🛟 k297 — ตาข่ายสุดท้าย "ห้ามลูกค้าตัน" (คำสั่งเจ้าของร้าน 12 ส.ค. ก่อนเปิดร้าน)
+          //   k271 เดิม "จดไว้เฉยๆ" เพื่อให้แอดมินตามดูทีหลัง — ดีสำหรับการไล่บั๊ก
+          //   แต่ในมุมลูกค้า: เขาพิมพ์มาแล้วไม่มีอะไรตอบกลับเลย = คิดว่าร้านเมิน แล้วหายไป
+          //   เจอจริงตอนเดินโฟลว์แกร็บ: ลูกค้าส่ง "ชื่อ+เบอร์+บ้านเลขที่" ในจังหวะที่ระบบไม่ได้ขอ → เงียบสนิท
+          //   กติกา: ถึงจุดนี้แปลว่า "ทุกเส้นทางในระบบไม่มีอะไรจะพูด" → อย่างน้อยต้องตอบรับ 1 ข้อความ
+          //   ⛔ ปลอดภัยโดยโครงสร้าง — จุดนี้อยู่ "ท้ายสุดของทุกเส้นทาง" และยิงเฉพาะตอน:
+          //      (1) ลูกค้าพิมพ์มาจริง (2) ไม่มีข้อความใดถูกส่งสำเร็จเลยทั้งเทิร์น (3) ไม่ได้อยู่ในคิวแอดมิน
+          //      → เส้นที่ตอบลูกค้าได้อยู่แล้วทุกเส้น ไม่มีทางมาถึงบรรทัดนี้
+          //   ⛔ ห้ามปิดปาก/ห้ามส่งเข้าคิวแอดมินตรงนี้ — ถ้าปิดปาก ลูกค้าจะยิ่งไม่ได้คำตอบจากจีทูอีกเลย
+          //      (เคสนี้จดไว้ใน log แล้ว แอดมินเห็นได้จากหน้ารายงาน /rv อยู่แล้ว)
+          try {
+            // 📮 k318a: ตราจอง — ถ้า worker อีกตัวรับ event นี้ไปตอบแล้ว ห้ามยิง ack ซ้ำ
+            if (!(await evOwns318(_uid))) {
+              console.log("K318A_SKIP_ACK_DUP uid=" + String(_uid).slice(0, 8) + " (worker อีกตัวรับ event นี้ไปแล้ว)");
+              return;
+            }
+            const _p297 = await lfetch("https://api.line.me/v2/bot/message/push", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${TOKEN}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ to: _uid, messages: [{ type: "text",
+                text: "รับข้อความแล้วนะคะ 🙏🏻\nขอเช็คให้อีกนิดนะคะ เดี๋ยวแอดมินตอบกลับในแชทนี้ค่ะ 💕" }] }),
+            });
+            console.log("K297_NO_STALL_REPLY " + (_p297 && _p297.ok ? "ส่งแล้ว" : "ส่งไม่สำเร็จ"));
+          } catch (e7) { console.log("K297_NO_STALL_FAIL " + String((e7 && e7.message) || e7)); }
+        }
+      }
+    } catch (e6) {}
     try {
       TURN.delete(_uid);
       if (env.CONV && !_ctx.written && _ctx.replies.length) {
@@ -6396,14 +9467,17 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
   try {
     // ── เพิ่มเพื่อน (follow) → ส่งการ์ดต้อนรับ + ปุ่มเมนู ──
     if (ev.type === "follow" && ev.replyToken) {
-      const uid = (ev.source && ev.source.userId) || "anon";
-      if (!(await botoffGet(env, shopId)))
-        await lineFlex(TOKEN, ev.replyToken, "ABC ยินดีต้อนรับค่ะ ✨", welcomeFlex(), uid);
+      // 🔇 k278 (เจ้านายสั่ง 11 ส.ค.): ตอนลูกค้าเพิ่มเพื่อน **ไม่ส่งการ์ดต้อนรับจากจีทูแล้ว**
+      //   เหตุผล: ร้านตั้ง "ข้อความตอบรับ" + ริชเมนู ไว้ใน LINE OA เองแล้ว → การ์ดจีทูซ้ำซ้อน
+      //   ⛔ แตะเฉพาะ event เพิ่มเพื่อนจุดเดียว — ปุ่ม "เริ่มการสนทนาใหม่" (k202) และ
+      //      การ์ดตอบคำทักทาย "สวัสดี" กลางแชท ยังทำงานเหมือนเดิมทุกอย่าง
       return;
     }
-    if (ev.type !== "message" || !ev.message) return;
+    // 🔇 k318a: ใช้ "ทะเบียนชนิด event ที่ระบบตอบได้" ตัวเดียวกับตาข่าย k297
+    //   ⛔ เดิมเขียนเกณฑ์ไว้ 2 ที่แล้วไม่ตรงกัน = ต้นเหตุของ ack ซ้ำเคสจริง 20.12
+    //   พฤติกรรมเหมือนเดิมเป๊ะ (text/image/location/sticker เท่านั้น) แค่ย้ายมาอ่านที่เดียว
+    if (!isAnswerable318(ev)) return;
     const mtype = ev.message.type;
-    if (mtype !== "text" && mtype !== "image" && mtype !== "location" && mtype !== "sticker") return; // ข้ามเสียง/วิดีโอ/ไฟล์
     const userId = (ev.source && ev.source.userId) || "anon";
     const replyToken = ev.replyToken;
     if (!replyToken) return;
@@ -6417,6 +9491,38 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       const _wk = UNMUTED.get(wakeKey(shopId, userId));
       if (_wk && Date.now() - _wk < 600000) { try { await env.CONV.delete(muteKey); } catch (e) {} }   // k94: เพิ่งกดเสร็จ → ตอบได้เลย
       let _mv = (_wk && Date.now() - _wk < 600000) ? null : await env.CONV.get(muteKey);
+      // ⚡⚡ k270 (เจ้าของร้านแจ้ง 10 ส.ค.): กด "เสร็จ" ในแผงแล้วจีทูยังเงียบต่ออีกเป็นนาที
+      //   ต้นเหตุ (ไม่ใช่โค้ดช้า): KV ของ Cloudflare แคชค่าที่อ่านไว้ **แยกตามที่ตั้งเซิร์ฟเวอร์**
+      //     · เว็บฮุคจาก LINE เข้าเครื่องแถบโตเกียว · แผงแอดมินกดจากไทย = คนละเครื่อง
+      //     · ลบคีย์มิ้วต์แล้ว แต่เครื่องฝั่งโตเกียวยังเสิร์ฟค่าเก่าจากแคชได้นานถึง 60 วิ
+      //   ตัวช่วยเดิม (k94 UNMUTED) ช่วยได้เฉพาะตอนบังเอิญเป็นเครื่องเดียวกัน — ส่วนใหญ่ไม่ใช่
+      //   วิธีแก้: "ป้ายปลุก" ที่ **ชื่อคีย์ผูกกับนาที** → เป็นคีย์ที่เครื่องนั้นไม่เคยอ่านมาก่อน
+      //     แคชเก่าจึงบังไม่ได้ อ่านได้สดทันที (เทคนิคเดียวกับการตั้งชื่อไฟล์ใหม่เพื่อล้างแคช)
+      //   ⛔ แคบโดยตั้งใจ: อ่านเพิ่ม **เฉพาะตอนที่เห็นว่ายังถูกปิดปากอยู่** เท่านั้น
+      //      ลูกค้าปกติที่ไม่ได้อยู่ในคิวแอดมิน ไม่มีการอ่านเพิ่มแม้แต่ครั้งเดียว
+      if (_mv) {
+        try {
+          const _now270 = Date.now();
+          const _mk = (t) => "wk:" + shopId + ":" + userId + ":" + Math.floor(t / 60000);
+          const _hit = (await env.CONV.get(_mk(_now270))) || (await env.CONV.get(_mk(_now270 - 60000)));
+          // ⛔ ป้ายปลุกต้อง "ใหม่กว่า" การปิดปากครั้งนี้เสมอ
+          //   ไม่งั้นเคสนี้พัง: กดเสร็จ 16.00 → แอดมินกดปิดปากใหม่ 16.02 → ป้ายเก่ายังไม่หมดอายุ
+          //   → จีทูจะปลดตัวเองทันทีทั้งที่แอดมินเพิ่งขอคุยต่อ (แย่งลูกค้ากับแอดมิน)
+          let _mt270 = 0, _wt270 = 0;
+          try { _mt270 = +(JSON.parse(_mv) || {}).t || 0; } catch (e) {}
+          try { _wt270 = +(JSON.parse(_hit || "{}") || {}).t || 0; } catch (e) {}
+          if (_hit && _wt270 && _mt270 && _wt270 < _mt270) {
+            console.log("K270_WAKE_STALE ป้ายปลุกเก่ากว่าการปิดปาก → ไม่ปลด");
+          } else if (_hit) {
+            console.log("K270_WAKE_HIT ปลดคิวทันที (ข้ามแคช KV)");
+            _mv = null;
+            try { await env.CONV.delete(muteKey); } catch (e) {}
+            UNMUTED.set(wakeKey(shopId, userId), _now270);
+            MUTED.delete(wakeKey(shopId, userId));
+            MUTED_UIDS.delete(userId);
+          }
+        } catch (e) {}
+      }
       // k114: มิ้วต์เพิ่งตั้งเมื่อครู่ (ยังไม่ทันเข้าแคช KV) → เชื่อความจำในเครื่อง
       if (!_mv && !(_wk && Date.now() - _wk < 600000)) {
         const _mm = MUTED.get(wakeKey(shopId, userId));
@@ -6483,8 +9589,28 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       if (_askTotal) {
         try {
           const _ov = await env.CONV.get("ord:" + shopId + ":" + userId);
+          // ⚡ k273 (เคสจริง LALITA 19.34): ลูกค้าถามยอดรวมทันทีหลังแอดมินกรอกค่าส่ง
+          //   ทางลัดนี้ตอบก่อนบล็อกยกค่าสดตัวหลัก → ต้องยกค่าสดตรงนี้ด้วย (มี ord แล้วเท่านั้น)
+          if (_ov) await liftExpFresh(env, shopId, userId);
           if (_ov) {
-            const _msg = totalMsg(JSON.parse(_ov));
+            let _oj168 = JSON.parse(_ov);
+            // ⚡ k273: รู้ค่าส่งด่วนแล้ว (จากป้ายสด/exp:) แต่ ord ยังเขียนว่า "รอทีมงานเช็ค"
+            //   → คิดยอดใหม่ด้วย computeOrder (สูตรเดียวกับ /expfee เป๊ะ) แล้วค่อยตอบยอดรวม
+            //   ⛔ เฉพาะออเดอร์ยังไม่จ่าย + ยังไม่มียอดรวม เท่านั้น — ไม่แตะออเดอร์ที่สรุปแล้ว
+            try {
+              const _exT = await env.CONV.get("exp:" + shopId + ":" + userId);
+              const _ejT = _exT ? JSON.parse(_exT) : null;
+              if (_ejT && typeof _ejT.fee === "number" && Array.isArray(_oj168.items) && _oj168.items.length
+                  && /รอทีมงานเช็ค|รอทีมงานแจ้งราคา/.test(String(_oj168.block || "")) && !/✅/.test(String(_oj168.status || ""))) {
+                const _c2 = computeOrder(_oj168.items, _ejT.fee);
+                _oj168.block = "📦 ออเดอร์ (รอโอน)\n" + _c2.rows.map(r => "- " + r.label + " = " + r.line).join("\n")
+                  + "\nยอดสินค้า " + _c2.goods + "\nค่าส่งด่วน " + _c2.ship + "\nรวมยอดชำระ " + _c2.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
+                _oj168.t = Date.now();
+                await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_oj168), { expirationTtl: 259200 });
+                console.log("K273_TOTAL_WITH_FEE " + _c2.total);
+              }
+            } catch (e2) {}
+            const _msg = totalMsg(_oj168);
             if (_msg) {
               console.log("K168_ANSWER_TOTAL " + _msg.slice(0, 50).replace(/\n/g, " "));
               await lineReply(TOKEN, replyToken, _msg, userId);
@@ -6523,7 +9649,16 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     // k28 เดิมสั่งขึ้นทุกข้อความ รวมทางลัดที่ตอบใน 0.1 วิ → จุดโผล่แวบเดียวแล้วดับ ดูเหมือนระบบสะดุด
     // ตอนนี้ย้ายไปสั่งตรงจุดก่อนเรียก AI (ทางที่ใช้เวลา 2-3 วิ) ส่วนทางลัดตอบทันที ไม่ต้องขึ้นจุดเลย
     let _loadingShown = false;
-    const showLoading = () => { if (_loadingShown) return; _loadingShown = true; try { lineLoading(TOKEN, userId); } catch (e) { } };
+    // ⏳ k244 (P0 · เจ้าของร้านเจอเอง 7 ส.ค.): จุดไข่ปลาขึ้นช้า แล้วหายก่อนคำตอบจะมา
+    //   ต้นเหตุ 1: เดิมไม่มี await → บน Cloudflare Worker คำขอที่ไม่ await อาจถูกตัดทิ้งก่อนยิงจริง
+    //   ต้นเหตุ 2: เดิมเรียกที่บรรทัด ~8399 ซึ่งอยู่หลัง slotLoad + โหลดสต็อก + ประกอบ hint
+    //              = ลูกค้าเห็นจอว่างหลายวินาทีก่อนจุดไข่ปลาจะโผล่
+    //   ⛔ ยังคงกันเรียกซ้ำด้วย _loadingShown เหมือนเดิม (ยิงครั้งเดียวต่อข้อความ)
+    const showLoading = async () => {
+      if (_loadingShown) return;
+      _loadingShown = true;
+      try { await lineLoading(TOKEN, userId); } catch (e) { }
+    };
 
     // เงียบแชทให้ทีมงานดูแล + จดเข้าคิว (ชื่อลูกค้า+เหตุผล+ข้อความล่าสุด+เวลา) เก็บไว้ในค่าของ mute key เอง (ไม่เพิ่มการเขียน KV)
     const muteNow = async (reason, msg) => {
@@ -6595,6 +9730,70 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     // ── ทางลัดเมนู + ขอคุยแอดมิน (เฉพาะข้อความ) ──
     if (mtype === "text") {
       const t = ev.message.text.trim();
+      // ⏳ k244: ยิงจุดไข่ปลาตั้งแต่ต้นทาง ⛔ ห้ามรอถึงตอนเรียก AI
+      //   ถ้าข้อความนี้ไปเข้าทางลัดที่ตอบทันที จุดไข่ปลาก็หายเองตอนข้อความถูกส่ง = ไม่เสียหาย
+      await showLoading();
+      let _contradictNote = "";   // k241 BUG-5: ตั้งค่าตอนจับได้ว่าลูกค้าทักท้วง แล้วส่งต่อให้ AI ที่ท้ายเส้นทาง
+      // 🔒🔒 k259 · CHECKOUT LOCK — "ออเดอร์นี้จ่ายเงินแล้ว" ต้องรู้ตั้งแต่ต้นทางของทุกทางลัด
+      //   เคสจริง 8 ส.ค. 23.27-23.28 (จ่ายเงินแล้วทั้ง 3 เทิร์น):
+      //     · "ส่งด่วน กทม."  → บอทตอบ "สั่งซื้อ + ชำระเงินตอนนี้ได้เลยนะคะ" = ชวนจ่ายซ้ำ
+      //     · "ขายไรครับ"    → บอทส่งลิงก์เมนูเริ่มต้นใหม่ = เหมือนรีเซ็ตบทสนทนาทิ้ง
+      //   ต้นเหตุ: ทางลัดพวกนี้ตัดสินจาก "ข้อความ" ล้วน ไม่มีอันไหนอ่านสถานะออเดอร์เลยสักอัน
+      //   ⛔ ตัวนี้อ่านอย่างเดียว ไม่แตะเงิน ไม่แตะสถานะ — ใช้เป็นเงื่อนไขของทางลัดเท่านั้น
+      let _ordPaidLock = false, _ordActive = false;
+      let _G2STATE = "BROWSING";   // 🧭 k263 · state ของเทิร์นนี้ — คำนวณครั้งเดียว อ่านได้ทุกด่าน
+      try {
+        if (env.CONV) {
+          const _ovL = await env.CONV.get("ord:" + shopId + ":" + userId);
+          let _ojL = null;
+          if (_ovL) { _ojL = JSON.parse(_ovL); _ordActive = !!(_ojL && _ojL.status); _ordPaidLock = ordPaidActive(_ojL); }
+          // 🧭 k263 · ทุกข้อความใหม่ต้องผ่าน State ก่อนเสมอ (คำสั่งเจ้าของร้าน 9 ส.ค.)
+          //   อ่านข้อเท็จจริงจาก KV เจ้าของเดิมทั้งหมด — ไม่มี state ตัวที่สองให้ desync
+          let _cstL = null, _slotL = null, _asW = false;
+          try { const _c = await env.CONV.get("cst:" + shopId + ":" + userId); if (_c) _cstL = JSON.parse(_c); } catch (e2) {}
+          try { const _s = await env.CONV.get("slot:" + shopId + ":" + userId); if (_s) _slotL = JSON.parse(_s); } catch (e2) {}
+          try { const _a = await env.CONV.get("as:" + shopId + ":" + userId); if (_a) { const _aj = JSON.parse(_a); _asW = !!(_aj && _aj.waiting && Date.now() - (_aj.t || 0) < 3600000); } } catch (e2) {}
+          const _mutedL = MUTED_UIDS.has(userId) && (Date.now() - ((MUTED_UIDS.get(userId) || {}).t || 0)) <= MUTED_UID_TTL_MS;
+          _G2STATE = orderFlowStateOf(_ojL, _cstL, _slotL, { asWaiting: _asW, muted: _mutedL });
+          console.log("G2_STATE " + _G2STATE + " (" + (G2_STATE_TH[_G2STATE] || "") + ")");
+          try { const _tcS = TURN.get(userId); if (_tcS) _tcS.state = _G2STATE; } catch (e2) {}
+        }
+      } catch (e) {}
+      if (_ordPaidLock) console.log("K259_CHECKOUT_LOCK paid=1");
+      // ⚡ k273: ยกค่าส่งสดหลังจุดที่รู้ว่ามีออเดอร์ค้าง (ลูกค้าคุยปกติไม่มีการอ่านเพิ่ม)
+      if (_ordActive) await liftExpFresh(env, shopId, userId);
+      // 📦🕐 k262 · PAID + "ได้ของวันไหน" = ถามถึง **ออเดอร์ใบที่จ่ายไปแล้ว** ไม่ใช่ถามจะซื้ออะไร
+      //   เคสจริงบนโปรดักชัน 9 ส.ค. 13.20: ลูกค้าจ่ายแล้ว ✅ พิมพ์ "ได้ของวันไหน"
+      //     → บอทตอบ "รบกวนบอกชื่อรุ่น" = ลากกลับไปเริ่มขายใหม่ทั้งที่จ่ายเงินไปแล้ว
+      //   ต้นเหตุ 2 ชั้น:
+      //     (1) ด่าน ETA ของ k226 รับเฉพาะสำนวน "กี่วัน/กี่ชม/นานไหม" — "ได้ของวันไหน" หลุดหมด
+      //     (2) ไม่มีใครอ่านสถานะออเดอร์ก่อนตอบ (บทเรียนเดิมของ k259: ทางลัดตัดสินจากข้อความล้วน)
+      //   ⛔ คำตอบมาจาก "ข้อมูลที่ระบบมี" ล้วน (สถานะ ord + วิธีส่งจากบล็อกออเดอร์) ห้าม LLM เดาวันเอง
+      //   ⛔ ใช้ประโยคมาตรฐานที่มีอยู่แล้วในโค้ด (ETA_MSG / lateNote) ไม่ได้แต่งข้อมูลใหม่
+      //   ⛔ แคบโดยตั้งใจ: ไม่มีออเดอร์ที่จ่ายแล้ว = ไม่แตะ (ตกไปที่ด่าน ETA เดิม/AI เหมือนเดิม)
+      if (_ordPaidLock
+          && /(?:ได้|รับ|ส่ง|ถึง)\s*(?:ของ|สินค้า|พัสดุ)?[^\n]{0,8}(?:วันไหน|เมื่อไหร่|เมื่อไร|วันอะไร|กี่โมง|กี่วัน|กี่ชม|กี่ชั่วโมง|นานไหม|นานมั้ย)|(?:ของ|สินค้า|พัสดุ)[^\n]{0,8}(?:ถึง|มา|ส่ง)[^\n]{0,6}(?:วันไหน|เมื่อไหร่|เมื่อไร|กี่วัน)/.test(t)
+          && !/เลขพัสดุ|เลขติดตาม|ถึงไหน|ส่งหรือยัง|ส่งยัง|ได้ของยัง/.test(t)) {
+        let _oj262 = null;
+        try { const _v = await env.CONV.get("ord:" + shopId + ":" + userId); if (_v) _oj262 = JSON.parse(_v); } catch (e) {}
+        const _ot262 = ordTotal(_oj262);
+        const _hasAddr262 = ordHasShip(_oj262);
+        let _m262 = "ออเดอร์ของคุณลูกค้าชำระเงินเรียบร้อยแล้วนะคะ ✅\n\n";
+        if (_ot262.express) {
+          _m262 += "🛵 รอบนี้เป็นส่งด่วน (กทม./ปริมณฑล)\n• ได้รับประมาณ 1-3 ชม. นับจากรอบส่งออกค่ะ";
+          _m262 += lateNote();
+        } else {
+          _m262 += "📦 รอบนี้เป็นพัสดุปกติ (ขนส่งเอกชน)\n"
+                 + "• ร้านจัดส่งออกภายใน 1-2 วัน หลังยืนยันออเดอร์ + ชำระเงิน\n"
+                 + "• จากวันที่ส่งออก ได้รับภายใน 2-3 วันค่ะ";
+        }
+        _m262 += _hasAddr262
+          ? "\n\nเป็นเวลาโดยประมาณนะคะ ขึ้นกับขนส่งและพื้นที่ปลายทางค่ะ 🙏🏻 ขอบคุณที่อุดหนุนค่ะ 💕"
+          : "\n\n📍 ตอนนี้ระบบยังไม่มีที่อยู่จัดส่งของออเดอร์นี้นะคะ รบกวนแจ้ง ชื่อผู้รับ + เบอร์โทร + ที่อยู่ เข้ามาได้เลยค่ะ เดี๋ยวจัดส่งให้ทันทีค่ะ 💕";
+        console.log("K262_PAID_ETA express=" + (_ot262.express ? 1 : 0) + " addr=" + (_hasAddr262 ? 1 : 0));
+        await lineReply(TOKEN, replyToken, _m262, userId);
+        return;
+      }
       // ทักทาย / เริ่มต้น → ส่งการ์ดต้อนรับ + ปุ่มเมนู (แมตช์เฉพาะข้อความที่เป็นคำทักทายล้วนๆ)
       if (/^(สวัสดี|หวัดดี|วัสดี|ดี|ทัก|ทักทาย|เริ่ม|เริ่มต้น|เมนูหลัก|hello+|hi+|hey+|start)\s*(ครับผม|ครับ|ค่ะ|คับ|ค้าบ|จ้า|จ้าา*|ค่า|คะ|ฮะ|น้า)?[\s!.~ๆๆ]*$/i.test(t)) {
         await lineFlex(TOKEN, replyToken, "ABC ยินดีต้อนรับค่ะ ✨", welcomeFlex(), userId);
@@ -6612,10 +9811,68 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           if (cardRec) { const cj = JSON.parse(cardRec); if (Date.now() - cj.t < 20 * 60 * 1000) _looseConfirm = true; }
         } catch (e) {}
       }
-      if ((_looseConfirm || /^ยืนยัน(รายการ)?(เดิม)?[\s!.]*$/.test(t) || /ขอเลขบัญชี|เลขบัญชี|โอนเข้า(บัญชี)?ไหน|บัญชีอะไร|โอนไปไหน|โอนบัญชีไหน/.test(t)) && env.CONV) {
+      // 🔒🔒 k261 · CONFIRM LOCK — "ยืนยัน" ต้องผูกกับคำถามที่บอทเพิ่งถาม ⛔ ไม่ใช่ตัวอักษรเป๊ะ ๆ
+      //   เคสจริง 9 ส.ค. (เงินจริง): ลูกค้ากดยืนยันการ์ด 620 → บอทตอบ "รับกี่ชิ้นดีคะ"
+      //   ต้นเหตุที่พิสูจน์ด้วยการรัน: ประตูนี้รับเฉพาะ /^ยืนยัน(รายการ)?(เดิม)?[\s!.]*$/
+      //     → "ยืนยันค่ะ" · "ยืนยันครับ" · "ยืนยันเลย" **หลุดหมด** เพราะไม่มีคำลงท้ายในแพทเทิร์น
+      //     → ตกไปให้ AI ซึ่งไม่รู้ว่ามีการ์ดค้างอยู่ = ถามซ้ำสิ่งที่ลูกค้าตอบไปแล้ว
+      //   ⛔ ไม่สร้าง state ใหม่ซ้อน — ใช้ waiting_order_confirm ของ k249/P0-14 ที่มีอยู่แล้ว
+      //   ⛔ กันแก้เกิน: คำรับกำกวม (ครับ/ค่ะ/ใช่) นับเป็นยืนยันเฉพาะตอน "มีคำถามยืนยันค้างอยู่จริง"
+      //      ถ้าไม่มีอะไรค้าง คำพวกนี้ยังตกไปให้ AI เหมือนเดิมทุกประการ
+      if (!_looseConfirm && env.CONV) {
+        try {
+          if (confirmYes(t)) {
+            const _cs261 = await convLoad(env, shopId, userId);
+            if (convIsWaiting(_cs261, "waiting_order_confirm")) {
+              _looseConfirm = true;
+              console.log("K261_CONFIRM_BY_STATE msg=" + t.slice(0, 20));
+            }
+          }
+        } catch (e) {}
+      }
+      // ✅🔒 k262 · CONFIRM BY LAST QUESTION — ผูก "คำรับสั้น ๆ" เข้ากับ **คำถามที่บอทเพิ่งถาม**
+      //   เคสจริงบนโปรดักชัน 9 ส.ค. 13.20 (เจ้าของร้านส่งแคปมาเอง):
+      //     บอทสรุปออเดอร์ 838 แล้วปิดท้ายว่า "รบกวนตรวจสอบ ... ให้ถูกต้อง"
+      //     ลูกค้าตอบ "ถูกครับ" → บอทตอบ "รบกวนพิมพ์ชื่อรุ่นที่สนใจ" = ไม่เข้าใจคำตอบของคำถามตัวเอง
+      //   ทำไม k261 (CONFIRM_BY_STATE) ไม่พอ: มันอ่านจาก cst: อย่างเดียว
+      //     ถ้า cst หมดอายุ / การ์ดออกจากเส้นทางที่ไม่ได้ตั้ง waiting_order_confirm → ประตูปิดสนิท
+      //   ⛔ ไม่ไล่เพิ่มคำรับ (แพตเทิร์นเดียวกับ K259_PENDING_ANSWER): ผูกกับข้อความก่อนหน้าของบอทเท่านั้น
+      //   ⛔ กันแก้เกิน 3 ชั้น: (1) ต้องมีออเดอร์อยู่จริง (2) ข้อความบอทก่อนหน้าต้องเป็นคำถาม "ตรวจสอบ/ถูกต้องไหม"
+      //      (3) คำรับลอย ๆ ที่ไม่มีคำถามค้าง ยังตกไปให้ AI เหมือนเดิมทุกประการ
+      if (!_looseConfirm && _ordActive && env.CONV) {
+        try {
+          if (confirmYes(t)) {
+            const _hz262 = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]");
+            let _pb262 = "";
+            for (let i = _hz262.length - 1; i >= 0; i--)
+              if (_hz262[i] && _hz262[i].role === "assistant") { _pb262 = String(_hz262[i].content || ""); break; }
+            if (/ตรวจสอบ[^\n]{0,30}ถูกต้อง|ถูกต้อง(ไหม|มั้ย|ใช่ไหม)|ยืนยันรายการ|ทวนคำสั่งซื้อ|ตามนี้(ไหม|มั้ย)|ใช่ไหมคะ/.test(_pb262)) {
+              _looseConfirm = true;
+              console.log("K262_PENDING_ANSWER q=recheck ans=" + t.slice(0, 12));
+            }
+          }
+        } catch (e) {}
+      }
+      if ((_looseConfirm
+           || /^ยืนยัน(?:รายการ)?(?:เดิม)?\s*(?:ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|ค๊า|จ้า|จ้ะ|นะ|เลย|แล้ว|ด้วย)*[\s!.ๆ👍💕✅🙏]*$/.test(t)
+           || /ขอเลขบัญชี|เลขบัญชี|โอนเข้า(บัญชี)?ไหน|บัญชีอะไร|โอนไปไหน|โอนบัญชีไหน/.test(t)) && env.CONV) {
         try {
           const ok = await env.CONV.get("ord:" + shopId + ":" + userId);
           if (ok) {
+            // 🎁🔒 k261 · ยืนยันมาแต่ยังไม่ได้เลือกโปร → ถามโปรซ้ำ ⛔ ห้ามเลือกแทน ห้ามส่งเลขบัญชี
+            //   (ยอดยังไม่นิ่ง เพราะโปร "ส่งฟรี" กับ "เครื่องฟรี" ให้ยอดต่างกัน = เรื่องเงิน)
+            try {
+              const _opd = JSON.parse(ok);
+              if (_opd && _opd.promoPending) {
+                console.log("K261_CONFIRM_WHILE_PROMO_PENDING");
+                await lineReply(TOKEN, replyToken,
+                  "รับทราบค่ะ 🙏🏻 เหลืออีกนิดเดียวนะคะ\nรายการนี้เข้าโปร แต่รับได้ 1 อย่างต่อ 1 ออเดอร์ค่ะ\n" +
+                  "• ส่งฟรี — ประหยัดค่าส่ง 40 บาท\n" +
+                  "• รับเครื่องฟรี 1 เครื่อง (" + GIFT_PROMO.giftModel + " มูลค่า " + GIFT_PROMO.giftValue + ") — ค่าส่ง 40 บาทตามปกติ\n\n" +
+                  "พิมพ์ว่า \"ส่งฟรี\" หรือ \"เอาเครื่อง\" ได้เลยค่ะ แล้วระบบจะสรุปยอด + ส่งเลขบัญชีให้ทันทีนะคะ 💕", userId);
+                return;
+              }
+            } catch (e) {}
             // 💳 k84 เคสจริง 2/8 (1.01 น.): จ่ายแล้ว (สลิปผ่าน ✅) ระบบถาม "ส่งที่เดิมไหมคะ"
             //   ลูกค้าตอบ "โอเค" → k76 นับเป็นยืนยันออเดอร์ → ส่งการ์ดเลขบัญชีซ้ำ! (จ่ายไปแล้ว)
             //   แก้: ถ้าออเดอร์จ่ายแล้ว "โอเค/ยืนยัน" = ตอบเรื่องที่อยู่ → ปิดออเดอร์ด้วยที่เดิม
@@ -6666,6 +9923,29 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               }
             } catch (e) {}
             }
+            // 🔁 k287 (เคสจริง ABC Easy 12 ส.ค.): การ์ดออก 0.00 น. ลูกค้ากลับมากดยืนยัน 0.46 น. = 46 นาที
+            //   d k27 ข้างบนทวนรายการให้ดูก่อน = ถูกต้องและต้องเก็บไว้
+            //   แต่ "ทางออก" จากด่านนี้มีทางเดียวคือลูกค้าต้องพิมพ์คำที่มีคำว่า "เดิม"
+            //   ⛔ ปัญหา: การ์ดของจีทูเองเขียนว่า 'หรือพิมพ์ "ยืนยัน" ได้เลยค่ะ' และปุ่มบนการ์ดก็ส่งคำว่า "ยืนยัน"
+            //      → ลูกค้าทำตามที่การ์ดบอก ระบบไม่รับ แล้ววนซ้ำไม่จบ **ค้างตรงจุดจ่ายเงินพอดี**
+            //      (พิสูจน์ด้วยการรัน handleEvent จริง 3 รอบ ได้ข้อความเดิมทั้ง 3 รอบ เลขบัญชีไม่เคยออก)
+            //   กติกาใหม่: ถ้าข้อความก่อนหน้าของบอทคือ "ขอทวนรายการอีกครั้ง" แปลว่าลูกค้าเห็นรายการ + ยอดครบแล้ว
+            //      แล้วยังยืนยันซ้ำอีก = เจตนาชัดเจน ไม่กำกวมแล้ว → ถือเท่ากับ "ยืนยันรายการเดิม"
+            //   ⛔ เจตนาเดิมของ k27 อยู่ครบทุกข้อ:
+            //      · ครั้งแรกยังทวนรายการให้ดูเสมอ ไม่มีทางลัดข้าม
+            //      · ถ้าบอทไม่เคยทวน (ข้อความก่อนหน้าเป็นอย่างอื่น) ก็ยังกันเหมือนเดิม
+            if (_stale && env.CONV) {
+              try {
+                const _hz287 = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]");
+                let _pb287 = "";
+                for (let i = _hz287.length - 1; i >= 0; i--)
+                  if (_hz287[i] && _hz287[i].role === "assistant") { _pb287 = String(_hz287[i].content || ""); break; }
+                if (/ขอทวนรายการอีกครั้ง/.test(_pb287)) {
+                  _stale = false;
+                  console.log("K287_RECONFIRM_ACCEPTED ลูกค้าเห็นรายการแล้วยืนยันซ้ำ → ถือเป็นยืนยันรายการเดิม");
+                }
+              } catch (e) {}
+            }
             if (_stale) {
               // 💰 k168: เดิมกรองบรรทัดด้วย /x\d|รวมยอด/ → ถ้า ord ไม่มีบรรทัดยอดรวม
               //   ลูกค้าจะเห็นแค่ "MARBO 9K เยลลี่ x1 = 350" แล้วโอน 350 ทั้งที่ต้องโอน 509
@@ -6674,7 +9954,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               const _b2 = _tm || (JSON.parse(ok).block || "").split("\n").filter(l => /x\d|รวมยอด|ยอดรวม/.test(l)).slice(0, 6).join("\n");
               await lineReply(TOKEN, replyToken,
                 "ขอทวนรายการอีกครั้งนะคะ 🙏🏻 จะได้ไม่โอนผิดค่ะ\n\nรายการที่ค้างอยู่ในระบบคือ\n" + (_b2 || "(รายการก่อนหน้า)") +
-                "\n\n• ถ้าต้องการรายการนี้ พิมพ์ \"ยืนยันรายการเดิม\" ได้เลยค่ะ\n• ถ้าต้องการสั่งใหม่ พิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยนะคะ 💕", userId);
+                // k287: เดิมเขียนว่าให้พิมพ์ "ยืนยันรายการเดิม" ซึ่งไม่มีลูกค้าคนไหนพิมพ์
+                //   และขัดกับปุ่มบนการ์ดที่ส่งคำว่า "ยืนยัน" → เปลี่ยนให้ตรงกับสิ่งที่ระบบรับจริง
+                "\n\n• ถ้าต้องการรายการนี้ พิมพ์ \"ยืนยัน\" อีกครั้งได้เลยค่ะ\n• ถ้าต้องการสั่งใหม่ พิมพ์ รุ่น + กลิ่น + จำนวน มาได้เลยนะคะ 💕", userId);
               return;
             }
             // k169: ใช้ตัวกลางตัวเดียวกับทางเจตนา (เดิมโค้ดชุดนี้ซ้ำอยู่ 2 ที่)
@@ -6683,9 +9965,35 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         } catch (e) {}
         // ถ้าไม่มีออเดอร์ค้าง ให้ปล่อยผ่านไปให้ AI ตอบปกติ
       }
-      if ((/แอดมิน/.test(t) && /ติดต่อ|คุย|ขอ|เรียก|หา|อยู่ไหม|อยู่ไหน|อยู่มั้ย|อยู่ป่าว|หน่อย|ช่วย/.test(t)) || /คุยกับคน|คนจริง|เจ้าหน้าที่|พนักงาน|ขอสายด่วน/.test(t)) {
+      // 🗂️🗂️ k254 · INCIDENT G (เคสจริง 8 ส.ค.): "ขายสินค้ากี่ประเภท"
+      //   เดิมตอบลอยๆ ว่า "มีหลายหมวดนะคะ รบกวนพิมพ์ชื่อรุ่น" = โยนภาระกลับให้ลูกค้าที่ยังไม่รู้จักอะไรเลย
+      //   ⛔ ลูกค้าถาม "มีกี่ประเภท" ต้องได้คำตอบเป็นจำนวน + รายชื่อหมวดจริง
+      //   สร้างจากแคตตาล็อกจริงทุกครั้ง ⛔ ไม่ฮาร์ดโค้ดรายชื่อหมวด — เพิ่มสินค้าใหม่แล้วตัวเลขขยับเอง
+      if (CAT_OVERVIEW_RE.test(t)) {
+        const _ov = categoryOverview();
+        if (_ov) { console.log("K254_CAT_OVERVIEW"); await lineReply(TOKEN, replyToken, _ov, userId); return; }
+      }
+      // 🙋 k254 · INCIDENT F: ลูกค้าพิมพ์ "แอดครับ" = เรียกแอดมิน แต่ /แอดมิน/ ไม่แมตช์ "แอด"
+      //   เดิมตกไปให้ AI ตอบ → ได้ "มีค่ะ 💕 รบกวนพิมพ์ชื่อรุ่นที่สนใจ" = ตอบคนละเรื่องกับที่ลูกค้าขอ
+      //   ⛔ จับเฉพาะตอนเป็นทั้งข้อความ กัน "แอดไลน์มาแล้ว" โดนดักผิด
+      if ((/แอดมิน/.test(t) && /ติดต่อ|คุย|ขอ|เรียก|หา|อยู่ไหม|อยู่ไหน|อยู่มั้ย|อยู่ป่าว|หน่อย|ช่วย/.test(t))
+          || /^แอด(มิน)?\s*(ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|จ้า|ฮะ|ๆ)*[\s!.?~ๆ]*$/.test(t.trim())
+          || /คุยกับคน|คนจริง|เจ้าหน้าที่|พนักงาน|ขอสายด่วน/.test(t)) {
         await muteNow("ขอคุยแอดมิน", t); // ส่งต่อให้คน — แอดมินเงียบแชทนี้
         await lineReply(TOKEN, replyToken, "รับเรื่องแล้วค่ะ เดี๋ยวทีมงานเข้ามาดูแลนะคะ รอสักครู่ค่ะ 🙏🏻💕", userId);
+        return;
+      }
+      // 💳 k273: ถามช่องทางชำระเงินอื่น (TrueMoney/ปลายทาง/บัตร/ผ่อน) → ตอบตายตัว ⛔ ห้ามให้ AI ตอบ
+      //   (เคสจริง LALITA 10 ส.ค.: AI ตอบ "ชำระผ่าน TrueMoney ได้ค่ะ" ทั้งที่ร้านรับโอนธนาคารเท่านั้น)
+      if (RX_PAY_CHANNEL.test(t)) {
+        console.log("K273_PAY_CHANNEL_FIXED");
+        await lineReply(TOKEN, replyToken, PAY_ONLY_BANK_MSG, userId);
+        return;
+      }
+      // 🖼️ k312: ขอดูรูป/ตัวอย่างสินค้า → ส่งลิงก์เมนู ⛔ ห้ามให้ AI ตอบ (มันจะตอบว่า "ร้านไม่มีรูป")
+      if (askPhotoIntent312(t)) {
+        console.log("K312_ASK_PHOTO → ส่งลิงก์เมนู | ถาม=" + t.slice(0, 40));
+        await lineReply(TOKEN, replyToken, askPhotoReply312(t), userId);
         return;
       }
       // 📦 k24: "ของเข้าวันไหน" → ตอบตายตัว ⛔ ห้ามให้ AI ตอบ เพราะมันจะกุวันเอง
@@ -6718,9 +10026,20 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           return;
         }
       }
+      // 🧾 k267 · ตัวตัดสินเดียวกันสำหรับทางลัดคำถามจัดส่ง: ข้อความนี้ "มีการสั่งของอยู่ด้วย" ไหม
+      //   ① สั่งของเต็มรูป (ตัวตัดสินเดิมของระบบ ไม่สร้างเกณฑ์ใหม่)
+      //   ② ตอบจำนวนต่อจากคำถามของบอท — เชื่อ State Engine (k263) ไม่เดาจากข้อความล้วน
+      const _ordish267 = (() => {
+        try {
+          if (looksLikeOrderText(t)) return "order";
+          if (_G2STATE === "SELECTING_QTY" && qtyLeadIn(t) > 0) return "qty";
+        } catch (e) {}
+        return "";
+      })();
       if (/รอบส่ง|รอบส่งด่วน|กี่โมงส่ง|ส่งกี่โมง|รอบจัดส่ง|ส่งด่วนกี่โมง|รอบรถ|รอบไหน|รอบกี่โมง/.test(t)) {
-        await lineReply(TOKEN, replyToken, EXPRESS_MSG, userId);   // ตารางรอบ 12 บรรทัด — ยังตายตัวไว้ AI พิมพ์เองพลาดแน่
-        return;
+        // ตารางรอบ 12 บรรทัด — ยังตายตัวไว้ AI พิมพ์เองพลาดแน่
+        if (_ordish267) { factNoteSet(userId, EXPRESS_MSG); console.log("K267_FACT_DEFERRED express by=" + _ordish267); }
+        else { await lineReply(TOKEN, replyToken, EXPRESS_MSG, userId); return; }
       }
       // 🚚🚚 k226 — "ส่งกี่วันถึง" คือคำถามที่ลูกค้าถามบ่อยที่สุดที่ระบบไม่มีทางตอบ
       //   หลักฐาน: ขุดแชทจริง 21,301 คู่ (ลูกค้าถาม → แอดมินคนตอบ)
@@ -6738,8 +10057,67 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         //    = ถามรอบส่งด่วนของพื้นที่นั้น ไม่ใช่ถามระยะเวลาทั่วไป → ปล่อยให้เส้นส่งด่วนตอบ
         && !BKK_ZONE.test(t) && !PERI_ZONE.test(t) && !(() => { try { return !!matchUpcountry(t); } catch (e) { return false; } })()) {
         console.log("K226_ETA_ANSWER");
-        await lineReply(TOKEN, replyToken, ETA_MSG, userId);
-        return;
+        // 🧾 k267: สั่งของมาพร้อมคำถาม → พักคำตอบ ETA ไว้ แล้วปล่อยเทิร์นเดินต่อเข้าสายรับออเดอร์
+        if (_ordish267) { factNoteSet(userId, ETA_MSG); console.log("K267_FACT_DEFERRED eta by=" + _ordish267); }
+        else { await lineReply(TOKEN, replyToken, ETA_MSG, userId); return; }
+      }
+      // 🗣️🗣️ k241 BUG-5 · ลูกค้าทักท้วงข้อมูล ≠ ลูกค้าขอเมนู
+      //   เคสจริง: ระบบบอกว่าหมด → ลูกค้าพิมพ์ "ในเมนูขึ้นว่ามี" → ระบบเห็นคำว่า "เมนู"
+      //     แล้วยิงด่านขอเมนู ส่งเมนูให้ใหม่ = ไม่ได้ตอบสิ่งที่ลูกค้าทักเลย
+      //   กติกา: ประโยคทักท้วงต้องถูกจับ "ก่อน" ด่านเมนู แล้วส่งต่อให้ AI พร้อมคำสั่งห้ามยืนยันจากการเดา
+      //   ⛔ ไม่ตอบเอง ไม่ส่งเมนู ไม่ยืนยันว่ามีหรือหมด — ให้ AI อธิบายพร้อมขอตรวจสอบ
+      if (/ในเมนู[^\n]{0,10}(ขึ้น|บอก|มี|เขียน)|เมนู[^\n]{0,6}(ขึ้นว่า|บอกว่า|เขียนว่า)|เมื่อกี้[^\n]{0,10}(บอก|ขึ้น)ว่า|เพิ่งบอกว่า|บอกว่ามีไม่ใช่หรอ|ไหนบอกว่ามี|ข้อมูลไม่ตรง|ไม่ตรงกัน|ไม่ใช่อันนี้|ไม่ใช่ตัวนี้|ที่บอกว่ามี/.test(t)) {
+        console.log("K241_CONTRADICTION");
+        _contradictNote = "\n\n🗣️🗣️ [ลูกค้ากำลัง**ทักท้วงข้อมูลที่ระบบให้ไปก่อนหน้า** ไม่ได้ขอดูเมนู]\n"
+          + "⛔ ห้ามส่งเมนู ห้ามเปลี่ยนเรื่อง ห้ามยืนยันว่า 'มี' หรือ 'หมด' จากการเดาเด็ดขาด\n"
+          + "✅ ให้ทำ 3 อย่างนี้: (1) ขอโทษที่ข้อมูลอาจคลาดเคลื่อน (2) ทวนว่าลูกค้าหมายถึงรุ่น/กลิ่นไหน "
+          + "(3) บอกว่าจะให้ทีมงานเช็คสต็อกจริงให้อีกครั้ง\n"
+          + "⛔ ถ้าไม่มีข้อมูลสต็อกยืนยันในข้อความนี้ ห้ามฟันธงสถานะสินค้าเด็ดขาด";
+      }
+      // 🎁🎁 k240: ลูกค้าตอบว่าจะเอาโปรไหน (มีคำถามค้างอยู่เท่านั้น) → บันทึกแล้วออกการ์ดใหม่
+      //   ⛔ ต้องอยู่ก่อนด่านโปรทุกตัว ไม่งั้นคำว่า "ส่งฟรี" จะโดนด่าน k35/k138 ดักไปก่อน
+      //   ✅ เปลี่ยนใจได้ตลอด — ตอบใหม่กี่ครั้งก็ได้จนกว่าจะยืนยันออเดอร์ (เจ้าของร้านยืนยัน 7/8)
+      if (/ส่งฟรี|เอาส่ง|ฟรีค่าส่ง|เอาเครื่อง|รับเครื่อง|เครื่องฟรี|เอาของแถม|ขอเครื่อง/.test(t)) {
+        let _pp = null;
+        try { if (env.CONV) { const _v = await env.CONV.get("promo:" + shopId + ":" + userId); if (_v) _pp = JSON.parse(_v); } } catch (e) {}
+        if (_pp && Array.isArray(_pp.items) && _pp.items.length) {
+          const _wantGift = /เอาเครื่อง|รับเครื่อง|เครื่องฟรี|เอาของแถม|ขอเครื่อง/.test(t);
+          const _wantShip = /ส่งฟรี|เอาส่ง|ฟรีค่าส่ง/.test(t);
+          if (_wantGift && _wantShip) {
+            console.log("K240_PROMO_BOTH");
+            await lineReply(TOKEN, replyToken,
+              "ขออภัยค่ะ 🙏🏻 โปรหลักของร้านรับได้ 1 อย่างต่อ 1 ออเดอร์นะคะ ใช้พร้อมกันไม่ได้ค่ะ\n\n" +
+              "• ส่งฟรี — ประหยัดค่าส่ง 40 บาท\n" +
+              "• รับเครื่องฟรี 1 เครื่อง (มูลค่า " + GIFT_PROMO.giftValue + ") — ค่าส่ง 40 บาท\n\n" +
+              "เลือกแบบไหนดีคะ 💕", userId);
+            return;
+          }
+          // 🔒 k261 · ORDER LOCK — ออเดอร์ที่จ่ายเงินแล้วห้ามถูกเขียนทับด้วยการเลือกโปร
+          //   (จุดนี้เดิมเขียน ord: ทับทุกกรณีโดยไม่เคยอ่าน ordPaidActive เลยสักครั้ง)
+          if (_ordPaidLock) {
+            console.log("K261_PROMO_PICK_BLOCKED_PAID");
+            await lineReply(TOKEN, replyToken, "ออเดอร์ของคุณลูกค้าชำระเงินเรียบร้อยแล้วนะคะ ✅ โปรของรอบนี้ล็อกตามการ์ดที่ยืนยันไปแล้วค่ะ\nถ้าต้องการสั่งเพิ่ม แจ้งชื่อรุ่นมาได้เลยนะคะ 💕", userId);
+            return;
+          }
+          const _pick = _wantGift ? "gift" : "ship";
+          const _c = computeOrder(_pp.items, null, _pick);
+          if (!_c.rows.some(r => r.unknown && !r.free) && _c.goods > 0) {
+            console.log("K240_PROMO_PICK " + _pick);
+            try { if (env.CONV) await env.CONV.put("promo:" + shopId + ":" + userId, JSON.stringify({ c: _pick, items: _pp.items, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
+            await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(_c), userId);
+            try {
+              if (env.CONV) {
+                const _ib = _c.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
+                const _blk = "📦 ออเดอร์ (รอโอน)\n" + _ib + "\nยอดสินค้า " + _c.goods + "\nค่าส่ง " + _c.ship + "\nรวมยอดชำระ " + _c.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
+                const _nm2 = await lineProfileName(TOKEN, userId);
+                await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({ name: _nm2, block: _blk, items: _pp.items, t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 });
+                // 🔒 k261 · PAYMENT LOCK — เลขบัญชีออกหลังลูกค้ายืนยันเท่านั้น (ดูเหตุผลเต็มที่ก้อน k261 ท้ายเส้นการ์ด)
+                console.log("K261_PAYMENT_LOCK promo=" + _pick + " total=" + _c.total);
+              }
+            } catch (e) {}
+            return;
+          }
+        }
       }
       // 🎁 k35: ถามโปรโมชั่น → ตอบตายตัว ⛔ ห้าม AI ตอบ (เคสจริง 31/7: ถาม "มีโปรอะไรบ้าง" แล้วแอดมินตอบ "รอทีมงานหลังการขาย")
       // k36: เพิ่ม "กี่แท่งส่งฟรี / ส่งฟรียังไง / ต้องซื้อเท่าไหร่ส่งฟรี" → เงื่อนไขโปรตายตัว
@@ -6820,14 +10198,47 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           //   ความจริง: "เปลี่ยนสินค้า / เคลมได้ไหม" ตอนยังไม่มีออเดอร์ = ลูกค้ากำลังเลือกของอยู่
           //   กฎใหม่: หมวด "เคลม/เปลี่ยน/คืน" และ "แก้ข้อมูลจัดส่ง" ต้องมี **ออเดอร์อยู่จริง** ถึงนับเป็นหลังการขาย
           //   ⛔ หมวด "ปัญหาสินค้า" กับ "ตามพัสดุ" ไม่ต้องมีออเดอร์ก็ส่งต่อได้ (ลูกค้าเดือดร้อนจริง ห้ามให้รอ)
+          // 🧾 k280 (เจ้าของร้านตัดสิน 11 ส.ค. — ทางเลือก A): "ลูกค้าเก่าเคลมได้เสมอ"
+          //   ช่องโหว่ที่พบก่อนเปิดร้าน: ระบบเก็บออเดอร์ไว้ 3 วัน แต่ร้านรับเคลม 7-30 วัน
+          //   → ลูกค้าเคลมจริงส่วนใหญ่ทักมาตอนออเดอร์หมดอายุแล้ว = ไม่มี ord: → k200 ตัดทิ้ง
+          //   → ไม่มีเคสเข้าหลังบ้านเลย ทั้งที่เป็นลูกค้าที่ซื้อจริง
+          //   หลักฐาน "เคยซื้อจริง" ที่ไม่หมดอายุ: cust: (โปรไฟล์ผู้รับ เก็บถาวร) · paid: (หลักฐานจ่ายเงิน k269)
+          //   ⛔ คนที่ไม่เคยสั่งเลย ยังตกตามกฎ k200 เหมือนเดิม (ถามก่อนซื้อ = ไม่รบกวนแอดมิน)
           if (!_asOrd && /เคลม|แก้ข้อมูลจัดส่ง/.test(_asIntent)) {
-            console.log("K200_AS_SKIP_NO_ORDER " + _asIntent);
-            _asIntent = "";
+            let _wasCust280 = false;
+            try {
+              const _cv = await env.CONV.get("cust:" + shopId + ":" + userId);
+              if (_cv) { const _cj = JSON.parse(_cv) || {}; _wasCust280 = !!(_cj.name || _cj.tel || _cj.addr); }
+              if (!_wasCust280) _wasCust280 = !!(await env.CONV.get("paid:" + shopId + ":" + userId));
+            } catch (e) {}
+            if (_wasCust280) {
+              console.log("K280_AS_OLD_CUSTOMER " + _asIntent);
+            } else {
+              console.log("K200_AS_SKIP_NO_ORDER " + _asIntent);
+              _asIntent = "";
+            }
           }
           // ลูกค้าตอบสั้นๆ (เลข/ชื่อ/เบอร์) ตอนที่เรากำลังรอข้อมูลอยู่ = คำตอบของคำถามเรา
           //   ⛔ ห้ามตีความเป็นชื่อสินค้า/จำนวน (ข้อ 6 ที่เจ้าของร้านกำชับ)
           const _asWaiting = !!(_asPend && _asPend.waiting && Date.now() - (_asPend.t || 0) < 3600000);
-          if (_asIntent || _asWaiting) {
+          // 🔓 k279b (เจอตอนเขียนเทสล็อกของ k279 — ยังไม่เคยหลุดถึงลูกค้า):
+          //   ระหว่างรอเลขออเดอร์ ถ้าลูกค้า "เปลี่ยนเรื่อง" ไปถามของ/ราคา/เมนู
+          //   เส้นหลังการขายจะกลืนข้อความนั้นทั้งเทิร์น (เดิม = เงียบ · หลัง k279 = ลากเข้าคิวแอดมิน)
+          //   ทั้งสองแบบผิดทั้งคู่ — ลูกค้าถามซื้อของ ต้องได้คำตอบเรื่องของ
+          //   กติกา: ข้อความที่เป็นคำถามซื้อขายชัดเจน → ปลดสถานะรอ แล้วปล่อยไหลตามเส้นปกติ
+          let _asRelease = false;
+          if (!_asIntent && _asWaiting) {
+            try {
+              _asRelease = looksLikeOrderText(t)
+                || !!(flavorHint(t, {}, 1) || "").trim()
+                || /ราคา|เท่าไห?ร่|กี่บาท|มีไหม|มีมั้ย|มีป่าว|เมนู|โปร|ส่งฟรี|ค่าส่ง|กี่วัน|บัญชี|สั่ง(ซื้อ|ของ)?/.test(t);
+            } catch (e) {}
+            if (_asRelease) {
+              try { await env.CONV.delete(_asKey); } catch (e) {}
+              console.log("K279B_AS_RELEASE " + String(t).slice(0, 40));
+            }
+          }
+          if ((_asIntent || _asWaiting) && !_asRelease) {
             const _kind = _asIntent || (_asPend && _asPend.intent) || "หลังการขาย";
             // รวมข้อมูลระบุตัวตนจาก 3 ทาง: ข้อความนี้ → ที่เคยให้ไว้ → โปรไฟล์ลูกค้าที่ระบบมีอยู่แล้ว
             const _got = asIdentityIn(t);
@@ -6854,10 +10265,28 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             // ⛔ ยังไม่มีอะไรระบุออเดอร์ได้เลย → ถาม 1 ครั้ง แล้วรอ (ห้ามถามซ้ำถ้าเคยถามไปแล้ว)
             if (!asHasIdentity(_id) && !_urgent) {
               if (_asWaiting) {
+                // 🆘 k279 (เคสจริง JW 11 ส.ค. 19.17-19.22): ถามเลขออเดอร์ไปแล้ว ลูกค้าตอบ "เคลมยังไงคะ"
+                //   ซ้ำ 3 รอบ → ระบบเงียบสนิททุกรอบ **และไม่เข้าคิวแอดมินเลย** = ลูกค้าถูกทิ้ง
+                //   ต้นเหตุ: กติกา "ถามไปแล้วห้ามถามซ้ำ" ถูกต้อง แต่ทางออกเดียวคือ return เงียบ
+                //   กติกาใหม่: เงียบได้ครั้งเดียว · ลูกค้าทักซ้ำอีก = เขาให้ข้อมูลไม่ได้ → ส่งต่อคนทันที
+                //   ⛔ แคบ: แตะเฉพาะเส้นหลังการขายที่ "รอเลขออเดอร์" เท่านั้น เส้นอื่นไม่กระทบ
+                const _n279 = ((_asPend && _asPend.asked) || 1) + 1;
+                if (_n279 >= 2) {
+                  let _h279 = [];
+                  try { const hv = await env.CONV.get("conv3:" + shopId + ":" + userId); if (hv) _h279 = JSON.parse(hv) || []; } catch (e) {}
+                  await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: false, got: _id, t: Date.now() }), { expirationTtl: 3600 });
+                  await muteNow("📦 หลังการขาย — " + _kind + " (ลูกค้าทักซ้ำ ยังไม่มีเลขออเดอร์)",
+                    "uid: " + userId + " | shop: " + shopId + " | ข้อความล่าสุด: " + String(t).slice(0, 80)
+                    + " | สรุปบท: " + asSummary(_h279, t));
+                  console.log("K279_AS_REPEAT_HANDOFF " + _kind);
+                  await lineReply(TOKEN, replyToken, AS_DONE_MSG, userId);
+                  return;
+                }
+                await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: true, got: _id, asked: _n279, t: Date.now() }), { expirationTtl: 3600 });
                 console.log("K198_AS_WAIT_AGAIN " + _kind);
-                return;                                   // ถามไปแล้ว ลูกค้ายังไม่ให้ → เงียบ ไม่ถามซ้ำ
+                return;                                   // ถามไปแล้ว ลูกค้ายังไม่ให้ → เงียบ 1 รอบ
               }
-              await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: true, got: _id, t: Date.now() }), { expirationTtl: 3600 });
+              await env.CONV.put(_asKey, JSON.stringify({ intent: _kind, waiting: true, got: _id, asked: 1, t: Date.now() }), { expirationTtl: 3600 });
               console.log("K198_AS_ASK_ID " + _kind);
               await lineReply(TOKEN, replyToken, AS_ASK_MSG, userId);
               return;
@@ -6924,13 +10353,27 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         //   ⛔ คำที่พูดถึงเงินตรงๆ (คืนเงิน/โอนคืน/refund) ส่งต่อคนเสมอ ไม่ว่ามีออเดอร์หรือไม่
         //      — พลาดเคสเงินคืนจริงเสียหายกว่าเคสด่วนปลอมมาก
         // k165: รวมกฎเป็นตัวเดียว (แทน RX_MONEYBACK + เงื่อนไข k163 ที่กระจายอยู่)
-        let _hasOrder = false, _paid = false;
+        let _hasOrder = false, _paid = false, _shipped = false;
         try {
           if (env.CONV) {
             const _ov = await env.CONV.get("ord:" + shopId + ":" + userId);
-            if (_ov) { const _oj = JSON.parse(_ov); _hasOrder = !!(_oj && _oj.status); _paid = ordPaidActive(_oj); }
+            if (_ov) { const _oj = JSON.parse(_ov); _hasOrder = !!(_oj && _oj.status); _paid = ordPaidActive(_oj);
+                       // 📦 k301: "ส่งออกแล้ว" อ่านจากสถานะจริงที่ระบบเขียนไว้เอง ไม่ได้สร้าง state ใหม่
+                       _shipped = /ส่งออกแล้ว|เลขพัสดุ/.test(String((_oj && _oj.status) || "")); }
           }
         } catch (e) {}
+        // 🔄🔄 k301 · "ก่อนจ่ายเงิน = ยังเลือกของอยู่" (เคสจริง PRE-DEPLOY SMOKE 12 ส.ค.)
+        //   ord: ถูกสร้างตั้งแต่ "การ์ดยืนยันออก" สถานะ "รอโอน 💰" — ยังไม่มีเงินสักบาท
+        //   แต่เงื่อนไขด้านล่างใช้ _hasOrder = มี ord: อยู่ (สถานะไหนก็ได้)
+        //   → ลูกค้าที่เพิ่งเห็นการ์ดแล้วพิมพ์ "ขอเปลี่ยนเป็นอย่างละ 2" ถูกมองว่าเป็นเคสหลังการขาย
+        //     → muteNow + ปิดปาก G2 ทั้งบทสนทนา (K201_SILENT_AFTER_HANDOFF) = ลูกค้าที่พร้อมจ่ายหลุดมือ
+        //   วัดของจริงแล้ว: คำว่า "ขอ" คำเดียวเป็นตัวพลิก
+        //     "เปลี่ยนเป็น 3 ชิ้นค่ะ" → ปกติ · "ขอเปลี่ยนเป็น 3 ชิ้นค่ะ" → ส่งต่อคน
+        //   เกณฑ์ใหม่: ยังไม่จ่าย + ยังไม่ส่งของ = ACTIVE ORDERING → แก้ออเดอร์ได้ ห้าม handoff
+        //   ⛔ จ่ายแล้ว/ส่งแล้ว = หลังการขายจริง → ส่งต่อคนเหมือนเดิมทุกประการ
+        //   ⛔ เส้นหลังการขายอื่นไม่ถูกแตะเลย: ของเสีย · เคลม · คืนเงิน · ลูกค้าโกรธ · ตามพัสดุ
+        //      (พวกนั้นไม่ได้พึ่ง _hasOrder อยู่แล้ว)
+        const _afterPay = _paid || _shipped;
         const moneyBack = refundIntent(t, _paid);   // k165: เกณฑ์คือ "จ่ายเงินแล้วหรือยัง"
         if (moneyBack) console.log("K165_REFUND_INTENT paid=" + _paid + " hasOrder=" + _hasOrder + " msg=" + t.slice(0, 40));
         // 😠 ลูกค้าเริ่มไม่พอใจ → ห้ามยิงข้อความสำเร็จรูปซ้ำอีก ต้องให้คนเข้ามาคุย
@@ -6954,7 +10397,11 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           //   ลูกค้าที่ยังไม่เคยสั่งพิมพ์ "ขอเปลี่ยนสินค้าค่ะ" (หมายถึงเปลี่ยนใจเลือกของ) → โดนส่งเข้าคิวคน
           //   แล้วเงียบใส่อีก 6 ข้อความติดทั้งที่ลูกค้าพยายามสั่งของอยู่ = เสียการขายจริง
           //   กฎใหม่: "ขอเปลี่ยน" นับเป็นเคสร้องเรียนก็ต่อเมื่อ **มีออเดอร์อยู่จริง**
-          || (/ขอเปลี่ยน|เปลี่ยนสินค้า/.test(t) && _hasOrder);
+          // 🎨 k258c (เจ้าของร้านยืนยัน): "ขอเปลี่ยนกลิ่น/สี/จำนวน" = แก้ออเดอร์ ระบบทำเอง
+          //   ห้ามส่งให้แอดมิน — เคสจริง L8: ลูกค้าขอเปลี่ยนกลิ่นหลังเห็นการ์ด แล้วโดนส่งเข้าคิวคน
+          //   ⛔ ยังจ่ายเงินแล้ว (_paid) = เรื่องเงิน ต้องให้คนดูเหมือนเดิม ห้ามให้ระบบแก้เอง
+          //   🔄 k301: เกณฑ์เปลี่ยนจาก "มีออเดอร์" → "จ่ายเงินแล้ว/ส่งของแล้ว" (เหตุผลเต็มอยู่ที่ _afterPay)
+          || (/ขอเปลี่ยน|เปลี่ยนสินค้า/.test(t) && _afterPay && !(!_paid && attrEditIntent(t)));
         if (complain && !askInfo) {
           await muteNow("เคสหลังการขาย ⚠️", t);
           await lineReply(TOKEN, replyToken,
@@ -7005,7 +10452,14 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   แต่คำว่า "เปลี่ยนหัว" ไปตรงกับทางลัด "วิธีใช้งาน" → ระบบส่งคู่มือการใช้งานไปแทน คนละเรื่องเลย
       //   กฎ: ถ้าประโยคถามหา "รายชื่อ/แบรนด์/รุ่นไหนบ้าง" → ไม่ใช่คำถามวิธีใช้ ปล่อยให้ตอบเป็นรายการสินค้า
       if (/^(ใช้ยังไง|ใช้ไง|ใช้งานยังไง)|วิธีใช้|ใช้ยังไงคะ|ใช้ยังไงครับ|สูบยังไง|ดูดยังไง|ชาร์จ|เปลี่ยนหัว|ใส่หัว|ถอดหัว|เปิดเครื่องยังไง|ไฟกระพริบ|ไม่มีควัน|ดูดไม่ติด|ดูดไม่ออก|เครื่องไม่ทำงาน|ใช้ไม่ได้/i.test(t)
-        && !/แบรนด์ไหน|ยี่ห้อไหน|รุ่นไหนบ้าง|มีอะไรบ้าง|มีรุ่นไหน|มีแบรนด์|มียี่ห้อ|มีตัวไหน|ตัวไหนบ้าง|อะไรบ้างคะ|อะไรบ้างครับ|แนะนำ/.test(t)) {
+        && !/แบรนด์ไหน|ยี่ห้อไหน|รุ่นไหนบ้าง|มีอะไรบ้าง|มีรุ่นไหน|มีแบรนด์|มียี่ห้อ|มีตัวไหน|ตัวไหนบ้าง|อะไรบ้างคะ|อะไรบ้างครับ|แนะนำ/.test(t)
+        // 🏷️🏷️ k254 · INCIDENT D (เคสจริง 8 ส.ค.): "DUAL SMASH เปลี่ยนหัวไหม"
+        //   ด่านนี้จับคำว่า "เปลี่ยนหัว" แล้วส่งคู่มือวิธีใช้งานทั่วไปให้ ทั้งที่ลูกค้าถาม **ประเภทสินค้า**
+        //   ผลคือคำถาม "เป็นแบบไหน" ไม่เคยไปถึงด่าน Product Attribute ของ P0-16 เลย
+        //   ⛔ แยกด้วย "ถามว่าอย่างไร" กับ "ถามว่าใช่หรือไม่" — คนละคำถามคนละคำตอบ
+        //     "เปลี่ยนหัวยังไง"  = ถามวิธี  → คู่มือ (ด่านนี้ทำงานเหมือนเดิม)
+        //     "เปลี่ยนหัวไหม"   = ถามประเภท → ต้องตอบจากทะเบียนสินค้า
+        && !(attrQuestion(t) && !/ยังไง|ยังไร|ยังงัย|วิธี|อย่างไร|ไม่ได้|ไม่ติด|ไม่ออก|ไม่ทำงาน|กระพริบ|ไม่มีควัน/.test(t))) {
         await lineReply(TOKEN, replyToken,
           "วิธีใช้งานเบื้องต้นค่ะ 💕\n\n" +
           "🔹 แบบใช้แล้วทิ้ง (พอตทิ้ง) — แกะออกมาดูดได้เลย ไม่ต้องชาร์จ ไม่ต้องเติมน้ำยา หมดแล้วทิ้ง\n" +
@@ -7044,7 +10498,24 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         return;
       }
       // 💾 ลูกค้าเก่าพิมพ์ "ที่เดิม" หลังชำระเงิน → ปิดออเดอร์ด้วยที่อยู่ที่บันทึกไว้ (โค้ดจัดการเอง)
-      if (/^(ที่เดิม|ส่งที่เดิม|ใช้ที่เดิม|ที่อยู่เดิม)[\s!.ค่ะครับ]*$/.test(t) && env.CONV) {
+      // 🔁🔁 k259 BUG-2 (เคสจริง 8 ส.ค. 23.26): บอทถาม "📍 ส่งที่เดิมไหมคะ?" ลูกค้าตอบ "ครับ"
+      //   ระบบไม่นับว่าเป็นคำตอบของคำถามนั้น แล้วไปถาม "รับกี่ชิ้นดีคะ" = ตอบไม่ตรงคำถามตัวเอง
+      //   ต้นเหตุ: ประตูนี้รับเฉพาะคำว่า "ที่เดิม" เป๊ะ ๆ — ไม่มีใครผูก "คำตอบรับ" เข้ากับ "คำถามที่ค้างอยู่"
+      //   ⛔ ไม่แก้ด้วยการไล่เพิ่มคำรับ (ครับ/ค่ะ/จ้า/อือ...) — ผูกกับข้อความก่อนหน้าของบอทเท่านั้น
+      //      คำรับลอย ๆ ที่ไม่มีคำถามค้างอยู่ ต้องไม่เข้าประตูนี้เด็ดขาด
+      let _sameAddrYes = /^(ที่เดิม|ส่งที่เดิม|ใช้ที่เดิม|ที่อยู่เดิม)[\s!.ค่ะครับ]*$/.test(t);
+      if (!_sameAddrYes && confirmYes(t) && env.CONV) {
+        try {
+          const _hz = JSON.parse((await env.CONV.get("conv3:" + shopId + ":" + userId)) || "[]");
+          let _pb = "";
+          for (let i = _hz.length - 1; i >= 0; i--) if (_hz[i] && _hz[i].role === "assistant") { _pb = String(_hz[i].content || ""); break; }
+          if (/ส่งที่เดิม(ไหม|มั้ย)|ที่เดิมไหม|ที่เดิมมั้ย|ที่อยู่เดิม/.test(_pb)) {
+            _sameAddrYes = true;
+            console.log("K259_PENDING_ANSWER q=sameaddr ans=" + t.slice(0, 12));
+          }
+        } catch (e) {}
+      }
+      if (_sameAddrYes && env.CONV) {
         try {
           const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
           const ov = await env.CONV.get("ord:" + shopId + ":" + userId);
@@ -7056,6 +10527,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               o.status = "ชำระแล้ว ✅ (พร้อมจัดส่ง)";
               await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(o), { expirationTtl: 259200 });
               await lineReply(TOKEN, replyToken, "รับทราบค่ะ ส่งที่เดิมนะคะ 📍\n" + (c.name ? c.name + " " : "") + (c.tel ? c.tel + "\n" : "") + c.addr + "\n\nแอดมินลงออเดอร์ให้เรียบร้อยค่ะ 🎉 จะได้รับสินค้าภายใน 2-3 วันนะคะ ขอบคุณที่อุดหนุนค่ะ 💕", userId);
+              return;
+            }
+            // 🔁 k259: ยืนยัน "ที่เดิม" **ก่อน** จ่ายเงิน (เคสจริง 23.26 — บอทถามที่อยู่ก่อนโอน)
+            //   เดิมโค้ดรับเฉพาะกรณีจ่ายแล้ว → ที่อยู่ที่ลูกค้าเพิ่งยืนยันหายไปทั้งดุ้น
+            //   พอโอนเสร็จระบบจึงขอที่อยู่ใหม่อีกรอบ (เคสจริง 23.27) = ถามซ้ำสิ่งที่เพิ่งตอบไป
+            //   ⛔ ไม่แตะสถานะการชำระเงิน — บันทึกที่อยู่ลงออเดอร์อย่างเดียว
+            if (c.addr) {
+              o.ship = { name: c.name || "", tel: c.tel || "", addr: c.addr, same: 1, t: Date.now() };
+              if (!/ที่อยู่:/.test(String(o.block || "")) || /\(รอลูกค้าแจ้งหลังโอน\)/.test(String(o.block || "")))
+                o.block = String(o.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "")
+                        + "\nชื่อผู้รับ: " + (c.name || "-") + "\nเบอร์: " + (c.tel || "-") + "\nที่อยู่: " + c.addr;
+              await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(o), { expirationTtl: 259200 });
+              console.log("K259_SAMEADDR_PREPAID status=" + String(o.status || "-"));
+              await lineReply(TOKEN, replyToken, "รับทราบค่ะ ส่งที่เดิมนะคะ 📍\n"
+                + (c.name ? c.name + " " : "") + (c.tel ? c.tel + "\n" : "") + c.addr
+                + "\n\nบันทึกที่อยู่จัดส่งไว้ให้แล้วค่ะ ✅ โอนแล้วส่งสลิปเข้ามาในแชทนี้ได้เลยนะคะ 🧾💕", userId);
               return;
             }
           }
@@ -7112,6 +10599,19 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             if (!paidOrder) await env.CONV.delete("ord:" + shopId + ":" + userId);
             await env.CONV.delete("exp:" + shopId + ":" + userId);   // ล้างค่าส่งด่วนที่จำไว้
             await env.CONV.delete("card:" + shopId + ":" + userId);  // ล้างการ์ดที่ค้าง
+            // 🧭🧭 k255 · Invalidation ต้องอยู่ที่ "ด่านยกเลิกตัวแรกที่ทำงานจริง" ไม่ใช่ตัวท้าย
+            //   บั๊กที่ Local Runner จับได้: k252 ใส่ไว้ที่ด่านยกเลิกบรรทัด ~10290 แต่ด่าน k66 ตัวนี้
+            //   รับคำว่า "ยกเลิก" ไปก่อนเสมอแล้ว return → invalidation ตัวนั้น **ไม่เคยทำงานเลย**
+            //   ผลจริงที่วัดได้: ยกเลิกแล้วถามเรื่องอื่น ระบบยังถือ MARBO อยู่ (drop=MARBO 9K องุ่น)
+            //   ⛔ ยกเลิก = ลูกค้าบอกชัดว่าไม่เอาแล้ว → ต้องลบความจำสินค้าจริง ไม่ใช่แค่ระงับ
+            if (!paidOrder) {
+              await env.CONV.delete("slot:" + shopId + ":" + userId);   // สินค้าที่คุยค้าง
+              // ⛔ k258b: ด่านนี้อยู่ "ก่อน" ที่ pslot จะถูกโหลด จึงใช้ slotDrop() ไม่ได้ (TDZ)
+              //   เคลียร์ที่ TURN context ตรงๆ แทน — กันไม่ให้ finally เซฟของที่เพิ่งยกเลิกกลับมา
+              try { const _tc = TURN.get(userId); if (_tc) { _tc.slot = null; _tc.slotDirty = false; } } catch (e3) {}
+              await env.CONV.delete("cst:" + shopId + ":" + userId);    // สิ่งที่ค้างถาม
+              console.log("K252_INVALIDATE cancel → ord+card+exp+slot+cst");
+            }
           }
         } catch (e) {}
         EXPFEE.delete(shopId + ":" + userId);   // k108: ล้างค่าส่งในหน่วยความจำด้วย กันออเดอร์ใหม่แอบใช้ค่าเก่า
@@ -7220,8 +10720,20 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   • จ่ายแล้วจริง (ord ✅) → ยืนยัน + ขอที่อยู่ต่อ
       //   • ยังไม่พบสลิป → ขอรูปสลิป (ส่งมาแล้วระบบตรวจ SlipOK อัตโนมัติผ่าน k80)
       //   • ยืนยันซ้ำรอบ 2 ใน 30 นาที = อาจส่งสลิปแล้วระบบพลาด → เด้งคิวแอดมินด่วน (มิ้วต์ให้คนดูแล)
+      // 🗣️🗣️ k315 (เคสจริงโปรดักชัน 13 ส.ค. 16.55 · ลูกค้า "ช้าง"):
+      //   ลูกค้าใหม่แอดมา 6 นาที ยังไม่เคยสั่งอะไร ถามเรื่องเก็บเงินปลายทาง แล้วพิมพ์
+      //   "ผมเคยโดนมาแล้วครับโอนไปแล้วงีบเลย" = เล่าว่าเคยโดนโกงจากร้านอื่น (แสดงความไม่ไว้ใจ)
+      //   → ระบบเห็นคำว่า "โอนไปแล้ว" → ตอบ "รบกวนส่งรูปสลิปเข้ามาในแชทนี้" = ตอบผิดเรื่องสนิท
+      //   ต้นเหตุ: รายการยกเว้นเดิมมีแต่คำที่แปลว่า "ยังไม่ได้โอน" (ยังไม่ / เดี๋ยวโอน / จะโอน)
+      //     ไม่มีคำที่แปลว่า "กำลังเล่าอดีต/พูดถึงร้านอื่น" เลยสักคำ
+      //     ตัวจับจึงแยกไม่ออกระหว่าง "ผมโอนแล้ว" กับ "ผมเคยโดนโกงตอนโอน"
+      //   ⛔ แก้เฉพาะ "รายการยกเว้น" บรรทัดเดียว — ไม่แตะ logic จ่ายเงิน/ออเดอร์/ตะกร้า
+      //      ไม่แตะตรวจสลิป SlipOK (คนละเส้น) · ไม่แตะตัวนับ paidclaim · ไม่แตะการเด้งคิวแอดมิน
+      //   ⚠️ ผลข้างเคียงที่กันได้ด้วย: เล่าเรื่องซ้ำ 2 ครั้งใน 30 นาที เดิมจะทำให้ paidclaim ครบ 2
+      //      → ปิดปาก G2 + เด้งคิวแอดมิน ทั้งที่ไม่มีการโอนเกิดขึ้นเลย
       if (/(?:โอน|จ่าย|ชำระ)(?:เงิน)?(?:ไป|ให้|มา)?(?:เรียบร้อย)?(?:แล้ว|เเล้ว|เสร็จ)/.test(t)
-          && !/ยังไม่|ไม่ได้โอน|เดี๋ยว(?:จะ)?โอน|กำลัง(?:จะ)?โอน|จะโอน|ก่อนโอน|ยังไง|อย่างไร|บัญชีไหน|เลขบัญชี|ปลายทาง/.test(t)) {
+          && !/ยังไม่|ไม่ได้โอน|เดี๋ยว(?:จะ)?โอน|กำลัง(?:จะ)?โอน|จะโอน|ก่อนโอน|ยังไง|อย่างไร|บัญชีไหน|เลขบัญชี|ปลายทาง/.test(t)
+          && !/เคยโดน|โดนโกง|โดนหลอก|เคยโกง|ร้านอื่น|ที่อื่น|เจ้าอื่น|เพจอื่น|เมื่อก่อน|กลัวโดน|กลัวโกง|กลัวไม่ได้ของ|ไม่ได้ของ|เชิดเงิน|หนีไปเลย|งีบเลย|เงียบเลย/.test(t)) {
         let _ordPaid = false;
         try {
           if (env.CONV) {
@@ -7230,6 +10742,16 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           }
         } catch (e) {}
         if (_ordPaid) {
+          // 📍 k259 BUG-3 (เคสจริง 8 ส.ค. 23.27): ลูกค้าเพิ่งยืนยัน "ส่งที่เดิม" ไปเมื่อ 1 นาทีก่อน
+          //   แต่พอพิมพ์ "โอนไปแล้ว" ระบบขอที่อยู่ + เบอร์ใหม่ทั้งชุด = ถามซ้ำสิ่งที่เพิ่งได้มา
+          //   ⛔ ห้ามขอข้อมูลที่มีอยู่แล้ว — เช็คจาก ordHasShip() จุดเดียว
+          let _shipKnown = false;
+          try { const _o2 = JSON.parse((await env.CONV.get("ord:" + shopId + ":" + userId)) || "null"); _shipKnown = ordHasShip(_o2); } catch (e) {}
+          if (_shipKnown) {
+            console.log("K259_NO_REASK_ADDR paid=1");
+            await lineReply(TOKEN, replyToken, "ระบบตรวจสอบยอดเรียบร้อยแล้วค่ะ ✅ ขอบคุณค่ะ 💕\nที่อยู่จัดส่งใช้ตามที่ยืนยันไว้แล้วนะคะ 📍 แอดมินลงออเดอร์ให้เรียบร้อยค่ะ 🎉", userId);
+            return;
+          }
           await lineReply(TOKEN, replyToken, "ระบบตรวจสอบยอดเรียบร้อยแล้วค่ะ ✅ ขอบคุณค่ะ 💕\nรบกวนแจ้งที่อยู่จัดส่ง + เบอร์โทรศัพท์ได้เลยนะคะ 📍", userId);
           return;
         }
@@ -7296,6 +10818,38 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   ⚠️ ไม่ต้องเพิ่มด่านใหม่ — ด่านกันออเดอร์หาย (looksLikeOrderText) อยู่หลัง k64 อยู่แล้ว
       if (/แกร?[็ๆ]?[บป]|grab|ไรเดอร์|rider|มอเตอร์ไซค์|วินมอไซ|เมสเซนเจอร์|messenger|ลาลามูฟ|lalamove|ตามหมุด|ที่หมุด|ตามพิกัด|ส่งด่วน|ส่งดวน/i.test(t)
           || /^(ส่งด่วน(\s*กทม\.?)?|เอาส่งด่วน|ด่วน|คิดค่าส่ง|เช็คค่าส่ง|คิดค่าส่งด่วน|เช็คค่าส่งด่วน|ค่าส่งด่วน)[\s!.?]*$/.test(t)) {
+        // 📦 k274: ลูกค้า "ขอเปลี่ยนกลับเป็นพัสดุ" — ต้องมาก่อนทุกทางลัดส่งด่วน ไม่งั้นโดนตอบค่าส่งด่วนซ้ำ
+        if (wantsParcelSwitch(t)) {
+          console.log("K274_PARCEL_SWITCH");
+          let _ojS = null;
+          try { if (env.CONV) { const _v = await env.CONV.get("ord:" + shopId + ":" + userId); if (_v) _ojS = JSON.parse(_v); } } catch (e) {}
+          if (_ojS && ordPaidActive(_ojS)) {
+            // จ่ายเงินแล้ว = การเปลี่ยนวิธีส่งกระทบเงิน (ค่าส่งด่วนที่จ่ายไว้) → คนตัดสิน ห้ามระบบเกลี่ยเงินเอง
+            try { await muteNow("📦 ลูกค้าขอเปลี่ยนจากส่งด่วนเป็นพัสดุ (จ่ายแล้ว) — ทีมงานปรับยอด/ยืนยัน", String(t).slice(0, 120)); } catch (e) {}
+            await lineReply(TOKEN, replyToken, "รับทราบค่ะ 🙏🏻 เดี๋ยวทีมงานปรับการจัดส่งเป็นพัสดุและยืนยันให้อีกครั้งนะคะ 💕", userId);
+            return;
+          }
+          // ยังไม่จ่าย → เปลี่ยนโหมดได้เลย: ปิดค่าส่งด่วน + คิดยอดใหม่แบบพัสดุ (สูตรเดิม computeOrder — โปรส่งฟรีทำงานตามปกติ)
+          try { if (env.CONV) { await env.CONV.delete("exp:" + shopId + ":" + userId); } EXPFEE.delete(shopId + ":" + userId); } catch (e) {}
+          if (_ojS && Array.isArray(_ojS.items) && _ojS.items.length) {
+            const _c2 = computeOrder(_ojS.items, null);
+            _ojS.block = "📦 ออเดอร์ (รอโอน)\n" + _c2.rows.map(r => "- " + r.label + " = " + r.line).join("\n")
+              + "\nยอดสินค้า " + _c2.goods + "\nค่าส่ง " + _c2.ship + "\nรวมยอดชำระ " + _c2.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
+            _ojS.t = Date.now();
+            try {
+              await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_ojS), { expirationTtl: 259200 });
+              await env.CONV.put("card:" + shopId + ":" + userId, JSON.stringify({ sig: _c2.rows.map(r => r.label).join("|") + "#" + _c2.total, t: Date.now() }), { expirationTtl: 7200 });
+            } catch (e) {}
+            console.log("K274_PARCEL_TOTAL " + _c2.total);
+            await lineMulti(TOKEN, replyToken, [
+              { type: "text", text: "รับทราบค่ะ เปลี่ยนเป็นส่งพัสดุปกติให้แล้วนะคะ 📦 (จัดส่งออกภายใน 1-2 วัน · ได้รับใน 2-3 วัน)" },
+              { type: "flex", altText: "ยืนยันรายการสั่งซื้อ (พัสดุปกติ)", contents: orderConfirmFlex(_c2) },
+            ], userId);
+            return;
+          }
+          await lineReply(TOKEN, replyToken, "รับทราบค่ะ ส่งเป็นพัสดุปกตินะคะ 📦 ค่าส่ง 40 บาททั่วประเทศ (เข้าโปรส่งฟรีได้ค่ะ)\nรับสินค้ารุ่นไหน กลิ่นอะไร กี่ชิ้นดีคะ 💕", userId);
+          return;
+        }
         // 📍 k103 เคสจริง 2/8 (19.04 น.): จ่ายแล้ว (สลิปผ่าน ✅) ลูกค้าตอบ "ส่งแกรปตามหมุด" (= บอกที่อยู่)
         //   แต่บอทไปโควตราคาใหม่ + ถาม "รับสินค้ารุ่นไหน" = เริ่มขายใหม่ใส่คนที่จ่ายเงินจบแล้ว
         //   แก้: จ่ายแล้ว + มีหมุด → ปิดออเดอร์ด้วยพิกัดหมุดเลย (หมุดคือที่อยู่จัดส่ง)
@@ -7319,6 +10873,19 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             }
           }
         } catch (e) {}   // k13: รองรับปุ่ม "ส่งด่วน กทม."
+        // 🔒🔒 k259 BUG-5 (เคสจริง 8 ส.ค. 23.27): จ่ายเงินแล้ว แต่ยังไม่ได้ปักหมุด
+        //   ทุกสาขาด้านล่างเขียนไว้สำหรับ "ลูกค้าที่ยังไม่ได้สั่ง" → ลงท้ายด้วยชวนสั่ง/ชวนจ่ายทั้งหมด
+        //   ลูกค้าที่โอนเงินไปแล้วอ่านแล้วนึกว่าต้องจ่ายอีกรอบ = เรื่องเงินโดยตรง ⛔
+        //   ⚠️ ทางที่ปักหมุดแล้ว (k103) อยู่ด้านบนและ return ไปแล้ว — ตัวนี้รับเฉพาะที่เหลือ
+        if (_ordPaidLock && !looksLikeOrderText(t)) {
+          const _upP = matchUpcountry(t);
+          console.log("K259_PAID_EXPRESS upcountry=" + (_upP || "-"));
+          await lineReply(TOKEN, replyToken, _upP
+            ? ("ออเดอร์ของคุณลูกค้าชำระเงินเรียบร้อยแล้วนะคะ ✅\nแต่ส่งด่วน (แกร็บ/ไรเดอร์) มีเฉพาะ กทม. และปริมณฑลค่ะ 🙏🏻\n"
+               + _upP + " ทางร้านจัดส่งเป็นพัสดุ (ขนส่งเอกชน) ให้นะคะ 📦 จัดส่งออกภายใน 1-2 วันค่ะ\n⛔ ไม่ต้องชำระเงินเพิ่มนะคะ ออเดอร์นี้จ่ายครบแล้วค่ะ 💕")
+            : ("ออเดอร์ของคุณลูกค้าชำระเงินเรียบร้อยแล้วนะคะ ✅ รับทราบว่าขอส่งด่วนค่ะ 🛵\nรบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาให้หน่อยนะคะ เดี๋ยวทีมงานเช็คค่าส่งด่วนแล้วแจ้งให้ทันทีค่ะ\n(ค่าส่งด่วนคิดตามระยะทาง แยกจากยอดที่ชำระไปแล้วนะคะ) 💕"), userId);
+          return;
+        }
         // 🛑 k64: ส่งด่วน/แกร็บ = **กทม. + ปริมณฑล เท่านั้น** นอกนั้นต้องส่งพัสดุ
         // เคสจริง 1/8: ลูกค้าบอก "เชียงใหม่ ส่งแกร็บได้หรอครับ" → แอดมินตอบ "ได้เลยค่ะ 🛵 แชร์โลเคชั่นมา"
         //   = รับปากในสิ่งที่ร้านทำไม่ได้ ลูกค้าปักหมุดมาแล้วต้องมาบอกทีหลังว่าส่งไม่ได้
@@ -7496,6 +11063,11 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       if (/เมนู|มี(อะไร|ไร|อาราย|หยัง)(ขาย)?(บ้าง|มั่ง)|ขาย(อะไร|ไร|หยัง)(บ้าง|มั่ง)?|มีพอตอะไร|มีบุหรี่อะไร|มีของอะไร|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t)) {
         const _askFlavor = /กลิ่น|รส|สี|ความแรง|นิโค|เหลือ/.test(t);        // ถามของในรุ่น ≠ ขอเมนูรวม
         const _askMenuDirect = /เมนู|รายการสินค้า|ขอดูสินค้า|ดูสินค้า/.test(t);  // ขอเมนูตรงๆ
+        // 🗂️🗂️ k259: ลูกค้าระบุ "หมวดสินค้า" มาแล้ว = ถามเจาะจง ไม่ใช่ขอเมนูรวม
+        //   เคสจริง: "บิ๊กพอตมีอะไรบ้าง" ในบทใหม่ → ได้ลิงก์เมนูเปล่า ๆ แทนรายชื่อบิ๊กพอต
+        //   ต้นเหตุ: ทางลัดนี้อยู่ "ก่อน" ที่ระบบจะโหลด Slot/หมวด จึงตัดสินจากคำว่า "มีอะไรบ้าง" ล้วน
+        //   ⛔ ตรงกับคำสั่งเจ้าของร้าน k115 อยู่แล้ว — ห้ามโยนลิงก์เมนูแทนการตอบสิ่งที่ลูกค้าถาม
+        let _askCat = ""; try { _askCat = topicInText(t) || ""; } catch (e) {}
         let _ctxModel = "";
         try {
           _ctxModel = _MODEL_IN(t) || "";
@@ -7508,12 +11080,33 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             }
           }
         } catch (e) {}
-        if (_askMenuDirect || (!_askFlavor && !_ctxModel)) {
+        // 🧾 k266 (พิสูจน์ด้วย probe 9 ส.ค.): "เอา MARBO 9K องุ่น 2 ชิ้น ดูเมนูแล้ว" / "ดูในเมนูแล้ว เอา ..."
+        //   → `_askMenuDirect` (เจอคำว่า "เมนู") ชนะทุกเงื่อนไข → ส่งลิงก์เมนูแล้ว return
+        //   → ออเดอร์หายทั้งบรรทัด (ทั้ง ord: และ slot: ว่างเปล่า ตรวจแล้ว) = ตระกูลเดียวกับ k160/k265
+        //   ⛔ แคบสุด: ใช้ตัวตัดสินตัวเดิม (looksLikeOrderText) ไม่สร้างเกณฑ์ใหม่
+        //      ขอเมนูเปล่า ๆ ("ขอดูเมนู") ไม่มีจำนวน+กลิ่น → ไม่เข้าเงื่อนไขนี้ พฤติกรรมเดิมทั้งหมด
+        let _ordTxt266 = false;
+        try { _ordTxt266 = looksLikeOrderText(t); } catch (e) {}
+        if (_ordTxt266) console.log("K266_MENU_SKIPPED_ORDER");
+        if (!_ordTxt266 && (_askMenuDirect || (!_askFlavor && !_ctxModel && !_askCat))) {
+          // 🔒 k259 BUG-4: มีออเดอร์ที่ชำระเงินแล้วค้างอยู่ → ห้ามโยน "เมนูเริ่มต้น" ทับ
+          //   เคสจริง 23.28: ลูกค้าถาม "ขายไรครับ" หลังโอนเสร็จ → ได้ลิงก์เมนูเปล่า ๆ
+          //   = ลูกค้าอ่านว่าร้านลืมออเดอร์ตัวเอง  ⛔ ต้องตอบแบบรู้ว่ามีออเดอร์ค้างอยู่
+          //   ⚠️ ยังตอบคำถามที่ลูกค้าถามจริง ๆ (ภาพรวมหมวดสินค้า) ไม่ใช่แค่ปฏิเสธ
+          if (_ordPaidLock && !_askMenuDirect) {
+            const _ovw = categoryOverview();
+            console.log("K259_MENU_SUPPRESSED_PAID");
+            await lineReply(TOKEN, replyToken,
+              "ออเดอร์ที่ชำระเงินแล้วของคุณลูกค้ายังอยู่ในระบบนะคะ ✅ ไม่ได้หายไปไหนค่ะ 💕\n\n"
+              + (_ovw || MENU_MSG), userId);
+            return;
+          }
           await lineReply(TOKEN, replyToken, MENU_MSG, userId);
           return;
         }
-        // มีบริบทรุ่น หรือถามเรื่องกลิ่น → ปล่อยให้ระบบตอบด้วยสต็อกจริง (ไม่ return)
-        console.log("K115_MENU_SKIPPED ctx=" + _ctxModel.slice(0, 24) + " flavor=" + _askFlavor);
+        // มีบริบทรุ่น หรือถามเรื่องกลิ่น หรือระบุหมวดมาแล้ว → ปล่อยให้ระบบตอบด้วยสต็อกจริง (ไม่ return)
+        console.log("K115_MENU_SKIPPED ctx=" + _ctxModel.slice(0, 24) + " flavor=" + _askFlavor + " cat=" + (_askCat || "-"));
+        if (_askCat && !_ctxModel && !_askFlavor) console.log("K259_MENU_SKIPPED_CATEGORY cat=" + _askCat);
       }
     }
 
@@ -7540,6 +11133,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       const saved = await env.CONV.get(key);
       if (saved) { try { history = JSON.parse(saved); } catch (e) {} }
     }
+    // 🧠 k250 · โหลด "สิ่งที่ค้างอยู่" ของบทสนทนานี้ (k249 Conversation State)
+    let _CST = convNew();
+    try { _CST = await convLoad(env, shopId, userId); } catch (e) {}
 
     // ข้อมูลชำระเงินของร้าน (ตั้งเป็น secret ชื่อ PAY_V20 ใน Cloudflare — ไม่อยู่ในโค้ดสาธารณะ)
     const payInfo = await payOf(env, shopId);   // k116
@@ -7612,7 +11208,10 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     //      (Cloudflare isolate อยู่ข้ามชั่วโมงได้ → เวลาจะค้างเป็นตอนที่ worker บูต)
     const _t153 = thTime();
     const timeNote = "\n\n# ⏰⏰ เวลาจริงตอนนี้ (ข้อเท็จจริง เชื่อข้อมูลนี้ก่อนทุกอย่าง ห้ามคำนวณเอง)\n" +
-      "ขณะนี้เวลาประเทศไทย **" + _t153.hhmm + " น.**\n" +
+      "วันนี้คือ **" + _t153.dateTH + "** เวลา **" + _t153.hhmm + " น.**\n" +
+      "📅 ปฏิทินเดือนนี้ (วันที่=วันอะไร) — ใช้ตอบตรงๆ ⛔ ห้ามคำนวณวันเอง:\n" + _t153.calendar + "\n" +
+      "⛔ ถ้าลูกค้าเอ่ยวันที่ ให้เปิดจากปฏิทินข้างบนเท่านั้น ห้ามเดาว่าวันนั้นเป็นวันอะไร\n" +
+      "⛔ และถึงจะรู้ว่าเป็นวันอะไร ก็ห้ามเอาไปสร้างข้อจำกัด — ร้านส่งทุกวัน (ดูกฎ P0-10)\n" +
       (_t153.afterLast
         ? "🌙 **เลยรอบส่งด่วนรอบสุดท้ายของวัน (20.45 น.) มาแล้ว**\n" +
           "⛔⛔ ห้ามพูดว่า 'ยังทันรอบวันนี้' / 'ได้รับภายในวันนี้' / 'ได้รับคืนนี้' / 'ตอนนี้ยังพอมีเวลา' / 'ยังทันอยู่' เด็ดขาด — ไม่จริงแล้ว\n" +
@@ -7642,7 +11241,19 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         }
       }
     } catch (e) {}
-    const sysFull = sysPrompt + NO_GUESS_RULE + timeNote + payIntentNote + noticeNote + outNote + custNote;
+    
+
+
+    // 🧭 k252 · Context Broker — ตัดสิน "เทิร์นนี้เกี่ยวกับอะไร" ครั้งเดียว ใช้ทั้งเส้นทาง
+    //   หลายเจตนาพร้อมกันได้ (ข้อ 2) · คำนวณจากข้อความดิบก่อนประกอบ prompt
+    const _INTENT = (function () {
+      try { return intentsOf(String((ev.message && ev.message.text) || "")); } catch (e) { return []; }
+    })();
+    if (_INTENT.length) console.log("K252_INTENT " + _INTENT.join("+")
+      + " product=" + (ctxAllowProduct(_INTENT) ? "ALLOW" : "DENY"));
+
+    const sysFull = sysPrompt + NO_GUESS_RULE + K245_RULES + timeNote + payIntentNote + noticeNote + outNote + custNote
+      + (typeof _contradictNote === "string" ? _contradictNote : "");   // k241 BUG-5
 
     let reply, userForHistory;
     let smForQR = null, bufForQR = 1;   // สต็อกสำหรับสร้างปุ่ม Quick Reply + ทุกด่านตรวจสต็อกขาออก
@@ -7651,6 +11262,25 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     // 🎯 P0: โหลด Product Slot ก่อนแยกเส้นทาง — ทุกโมดูลจะได้อ่านของชุดเดียวกัน
     let pslot = await slotLoad(env, shopId, userId);
     let pslotDirty = false;
+    // 💾💾 k258b · SLOT SAVE ON EXIT — บั๊กที่โมเดลจริงเป็นคนจับได้ (STUB มองไม่เห็นเลย)
+    //
+    //  อาการ: ลูกค้าสั่งของ → เทิร์นถัดไประบบจำไม่ได้ → ถามซ้ำ / ของหายจาก cart
+    //  ต้นเหตุ: การเขียน Slot อยู่ต้นฟังก์ชัน แต่ `slotSave()` อยู่ "ท้ายสุด" ของ handleEventCore
+    //          ระหว่างสองจุดนี้มี `return;` **19 จุด** (ออกการ์ด · ของหมด · ถามคุณสมบัติ ·
+    //          เลือกโปร · ส่งต่อแอดมิน ฯลฯ) ทุกเส้นทางที่ return ก่อน = Slot ที่เพิ่งเขียน **หายทั้งก้อน**
+    //  ทำไม STUB ไม่เจอ: STUB ตอบ "รับทราบค่ะ" ทุกเทิร์น → ไม่เคยเข้าเส้นทางที่ return ก่อน
+    //          พอโมเดลจริงตอบเป็นบล็อกทวนคำสั่งซื้อ → เข้าเส้นทางออกการ์ด → return → Slot หาย
+    //  ⛔ นี่คือต้นเหตุตัวจริงของเคส JW ("แจ้งไปหลายรอบแล้วนะคะ") — ไม่ใช่แค่เรื่องช่อง color
+    //
+    //  วิธีแก้: ใช้แพตเทิร์นเดียวกับที่ k158 ใช้แก้ปัญหาเดียวกันของ "ประวัติแชท" (HIST_SAVED_ON_EXIT)
+    //          ฝาก Slot ไว้กับ TURN context แล้วให้ handleEvent() เซฟใน finally
+    //          = จุดเดียว ครอบทุกทางออก รวมถึง return ที่จะเพิ่มในอนาคต
+    //  ⛔ ห้ามไล่ใส่ slotSave() ทีละจุดก่อน return — 19 จุดวันนี้ พรุ่งนี้เพิ่มอีกก็ลืมอีก
+    const _tctx = TURN.get(userId) || null;
+    //  ประกาศว่า Slot เปลี่ยนแล้ว → ต้องรอดออกไปให้ได้ไม่ว่าจะออกทางไหน
+    const slotMark = () => { pslotDirty = true; if (_tctx) { _tctx.slot = pslot; _tctx.slotDirty = true; } };
+    //  ⛔ ยกเลิก/ล้างบริบท = ต้องยกเลิกการเซฟด้วย ไม่งั้นของที่ลูกค้าเพิ่งยกเลิกจะฟื้นกลับมา
+    const slotDrop = () => { pslot = slotNew(); pslotDirty = false; if (_tctx) { _tctx.slot = null; _tctx.slotDirty = false; } };
 
     // 📸 k192 (เคสจริง 5/8): ลูกค้าส่ง "รูป" MARBO 9K → บอทตอบ "M SWITCH กลิ่นที่มีพร้อมส่งค่ะ" + ลิสต์ 17 กลิ่น
     //   ทั้งที่สต็อกจริง M SWITCH หัวน้ำยา = 0 ทุกกลิ่น (ยืนยันจาก /stock และ /menustock)
@@ -7669,7 +11299,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     } catch (e) {}
 
     if (mtype === "image") {
-    showLoading();   // k47: อ่านรูปใช้เวลา ต้องโชว์จุดไข่ปลา
+    await showLoading();   // k47: อ่านรูปใช้เวลา ต้องโชว์จุดไข่ปลา (k244: เติม await)
       // 🧾 k80 เคสจริง 2/8 (เจ้านายเทสโอนจริง 320 บาท): ส่งสลิป K+ ของจริง แต่ vision ไม่ตอบแท็ก [SLIP]
       //   → สลิปโดนปฏิบัติเหมือนรูปทั่วไป → SlipOK ไม่เคยถูกเรียก → คำตอบโดนตาข่าย k36 กิน
       //   → ลูกค้าได้ "ขออภัย เข้าใจคำถามไม่ตรง + ลิงก์เมนู" = โอนเงินแล้วโดนเมิน!
@@ -7715,7 +11345,15 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
 "2) ถ้าสิ่งที่เห็นในภาพขัดกับสิ่งที่ถูกวง → **ยึดสิ่งที่ถูกวงเสมอ**\n" +
 "3) ⛔⛔ ห้ามเอ่ยชื่อรุ่นที่ **ไม่ปรากฏอยู่ในรูปนี้** เด็ดขาด\n" +
 "   ห้ามหยิบรุ่นจากบทสนทนาก่อนหน้า จากรายการสินค้า หรือจากความจำมาเติมลงในคำตอบ\n" +
-"   อ่านบริเวณที่วงไม่ออก/รูปเบลอ → ถามกลับตรงๆ ว่าวงตรงไหน ห้ามเดา ห้ามเดารุ่นยอดฮิต\n\n" +
+"   อ่านบริเวณที่วงไม่ออก/รูปเบลอ → ถามกลับตรงๆ ว่าวงตรงไหน ห้ามเดา ห้ามเดารุ่นยอดฮิต\n" +
+// 🖼️ k264 (เคสจริง 9 ส.ค.): เดิมบังคับแท็ก [READ:] เฉพาะขั้นที่ 3 (รูปถ่ายสินค้าจริง)
+//   → รูปเมนูที่ลูกค้าวงกลิ่น (ขั้นที่ 2 — เคสที่ลูกค้าร้านใช้บ่อยสุด) ตอบมาไม่มีแท็ก
+//   → ด่านหลักฐาน k192 หาหลักฐานไม่เจอ → ตีตกทั้งที่อ่านรูปออก → ลูกค้าโดน "ไม่ชัด" วนซ้ำ
+//   แก้ที่ต้นเหตุ: บังคับแท็กกับรูปทุกประเภท (ยกเว้นสลิปที่ตอบ [SLIP] คำเดียว)
+"4) ⛔⛔ บังคับทุกคำตอบที่ไม่ใช่ [SLIP]: ขึ้นต้นคำตอบด้วยแท็ก [READ: <ตัวหนังสือที่อ่านได้จริงจากรูป ตามตัวอักษร>]\n" +
+"   ใส่สิ่งที่อ่านได้จากรูป: ชื่อรุ่น/หัวข้อบล็อก · ชื่อกลิ่นบนกล่องที่ถูกวง · ราคา/ตัวเลขที่เห็น\n" +
+"   อ่านได้แค่บางส่วนใส่เท่าที่อ่านได้ · อ่านไม่ออกเลยใส่ [READ: ] ว่างๆ · ⛔ ห้ามใส่ชื่อที่ 'คิดว่าน่าจะใช่'\n" +
+"   แท็กนี้เป็นข้อมูลภายใน ระบบใช้ตรวจหลักฐานแล้วตัดออกก่อนส่ง ลูกค้าไม่เห็น — ไม่มีแท็ก = คำตอบเสี่ยงถูกทิ้งทั้งอัน\n\n" +
 "ขั้นที่ 2 — อ่านบริเวณที่ลูกค้าทำเครื่องหมาย (ทำก่อนเสมอ):\n" +
 "เมนูของร้านเป็นภาพแคตตาล็อก จัดวางแบบนี้: ด้านบนของบล็อกคือ 'ชื่อรุ่น/ยี่ห้อ + ราคา' (เช่น KARDINAL 199.- , MARBO 9K 290.-) และด้านล่างเป็นกล่องสินค้าเรียงกันหลายกล่อง แต่ละกล่องคือ 'กลิ่น/สี' หนึ่งอัน (ชื่อกลิ่นเขียนอยู่บนกล่องหรือใต้กล่อง) บางเมนูมีตัวเลขความแรง mg กำกับด้านซ้ายของแถว\n\n" +
 "ให้ทำตามนี้:\n" +
@@ -7756,6 +11394,67 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       reply = !dataUri ? "[SLIP]" : await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...histForAI(history, 8), visionMsg], VISION_MODELS);
       // k80: vision พูดถึงสลิป/การโอน แต่ลืมพิมพ์แท็ก [SLIP] → นับเป็นสลิปไว้ก่อน (กันหลุดซ้ำ — SlipOK เป็นคนตัดสินจริง)
       if (reply.indexOf("[SLIP]") === -1 && /สลิป|โอนเงินสำเร็จ|ยอดโอน|โอนสำเร็จ/i.test(reply)) { console.log("SLIP_INFERRED " + String(reply).slice(0, 50)); reply = "[SLIP]"; }
+      // 🖼️ k276 (เคสจริง ABC Easy 11 ส.ค. 15.52-15.53): รูปเมนู V PLUS / Marbo วงกลิ่นไว้ชัด
+      //   แต่โดนตอบ "ไม่ชัด" 2 รอบติด — เพราะโมเดลตอบมา **ไม่มีแท็ก [READ:]** (ฝ่าฝืนกฎ k264)
+      //   → ด่านหลักฐาน k192 ไม่มีอะไรให้ตรวจ → ตีตกทั้งที่รูปอ่านได้
+      //   แก้แบบเดียวกับ JSON-retry (k207 บรรทัด ~7911): เตือนซ้ำ 1 รอบพร้อมรูปเดิม แล้วใช้คำตอบใหม่
+      //   ⛔ ยิงเฉพาะ: เป็นรูป + คำตอบไม่ใช่ [SLIP] + ไม่มีแท็ก — เคสปกติไม่แตะ ไม่เพิ่มเวลา
+      // 🔁🔁 k302 · retry เดิมยิงแค่ตอน "ไม่มีแท็กเลย" — ไม่พอ (เคสจริงโปรดักชัน 12 ส.ค. 2 ร้าน)
+      //   INSTA BAR (18.04) และ MARBO (18.09) โดน "รูปนี้ระบบอ่านชื่อรุ่นไม่ชัดพอค่ะ" ทั้งคู่
+      //   ทั้ง 2 รุ่นอยู่ในแคตตาล็อก · MODEL_LIST มีครบ · ตัวแปลชื่อรุ่นรู้จักทุกรูปแบบการเขียน
+      //   ต้นเหตุ (พิสูจน์ด้วยการเรียก visionEvidenceGate ตรง ๆ 7 แบบ):
+      //     RX_READTAG ถามแค่ว่า "มีวงเล็บ [READ:] ไหม" ไม่ได้ถามว่า "ในวงเล็บมีหลักฐานพอไหม"
+      //     → ใส่มาแต่ชื่อกลิ่น ("[READ: มิกซ์เบอร์รี่]") = มีแท็ก → retry ไม่ยิง
+      //       แต่ด่านหลักฐานหาชื่อรุ่นในแท็กไม่เจอ → ตีตกทั้งอัน → ไล่ลูกค้าไปถ่ายรูปใหม่
+      //     ซึ่งเป็นสิ่งที่เกิดบ่อยที่สุดกับ "รูปเมนูที่วงกลิ่น" (ตาไปโฟกัสที่กลิ่นที่ถูกวง)
+      //   กติกาใหม่: ให้ **ด่านหลักฐานตัวเดิม** เป็นคนบอกว่าต้องยิงซ้ำไหม แทนการเดาจากรูปแบบข้อความ
+      //   ⛔ ไม่ได้สร้างเส้นหลักฐานใหม่ ไม่ได้ลดเกณฑ์ ไม่ได้ bypass อะไรทั้งสิ้น:
+      //      รอบซ้ำใช้ prompt เดิม รูปเดิม และต้องแนบแท็ก [READ:] ของตัวเองมาให้ด่านเดิมตรวจใหม่
+      //      คำตอบรอบแรกไม่ถูกใช้เป็นหลักฐานให้รอบสองแม้แต่นิดเดียว
+      //   ⛔ ยิงซ้ำได้ครั้งเดียวเท่าเดิม · เคสที่แท็กครบอยู่แล้วไม่ถูกแตะ (ไม่เพิ่มเวลา/ค่าใช้จ่าย)
+      let _retry302 = dataUri && reply.indexOf("[SLIP]") === -1 && !RX_READTAG.test(reply);
+      // 🎯 k307 (เคสจริง 20.26 · DUAL SMASH 20K + แตงโม): ยิงซ้ำแล้วก็ยังไม่ได้ชื่อยี่ห้อ
+      //   ต้นเหตุ: ข้อความยิงซ้ำเป็นสตริงตายตัวว่า "ไม่มีแท็ก [READ:]"
+      //     แต่เคสนี้ **แท็กมีอยู่แล้ว** ([READ: แตงโม]) ขาดแค่ชื่อรุ่น
+      //     → ตาสำรองถูกบอกให้แก้ผิดข้อ เลยใส่แท็กเดิมกลับมา = ยิงซ้ำฟรี ลูกค้าไม่ได้อะไร
+      //   แก้: บอกให้ตรงว่าขาดอะไร และสั่งให้กวาดตัวหนังสือ "ทั้งรูป" ไม่ใช่แค่จุดที่ถูกวง
+      //     (ชื่อรุ่นพิมพ์ตัวใหญ่อยู่บนหัวรูปเสมอ — ตาแค่ไม่ได้ถูกสั่งให้อ่านตรงนั้น)
+      //   ⛔ ไม่ลดมาตรฐาน: ยังห้ามเดาชัดเจน · ยังยิงซ้ำได้ครั้งเดียว · ด่านหลักฐานเดิมตรวจซ้ำเหมือนเดิม
+      //   ⛔ ไม่แตะ k304 ไม่แตะเงื่อนไขว่าจะยิงซ้ำเมื่อไร — เปลี่ยนแค่ "ถ้อยคำที่บอกตาสำรอง"
+      let _why307 = "no-tag";
+      if (!_retry302 && dataUri && reply.indexOf("[SLIP]") === -1) {
+        try {
+          if (visionEvidenceGate(reply, String(msgText || ""), history, true).blocked) {   // k308: เทิร์นรูป
+            _retry302 = true; _why307 = "no-model";
+            console.log("K302_TAG_PRESENT_BUT_NO_EVIDENCE tag=" + String((reply.match(RX_READTAG) || [])[1] || "").slice(0, 40));
+          }
+        } catch (e) {}
+      }
+      const _ASK307 = _why307 === "no-model"
+        ? "⛔ คำตอบก่อนหน้ายังใช้ไม่ได้: อ่านได้บางส่วนแล้ว แต่ยังไม่เห็น \"ชื่อรุ่น\" ชัดพอ\n" +
+          "ตอบใหม่ทั้งหมด คราวนี้ให้กวาดตัวหนังสือ **ทั้งรูป** ไม่ใช่เฉพาะจุดที่ถูกวง —\n" +
+          "โดยเฉพาะ: หัวรูป · โลโก้/ชื่อยี่ห้อบนกล่อง · จำนวนพัฟ (เช่น 20,000 Puffs) · ราคา\n" +
+          "รูปแบบ: [READ: <ตัวหนังสือที่อ่านได้จริง ตามตัวอักษรเป๊ะๆ>] แล้วค่อยตอบลูกค้า\n" +
+          "⛔ อ่านตรงไหนไม่ออกให้ข้าม ห้ามเดา ห้ามเติมชื่อที่คิดว่าน่าจะใช่ — ใส่เท่าที่ตาอ่านออกจริงเท่านั้น\n" +
+          "ถ้าเป็นสลิปตอบ [SLIP] คำเดียว"
+        : "⛔ คำตอบก่อนหน้าผิดกติกา: ไม่มีแท็ก [READ: ...] ขึ้นต้น\nตอบใหม่ทั้งหมด โดยขึ้นต้นด้วย [READ: <ตัวหนังสือที่อ่านได้จริงจากรูป ตามตัวอักษร — ชื่อรุ่น/หัวข้อ/กลิ่นที่ถูกวง/ราคา>] แล้วค่อยตอบลูกค้า\nถ้าเป็นสลิปตอบ [SLIP] คำเดียว";
+      if (_retry302) {
+        // 👁️ k291 (เคสจริง ABC Easy 12 ส.ค. 2.31-2.32): ลูกค้าส่งรูปเมนู 2 รูปติด โดนตอบ "ไม่ชัด" ทั้งคู่
+        //   พิสูจน์แล้วว่าโค้ดทำงานถูก (ป้อนแท็ก READ ที่อ่านออก → ผ่านฉลุย) = ตาที่อ่านรูปอ่านไม่ออกจริง
+        //   ปัญหาของ k276: ยิงซ้ำเข้า "โมเดลตัวเดิม" ที่เพิ่งอ่านไม่ออกไปหมาดๆ → มักไม่ออกอีก
+        //   แก้: รอบซ้ำให้ "สลับตัวสำรองขึ้นมาเป็นตัวแรก" — ร้านมีตาสำรองอีก 2 ตัวที่ยังไม่ได้ลองเลย
+        //   ⛔ ไม่กระทบเส้นปกติ: ทำงานเฉพาะตอนรอบแรกอ่านไม่ออกอยู่แล้ว ไม่เพิ่มเวลาให้ลูกค้าคนอื่น
+        const _vm291 = VISION_MODELS.length > 1 ? VISION_MODELS.slice(1).concat(VISION_MODELS[0]) : VISION_MODELS;
+        console.log("K276_READTAG_RETRY why=" + _why307 + " prev=" + String(reply).slice(0, 40) + " → สลับไปตาสำรอง " + _vm291[0]);   // k307
+        try {
+          const r2 = await askAI(env.OPENROUTER_KEY, [{ role: "system", content: sysFull }, ...histForAI(history, 8), visionMsg,
+            { role: "assistant", content: reply },
+            { role: "user", content: [
+              { type: "text", text: _ASK307 },   // k307: บอกให้ตรงว่าขาดอะไร (เดิมเป็นสตริงตายตัวว่า "ไม่มีแท็ก")
+              { type: "image_url", image_url: { url: dataUri } } ] }], _vm291);   // k291: ตาสำรองขึ้นก่อน
+          if (r2 && (RX_READTAG.test(r2) || r2.indexOf("[SLIP]") !== -1)) reply = r2;
+        } catch (e) {}
+      }
       // k156: ตาข่ายรองของ k80 — มีออเดอร์รอโอนอยู่ และ vision "ดูไม่ออกว่าเป็นอะไร"
       //   (ตอบว่าง / สั้นจนไม่มีเนื้อหา / ไม่ได้พูดถึงรุ่น-กลิ่น-เมนู-สินค้าเลย) → ถือเป็นสลิปไว้ก่อน
       //   ⛔ ห้ามเหมาเป็นสลิปถ้า vision อ่านออกแล้วว่าเป็นเมนู/สินค้า (นั่นคือบั๊กที่กำลังแก้อยู่)
@@ -7782,8 +11481,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         //    ซ้ำรอยบทเรียนเดิมเป๊ะ: อ่านโค้ดแล้วสรุปว่าใช้ได้ = เดา · ต้องรันเส้นทางจริงเท่านั้น
         //    แก้ 2 ชั้น: (1) ใช้ตัวแปรที่มีจริงในขอบเขตนี้ (2) ด่านพัง = ปิดประตู ไม่ใช่เปิดประตู
         let _veBlocked = false, _veReply = reply;
+        const _raw309 = reply;   // k309: เก็บคำตอบดิบไว้ก่อน (ด่านจะตัดแท็ก [READ:] ออก)
         try {
-          const _ve = visionEvidenceGate(reply, String(msgText || ""), history);
+          const _ve = visionEvidenceGate(reply, String(msgText || ""), history, true);   // k308: เทิร์นรูป
           _veBlocked = !!_ve.blocked; _veReply = _ve.reply;
           if (_veBlocked) console.log("K192_VISION_NO_EVIDENCE_EARLY_RETURN said=" + _ve.said + " read=" + _ve.read);
         } catch (e) {
@@ -7792,6 +11492,56 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           _veBlocked = true; _veReply = ASK_CLEAR_PHOTO;
         }
         reply = _veReply;
+        // 🔎 k309 · TRACE บรรทัดเดียวจบต่อ 1 เทิร์นรูป — ไว้ตรวจ smoke test บนโปรดักชัน
+        //   เดิมต้องต่อจิ๊กซอว์จาก log หลายบรรทัด (K308 / K304 / K192) และไม่มี "คำตอบสุดท้าย" เลย
+        //   ⛔ LOG ล้วนๆ — ไม่ตัดสินใจ ไม่เปลี่ยนคำตอบ ไม่เปลี่ยนเส้นทาง ห่อ try/catch กันพังทั้งเทิร์น
+        //   ⛔ ไม่มีข้อมูลลูกค้า: ลง READ (ตัวหนังสือบนรูป) · ชื่อรุ่น/กลิ่นจากแคตตาล็อก · คำตอบที่ตัดสั้น
+        try {
+          const _rdRaw = String((String(_raw309).match(RX_READTAG) || [])[1] || "").trim();
+          const _src = RX_BACKREF308.test(String(msgText || "")) ? "รูปนี้+ประวัติ(ลูกค้าอ้างของเดิม)" : "รูปนี้เท่านั้น";
+          const _fl = _flavorsInText(_rdRaw).join("/") || "-";
+          const _mdImg = _readModels(_rdRaw).join("/") || "-";
+          const _mdOut = Object.keys(FLAVORS).filter(k => k.length >= 4 && reply.indexOf(k) !== -1).join("/") || "-";
+          // 🔍 รุ่นที่ "มีอยู่ในแชทเก่า" — โชว์ไว้เพื่อพิสูจน์ด้วยตาว่ามันอยู่ตรงนั้นจริงแต่ไม่ถูกใช้ (k308)
+          let _mdHist = "-";
+          try {
+            const _hs = (Array.isArray(history) ? history.slice(-8) : []).map(m => (m && typeof m.content === "string") ? m.content : "").join(" ");
+            _mdHist = Object.keys(FLAVORS).filter(k => k.length >= 4 && _hs.indexOf(k) !== -1).join("/") || "-";
+          } catch (e) {}
+          // เหตุผลของคำตัดสิน — สรุปจากข้อเท็จจริงที่มีในเทิร์นนี้ (ไม่ได้เดา)
+          const _why = _veBlocked
+            ? (/มีหลายรุ่นเลยค่ะ/.test(reply) ? "กลิ่นนี้ขายหลายรุ่น → ถามลูกค้า ไม่เดา"
+              : "ไม่พบหลักฐานยืนยันรุ่นในรูปนี้ → ขอรูปชัด/ให้พิมพ์")
+            : (_mdOut === "-" ? "ไม่ได้เอ่ยชื่อรุ่น → ไม่ต้องตรวจ"
+              : _mdImg !== "-" ? "ยืนยันจากตัวหนังสือบนรูปนี้"
+              : "กลิ่นชี้รุ่นเดียวในแคตตาล็อก (k304)");
+          console.log("G2_IMG_TRACE"
+            + " | READ=" + (_rdRaw.slice(0, 60) || "(ว่าง)")
+            + " | หลักฐานรุ่น=" + _src
+            + " | รุ่นที่อ่านได้จากรูป=" + _mdImg
+            + " | กลิ่น=" + _fl
+            + " | รุ่นที่สรุป=" + _mdOut
+            + " | รุ่นในแชทเก่า=" + _mdHist + (_mdHist !== "-" && _src === "รูปนี้เท่านั้น" ? "(ไม่ถูกใช้เป็นหลักฐาน)" : "")
+            + " | ผล=" + (_veBlocked ? "บล็อก" : "ผ่าน") + " (" + _why + ")"
+            + " | ตอบ=" + String(reply).replace(/\n/g, " ").slice(0, 70));
+        } catch (e) { console.log("G2_IMG_TRACE_ERROR " + String((e && e.message) || e)); }
+        // 🙋 k291 — "ห้ามให้ลูกค้าตัน" (คำสั่งเจ้าของร้าน 12 ส.ค.)
+        //   เคสจริง 2.31-2.32: ลูกค้าส่งรูปเมนู 2 รูป โดนตอบ "ไม่ชัด" ทั้ง 2 รอบ แล้วจบแค่นั้น
+        //   ลูกค้าส่งรูปมาเพราะไม่อยากพิมพ์ พอโดนไล่ให้พิมพ์ 2 รอบติด = ลูกค้าหายไปเฉยๆ
+        //   กติกาใหม่: อ่านรูปไม่ออก **รอบที่สอง** = ระบบยอมรับว่าทำเองไม่ได้ → ส่งให้คนทันที
+        //     คนเปิดรูปดูแล้วตอบได้ใน 5 วินาที ไม่ต้องให้ลูกค้าทำงานแทนระบบ
+        //   ⛔ รอบแรกยังขอรูปชัด/ให้พิมพ์เหมือนเดิม (ส่วนใหญ่จบได้เองตั้งแต่รอบแรก ไม่รบกวนคน)
+        if (_veBlocked && _veReply === ASK_CLEAR_PHOTO_ALT) {
+          console.log("K291_VISION_HANDOFF อ่านรูปไม่ออก 2 รอบติด → ส่งต่อคน");
+          try {
+            await muteNow("🖼️ อ่านรูปไม่ออก 2 รอบ — ลูกค้าส่งรูปมา ระบบยืนยันรุ่นไม่ได้",
+              "รบกวนเปิดรูปในแชทดูแล้วตอบลูกค้าแทนระบบนะคะ");
+          } catch (e) { console.log("K291_HANDOFF_FAIL " + String((e && e.message) || e)); }
+          await lineReply(TOKEN, replyToken,
+            "ขออภัยด้วยนะคะ 🙏🏻 รูปนี้ระบบอ่านไม่ออกจริงๆ ค่ะ\n"
+            + "ขอส่งให้ทีมงานคนจริงเข้ามาดูรูปให้เลยนะคะ รอสักครู่ค่ะ 💕", userId, null, false, true);
+          return;
+        }
         if (_veBlocked) {
           // ⛔ จบที่ Vision — ไม่วิ่งต่อเข้า stock / flavor / resolver / recommendation / stock message
           // การจดความจำปล่อยให้ตาข่ายเดิม (k158 บันทึกอัตโนมัติตอนออกจากฟังก์ชัน) ทำแทน
@@ -7808,7 +11558,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         try {
           const _seen = [];
           for (const k in FLAVORS) if (k.length >= 4 && reply.indexOf(k) !== -1) _seen.push(k);
-          for (const k of _seen) { pslot = slotPut(pslot, { model: k, source: "image" }); pslotDirty = true; }
+          for (const k of _seen) { pslot = slotPut(pslot, { model: k, source: "image" }); slotMark(); }
+          // 🧹 k314 ชั้น 3: เทิร์นรูป — "รุ่นที่กำลังคุยถึง" ต้องมาจากรูปใบนี้เท่านั้น
+          //   อ่านรุ่นได้ → ใช้รุ่นในรูป · อ่านไม่ได้ → ว่าง (⛔ ห้ามปล่อยให้ค่าจากเทิร์นก่อนตัดสินแทน)
+          //   ถ้าไม่ตั้งตรงนี้ ด่าน k117 จะเทียบคำตอบกับรุ่นเก่าแล้วทับคำตอบที่ถูกทิ้ง (เคสจริง 15.56)
+          setHints314(userId, _seen);
+          console.log("K314_IMG_HINT [" + (_seen.join("|") || "-") + "] จากรูปนี้เท่านั้น");
           // 🖼️ P0 (ชุดข้อมูล Product Understanding จับได้ 13 เคส):
           //   รูปเมนูมีหลายรุ่นในภาพเดียว ลูกค้าพูดว่า "ที่วงกลมไว้" / "เอาอันนี้"
           //   โค้ดมองไม่เห็นวงกลม → เดิมหยิบรุ่นสุดท้ายที่เจอมาตอบเงียบๆ = เดาล้วนๆ
@@ -7846,22 +11601,45 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         if (!_expOrd && ordObj === null) { /* ord ยังไม่โหลด — เช็คด้านล่างหลังโหลด */ }
 
         // 💾 ลูกค้าเก่ามีที่อยู่บันทึกไว้ → เสนอ "ส่งที่เดิม" แทนฟอร์มเต็ม (เฉพาะโหมดพัสดุ)
-        let ADDR_FORM = "\n\nรบกวนขอที่อยู่จัดส่งให้ครบตามนี้นะคะ 📍\nชื่อผู้รับ :\nบ้านเลขที่ :\nซอย / หมู่ :\nตำบล / แขวง :\nอำเภอ / เขต :\nจังหวัด :\nเลขไปรษณีย์ :\nเบอร์โทรศัพท์ :\nเพื่อไม่ให้เกิดข้อผิดพลาดในการจัดส่งค่ะ 🙏🏻💕\nหากส่งที่อยู่ไม่ครบถ้วนหรือไม่ถูกต้องจะทำให้สินค้าจัดส่งล่าช้านะคะ 🥹";   // k12: เจ้าของร้านยืนยันให้ขอเบอร์โทรได้ (ขนส่งต้องใช้ติดต่อ)
+        // 📦📦 k250 · STEP 1 — สลิปผ่านแล้ว "ดูประเภทจัดส่งก่อน" แล้วค่อยรู้ว่าต้องขออะไร
+        //   ทั้งสองโหมดเดินผ่าน shipNeeds() ตัวเดียวกัน (k249) ⛔ ถามเฉพาะที่ยังขาดจริง
+        //   พัสดุ          → ชื่อ · เบอร์ · ที่อยู่เต็ม
+        //   Grab + มีหมุด  → ชื่อ · เบอร์ · บ้านเลขที่   (ห้ามขอที่อยู่เต็มซ้ำ)
+        //   Grab ไม่มีหมุด → ขอหมุดก่อน อย่างอื่นรอไว้
+        const _shipMode = _expOrd ? "grab" : "parcel";
+        const _known = {};
         if (_expOrd) {
-          // 🛵 P0: ถามเฉพาะที่ขาดจริง — รู้ชื่อ/เบอร์แล้วห้ามถามซ้ำ · ไม่มีบ้านเลขที่ต้องขอเสมอ
-          let _k = { house: _expOrd.house || "", name: _expOrd.name || "", tel: _expOrd.tel || "" };
-          try {
-            const cv2 = await env.CONV.get("cust:" + shopId + ":" + userId);
-            if (cv2) { const c2 = JSON.parse(cv2); if (c2) { _k.name = _k.name || c2.name || ""; _k.tel = _k.tel || c2.tel || ""; } }
-          } catch (e) {}
-          ADDR_FORM = "\n\n" + expressAskMsg(_k);
-        } else try {
+          _known.loc   = _expOrd.lat ? 1 : "";
+          _known.house = _expOrd.house || "";
+          _known.name  = _expOrd.name || "";
+          _known.tel   = _expOrd.tel || "";
+        }
+        try {
           const cv = await env.CONV.get("cust:" + shopId + ":" + userId);
           if (cv) {
-            const c = JSON.parse(cv);
-            if (c && c.addr) ADDR_FORM = "\n\n📍 ส่งที่เดิมไหมคะ?\n" + (c.name ? "ชื่อผู้รับ: " + c.name + "\n" : "") + (c.tel ? "เบอร์: " + c.tel + "\n" : "") + "ที่อยู่: " + c.addr + "\n\nพิมพ์ \"ที่เดิม\" ได้เลยค่ะ หรือส่งที่อยู่ใหม่มาก็ได้นะคะ 💕";
+            const c = JSON.parse(cv) || {};
+            // 🛵 k275: โหมดส่งด่วน (แกร็บ) ⛔ ห้ามยืมชื่อ/เบอร์จากโปรไฟล์เก่ามานับว่า "รู้แล้ว"
+            //   เคสจริง 11 ส.ค.: โปรไฟล์เก่ามีชื่อ+เบอร์จากออเดอร์พัสดุครั้งก่อน → ระบบถามแค่บ้านเลขที่
+            //   → ไรเดอร์รอบนี้ได้เบอร์เก่าที่อาจไม่ใช่คนรับ/ไม่ได้อยู่ที่หมุดนี้ = ส่งไม่ถึงมือ
+            //   พัสดุยังใช้ของเดิมได้ (มีเส้น "ส่งที่เดิมไหมคะ" ให้ลูกค้ายืนยันอยู่แล้ว)
+            if (_shipMode !== "grab") {
+              _known.name = _known.name || c.name || "";
+              _known.tel  = _known.tel  || c.tel  || "";
+            }
+            _known.addr = _known.addr || c.addr || "";
           }
         } catch (e) {}
+        // k12: เจ้าของร้านยืนยันให้ขอเบอร์โทรได้ (ขนส่งต้องใช้ติดต่อ)
+        let ADDR_FORM = "\n\n" + shipAskMsg(_shipMode, _known);
+        // 💾 ลูกค้าเก่ามีที่อยู่บันทึกไว้ (โหมดพัสดุ) → เสนอ "ส่งที่เดิม" แทนการขอใหม่ทั้งชุด
+        if (_shipMode === "parcel" && _known.addr) {
+          const c = _known;
+          ADDR_FORM = "\n\n📍 ส่งที่เดิมไหมคะ?\n" + (c.name ? "ชื่อผู้รับ: " + c.name + "\n" : "") + (c.tel ? "เบอร์: " + c.tel + "\n" : "") + "ที่อยู่: " + c.addr + "\n\nพิมพ์ \"ที่เดิม\" ได้เลยค่ะ หรือส่งที่อยู่ใหม่มาก็ได้นะคะ 💕";
+        }
+        const _shipPending = _shipMode === "grab"
+          ? (_known.loc ? "waiting_shipping_grab" : "waiting_location")
+          : "waiting_shipping_parcel";
+        console.log("K250_SLIP_SHIP mode=" + _shipMode + " missing=" + (shipNeeds(_shipMode, _known).missing.join(",") || "-"));
 
         let statusLine = "ส่งสลิปแล้ว รอตรวจยอด 🧾";
         let customerMsg = "ได้รับสลิปแล้วค่ะ 🙏🏻 รอทีมงานตรวจสอบและยืนยันอีกครั้งนะคะ ขอบคุณค่ะ 💕";
@@ -7932,6 +11710,24 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             await env.CONV.put(ordKey, JSON.stringify(ordObj), { expirationTtl: 259200 });
           }
         } catch (e) {}
+        // 💰💰 k269 (เคสจริง 9 ส.ค. 19.45-19.56 — เงินจริง 838 บาท):
+        //   ลูกค้าโอนจริง สลิปผ่าน SlipOK การ์ด ✅ ออกไปแล้ว **แต่ไม่มี ord: ค้างอยู่**
+        //   (เพราะเทิร์นก่อนหน้าไม่เคยสร้างออเดอร์ = บั๊ก k268 · หรือออเดอร์หมดอายุไปแล้ว)
+        //   → ก้อนด้านบนเขียนว่า `if (ordObj)` เท่านั้น = **หลักฐานการจ่ายหายทันทีที่ตรวจเสร็จ**
+        //   → เทิร์นถัดไปด่านกันสลิปปลอม (k79) หาสถานะจ่ายไม่เจอ → ตอบ "ยังไม่พบสลิปโอนเงิน"
+        //     ใส่คนที่เพิ่งโอนไป 838 → ลูกค้าส่งสลิปซ้ำ → โดนตีเป็นสลิปซ้ำ → โยนแอดมิน
+        //   เจ้าของร้านเลือกวิธีแก้: **จดแยกเป็นหลักฐานอย่างเดียว**
+        //   ⛔ ไม่แตะการคิดเงิน · ไม่สร้าง/แก้ออเดอร์ · ไม่มีโมดูลอื่นอ่านคีย์นี้นอกจากด่าน k79
+        try {
+          //   ⚠️ ใช้ `slipCard` (ตัวแปรระดับก้อนนี้) ไม่ใช่ slipAmt ที่ประกาศ const อยู่ในบล็อกลึกกว่า
+          //      บทเรียนเดิม k192b/k263: อ้างตัวแปรนอกขอบเขต → ReferenceError โดน try กลืน = ด่านตายเงียบ
+          if (slipPassed && env.CONV && !ordObj) {
+            const _amt269 = (slipCard && slipCard.amt) || 0;
+            await env.CONV.put("paid:" + shopId + ":" + userId,
+              JSON.stringify({ amt: _amt269, t: Date.now() }), { expirationTtl: 259200 });
+            console.log("K269_PAID_PROOF_SAVED amt=" + _amt269 + " (ไม่มีออเดอร์ในระบบ)");
+          }
+        } catch (e) {}
 
         if (slipPassed) {
           // ชำระผ่าน → แอดมินขอที่อยู่ต่อ (ไม่มิ้วต์) + จดประวัติว่าชำระแล้ว เพื่อให้แอดมินรู้ว่าต้องขอที่อยู่แล้วสรุปออเดอร์
@@ -7944,14 +11740,24 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           // 🧾 k203: แสดงผลเป็นการ์ด + ฟอร์มที่อยู่ต่อท้าย
           //   ⛔ เปลี่ยนเฉพาะ "วิธีแสดง" — สถานะออเดอร์ · ประวัติ · การตัดสินใจ เหมือนเดิมทุกบรรทัด
           //   ถ้าสร้างการ์ดไม่ได้ด้วยเหตุใดก็ตาม → ตกกลับไปข้อความเดิม (ห้ามเงียบใส่ลูกค้า)
+          // 🧠 k250 · จดไว้ว่า "กำลังรอข้อมูลจัดส่งอะไรอยู่" + ข้อมูลที่รู้แล้ว
+          //   ⛔ ตัวนี้คือสิ่งที่ทำให้เทิร์นถัดไปไม่ถามซ้ำ และไม่ขอสิ่งที่ลูกค้าให้มาแล้ว
+          try {
+            convSet(_CST, _shipPending, Date.now());
+            _CST.known = Object.assign({}, _CST.known, _known);
+            _CST.lastSig = intentOf(ADDR_FORM);
+            await convSave(env, shopId, userId, _CST);
+          } catch (e) {}
           let _cardSent = false;
+          const _addrText = ADDR_FORM.replace(/^\n+/, "").trim();
           try {
             if (slipCard) {
-              await lineMulti(TOKEN, replyToken, [
-                { type: "flex", altText: "✅ ตรวจสอบสลิปเรียบร้อย · ยอด " + slipCard.amt + " บาท",
-                  contents: slipOkFlex(slipCard.amt, slipCard.recv, slipCard.expected, slipCard.matched) },
-                { type: "text", text: ADDR_FORM.replace(/^\n+/, "") },
-              ], userId);
+              const _msgs = [{ type: "flex", altText: "✅ ตรวจสอบสลิปเรียบร้อย · ยอด " + slipCard.amt + " บาท",
+                  contents: slipOkFlex(slipCard.amt, slipCard.recv, slipCard.expected, slipCard.matched) }];
+              // ⛔ ข้อมูลครบแล้ว = ไม่มีอะไรต้องขอ → ห้ามส่งบับเบิลว่าง (LINE ตีกลับ) และห้ามขอซ้ำ
+              if (_addrText) _msgs.push({ type: "text", text: _addrText });
+              else _msgs.push({ type: "text", text: "ข้อมูลจัดส่งครบแล้วนะคะ 🙏🏻 เดี๋ยวทีมงานจัดส่งให้ตามรอบเลยค่ะ 💕" });
+              await lineMulti(TOKEN, replyToken, _msgs, userId);
               _cardSent = true;
               console.log("K203_SLIP_CARD amt=" + slipCard.amt + " matched=" + slipCard.matched);
             }
@@ -8046,13 +11852,91 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       } catch (e) {}
       // 🎯 P0 (ฝั่งเขียน · แหล่ง customer_text): ลูกค้าพิมพ์ชื่อรุ่นมาเอง = หลักฐานที่เชื่อได้มากที่สุด
       //   บันทึกทันทีที่ระบุได้ ⛔ ไม่รอให้ตอบเสร็จ เพราะถ้าเทิร์นนี้พลาด เทิร์นหน้าจะไม่มีอะไรให้ชี้กลับ
+      // 🧭 k259: จดหัวข้อหมวดล่าสุดก่อนทุกอย่าง — ลูกค้าบอกหมวดมาเอง = หลักฐานที่แรงที่สุด
+      //   ⛔ ต้องมาก่อนตัวจับรุ่น เพราะเทิร์นที่ "บอกหมวดแต่ไม่บอกรุ่น" คือเทิร์นที่ระบบเคยลืมหัวข้อ
+      try {
+        if (!_npFlow && slotOk(pslot)) {
+          const _wc = topicInText(textH);
+          if (_wc && slotTopicSet(pslot, _wc)) slotMark();
+        }
+      } catch (e) {}
       try {
         const _m = _npFlow ? "" : _MODEL_IN(textH);   // k207: Flow ไม่เกี่ยวสินค้า = ห้ามแตะ Slot
         if (_m) {
+          // หมวดของรุ่นที่ระบุได้ = หัวข้อล่าสุดเช่นกัน (ลูกค้าเอ่ยชื่อรุ่น = บอกหมวดโดยปริยาย)
+          try { if (slotTopicSet(pslot, topicOfModel(_m))) slotMark(); } catch (e) {}
           const _f = carryFlavor(textH, []) || "";
-          const _qm = String(textH).replace(/\d+\s*[Kk]\b/g, " ").match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง)/);
-          pslot = slotPut(pslot, { model: _m, flavor: _f.trim(), qty: _qm ? parseInt(_qm[1], 10) : null, source: "customer_text" });
-          pslotDirty = true;
+          // 🔢 k258: เดิมลืมหน่วยนับของ "เครื่อง" → "เอาเครื่อง RELX INFINITY 2+ สีขาว 1 เครื่อง"
+          //   จับจำนวนไม่ได้ → qty ว่าง → ระบบถามซ้ำว่า "กี่เครื่อง" ทั้งที่ลูกค้าบอกแล้ว (เคสจริง JW ข้อ 4)
+          const _qm = String(textH).replace(/\d+\s*[Kk]\b/g, " ").match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|เครื่อง|ชุด)/);
+          // 🎨🎨 k258 · ต้นเหตุเคส JW: "เครื่อง relx infinity 2+ สีขาว"
+          //   เดิม carryFlavor() คืน "ขาว" แล้วถูกยัดลงช่อง flavor → บอทถาม "สีขาวหมายถึงกลิ่นไหน"
+          //   กติกาใหม่: รุ่นนี้ต้องการ attribute อะไร ให้ requiredAttrs() เป็นคนบอก
+          //     ต้องการ color → ค่าที่จับได้ลงช่อง color · ไม่ต้องการ color → ลงช่อง flavor เหมือนเดิม
+          //   ⛔ ห้ามเขียน if (cat === "device") ตรงนี้ — ตัดสินจากทะเบียนเท่านั้น
+          const _need = requiredAttrs(_m);
+          const _put = { model: _m, qty: _qm ? parseInt(_qm[1], 10) : null, source: "customer_text" };
+          if (_need.indexOf("color") !== -1) {
+            const _c = attrInText(_m, "color", textH) || (_f.trim() && attrInText(_m, "color", _f) ) || "";
+            if (_c) _put.color = _c;
+            // รุ่นที่ต้องการสี ไม่มีช่องกลิ่นใน ATTR_SCHEMA → ห้ามเขียนกลิ่นทับ
+            if (_need.indexOf("flavor") !== -1) _put.flavor = _f.trim();
+            if (_c) console.log("K258_ATTR_COLOR model=" + _m + " color=" + _c);
+          } else {
+            _put.flavor = _f.trim();
+          }
+          pslot = slotPut(pslot, _put);
+          slotMark();
+          // 🎁 k258: ซื้อเครื่องที่เข้าเงื่อนไข → ผูกของแถมเข้ากับ parent ทันที (อ่านจากตาราง BUNDLE)
+          try {
+            const _bs = bundleSync(pslot);
+            pslot = _bs.slot;
+            if (_bs.added.length) console.log("K258_BUNDLE_ATTACH " + _bs.added.map(x => x.parent + " x" + x.qty).join(" · "));
+          } catch (e) {}
+        } else {
+          // ✅✅ k258 · CONFIRMATION แบบเจาะช่อง — ลูกค้าตอบสั้นๆ ว่า "สีขาว" / "องุ่น" / "3 ชิ้น"
+          //   (ไม่มีชื่อรุ่นในข้อความ แต่ระบบรู้อยู่แล้วว่ากำลังคุยรุ่นไหนจาก Slot)
+          //   เคสจริง 8 ส.ค.: ลูกค้าบอกครบแล้วแต่โดนถามซ้ำหลายรอบ → "แจ้งไปหลายรอบแล้วนะคะ"
+          //   ⛔ ห้าม reset slot ทั้งก้อน · แก้เฉพาะช่องที่ลูกค้าเพิ่งพูดถึงเท่านั้น
+          try {
+            const _cur = slotCurrent(pslot);
+            if (_cur && _cur.model && !_npFlow) {
+              const _miss = missingAttrs(_cur);
+              const _hit = [];
+              for (const _a of _miss) {
+                if (_a === "qty") {
+                  //  ⛔ ต้องมีหน่วยนับ หรือลูกค้าพิมพ์ตัวเลขล้วน — ห้ามหยิบเลขลอยๆ จากประโยคอื่น
+                  //     (บทเรียน k154: เลขคนละความหมาย — เบอร์โทร รหัสไปรษณีย์ ราคา ห้ามกลายเป็นจำนวน)
+                  const _clean = String(textH).replace(/\d+\s*[Kk]\b/g, " ");
+                  const _q = _clean.match(/(\d{1,3})\s*(ชิ้น|อัน|แท่ง|หัว|ตัว|กล่อง|เครื่อง|ชุด)/)
+                          || _clean.trim().match(/^(\d{1,3})$/);
+                  const _n = _q ? parseInt(_q[1], 10) : 0;
+                  if (_n > 0 && _n <= 999) { attrSet(_cur, "qty", _n); _hit.push("qty=" + _n); }
+                  continue;
+                }
+                const _v = attrInText(_cur.model, _a, textH);
+                if (_v) { attrSet(_cur, _a, _v); _hit.push(_a + "=" + _v); }
+              }
+              if (_hit.length) {
+                _cur.t = Date.now(); pslot.t = Date.now(); slotMark();
+                console.log("K258_CONFIRM_PATCH model=" + _cur.model + " set=" + _hit.join(",")
+                  + " untouched=" + requiredAttrs(_cur.model).filter(a => _hit.every(h => h.indexOf(a + "=") !== 0)).join(","));
+              }
+              // 🎁 ของแถมยังไม่รู้กลิ่น แล้วลูกค้าพิมพ์ชื่อกลิ่นมา → เติมลงของแถม ไม่ใช่สร้างรายการคิดเงินใหม่
+              try {
+                for (const _ch of (pslot.items || [])) {
+                  if (!_ch || !_ch.free || !_ch.parent || _ch.flavor) continue;
+                  for (const _cand of bundleChoices(_ch.parent)) {
+                    const _f = attrInText(_cand, "flavor", textH);
+                    if (!_f) continue;
+                    _ch.model = _cand; _ch.flavor = _f; _ch.price = 0; slotMark();
+                    console.log("K258_BUNDLE_FLAVOR parent=" + _ch.parent + " child=" + _cand + "|" + _f);
+                    break;
+                  }
+                }
+              } catch (e) {}
+            }
+          } catch (e) {}
         }
       } catch (e) {}
       // 💨 k18: "สูบได้กี่คำ / อยู่ได้นานมั้ย" → ตอบตายตัวจากเลข K ท้ายชื่อรุ่น (ห้ามให้ AI เดา)
@@ -8200,7 +12084,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             if (!have.length) {
               msg = "ขออภัยค่ะ ตอนนี้ " + mdl + " หมดชั่วคราวทุกกลิ่นเลยค่ะ 🙏🏻\nสนใจรุ่นใกล้เคียงไหมคะ เดี๋ยวแอดมินแนะนำให้ค่ะ 💕";
             } else if (have.length > 15) {
-              msg = mdl + " ตอนนี้มีพร้อมส่ง " + have.length + " กลิ่นค่ะ 💕 เช่น\n" + have.slice(0, 12).map(f => "- " + f).join("\n") + "\n\nดูครบทุกกลิ่นแบบอัปเดตสดได้ที่เมนูนี้เลยค่ะ ✨\nhttps://cutt.ly/menu4\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ 💕";
+              msg = mdl + " ตอนนี้มีพร้อมส่ง " + have.length + " กลิ่นค่ะ 💕 เช่น\n" + have.slice(0, 12).map(f => "- " + f).join("\n") + "\n\nดูครบทุกกลิ่นแบบอัปเดตสดได้ที่เมนูนี้เลยค่ะ ✨\nhttps://cutt.ly/abc-menu\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ 💕";
             } else {
               msg = mdl + " กลิ่นที่มีพร้อมส่งตอนนี้ค่ะ 💕\n" + have.map(f => "- " + f).join("\n") + (out.length ? "\n\n(นอกจากนี้หมดชั่วคราวค่ะ 🙏🏻)" : "") + "\n\nสนใจกลิ่นไหนแจ้งได้เลยนะคะ ✨";
             }
@@ -8219,7 +12103,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   ระบบเห็นชื่อแบรนด์ เลยแนบรายงานสต็อกว่า "หมดทุกกลิ่น" → แอดมินขึ้นต้นว่า "ขออภัยค่ะ หมดทุกกลิ่น"
       //   ลูกค้าถามว่าคืออะไร แต่ได้คำตอบว่าของหมด = คนละเรื่องกันเลย
       const _explainQ = /คือ ?อะไร|คืออะไร|แปลว่า|หมายถึง|ต่างกัน(ยังไง|ไง|อย่างไร|ตรงไหน)|ต่างยังไง|เทียบกับ|ดียังไง|ดีไหม|ใช้ยังไง|ใช้งานยังไง|วิธีใช้|เหมาะกับใคร|แนะนำมือใหม่|มือใหม่ควร|อธิบาย|explain|what is|difference/i.test(textH);
-      showLoading();   // k47: ถึงตรงนี้แปลว่าไม่เข้าทางลัด ต้องให้ AI คิด = รอ 2-3 วิ
+      await showLoading();   // k47: ไม่เข้าทางลัด ต้องให้ AI คิด (k244: เติม await · ปกติยิงไปแล้วตั้งแต่ต้นทาง)
       const hint = _explainQ
         ? (aliasHint(textH) + "\n\n[ลูกค้ากำลังถามเชิงอธิบาย/ขอความรู้ ไม่ได้ถามว่ามีของไหม]\n" +
            "⛔ ห้ามขึ้นต้นด้วยสถานะสต็อก และห้ามบอกว่า 'หมด' ถ้าลูกค้าไม่ได้ถามหาของ\n" +
@@ -8237,7 +12121,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               if (_ops.length) {
                 const _r = draftApply(pslot, _ops);
                 if (_r.done.length) {
-                  pslot = _r.slot; pslotDirty = true;
+                  pslot = _r.slot; slotMark();
                   console.log("P0_DRAFT_EDIT " + _r.done.map(o => o.target + ":" + o.op + " " + o.from + "→" + o.to).join(" | "));
                   draftNote = "\n\n🧾 [ลูกค้าแก้รายการใน Draft — ระบบแก้ให้แล้ว]\n"
                     + _r.done.map(o => "· " + o.target + " " + (o.op === "flavor" ? ("เปลี่ยนกลิ่นเป็น " + o.to)
@@ -8259,7 +12143,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               if (_ref && _ref.item && _ref.item.model) {
                 slotModel = _ref.item.model; slotFlavor = _ref.item.flavor || "";
                 slotWhy = "ลูกค้าอ้างถึงสินค้าด้วยคำว่า \"" + _ref.ref + "\"";
-                pslot.cur = _ref.idx >= 0 ? _ref.idx : pslot.cur; pslotDirty = true;
+                pslot.cur = _ref.idx >= 0 ? _ref.idx : pslot.cur; slotMark();
               } else if (_ref && _ref.ambiguous && _ref.ambiguous.length) {
                 // ราคาเดียวมีหลายรุ่น = ยังไม่รู้ว่าหมายถึงตัวไหน ⛔ ห้ามเดา ให้ถามกลับ
                 slotWhy = "AMBIG:" + _ref.ambiguous.join(", ");
@@ -8272,11 +12156,43 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               }
             }
             // k55: เติมชื่อรุ่นล่าสุดจากบทสนทนา ถ้าลูกค้าถามลอยๆ ("เหลือไรบ้าง" / "อันไหนมี")
-            const carried = slotModel ? (" " + slotModel) : carryModel(textH, history);
-            const carriedF = slotFlavor ? (" " + slotFlavor) : carryFlavor(textH, history);   // k157: พากลิ่นข้ามเทิร์นคู่กับรุ่น
+            let carried = slotModel ? (" " + slotModel) : carryModel(textH, history);
+            let carriedF = slotFlavor ? (" " + slotFlavor) : carryFlavor(textH, history);   // k157: พากลิ่นข้ามเทิร์นคู่กับรุ่น
+            // 🏷️ k296 (เคสจริงร้าน m 12 ส.ค. 4.16 — ต่อยอดจากบั๊ก infy 11 ส.ค.):
+            //   ลูกค้าคุย MARBO 10K (หมด) แล้วเปลี่ยนใจพิมพ์ "Relx" / "หัว relx"
+            //   "Relx" กำกวม (มีหลายรุ่น) → ควรถามกลับว่ารุ่นไหน
+            //   แต่ตัวลากหัวข้อพา MARBO 10K มาค้ำ → ความกำกวมถูกยกเลิก (บรรทัด _ambig ด้านล่าง)
+            //   → AI ถูกสั่งว่า "กำลังพูดถึง MARBO 10K ต่อ ตอบได้เลย" → ตอบ "MARBO 10K หมด" ใส่คนถาม RELX
+            //   กติกาใหม่: ข้อความเอ่ย "แบรนด์" ที่ไม่ตรงกับรุ่นที่ลากมา = ลูกค้าเปลี่ยนเรื่องแล้ว → ห้ามลาก
+            //   ⛔ แคบ: ข้อความไม่เอ่ยแบรนด์เลย ("มีกลิ่นไหนบ้าง") = ลากต่อได้เหมือนเดิมทุกกรณี
+            try {
+              const _bt296 = _brandTokens296(textH);
+              if (_bt296.length && (carried || carriedF)) {
+                const _cLow296 = (String(carried) + " " + String(carriedF)).toLowerCase();
+                if (!_bt296.some(b => _cLow296.indexOf(b) !== -1)) {
+                  console.log("K296_CARRY_DROP brand=" + _bt296.join(",") + " drop=" + (String(carried) + String(carriedF)).trim());
+                  carried = ""; carriedF = "";
+                }
+              }
+            } catch (e) {}
             const tForHint = textH + carried + carriedF;
             _LEGO_CTX = { txt: tForHint, sm: smForHint, buf: bufForHint, t: Date.now() };   // k123: เก็บไว้ให้ด่านขาออกตรวจ
             _LAST_LOCK = null;   // P0: ล้างก่อนเรียก จะได้รู้ว่ารอบนี้ระบุได้จริงไหม
+            // 🧭🧭 k252 · ด่าน Context Broker — บริบทสินค้าเข้า prompt ได้ต่อเมื่อ "ได้รับอนุญาต"
+            //   เคสที่แก้: คุย MARBO อยู่ แล้วถาม "ร้านเปิดกี่โมง"
+            //     เดิม slotCarry คืน MARBO → hint 1,307 ตัวอักษรถูกแนบท้ายคำถาม 14 ตัวอักษร (93 เท่า)
+            //   ⛔ นี่คือ "การระงับ" ไม่ใช่ "การลบ" — Slot ยังอยู่ ถามเรื่องของอีกครั้งจะกลับมาเอง (เทส F)
+            //   ⚠️ ต้องอยู่หลัง `_LAST_LOCK = null` เสมอ — _LAST_LOCK เป็นตัวแปรระดับโมดูล
+            //      ถ้า return ก่อนล้าง ค่าค้างจากรีเควสต์ก่อนหน้าใน isolate เดียวกันจะไหลลง Draft
+            if (!ctxAllow("product_hint", _INTENT)) {
+              console.log("K252_CTX_DENY product intent=" + (_INTENT.join("+") || "-")
+                + " drop=" + String(carried + carriedF).trim());
+              _hintModels = []; _LEGO_CTX = null;
+              return "\n\n🧭 [ข้อความล่าสุดไม่ได้ถามเรื่องสินค้า — ระบบไม่แนบข้อมูลสินค้ามาให้รอบนี้]"
+                + "\n⛔ ห้ามพูดถึงรุ่น กลิ่น ราคา หรือสต็อกใดๆ ในคำตอบนี้"
+                + "\n⛔ ห้ามลากสินค้าที่คุยค้างไว้ก่อนหน้ามาต่อท้ายคำตอบเด็ดขาด"
+                + "\n✅ ตอบเฉพาะสิ่งที่ลูกค้าถามในข้อความล่าสุด ให้จบในตัว";
+            }
             // 🔒 k207: อยู่ใน Flow ที่ไม่เกี่ยวกับสินค้า → ห้ามเรียกตัวอ่านสินค้าเด็ดขาด
             if (_npFlow) {
               console.log("K207_PRODUCT_PARSER_BLOCKED เหตุผล=" + _npFlow);
@@ -8287,9 +12203,15 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             }
             // 🔎 k225: ลูกค้าขอ "ตัวอื่น / มีอะไรบ้าง" → ต้องส่งรายชื่อรุ่นในหมวดนั้นให้ AI
             //   ถ้าไม่ส่ง AI จะมีข้อมูลอยู่รุ่นเดียวแล้วตอบรุ่นเดิมวนไป (เคสจริง 7 ส.ค. 01.48)
+            // 🧭 k259: "หมวดที่คุยกันอยู่" ต้องอ่านจาก Slot Topic (pslot.cat) ก่อนเสมอ
+            //   เคสจริง 8 ส.ค. 23.24 "ใช้แล้วที่มีไรบ้าง" → ระบบยังยึดหมวดของ "รุ่นล่าสุดใน Slot"
+            //   ซึ่งเป็นหมวดเก่าที่ลูกค้าเลิกคุยไปแล้ว (log: K225_CATALOG_HINT cat=smallpod)
+            //   ⛔ รุ่นล่าสุดใน Slot ไม่ใช่หัวข้อล่าสุดของบทสนทนา — เป็นคนละอย่างกัน
             let _prevCat = "";
-            try { const _pc = slotCurrent(pslot); if (_pc && _pc.model) _prevCat = topicOfModel(_pc.model); } catch (e) {}
-            const _catList = catalogHint(textH, smForHint, bufForHint, _prevCat);
+            try { if (pslot && pslot.cat && CAT_LABEL[pslot.cat]) _prevCat = pslot.cat; } catch (e) {}
+            if (!_prevCat) { try { const _pc = slotCurrent(pslot); if (_pc && _pc.model) _prevCat = topicOfModel(_pc.model); } catch (e) {} }
+            const _catList = catalogHint(textH, smForHint, bufForHint, _prevCat)
+                           + catNarrowHint(textH, smForHint, bufForHint);
             // 🚫🚫🚫 k227 — ต่อสาย "ตัวตรวจความกำกวม" เข้าเส้นทางตอบจริง
             //   เคสจริง 7 ส.ค. 13.23: ลูกค้าพิมพ์ "สตามีกลิ่นไร" (หมายถึง STAR 2,500)
             //     ทุกกลไกทำถูกหมด — จับรุ่นไม่ได้ · ไม่ลากของเดิม · ตัวตรวจบอกว่า "ยังไม่รู้ว่ารุ่นไหน"
@@ -8311,7 +12233,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             //    เหตุอื่น (อ้างของเดิม/กำกวมหลายตัว) ให้ใช้แค่คำสั่งใน prompt
             //    เพราะเทสจริงจับได้ว่าถ้าบล็อกทุกเหตุ จะไปทับด่านอื่นที่ทำงานถูกอยู่แล้ว
             const _ambigHard = _ambig === "ลูกค้าเอ่ยถึงบางอย่างที่ระบบไม่รู้จัก";
-            _AMBIG_CTX = _ambigHard ? { why: _ambig, t: Date.now() } : null;
+            // 🏷️ k296: จดความกำกวมแบบ "อ่อน" ไว้ด้วย พร้อมแบรนด์ที่ลูกค้าเอ่ย —
+            //   ให้ด่านขาออกใช้บังคับ AI ที่ไม่เชื่อคำสั่ง (prompt ห้ามแล้วยังหยิบรุ่นเก่าจากประวัติมาตอบ)
+            _AMBIG_CTX = _ambig ? { why: _ambig, hard: _ambigHard, brands: (function () { try { return _brandTokens296(textH); } catch (e) { return []; } })(), t: Date.now() } : null;
             const _ambigBlock = _ambig
               ? "\n\n🚫🚫 [ระบบตีความข้อความนี้ไม่ได้: " + _ambig + "]"
                 + "\n⛔⛔⛔ ห้ามเอ่ยชื่อรุ่นสินค้าใด ๆ ในคำตอบนี้เด็ดขาด — ห้ามเดา ห้ามหยิบรุ่นจากแคตตาล็อกมาตอบ"
@@ -8320,7 +12244,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                 + "\n✅ ถ้าเดาไม่ออกจริง ๆ ให้เสนอส่งเมนูสินค้าให้ดู"
               : "";
             if (_ambig) console.log("K227_AMBIG_BLOCK " + _ambig.slice(0, 40));
-            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint) + typoHint(textH, smForHint, bufForHint) + _catList + _ambigBlock;
+            let h = aliasHint(tForHint) + flavorHint(tForHint, smForHint, bufForHint, userId) + brandHint(tForHint, smForHint, bufForHint) + legoHint(tForHint, smForHint, bufForHint) + locHint(textH) + flavorSearchHint(tForHint, smForHint, bufForHint) + styleHint(tForHint, smForHint, bufForHint) + unknownAskHint(textH, smForHint, bufForHint) + typoHint(textH, smForHint, bufForHint) + _catList + _ambigBlock;
             if (carried) h += "\n\n[ลูกค้าไม่ได้พิมพ์ชื่อรุ่นซ้ำ แต่กำลังพูดถึง" + carried.trim() + " ต่อจากข้อความก่อนหน้า → ตอบเรื่องรุ่นนี้ได้เลย ไม่ต้องถามใหม่]";
             if (carriedF) h += "\n[ลูกค้าเลือกกลิ่น **" + carriedF.trim() + "** ไว้แล้วจากข้อความก่อนหน้า]"
                              + "\n⛔⛔ ห้ามถามกลิ่นซ้ำเด็ดขาด — ลูกค้าบอกไปแล้ว ถามซ้ำ = ลูกค้าหนี (เคสจริง 4/8: ถามซ้ำ 3 รอบจนออเดอร์ไม่ปิด)";
@@ -8343,11 +12267,19 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                  + "\n⛔ เวลาทวนรายการ ต้องทวนให้ครบทุกข้อ ห้ามตกหล่นข้อใดข้อหนึ่ง";
             }
             h += draftNote;
+            // 🧭 k263: บอก AI ตรงๆ ว่าบทสนทนาอยู่ขั้นไหน — ให้เรียบเรียงคำพูดตาม state
+            //   ⛔ นี่คือ "ข้อมูล" ไม่ใช่การมอบอำนาจ — การตัดสิน state และด่านบังคับเป็นของโค้ด (stateReplyGate)
+            try {
+              const _stH = (TURN.get(userId) || {}).state || "";   // k263: อ่านจาก TURN ctx (scope-safe)
+              if (_stH && _stH !== "BROWSING")
+                h += "\n\n🧭 [สถานะบทสนทนาตอนนี้ = " + _stH + " (" + (G2_STATE_TH[_stH] || "") + ")]"
+                   + "\n⛔ ห้ามถามข้อมูลของขั้นที่ผ่านมาแล้วซ้ำ · ห้ามพาลูกค้าย้อนกลับไปเริ่มเลือกสินค้าใหม่ ถ้าลูกค้าไม่ได้ขอเอง";
+            } catch (e) {}
             if (_LAST_LOCK && _LAST_LOCK.model && !_npFlow) {
               // k204: ลูกค้าสั่งหลายรายการในข้อความเดียว → ต้องเข้า Draft ให้ครบทุกตัว
               const _its = (_LAST_LOCK.items && _LAST_LOCK.items.length) ? _LAST_LOCK.items : [_LAST_LOCK];
               for (const _it of _its) pslot = slotPut(pslot, { model: _it.model, flavor: _it.flavor, qty: _it.qty, source: "customer_text" });
-              pslotDirty = true;
+              slotMark();
               console.log("P0_SLOT_FROM_FLAVORHINT " + _its.map(x => x.model + "|" + x.flavor + (x.qty ? "x" + x.qty : "")).join(" · "));
             }
             return h;
@@ -8404,14 +12336,67 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           }
         }
       } catch (e) {}
-      if (_preOrder) { reply = _preOrder; }
+      // 🧾🔒🔒 k262 · CLOSING FROM SLOT — "ลูกค้ายืนยันแล้ว" ต้องปิดการขายได้โดยไม่ต้องรอ AI พิมพ์บล็อกทวน
+      //   เคสจริงที่พิสูจน์ด้วยการรัน (pe-workflow-closing 1c แดงเฉพาะโหมดโมเดลจริง):
+      //     ลูกค้า "เอา <รุ่น> กลิ่น<กลิ่น> 2 อันค่ะ" → บอทถาม "…ใช่ไหมคะ" → ลูกค้า "ใช่ค่ะ ถูกต้อง"
+      //     → โมเดลจริงตอบ "ขอบคุณค่ะ เดี๋ยวแอดมินสรุปยอดให้นะคะ" แล้วจบ = ไม่มีการ์ด ไม่มีออเดอร์
+      //     ต้นเหตุ: ทั้งเส้นปิดการขายแขวนอยู่กับ "AI ต้องพิมพ์บล็อกทวนคำสั่งซื้อ" อย่างเดียว
+      //     ⛔ ขัดหลักสถาปัตยกรรม "โค้ดตัดสินข้อเท็จจริง · AI แค่เรียบเรียงคำพูด" ที่จุดที่เป็นเงินที่สุด
+      //   กติกา: ข้อมูลครบใน Slot (รุ่น+กลิ่น+จำนวน) + ลูกค้ายืนยัน + บอทเพิ่งถามคำถามยืนยัน
+      //          → โค้ดสร้างบล็อกทวนเอง (ยอดยังคิดโดย computeOrder เหมือนเดิมทุกบาท)
+      //   ⛔ กันแก้เกิน 4 ชั้น: (1) ต้องครบทั้ง 3 ช่องทุกแถว (2) คำยืนยันชัดเจนเท่านั้น
+      //      (3) บอทต้องเพิ่งถามคำถามที่รอคำยืนยันจริง (4) ออเดอร์ที่จ่ายแล้วห้ามยิง (k261 ORDER LOCK)
+      try {
+        if (!_preOrder && LANG === "th") {
+          const _cRows = ((pslot && pslot.items) || []).filter(x => x && !x.free && x.model && x.flavor && x.qty > 0);
+          const _allDone = _cRows.length > 0 && _cRows.length === ((pslot && pslot.items) || []).filter(x => x && !x.free).length;
+          //  ⛔ ใช้ตาข่ายคำยืนยันเฉพาะจุดนี้ (ไม่แตะ confirmYes กลาง เพราะมันคุมเส้นส่งเลขบัญชีอยู่)
+          //     รับได้เฉพาะข้อความที่ประกอบด้วย "คำรับ" ล้วน ๆ เท่านั้น เช่น "ใช่ค่ะ ถูกต้อง" · "ถูกต้องค่ะ"
+          //  ⚠️ ในบล็อกนี้ตัวแปรข้อความของลูกค้าชื่อ msgText (ตัวแปร t ของต้นทางไม่ได้อยู่ในสโคปนี้)
+          const _mt262 = String(msgText || "").trim();
+          const _affirmClose = confirmYes(_mt262)
+            || /^(?:ใช่|ช่าย|ถูก(?:ต้อง|แล้ว)?)(?:\s*(?:ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|ค๊า|จ้า|จ้ะ|นะ|เลย|แล้ว|ใช่|ถูกต้อง|ถูกแล้ว|ครบ(?:แล้ว)?))*[\s!.ๆ👍💕✅🙏]*$/.test(_mt262);
+          if (_allDone && _affirmClose) {
+            let _lastBot = "";
+            for (let i = (history || []).length - 1; i >= 0; i--) {
+              const _h = history[i];
+              if (_h && _h.role === "assistant" && typeof _h.content === "string") { _lastBot = _h.content; break; }
+            }
+            //  🔒 k261 ORDER LOCK — ออเดอร์ที่จ่ายเงินแล้วห้ามถูกยิงการ์ดใหม่จากทางนี้
+            let _paidNow = false;
+            try {
+              if (env.CONV) { const _pv262 = await env.CONV.get("ord:" + shopId + ":" + userId); if (_pv262) _paidNow = ordPaidActive(JSON.parse(_pv262)); }
+            } catch (e) {}
+            //  ต้องมีหลักฐานว่า "บอทกำลังคุยเรื่องออเดอร์ใบนี้อยู่จริง" ก่อนถือว่าคำรับ = ยืนยันออเดอร์
+            //  ⛔ ถ้อยคำของโมเดลจริงไม่คงที่ → รับได้ 2 ทาง: ถามยืนยันตรง ๆ หรือเอ่ยชื่อรุ่นที่กำลังสั่งอยู่
+            const _botOnTopic = /ใช่ไหม|ใช่มั้ย|ถูกต้องไหม|ถูกไหม|ยืนยัน|ทวนคำสั่งซื้อ|สรุปยอด|ตามนี้ไหม/.test(_lastBot)
+              || (!!_cRows[0].model && _lastBot.indexOf(_cRows[0].model) !== -1);
+            if (!_paidNow && _botOnTopic) {
+              _preOrder = "ขออนุญาตทวนคำสั่งซื้ออีกครั้งนะคะ 🧾\n"
+                + _cRows.map(x => "- " + x.model + " | " + x.flavor + " | " + x.qty).join("\n");
+              console.log("K262_CLOSE_FROM_SLOT rows=" + _cRows.length);
+            }
+          }
+        }
+      } catch (e) {}
+      // 🧭 k313: ด่านสุดท้ายก่อนเข้า AI — ทักครั้งแรกแบบกว้างๆ ให้เห็นเมนูก่อน
+      //   ⛔ ถึงบรรทัดนี้แปลว่า "ไม่มีด่านไหนรับเลย" → ไม่มีทางแย่งงานของเส้นทางเดิม
+      //   ⛔ ตอบแทน askAI (ไม่ได้ตอบเพิ่ม) → ไม่มี ack เพิ่ม และประหยัดการเรียก AI 1 ครั้ง
+      let _menu313 = "";
+      if (!_preOrder && firstTurnMenu313(history, text) && !menuSent313(shopId, userId)) {
+        _menu313 = firstTurnMenuReply313();
+        console.log("K313_FIRST_TURN_MENU ถาม=" + String(text).slice(0, 40));
+      }
+      if (_menu313) { reply = _menu313; }
+      else if (_preOrder) { reply = _preOrder; }
       else
       // ⏱ เส้นตาย 32 วิ: ถ้า AI ช้ากว่านี้ ให้ตอบข้อความคั่นแทนการเงียบใส่ลูกค้า
       reply = await Promise.race([
         askAI(env.OPENROUTER_KEY, [
           { role: "system", content: sysFull },                        // k33: ก้อนคงที่ — ต้องเหมือนเดิมทุกครั้งเพื่อให้ผู้ให้บริการแคชได้ (ลดค่าใช้จ่าย)
           { role: "system", content: (stockNote || "") + (langRule || "") },  // ก้อนที่เปลี่ยนตามสถานการณ์
-          ...histForAI(history, 6), { role: "user", content: text + hint }]),
+          // 🧭 k252 ข้อ 4 · "ล่าสุด" ≠ "เกี่ยวข้อง" — เปลี่ยนเรื่องแล้วห้ามลากเทิร์นสินค้าเก่ามา
+          ...histForAI(histRelevant(history, _INTENT, 6), 6), { role: "user", content: text + hint }]),
         new Promise(res => setTimeout(() => res("__TIMEOUT__"), 26000))
       ]);
       if (reply === "__TIMEOUT__") {
@@ -8451,7 +12436,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             .join("\n").replace(/\n{3,}/g, "\n\n").trim();
           reply = reply.replace(/รอสักครู่นะคะ[^\n]*แอดมิน[^\n]*/g, "").trim();
           if (reply.replace(/[\s🙏🏻💕✨]/g, "").length < 12) {
-            reply = "ขออภัยด้วยนะคะ แอดมินอาจจะเข้าใจคำถามไม่ตรงค่ะ 🙏🏻\nรบกวนพิมพ์ถามใหม่อีกครั้งได้ไหมคะ หรือดูสินค้าทั้งหมดได้ที่เมนูนี้เลยค่ะ 💕\nhttps://cutt.ly/menu4";
+            reply = "ขออภัยด้วยนะคะ แอดมินอาจจะเข้าใจคำถามไม่ตรงค่ะ 🙏🏻\nรบกวนพิมพ์ถามใหม่อีกครั้งได้ไหมคะ หรือดูสินค้าทั้งหมดได้ที่เมนูนี้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
           }
           console.log("MUTE_SKIPPED no-problem-signal:", _um.slice(0, 60));
         }
@@ -8792,6 +12777,39 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         reply = "ขออภัยค่ะ ราคาสินค้าเป็นราคามาตรฐานของทางร้านนะคะ 🙏🏻 แอดมินไม่สามารถลดเพิ่มให้ได้ค่ะ\n\nแต่ตอนนี้มีโปรที่ช่วยประหยัดได้จริงค่ะ 💕\n• พอตใช้แล้วทิ้ง ครบ 4 แท่ง (คละยี่ห้อได้) → ส่งฟรี\n• บิ๊กพอต / ชุด KIT ครบ 4 ชิ้น → ส่งฟรี\n• หัวพอตเล็ก ครบ 10 หัว → ส่งฟรี\n\nสนใจรับเพิ่มให้ครบโปรไหมคะ เดี๋ยวแอดมินสรุปยอดให้ค่ะ ✨";
         console.log("DISCOUNT_BLOCKED");
       }
+      // 💳 k273 ด่านขาออก: AI เผลอพูดถึงช่องทางชำระอื่นโดยไม่ย้ำว่ารับโอนธนาคารเท่านั้น → แทนด้วยความจริง
+      //   (ขาเข้าดักไว้แล้ว ด่านนี้กันกรณี AI เอ่ยเองในบทสนทนาอื่น)
+      if (RX_PAY_CHANNEL.test(reply) && !/โอนผ่าน(?:บัญชี)?ธนาคาร.{0,10}เท่านั้น/.test(reply)) {
+        console.log("K273_PAY_CHANNEL_REPLY_FIXED " + String(reply).slice(0, 50));
+        reply = PAY_ONLY_BANK_MSG;
+      }
+      // 🏷️ k282 (เจ้าของร้านสั่ง 11 ส.ค.): "หมวดเครื่องต้องพิมพ์นำหน้าว่าเครื่อง หัวน้ำยาก็พิมพ์หัวน้ำยา"
+      //   เคสจริง 21.35: ลูกค้าถาม "เครื่อง M SWITCH 1" → จีทูตอบ "M SWITCH 15K ราคา 250 บาท"
+      //   ชื่อไม่มีคำนำหน้า = ลูกค้าแยกไม่ออกว่าเป็นเครื่อง (250) · หัวน้ำยา (350) · ชุด KIT (499)
+      //   ⚠️ ที่หนักกว่านั้น (พิสูจน์ด้วย parseItems+computeOrder จริง): ถ้า AI เขียนบล็อกทวนว่า
+      //      "M SWITCH 15K | สีดำ | 1" → การ์ดคิด **350** แทน 250 เพราะชื่อไม่ตรงคีย์ในตารางราคา
+      //   → ด่านนี้ต้องอยู่ **ก่อน** เส้นออกการ์ด เพื่อให้ทั้งข้อความและราคาถูกพร้อมกัน
+      //   ⛔ ไม่ hardcode ชื่อรุ่น — สร้างตารางจากแคตตาล็อกตอนบูต · จับคำที่ยาวที่สุดก่อนเสมอ
+      //      ("RELX INFINITY 2+" ต้องไม่กลายเป็น "หัวพอต RELX INFINITY 2+")
+      try {
+        const _fixed282 = fixCatPrefix(reply);
+        if (_fixed282 !== reply) { console.log("K282_CAT_PREFIX_FIXED " + String(reply).slice(0, 50)); reply = _fixed282; }
+      } catch (e) {}
+      // 🔐 k281 ด่านขาออก (เคสจริง BWA 11 ส.ค. 19.59 — เจ้าของร้านชี้):
+      //   ลูกค้าสั่ง 300 ชิ้น → AI ตอบ "ตอนนี้มีของพร้อมส่ง 84 แท่งนะคะ" = เปิดตัวเลขสต็อกให้ลูกค้า
+      //   ทั้งที่ prompt สั่งห้ามไว้ 2 จุด ("ความลับบริษัท") — บทเรียนเดิม k15/k41/k55/k190:
+      //   กฎใน prompt เป็นแค่คำขอ **โค้ดต้องเป็นคนบังคับ**
+      //   วิธี: ลบเฉพาะ "ตัวเลข+หน่วย" ที่ติดกับคำบอกสต็อก เหลือข้อความเดิมที่ยังอ่านรู้เรื่อง
+      //   ⛔ แคบโดยตั้งใจ — ตัวเลขอื่นไม่ถูกแตะ: ราคา · จำนวนที่ลูกค้าสั่ง · เกณฑ์โปร ("ครบ 4 แท่ง")
+      //      · เงื่อนไขเคลม ("ซื้อ 1-19 แท่ง") · ระยะเวลาส่ง เพราะไม่มีคำบอกสต็อกนำหน้า
+      try {
+        const _RX_STK = /(พร้อมส่ง|เหลือ(?:อยู่)?|มีอยู่|มีของ(?:อยู่)?|คงเหลือ|สต็อก(?:เหลือ|มี)?|ในคลัง)\s*(?:ประมาณ\s*|ราว\s*)?\d{1,5}\s*(แท่ง|ชิ้น|อัน|หัว|ตัว|กล่อง|ลัง|คอต|ตลับ)/g;
+        if (_RX_STK.test(reply)) {
+          const _before = String(reply).slice(0, 60);
+          reply = String(reply).replace(_RX_STK, (m, w) => /เหลือ|สต็อก|ในคลัง/.test(w) ? "มีพร้อมส่ง" : w);
+          console.log("K281_STOCK_QTY_REDACTED " + _before);
+        }
+      } catch (e) {}
       // 💸 k79 เคสจริง 1/8 (อันตรายสุด): ลูกค้าพิมพ์ "ครับ" เฉยๆ → AI ก๊อปตัวอย่างใน prompt มาตอบ
       //   "✅ สลิปถูกต้อง จำนวนเงิน 390 บาท" ทั้งที่ลูกค้ายังไม่ได้โอน! = ยืนยันรับเงินปลอม ร้านเกือบส่งของฟรี
       //   ข้อความยืนยันสลิป "ระบบ" เป็นคนส่งเท่านั้น (หลังตรวจ SlipOK ผ่านจริง) — ถ้า AI พิมพ์เองตอนออเดอร์ยังไม่จ่าย → บล็อกทิ้ง
@@ -8803,7 +12821,27 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             if (_ov) { const _oj = JSON.parse(_ov); if (ordPaidActive(_oj)) _paidOk = true; }
           }
         } catch (e) {}
+        // 💰 k269: ไม่มีออเดอร์ค้าง แต่ **สลิปเคยผ่านจริง** ในช่วง 3 วันนี้ (จดไว้ตอนตรวจสลิป)
+        //   → ห้ามพูดว่า "ยังไม่พบสลิป" ใส่คนที่โอนเงินมาแล้ว = ประโยคที่แย่ที่สุดที่ลูกค้าจะได้ยิน
+        //   ⛔ ยังไม่ปล่อยให้ AI ยืนยันยอดเอง (เจตนาเดิมของ k79 คงอยู่) — ใช้ข้อความของระบบที่ตรงความจริง
+        let _proof269 = null;
         if (!_paidOk) {
+          try {
+            if (env.CONV) {
+              const _pp = await env.CONV.get("paid:" + shopId + ":" + userId);
+              if (_pp) { const _pj = JSON.parse(_pp); if (_pj && Date.now() - (_pj.t || 0) < 259200000) _proof269 = _pj; }
+            }
+          } catch (e) {}
+        }
+        if (!_paidOk && _proof269) {
+          console.log("K269_PAID_PROOF_USED amt=" + (_proof269.amt || 0));
+          //   ⚠️ ต้องเป็น **บรรทัดเดียว** — ด่านตัดความเกี่ยวข้อง (k252) ตัดเป็นรายบรรทัด
+          //      เวอร์ชันแรกเขียน 2 บรรทัด แล้วบรรทัดแรก ("ได้รับสลิปแล้ว") โดนตัดทิ้ง เทส U2 จับได้
+          reply = "ระบบได้รับสลิปของคุณลูกค้าแล้วนะคะ ✅"
+                + (_proof269.amt ? " (ยอด " + _proof269.amt + " บาท)" : "")
+                + " แต่ยังไม่มีรายการสินค้าผูกกับยอดนี้ในระบบค่ะ 🙏🏻 เดี๋ยวทีมงานเช็คและยืนยันให้อีกครั้งนะคะ 💕";
+          try { await muteNow("💰 สลิปผ่านแล้วแต่ไม่มีออเดอร์ในระบบ (ยอด " + (_proof269.amt || "?") + ") — ทีมงานเช็คด่วน", String(msgText || "")); } catch (e) {}
+        } else if (!_paidOk) {
           console.log("FAKE_SLIP_CONFIRM_BLOCKED " + String(reply).slice(0, 60));
           reply = "ตอนนี้ระบบยังไม่พบสลิปโอนเงินเข้ามานะคะ 🙏🏻\nรบกวนส่งรูปสลิปเข้ามาในแชทนี้ได้เลยค่ะ เดี๋ยวระบบตรวจสอบยอดให้ทันทีนะคะ 💕";
         }
@@ -8815,7 +12853,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   ทำให้ลูกค้าถาม "ทำไมต้องรอบสุดท้าย" แล้วได้คำตอบว่า "ตอนนี้เช็ครายการให้ไม่ได้ค่ะ" = ตอบไม่ตรงคำถาม
       //   ตอนนี้จับเฉพาะ "รับปากว่าจะกลับมาทักเอง" จริงๆ เท่านั้น (แอดมินทักเองไม่ได้ = โกหก)
       if (/จะ(กลับมา)?แจ้ง(ให้ทราบ|ให้อีกครั้ง|ให้อีกที|กลับ)|กลับมาแจ้ง|แจ้งกลับ(ให้|ไป)|(รอ|อีก)สักครู่[^\n]{0,25}(จะ|แล้ว)[^\n]{0,10}แจ้ง|ระบบ(สต็อก)?กำลัง(อัปเดต|อัพเดต|ประมวลผล)|(แจ้ง|บอก)(ให้ทราบ|ให้)[^\n]{0,10}(ในภายหลัง|เร็วๆ ?นี้|ทีหลัง)/.test(reply)) {
-        reply = "ขออภัยด้วยนะคะ 🙏🏻 ตอนนี้แอดมินยังเช็ครายการให้ไม่ได้ค่ะ\n\nรบกวนบอกรุ่นที่สนใจมาได้เลยนะคะ เดี๋ยวแอดมินเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕\nหรือดูรายการทั้งหมดที่มีของจริงได้จากเมนูนี้เลยค่ะ\nhttps://cutt.ly/menu4";
+        reply = "ขออภัยด้วยนะคะ 🙏🏻 ตอนนี้แอดมินยังเช็ครายการให้ไม่ได้ค่ะ\n\nรบกวนบอกรุ่นที่สนใจมาได้เลยนะคะ เดี๋ยวแอดมินเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕\nหรือดูรายการทั้งหมดที่มีของจริงได้จากเมนูนี้เลยค่ะ\nhttps://cutt.ly/abc-menu";
         console.log("FALSE_PROMISE_BLOCKED");
       }
       // 🚫 k56: ห้ามการันตีว่าของถึงวันนี้ — ตอนนี้ AI เป็นคนตอบเรื่องนี้เองแล้ว ต้องมีตาข่ายรับ
@@ -8867,6 +12905,18 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         "MARBO 9K (แท้ 350 บาท / โคลนเทียบแท้ 290 บาท)");
       // 2.7) 🛑 k16: ตัดกลิ่นที่ไม่มีจริงออกก่อนส่งถึงลูกค้า
       reply = stripFakeFlavors(reply);
+      // 2.7b) 🍬 k318b: บรรทัด "รุ่น: กลิ่น" ต้องตรงแคตตาล็อกของรุ่นนั้นจริง
+      //   ⛔ ต้องอยู่ "หลัง" k16 — k16 ตัดบรรทัดกลิ่นล้วนที่มั่ว ตัวนี้รับช่วงบรรทัดที่ k16 มองไม่เห็น
+      //     (k16 ข้ามบรรทัดยาวเกิน 20 ตัว และเทียบกับ "กลิ่นทั้งร้าน" ไม่ใช่ "กลิ่นของรุ่นนั้น")
+      try {
+        const _g318b = modelFlavorLineGate318b(reply);
+        if (_g318b.fixed.length || _g318b.dropped.length || _g318b.asked.length) {
+          reply = _g318b.text;
+          if (_g318b.fixed.length)   console.log("K318B_FLAVOR_FIXED "   + _g318b.fixed.join(" · "));
+          if (_g318b.dropped.length) console.log("K318B_FLAVOR_DROPPED " + _g318b.dropped.join(" · "));
+          if (_g318b.asked.length)   console.log("K318B_FLAVOR_ASK "     + _g318b.asked.join(" · "));
+        }
+      } catch (e) { console.log("K318B_ERR " + ((e && e.message) || e)); }
       // 2.8) 🕳 k40: กัน "ลิสต์กลิ่นว่างเปล่า"
       // เคสจริง 31/7: ลูกค้าถาม "ชอบแนวเย็นๆหวานๆ" → แอดมินมโนชื่อกลิ่นที่ MARBO 9K ไม่มี
       //   ตัวกรอง 2.7 ตัดทิ้งหมด เหลือแค่ "ในรุ่น MARBO 9K แนะนำค่ะ 💕" แล้วว่างเปล่า = ลูกค้างง
@@ -8895,12 +12945,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               // k45: ต่อท้าย ไม่แปะไว้หัวข้อความ (เดิมแปะหัวแล้วลูกค้าเจอลิสต์ก่อนคำอธิบาย)
               reply = reply.trim() + "\n\n" + _show.map(f => "• " + f).join("\n");
             }
-            if (_have.length > _show.length) reply += "\n(ดูครบทุกกลิ่นได้ที่เมนูค่ะ https://cutt.ly/menu4)";
+            if (_have.length > _show.length) reply += "\n(ดูครบทุกกลิ่นได้ที่เมนูค่ะ https://cutt.ly/abc-menu)";
             console.log("EMPTY_LIST_FIXED " + _mdl + " +" + _show.length);
           } else {
             // k164: เครื่องมี "สี" ไม่ใช่ "กลิ่น" — เดิมพูดว่า "กลิ่นแนวที่คุณลูกค้าชอบ" กับเครื่อง = ลูกค้างง
             const _u = unitWord(_mdl);
-            reply = "ต้องขออภัยด้วยนะคะ 🙏🏻 ตอนนี้ " + _mdl + " หมดชั่วคราวทุก" + _u + "ค่ะ\n\nรบกวนบอก" + _u + "หรือรุ่นอื่นที่สนใจมาได้เลยค่ะ เดี๋ยวแอดมินเช็คให้ทันที หรือดูรุ่นที่มีของทั้งหมดได้ที่เมนูนี้เลยค่ะ 💕\nhttps://cutt.ly/menu4";
+            reply = "ต้องขออภัยด้วยนะคะ 🙏🏻 ตอนนี้ " + _mdl + " หมดชั่วคราวทุก" + _u + "ค่ะ\n\nรบกวนบอก" + _u + "หรือรุ่นอื่นที่สนใจมาได้เลยค่ะ เดี๋ยวแอดมินเช็คให้ทันที หรือดูรุ่นที่มีของทั้งหมดได้ที่เมนูนี้เลยค่ะ 💕\nhttps://cutt.ly/abc-menu";
             console.log("EMPTY_LIST_FIXED soldout " + _mdl);
           }
         }
@@ -8965,7 +13015,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     //   กฎเหล็กใหม่: ถ้าลูกค้า "เอ่ยชื่อรุ่นมาชัดๆ" ในข้อความนี้ คำตอบห้ามพูดถึงรุ่นอื่นแทน
     //   ถ้าหลุด → โค้ดตอบเองด้วยกลิ่นจริงของรุ่นที่ลูกค้าถาม (ไม่ปล่อยให้ AI เดา)
     try {
-      const _askedM = (Array.isArray(_hintModels) && _hintModels.length === 1) ? _hintModels[0] : "";
+      // 🧹 k314: อ่าน "รุ่นที่กำลังคุยถึง" ของลูกค้าคนนี้เท่านั้น ⛔ ห้าม fallback ไปตัวแปรรวม
+      const _h314 = getHints314(userId);
+      const _askedM = (_h314.length === 1) ? _h314[0] : "";
       if (_askedM && env.CONV) {
         const _replyHasAsked = normTH(reply).indexOf(normTH(_askedM)) !== -1;
         let _other = "";
@@ -8973,7 +13025,16 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           if (k === _askedM || k.length < 5) continue;
           if (normTH(reply).indexOf(normTH(k)) !== -1) { _other = k; break; }
         }
-        if (!_replyHasAsked && _other) {
+        // 🧭 k300: ถ้าคำตอบเป็น "บล็อกทวนคำสั่งซื้อ" ห้ามด่านนี้แปลงเป็นลิสต์กลิ่น
+        //   เดิม: AI ทวนผิดรุ่น → ด่านนี้ทิ้งบล็อกทั้งก้อนแล้วตอบลิสต์กลิ่นแทน
+        //     = ลูกค้าที่ตอบ "เอา 2 / เอาทั้งคู่ / ใช่" หลังบอทเสนอ ได้ลิสต์กลิ่นกลับมาแทนการ์ด (วัดของจริงแล้ว)
+        //   ใหม่: ปล่อยผ่านให้ด่าน k300 แก้รุ่นให้ตรงข้อเสนอล่าสุด แล้ว k125 ตรวจต่อตามปกติ
+        //   ⛔ ไม่ได้ผ่อนอะไรเลย — k300 ตัดรุ่นผิดทิ้ง และ k125 ยังบังคับว่ากลิ่นต้องมาจากลูกค้า/ข้อเสนอ
+        //   ⛔ แคบเท่าที่จำเป็น: ยกเว้นเฉพาะ "บล็อกทวน + มีข้อเสนอค้างอยู่จริง" เท่านั้น
+        //      (เทส PE ปิดการขาย จับผมได้ตอนยกเว้นกว้างไป → มีเทิร์นที่ลูกค้าไม่ได้รับคำตอบเลย)
+        const _isOrderBlock117 = RX_ORDER_BLOCK.test(reply) && reply.indexOf("|") !== -1
+          && !!pendingOfferModel(history, msgText);
+        if (!_replyHasAsked && _other && !_isOrderBlock117) {
           console.log("K117_WRONG_MODEL_BLOCKED asked=" + _askedM + " said=" + _other);
           // k192: ใช้ผลตรวจสต็อกชุดเดียวกับทุกเส้นทาง
           reply = stockListMsg(smForQR, bufForQR, _askedM, { lim: 14, tail: "สนใจกลิ่นไหนแจ้งได้เลยนะคะ ✨" });
@@ -9009,7 +13070,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           }
           reply = _cands.length
             ? (_m2 + " แนวนี้ที่มีของตอนนี้ค่ะ 💕\n" + _cands.map(f => "- " + f).join("\n") + "\n\nรับกลิ่นไหนดีคะ ✨")
-            : "ขอเช็คให้ตรงนิดนึงนะคะ 🙏🏻 รบกวนพิมพ์ชื่อกลิ่นที่ต้องการเต็มๆ อีกครั้งค่ะ (หรือบอกแนวที่ชอบก็ได้ค่ะ เช่น มิ้นต์เย็น ผลไม้ องุ่น) เดี๋ยวแอดมินเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕";
+            : "ขอเช็คให้ตรงนิดนึงนะคะ 🙏🏻 รบกวนพิมพ์ชื่อกลิ่นที่ต้องการเต็มๆ อีกครั้งค่ะ (หรือบอกแนวที่ชอบก็ได้ค่ะ เช่น เย็น ผลไม้ หวาน) เดี๋ยวแอดมินเช็คกลิ่นที่มีของให้ทันทีค่ะ 💕";
         }
       }
     } catch (e) {}
@@ -9039,6 +13100,25 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         reply = "รบกวนแจ้ง รุ่น + กลิ่น + จำนวน ที่ต้องการอีกครั้งนะคะ 🙏🏻 เดี๋ยวแอดมินสรุปยอดให้ทันทีค่ะ 💕";
       }
     }
+    // 🔗🔒 k262 · ด่านขาออก "ลิงก์เมนู" ตอนมีออเดอร์ที่จ่ายเงินแล้ว
+    //   เคสจริง 8 ส.ค. 23.28 (k259-replay #16 · ตกในผลรันโมเดลจริง): ลูกค้าถาม "ขายไรครับ" หลังโอนเสร็จ
+    //   ด่าน K259_MENU_SUPPRESSED_PAID มีอยู่แล้ว แต่คุมเฉพาะ "ทางลัดเมนู" ของโค้ด
+    //   → พอในบทมีชื่อรุ่นค้างอยู่ ทางลัดจะถูกข้าม (K115_MENU_SKIPPED) แล้ว **AI พิมพ์ลิงก์เมนูออกมาเอง**
+    //   → ลูกค้าอ่านว่าร้านลืมออเดอร์ที่เพิ่งจ่ายไป  ⛔ ต้องคุมทั้งขาออก ไม่ใช่แค่ทางลัด
+    //   ⛔ แคบโดยตั้งใจ: ลูกค้าขอดูเมนูเองตรง ๆ = ไม่แตะ · ไม่มีออเดอร์จ่ายแล้ว = ไม่แตะ
+    try {
+      //  ⚠️ อ่าน ord: ตรงนี้เอง — ตัวแปร _ordPaidLock ของต้นทางไม่ได้อยู่ในสโคปนี้
+      //     (เช็ค regex ราคาถูกก่อนเสมอ → ไม่เพิ่มการอ่าน KV ให้เทิร์นปกติ)
+      if (/cutt\.ly\/menu/i.test(reply)
+          && !/เมนู|รายการสินค้า|ขอดูสินค้า|ดูสินค้า|ลิงก์/.test(String(msgText || "")) && env.CONV) {
+        const _ov262 = await env.CONV.get("ord:" + shopId + ":" + userId);
+        if (_ov262 && ordPaidActive(JSON.parse(_ov262))) {
+          const _ovw262 = categoryOverview();
+          console.log("K259_MENU_SUPPRESSED_PAID out=1");
+          reply = "ออเดอร์ที่ชำระเงินแล้วของคุณลูกค้ายังอยู่ในระบบนะคะ ✅ ไม่ได้หายไปไหนค่ะ 💕\n\n" + (_ovw262 || MENU_MSG);
+        }
+      }
+    } catch (e) {}
     // 🚫 k151: ห้าม AI พูดถึงโปร "ครบ 1,000 บาท ส่งฟรี" ที่ไม่มีจริง (เจ้าของร้านยืนยันแล้วว่าไม่มี)
     try {
       if (/1[,.]?000\s*บาท[^\n]{0,20}(ส่งฟรี|ฟรีค่าส่ง)|ส่งฟรี[^\n]{0,20}1[,.]?000\s*บาท/.test(reply)) {
@@ -9062,8 +13142,95 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       const _gi = ghostImageGate(reply, history, mtype);
       if (_gi.blocked) { console.log("K155_GHOST_IMAGE_BLOCKED"); reply = _gi.reply; }
     } catch (e) {}
+    // 🧭 k319b: รู้อยู่แล้วว่าคุยรุ่นไหน → ห้ามขอชื่อรุ่นซ้ำ
+    //   ⛔ ต้องอยู่ "หลัง" k155 เสมอ — ข้อความตายตัวของ k155 คือตัวที่ถามชื่อรุ่นซ้ำในเคสจริง
+    //     (วางไว้ก่อนหน้า = ด่านนี้มองไม่เห็นข้อความนั้นเลย · เทสจับได้ตอนรีโปรเคส Boat)
+    //   ⛔ ด่านเดียวท้ายสุด ครอบทุกที่มา (ข้อความตายตัว 7 จุด + คำตอบที่ AI เขียนเอง)
+    //     ไม่ไล่แก้ทีละจุด — บทเรียน k158 (แก้ 3 ทางจาก 71 ทาง แล้วรูยังอยู่)
+    try {
+      const _it319b = slotCurrent(pslot);
+      let _stale319b = false;
+      try { _stale319b = slotStale(pslot, Date.now()); } catch (e2) {}
+      const _g319b = modelKnownGate319b(reply, _it319b, String(msgText || ""), mtype, _stale319b);
+      if (_g319b.blocked) {
+        console.log("K319B_MODEL_ALREADY_KNOWN " + _g319b.model + " → " + _g319b.reply.split("\n")[0]);
+        reply = _g319b.reply;
+      }
+    } catch (e) { console.log("K319B_ERR " + ((e && e.message) || e)); }
     // 🎁 k163: กุโปรส่งฟรีที่ร้านไม่มี
     try {
+      try { const _rg = repeatGuard(reply); if (_rg.blocked) reply = _rg.reply; } catch (e) {}   // k248 P0-13
+      // 🧭🧭 k252 ข้อ 6 · ด่านความเกี่ยวข้องขาออก — ชั้นสุดท้ายกันข้อมูลสินค้าติดมากับคำตอบเรื่องอื่น
+      //   ชั้นแรก (ตอนประกอบ prompt) กันไม่ให้ข้อมูลเข้าไป · ชั้นนี้กันกรณีโมเดลดึงจากประวัติเอง
+      //   ⛔ ตัดแล้วเหลือน้อยเกิน = ถือว่าตัดผิด คืนของเดิม ห้ามส่งข้อความว่างใส่ลูกค้า
+      try {
+        const _rel = relevanceGate(reply, _INTENT);
+        if (_rel.blocked) { console.log("K252_RELEVANCE_CUT lines=" + _rel.dropped + " intent=" + _INTENT.join("+")); reply = _rel.reply; }
+      } catch (e) {}
+      // 📍📍 k320 · ที่ตั้งร้านต้องมาจากแหล่งความจริงเท่านั้น ห้ามโมเดลแต่ง/ขยาย
+      //   ⛔ ห้ามกลืนเงียบ — ถ้าด่านพังต้องเห็นใน log (บทเรียน k317)
+      try {
+        const _lg = locGate320(reply, _INTENT, env, shopId);   // ⛔ ใช้พารามิเตอร์ตรง — _ctx ไม่อยู่ในสโคปของ handleEventCore
+        if (_lg.blocked) { console.log("K320_LOC_FIX " + _lg.why + " → " + reply.split("\n")[0].slice(0, 50)); reply = _lg.reply; }
+      } catch (e) { console.log("K320_ERR " + ((e && e.message) || e)); }
+      // 🙏🙏 k319c · ลูกค้ารับทราบ/ปิดบท แล้ว G2 เปิดการขายรอบใหม่เอง
+      //   ⛔ ห้ามกลืนเงียบ — ถ้าด่านพังต้องเห็นใน log (บทเรียน k317)
+      try {
+        const _ac = ackCloseGate319c(reply, msgText, history, mtype);
+        if (_ac.blocked) { console.log("K319C_ACK_CLOSE " + _ac.why + " → " + reply.split("\n")[0].slice(0, 50)); reply = _ac.reply; }
+      } catch (e) { console.log("K319C_ERR " + ((e && e.message) || e)); }
+      // 🏷️🏷️ P0-16 · ด่านความจริงเรื่องประเภทสินค้า — Attribute มีสิทธิ์สูงกว่า LLM ทุกกรณี
+      //   ชั้น prompt บอกความจริงไปแล้ว · ชั้นนี้ดักกรณีโมเดลยังตอบขัดกับทะเบียนสินค้า
+      //   ⛔ ตรวจเฉพาะรุ่นที่ระบุได้ชัดรุ่นเดียว — หลายรุ่นปนกันไม่รู้ว่าประโยคไหนพูดถึงตัวไหน
+      try {
+        const _am = (Array.isArray(_hintModels) && _hintModels.length === 1) ? _hintModels[0] : "";
+        if (_am && attrQuestion(String(msgText || ""))) {
+          const _ag = attrGuard(reply, _am);
+          if (_ag.blocked) { console.log("P0_16_ATTR_BLOCKED " + _am + " · " + _ag.why); reply = _ag.reply; }
+        }
+      } catch (e) {}
+      // 🧠🧠 k249 ข้อ 4 + k250 STEP 2/4/5 · Semantic Duplicate Guard + Conversation State
+      //   ⛔ ไม่เทียบตัวอักษร เพราะ AI เปลี่ยนคำได้แต่เจตนาเดิม (เช่น ขอที่อยู่ 2 รอบคนละสำนวน)
+      //   ⚠️ บั๊กแฝงของ k249 ที่ k250 แก้: เทียบเจตนาอย่างเดียว → "MARBO 350 บาท ...สนใจกลิ่นไหนดีคะ"
+      //      กับ "SONIC 290 บาท ...สนใจกลิ่นไหนดีคะ" ถูกมองว่าซ้ำ แล้วคำตอบสินค้าที่ 2 โดนกลืน
+      //      ⇒ ต้องผ่าน hasSubstance() ก่อนเสมอ — ข้อความที่มีราคา/รายการ/ชื่อรุ่น ห้ามบล็อกเด็ดขาด
+      //   สองชั้น: (ก) เทียบกับข้อความก่อนหน้าในประวัติ  (ข) เทียบกับ State ที่จดไว้ (ทนกว่า ประวัติโดนตัดก็ยังอยู่)
+      try {
+        const _now250 = Date.now();
+        // ── STEP 2/3 · ลูกค้าให้ข้อมูลมาแล้วหรือยัง → เคลียร์สิ่งที่ค้างก่อนตัดสินคำตอบ
+        try {
+          const _prov = provideOf(String(msgText || ""), mtype);
+          if (Object.keys(_prov).length) {
+            const _r = convResolve(_CST, _prov, _now250);
+            if (_r.resolved) console.log("K250_RESOLVED " + _r.was);
+            else if (_CST.pending) console.log("K250_STILL_MISSING " + _CST.pending + " " + _r.missing.join(","));
+          }
+        } catch (e) {}
+        // ── STEP 4/5 · คำตอบนี้กำลังจะ "ถาม" อะไร และเคยถามไปแล้วหรือยัง
+        let _prevBot = "";
+        for (let i = history.length - 1; i >= 0; i--) {
+          if ((history[i] || {}).role === "assistant") { _prevBot = String(history[i].content || ""); break; }
+        }
+        // k303: หาข้อความ "ก่อนหน้าของลูกค้า" ด้วยวิธีเดียวกับ _prevBot (ไว้จับกรณีพิมพ์ซ้ำเป๊ะ)
+        let _prevUser = "";
+        for (let i = history.length - 1; i >= 0; i--) {
+          if ((history[i] || {}).role === "user" && typeof history[i].content === "string") { _prevUser = String(history[i].content); break; }
+        }
+        const _d250 = dupAskDecide(_CST, _prevBot, reply, _now250, String(msgText || ""), _prevUser);
+        if (_d250.block) {
+          console.log("K250_DUP_ASK sig=" + _d250.sig + " why=" + _d250.why);
+          reply = DUP_WAIT_MSG;
+        } else {
+          // ⛔ ข้อ 4 · หนึ่งบทสนทนามีสิ่งที่ค้างได้ตัวเดียว — ห้ามเปิดเรื่องใหม่ทับเรื่องเดิมที่ยังไม่จบ
+          //   (เช่น รอที่อยู่อยู่ แล้วเปิด "รอเลือกกลิ่น" ทับ → ลืมว่ารอที่อยู่ → รอบหน้าขอใหม่เหมือนไม่เคยถาม)
+          const _before = _CST.pending;
+          convNote(_CST, reply, _now250);
+          if (_d250.pending && _before !== _CST.pending) console.log("K250_PENDING_OPEN " + _CST.pending);
+          else if (_d250.pending && _before && pendingTopic(_before) !== pendingTopic(_d250.pending))
+            console.log("K250_PENDING_KEEP " + _before + " (ไม่เปิด " + _d250.pending + " ทับ)");
+        }
+      } catch (e) {}
+      try { const _dg = dayClaimGate(reply); if (_dg.blocked) reply = _dg.reply; } catch (e) {}   // k245 P0-10
       const _gp = fakePromoGate(reply);
       if (_gp.blocked) { console.log("K163_FAKE_PROMO_BLOCKED said=" + _gp.said); reply = _gp.reply; }
     } catch (e) {}
@@ -9074,6 +13241,38 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       if (_gc.blocked) {
         console.log("K163_CROSS_FLAVOR_BLOCKED model=" + _gc.model + " said=" + _gc.said);
         reply = stockListMsg(smForQR, bufForQR, _mk, { lim: 12 });   // k192: ผลตรวจชุดเดียวกัน
+      }
+    } catch (e) {}
+    // 🏷️🏷️ k296 — ด่านขาออก "ถามแบรนด์นึง ห้ามตอบอีกแบรนด์" (เคสจริงร้าน m 12 ส.ค. 4.16-4.17)
+    //   ลูกค้าพิมพ์ "Relx" / "หัว relx" → จีทูตอบ "MARBO 10K หมดชั่วคราวทุกกลิ่น" 2 รอบติด
+    //   ต้นเหตุ: "Relx" กำกวม (หลายรุ่น) → ด่านขาเข้า (K227) สั่งใน prompt แล้วว่าห้ามเอ่ยชื่อรุ่น
+    //   แต่ AI จริงไม่เชื่อ — หยิบ MARBO จากประวัติแชทมาตอบเอง (พิสูจน์: เรโปรด้วย stub ตอบถูก แต่ของจริงผิด)
+    //   บทเรียนบ้านเราซ้ำอีกรอบ: กฎใน prompt เป็นแค่คำขอ **โค้ดต้องเป็นคนบังคับ**
+    //   กติกา: เทิร์นที่ระบบตีความไม่ได้ (กำกวม) + ลูกค้าเอ่ยแบรนด์ A + คำตอบเอ่ยรุ่นของแบรนด์อื่น
+    //         → แทนคำตอบด้วยรายการรุ่นของแบรนด์ A จากแคตตาล็อกจริง แล้วถามว่ารุ่นไหน
+    //   ⛔ แคบ: ยิงเฉพาะเทิร์นกำกวม + มีแบรนด์ในข้อความ + คำตอบข้ามแบรนด์เท่านั้น
+    try {
+      if (_AMBIG_CTX && Array.isArray(_AMBIG_CTX.brands) && _AMBIG_CTX.brands.length && (Date.now() - _AMBIG_CTX.t) < 60000) {
+        const _bset = _AMBIG_CTX.brands;
+        const _saidModels = [];
+        for (const k of FLAVOR_KEYS) if (k.length >= 4 && reply.indexOf(k) !== -1) _saidModels.push(k);
+        const _crossed = _saidModels.filter(k => {
+          const m = String(k).toLowerCase().match(/[a-z]{3,}/);
+          return m && _bset.indexOf(m[0]) === -1;
+        });
+        if (_crossed.length && !_saidModels.some(k => { const m = String(k).toLowerCase().match(/[a-z]{3,}/); return m && _bset.indexOf(m[0]) !== -1; })) {
+          // คำตอบพูดถึงแต่รุ่นนอกแบรนด์ที่ลูกค้าถาม → สร้างคำตอบใหม่จากแคตตาล็อกจริง
+          const _opts = [];
+          for (const k of FLAVOR_KEYS) {
+            const m = String(k).toLowerCase().match(/[a-z]{3,}/);
+            if (m && _bset.indexOf(m[0]) !== -1 && _opts.length < 8) {
+              const _pp = (FLAVORS[k] && FLAVORS[k].p) ? " (" + FLAVORS[k].p + " บาท)" : "";
+              _opts.push("- " + k + _pp);
+            }
+          }
+          console.log("K296_CROSS_BRAND_BLOCKED ask=" + _bset.join(",") + " said=" + _crossed.join(","));
+          if (_opts.length) reply = "รุ่นในกลุ่มนี้ที่ร้านมีค่ะ 💕\n" + _opts.join("\n") + "\n\nสนใจรุ่นไหนแจ้งได้เลยนะคะ ✨";
+        }
       }
     } catch (e) {}
     // 🎯 k177: กฎเจาะจงชนะกฎกว้าง (ฝั่งขาออก) — บังคับใช้คำตัดสินของ Product Resolver
@@ -9102,7 +13301,8 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
     //   กฎใหม่: ตัวเลขค่าส่งด่วนในคำตอบ ต้องตรงกับที่แอดมินกรอกไว้เท่านั้น (หรือ 40 = พัสดุปกติ / 0 = ฟรี)
     try {
       const _mFee = reply.match(/ค่าส่ง(?:ด่วน|แกร็บ|ไรเดอร์)?[^\d\n]{0,20}([\d,]{2,6})\s*บาท/);
-      if (_mFee) {
+      // 📦 k274: ลูกค้ากำลังขอเปลี่ยนเป็นพัสดุ → ห้ามด่านนี้บังคับคำตอบกลับไปเป็นค่าส่งด่วน
+      if (_mFee && !wantsParcelSwitch(String(msgText || ""))) {
         const _said = +String(_mFee[1]).replace(/,/g, "");
         let _realFee = null;
         const _efV = EXPFEE.get(shopId + ":" + userId);
@@ -9193,6 +13393,21 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         const _gpz = priceGate(reply);
         if (_gpz.blocked) { console.log("K176_PRICE_FIXED " + _gpz.said); reply = _gpz.reply; }
       } catch (e) {}
+      // 💰💰 k258 · PRICE GUARD ข้ามหมวด — ต่อสายจริงแล้ว (เดิมเขียนไว้แต่ไม่มีใครเรียก)
+      //   เคสจริง 8 ส.ค.: "RELX INFINITY 2+ สีขาว ราคา 140 บาท" — 140 คือราคาหัวพอตเล็ก
+      //     เครื่องจริง 990 → ถ้าหลุดออกไป ร้านเสีย 850 บาท/ชิ้น
+      //   ⚠️ ต้องอยู่ "หลัง" priceGate เพราะ priceGate แก้ราคาต่อชิ้นให้ถูกก่อน
+      //     ด่านนี้จับเฉพาะที่เหลือรอด = ราคาที่ถูกต้องของ "สินค้าคนละหมวด"
+      //   รุ่นอ้างอิงยึดจาก Slot ก่อน (ระบบยืนยันแล้ว) ค่อยตกไปที่รุ่นที่ตรวจพบในเทิร์นนี้
+      try {
+        let _pcModel = "";
+        try { const _pc = slotCurrent(pslot); if (_pc && _pc.model && !_pc.free) _pcModel = _pc.model; } catch (e) {}
+        if (!_pcModel && Array.isArray(_hintModels) && _hintModels.length === 1) _pcModel = _hintModels[0];
+        if (_pcModel) {
+          const _gx = priceCrossCatGate(reply, _pcModel);
+          if (_gx.blocked) { console.log("K258_PRICE_CROSSCAT_BLOCKED " + _gx.said); reply = _gx.reply; }
+        }
+      } catch (e) {}
       // 📦 k190 (ด่านสุดท้ายจริงๆ): คำพูดเรื่อง "มี/หมด" ต้องตรงกับ stockmap ของร้าน
       //   วางท้ายสุดเหมือน k175/k176 — ต้องตรวจข้อความที่จะส่งจริง ไม่ใช่ร่างกลางทาง
       try {
@@ -9204,11 +13419,82 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         const _gcd = stockContradictGate(reply, smForQR, bufForQR, (Array.isArray(_hintModels) && _hintModels.length === 1) ? _hintModels[0] : "");
         if (_gcd.blocked) { console.log("K192_STOCK_CONTRADICT_FIXED " + _gcd.said); reply = _gcd.reply; }
       } catch (e) {}
+      // 🚧 k260 (ชั้นสุดท้ายของสายหมวดสินค้า): ขอดูรายการหมวด X → ห้ามเสนอรุ่นหมวดอื่น
+      //   k259 บังคับที่ขาเข้าแล้ว ด่านนี้จับเฉพาะที่ AI ดันเอ่ยเองตอนขาออก (เทิร์น 5/9 บทจริง 8 ส.ค.)
+      try {
+        const _gcr = catReplyGate(reply, String(msgText || ""));
+        if (_gcr.blocked) { console.log("K260_CAT_REPLY_FIXED " + _gcr.said); reply = _gcr.reply; }
+      } catch (e) {}
+      // 🧭🧭 k263 (ชั้นสุดท้ายของ State Engine): "ห้าม Intent ตอบข้าม State"
+      //   จ่ายแล้ว/จบแล้ว → คำตอบห้ามย้อนถาม รุ่น/กลิ่น/จำนวน/ข้อมูลติดต่อที่มีแล้ว
+      //   กำลังรอที่อยู่/หมุด → คำตอบห้ามวกไปชวนเลือกสินค้า
+      //   ⛔ ลูกค้าตั้งใจสั่งเพิ่ม (เอ่ยชื่อรุ่น/คำสั่งซื้อ) = ปล่อยผ่านทุก state
+      try {
+        //  ⚠️ อ่าน state จาก TURN ctx (ฝากไว้ตอนคำนวณต้นเทิร์น) — ตัวแปร _G2STATE อยู่คนละ scope
+        //    เทส W3 จับได้ว่าอ้างตรง ๆ แล้ว ReferenceError โดน try กลืน = ด่านตายเงียบ (บทเรียน k258 ซ้ำ)
+        const _st263 = (TURN.get(userId) || {}).state || "BROWSING";
+        let _wantsNew263 = false;
+        try {
+          _wantsNew263 = !!_MODEL_IN(puffToK(String(msgText || ""))) || /(เอา|สั่ง|รับ|ขอซื้อ)[^\n]{0,30}\d|สั่งเพิ่ม|เอาเพิ่ม/.test(String(msgText || ""));
+          // 🖼️ k264 (เคสจริง 9 ส.ค. 14.42): ลูกค้าจ่ายแล้ว ส่งรูปเมนูวงกลิ่นมาสั่งเพิ่ม
+          //   เทิร์นรูป msgText เป็นค่าว่าง → wantsNew ไม่ติด → ด่านนี้แทนคำทวนของ vision
+          //   ด้วย "ไม่ต้องแจ้งข้อมูลซ้ำ" = ลูกค้าสั่งเพิ่มด้วยรูปไม่ได้เลย
+          //   กฎ: เทิร์นรูปสินค้า/เมนู = ตั้งใจสั่งเพิ่มเสมอ (สลิปแยกไปเส้น [SLIP] ก่อนถึงจุดนี้แล้ว)
+          if (!_wantsNew263 && mtype === "image") _wantsNew263 = true;
+          // 🔗 k264: บอทเพิ่งถามเรื่องเลือกสินค้า/ขอรูปชัดเอง → เทิร์นนี้คือการคุยต่อคำถามค้างของบอท
+          //   ไม่ใช่ "ย้อน flow" (หลักเดียวกับ K259_PENDING_ANSWER: ผูกกับคำถามล่าสุดของบอท)
+          //   ⛔ ข้อความ boilerplate ของด่านนี้เอง ("ไม่ต้องแจ้งข้อมูลซ้ำ...") ไม่นับเป็นคำถามค้าง
+          if (!_wantsNew263) {
+            const _h263 = Array.isArray(history) ? history : [];
+            for (let i = _h263.length - 1; i >= 0; i--) {
+              const m = _h263[i];
+              if (!m || m.role !== "assistant") continue;
+              const c = String(m.content || "");
+              if (c.indexOf("ไม่ต้องแจ้งข้อมูลซ้ำ") === -1
+                  && (RX_ASK_PRODUCT_FLOW.test(c) || c.indexOf("ไม่ชัดเจนพอ") !== -1 || c.indexOf("ยืนยันรุ่นให้ไม่ได้") !== -1 || c.indexOf("สนใจรุ่นไหนในภาพ") !== -1)) _wantsNew263 = true;
+              break;
+            }
+          }
+          // 🛍️ k292 (เคสจริงร้าน m 12 ส.ค. 3.35 น. — ลูกค้าจ่ายแล้วแต่ยังเดินดูของต่อ):
+          //   ลูกค้าพิมพ์ "ใช้แล้วทิ้ง" (ชื่อหมวดสินค้า = ขอดูของหมวดนี้)
+          //   → AI ตอบลิสต์ให้แล้วถามต่อ "สนใจรุ่นไหนดีคะ" ซึ่งถูกต้องทุกอย่าง
+          //   → แต่ด่านนี้เห็นว่า state = จ่ายแล้ว + wantsNew ไม่ติด → เขียนทับด้วย
+          //     "ออเดอร์เรียบร้อยแล้วค่ะ ไม่ต้องแจ้งข้อมูลซ้ำ" = ปิดประตูขายของเพิ่มใส่หน้าลูกค้า
+          //   ต้นเหตุ: wantsNew ดูแค่ "ชื่อรุ่น" หรือ "เอา/สั่ง + ตัวเลข" — ไม่รู้จัก "ชื่อหมวด"
+          //   กติกาใหม่: พิมพ์ชื่อหมวด (ใช้แล้วทิ้ง/บิ๊กพอต/หัวพอต/ไส้บุหรี่/นิโคตินพอช/เครื่อง)
+          //             หรือขอดูรายการ/ขอคำแนะนำ = ตั้งใจซื้อเพิ่ม → ปล่อยให้คุยเรื่องสินค้าได้ตามปกติ
+          //   ⛔ เจตนาเดิมของ k263 อยู่ครบ: คำถามหลังการขาย (ส่งเมื่อไหร่/เคลมยังไง/ขอบคุณ)
+          //      ยังไม่นับเป็น wantsNew → ยังกัน AI ย้อนถามรุ่น/กลิ่น/จำนวนซ้ำเหมือนเดิม (ตรวจแล้วทั้ง 3 คำ)
+          if (!_wantsNew263) {
+            const _t292 = String(msgText || "");
+            try { if (topicInText(_t292) || catBrowseKind(_t292)) _wantsNew263 = true; } catch (e) {}
+            if (!_wantsNew263 && /แนะนำ|แบรนด์ไหน|ยี่ห้อไหน|มีรุ่นไหน|อยากได้|อยากลอง|ขอดู|ดูของ/.test(_t292)) _wantsNew263 = true;
+            if (_wantsNew263) console.log("K292_BROWSE_AFTER_PAID msg=" + _t292.slice(0, 24));
+          }
+        } catch (e) {}
+        let _hasShip263 = false;
+        try { const _ov263 = await env.CONV.get("ord:" + shopId + ":" + userId); if (_ov263) _hasShip263 = ordHasShip(JSON.parse(_ov263)); } catch (e) {}
+        const _gst = stateReplyGate(reply, _st263, _wantsNew263, _hasShip263);
+        if (_gst.blocked) { console.log("K263_STATE_REPLY_FIXED state=" + _st263 + " " + _gst.said); reply = _gst.reply; }
+      } catch (e) {}
     } catch (e) {}
     // 🚫 ลูกค้าปฏิเสธ/ยกเลิก → ล้างออเดอร์ค้าง + ห้ามออกการ์ดเด็ดขาด (กันการ์ดเด้งซ้ำ)
     const saidNo = /^(ไม่เอา|ไม่เอาแล้ว|ยกเลิก|ไม่เอาละ|พอแล้ว|ไม่ต้องแล้ว|ไม่สั่งแล้ว|cancel)\s*(แล้ว|ครับ|ค่ะ|คะ|นะ)?$/i.test(String(msgText || "").trim());
     if (saidNo) {
-      try { if (env.CONV) { await env.CONV.delete("ord:" + shopId + ":" + userId); await env.CONV.delete("card:" + shopId + ":" + userId); } } catch (e) {}
+      // 🧭 k252 ข้อ 5 · Invalidation — ยกเลิกแล้วต้องล้างบริบทที่หมดอายุตาม scope
+      //   เดิมลบแค่ ord: + card: → slot: (สินค้าที่คุยค้าง) กับ cst: (สิ่งที่ค้างถาม) รอด
+      //   ผล: ยกเลิกแล้วถามเรื่องอื่น ระบบยังลากสินค้าที่เพิ่งยกเลิกกลับมาตอบ
+      //   ⛔ นี่คือ "การลบ" จริง (ต่างจากการเปลี่ยนหัวข้อที่แค่ระงับ) เพราะลูกค้าบอกชัดว่าไม่เอาแล้ว
+      try {
+        if (env.CONV) {
+          await env.CONV.delete("ord:" + shopId + ":" + userId);
+          await env.CONV.delete("card:" + shopId + ":" + userId);
+          await env.CONV.delete("slot:" + shopId + ":" + userId);
+          slotDrop();   // ⛔ k258b: ยกเลิกแล้วห้ามให้ finally เซฟของเก่ากลับมา
+          await env.CONV.delete("cst:" + shopId + ":" + userId);
+          console.log("K252_INVALIDATE cancel → ord+card+slot+cst");
+        }
+      } catch (e) {}
       {   // k139: กันตอบข้อความยกเลิกซ้ำ (ลูกค้าพิมพ์ "ไม่รับแล้ว" + "ยกเลิก" ติดกัน)
         const _ck = "cxl:" + shopId + ":" + userId;
         const _prev = CANCELLED.get(_ck);
@@ -9231,8 +13517,199 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         return;
       }
     } catch (e) {}
-    if (reply.indexOf("ทวนคำสั่งซื้อ") !== -1) {
+    // 📍📍🔒 k262 · PAID + ที่อยู่ ต้องไม่แขวนอยู่กับ "AI บังเอิญพิมพ์บล็อกทวนคำสั่งซื้อ"
+    //   ต้นเหตุที่พิสูจน์ด้วยการรัน (Wiring W:261_PAID_ADDR_SAVED / W:260D ตกในผลรันโมเดลจริง):
+    //     ทั้งเส้นเก็บที่อยู่ของออเดอร์ที่จ่ายแล้ว (k260d + k261) ถูกวางไว้ **ข้างใน**
+    //     เงื่อนไข `reply.indexOf("ทวนคำสั่งซื้อ")` → ตอน STUB มันยิงเพราะ stub พิมพ์บล็อกทวนให้
+    //     แต่โมเดลจริงตอบเป็นภาษาคนปกติ ด่านนี้จึง **ไม่เคยยิงเลยสักครั้ง** = โค้ดตาย
+    //   ผลเสียจริงเรื่องเงิน 2 ชั้น:
+    //     (1) จ่ายเงินแล้วส่งที่อยู่มา → ที่อยู่/ชื่อ/เบอร์ ไม่ถูกจดลง ord: (พัสดุส่งไม่ได้)
+    //     (2) ตกไปให้เส้น "📦 สรุปออเดอร์" ของ AI แทน → บล็อกออเดอร์ถูกเขียนทับด้วย
+    //         "ตัวเลขที่ AI พิมพ์เอง" และ items ดิบหายทั้งก้อน (ผิดหลัก "โค้ดตัดสินข้อเท็จจริง")
+    //   ⛔ แคบโดยตั้งใจ: ยิงเฉพาะตอนข้อความลูกค้าเป็น "ที่อยู่เต็ม" หรือ "บ้านเลขที่" เท่านั้น
+    //      ข้อความอื่น ๆ ไหลตามเดิมทุกประการ · ลูกค้าตั้งใจสั่งเพิ่ม (เอ่ยรุ่น/จำนวน) ก็ไม่ยิง
+    //   ⛔ และเป็น "ตัวสำรอง" เท่านั้น: ถ้า AI ออกใบ 📦 สรุปออเดอร์ มาถูกต้องแล้ว ปล่อยให้เส้น k88 ทำงานเหมือนเดิม
+    //      (k88 ทับตัวเลขในใบสรุปด้วยยอดจริงจากระบบอยู่แล้ว — เทส jeetoo ข้อ 117 คุมไว้)
+    try {
+      if (env.CONV && !(reply.indexOf("📦 สรุปออเดอร์") !== -1 && /สินค้า:[ \t]*[^\s<]/.test(reply))) {
+        const _pvA = await env.CONV.get("ord:" + shopId + ":" + userId);
+        if (_pvA) {
+          const _pjA = JSON.parse(_pvA);
+          const _tA = String(msgText || "");
+          let _wantsNewA = false;
+          try { _wantsNewA = !!_MODEL_IN(puffToK(_tA)) || /(เอา|สั่ง|รับ|ขอซื้อ)[^\n]{0,30}\d|สั่งเพิ่ม|เอาเพิ่ม/.test(_tA); } catch (e) {}
+          const _hA = houseNoIn(_tA);
+          const _addrFullA = nonProductFlow(_tA, _pjA, false) === "ลูกค้ากำลังแจ้งที่อยู่จัดส่ง";
+          if (ordPaidActive(_pjA) && !_wantsNewA && (_addrFullA || _hA)) {
+            console.log("K260D_PAID_CARD_SUPPRESSED msg=" + _tA.slice(0, 40));
+            let _hasPinA = false;
+            try { const _x0 = await env.CONV.get("exp:" + shopId + ":" + userId); if (_x0) { const _x0j = JSON.parse(_x0); _hasPinA = typeof _x0j.lat === "number"; } } catch (e) {}
+            if (_addrFullA && !_hasPinA) {
+              const _nmA = nameIn(_tA) || "";
+              // ⚠️ ห้ามลบช่องว่างก่อนจับเบอร์ — "…10700 0812345678" จะถูกเชื่อมเป็นเลขเดียว
+              const _telA = (_tA.match(/(?:^|\D)(0\d{1,2}[-\s]?\d{3}[-\s]?\d{3,4})(?:\D|$)/) || ["", ""])[1].replace(/[-\s]/g, "");
+              const _adA = _tA.replace(/\s*\n\s*/g, " ").trim().slice(0, 300);
+              _pjA.ship = Object.assign({}, _pjA.ship, { name: _nmA, tel: _telA, addr: _adA, house: _hA || "", t: Date.now() });
+              _pjA.block = String(_pjA.block || "").replace(/\nที่อยู่: \(รอลูกค้าแจ้งหลังโอน\)/, "")
+                + "\nชื่อผู้รับ: " + (_nmA || "-") + "\nเบอร์: " + (_telA || "-") + "\nที่อยู่: " + _adA;
+              _pjA.status = "ชำระแล้ว ✅ (พร้อมจัดส่ง)";
+              try { await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_pjA), { expirationTtl: 259200 }); } catch (e) {}
+              try { await env.CONV.put("cust:" + shopId + ":" + userId, JSON.stringify({ name: _nmA, tel: _telA, addr: _adA, t: Date.now() })); } catch (e) {}
+              console.log("K261_PAID_ADDR_SAVED tel=" + (_telA ? "1" : "0"));
+              await lineReply(TOKEN, replyToken, "รับที่อยู่จัดส่งเรียบร้อยแล้วค่ะ ✅ ขอบคุณนะคะ 💕\n📦 ออเดอร์ชำระเงินครบแล้ว แอดมินลงระบบให้เรียบร้อยค่ะ 🎉 จัดส่งออกภายใน 1-2 วันนะคะ", userId);
+              return;
+            }
+            if (_hA) {
+              try { const _x = await env.CONV.get("exp:" + shopId + ":" + userId); const _xj = _x ? JSON.parse(_x) : {}; _xj.house = _hA; await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify(_xj), { expirationTtl: 7200 }); } catch (e) {}
+              try { _pjA.ship = Object.assign({}, _pjA.ship, { house: _hA }); await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_pjA), { expirationTtl: 259200 }); } catch (e) {}
+              // 🛵 k275 (เจ้าของร้านแจ้ง 11 ส.ค. — โฟลว์แกร็บจริง): "ขาดอย่างเดียว จีทูไม่ขอชื่อและเบอร์โทร"
+              //   หลักฐาน: เส้นปิดออเดอร์แกร็บครบชุด (k113) ยิงเฉพาะตอนข้อความลูกค้า **มีเบอร์โทร**
+              //   ลูกค้าที่พิมพ์บ้านเลขที่เปล่า ๆ จะจบที่บรรทัดนี้ แล้วบอก "เดี๋ยวไรเดอร์จัดส่ง" ทันที
+              //   → ไรเดอร์ไม่มีชื่อผู้รับ ไม่มีเบอร์ติดต่อ = ส่งไม่ได้จริง (เสียของ เสียค่าส่ง)
+              //   กติกา: บ้านเลขที่ครบแล้วแต่ยังขาดชื่อ/เบอร์ → ถามต่อทันที ⛔ ห้ามบอกว่าพร้อมส่ง
+              //   ⛔ ถามเฉพาะที่ขาด (กฎ k247): ชื่อ/เบอร์ที่ลูกค้าให้ไว้ในออเดอร์นี้แล้ว ไม่ถามซ้ำ
+              let _nm275 = "", _tel275 = "";
+              try {
+                const _x1 = await env.CONV.get("exp:" + shopId + ":" + userId);
+                const _x1j = _x1 ? JSON.parse(_x1) : {};
+                _nm275  = _x1j.name || (_pjA.ship && _pjA.ship.name) || "";
+                _tel275 = _x1j.tel  || (_pjA.ship && _pjA.ship.tel)  || "";
+                const _nIn = nameIn(_tA) || "", _tIn = (_tA.match(RX_TEL) || [""])[0] || "";
+                if (_nIn)  _nm275  = _nm275  || _nIn;
+                if (_tIn)  _tel275 = _tel275 || _tIn;
+                if (_nIn || _tIn) {
+                  _x1j.name = _nm275; _x1j.tel = _tel275; _x1j.house = _hA; _x1j.t = Date.now();
+                  await env.CONV.put("exp:" + shopId + ":" + userId, JSON.stringify(_x1j), { expirationTtl: 7200 });
+                }
+              } catch (e) {}
+              if (_hasPinA && (!_nm275 || !_tel275)) {
+                console.log("K275_GRAB_NEED_CONTACT name=" + (_nm275 ? "1" : "0") + " tel=" + (_tel275 ? "1" : "0"));
+                await lineReply(TOKEN, replyToken, "รับบ้านเลขที่ " + _hA + " เรียบร้อยค่ะ ✅\n"
+                  + expressAskMsg({ house: _hA, name: _nm275, tel: _tel275 }), userId);
+                return;
+              }
+              await lineReply(TOKEN, replyToken, "รับบ้านเลขที่ " + _hA + " เรียบร้อยค่ะ ✅\nออเดอร์ของคุณลูกค้าชำระเงินแล้ว " + (_hasPinA
+                ? "เดี๋ยวไรเดอร์จัดส่งตามหมุดที่แชร์ไว้นะคะ 🛵📍"
+                : "รบกวนแจ้งที่อยู่จัดส่งให้ครบ (ชื่อผู้รับ · ที่อยู่ · เบอร์โทร) ด้วยนะคะ 📦💕"), userId);
+              return;
+            }
+          }
+        }
+      }
+    } catch (e) {}
+    // 🧾🧾 k268 (เคสจริงบนโปรดักชัน 9 ส.ค. 19.43 — reproduce ในเครื่องได้ตรงกัน):
+    //   AI ตอบว่า "เดี๋ยวแอดมินทวน**ออเดอร์**ให้ก่อนนะคะ 🧾\n- MARBO 10K | องุ่น | 2\n\nถูกต้องไหมคะ"
+    //   → เส้นออกการ์ดทั้งเส้นแขวนอยู่กับตัวอักษรเป๊ะ ๆ ว่า "ทวนคำสั่งซื้อ" → **ไม่ออกการ์ด ไม่มี ord**
+    //   ลูกค้าเห็นแค่ข้อความทวน ไม่มียอด ไม่มีปุ่มยืนยัน = ปิดการขายไม่ได้ทั้งเทิร์น
+    //   ⛔ แคบโดยตั้งใจ: รับเฉพาะรูปที่ AI พิมพ์จริง (ทวนคำสั่งซื้อ · ทวนออเดอร์ · ทวนรายการสั่งซื้อ)
+    //      และก้อนนั้นยังต้องมีบรรทัด "รุ่น | กลิ่น | จำนวน" ให้ parseItems อ่านได้เหมือนเดิมทุกอย่าง
+    //      → ข้อความทั่วไปที่บังเอิญมีคำว่า "ทวน" ไม่มีทางกลายเป็นการ์ด
+    if (RX_ORDER_BLOCK.test(reply)) {
+      // 🔒🔒 k260d (เคสจริง 9 ส.ค. 11.29 — เงินจริง): ลูกค้าจ่าย 620 ✅ แล้วพิมพ์บ้านเลขที่ "134/2 จรัญ"
+      //   → AI อ่านเลข "2" จากบ้านเลขที่เป็นจำนวน สร้างบล็อกทวนคำสั่งซื้อใหม่ x2
+      //   → การ์ดใหม่ 970 ออกไปทับออเดอร์ที่จ่ายเงินแล้ว = ชวนลูกค้าจ่ายซ้ำ
+      //   กติกา: มีออเดอร์ "จ่ายแล้ว" (✅) ค้างอยู่ + ข้อความลูกค้าไม่มีชื่อรุ่น/คำสั่งซื้อชัด ๆ
+      //          → ⛔ ห้ามออกการ์ดใหม่ ห้ามเขียนทับ ord: · ถ้าเป็นบ้านเลขที่ ให้จดเข้าออเดอร์เดิม
+      //   ⛔ กันแก้เกิน: ลูกค้าตั้งใจสั่งเพิ่มจริง (เอ่ยชื่อรุ่น/คำว่าสั่ง+จำนวน) → ออกการ์ดได้ตามเดิม
+      try {
+        if (env.CONV) {
+          const _pv = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (_pv) {
+            const _pj = JSON.parse(_pv);
+            const _t = String(msgText || "");
+            let _wantsNew = false;
+            try { _wantsNew = !!_MODEL_IN(puffToK(_t)) || /(เอา|สั่ง|รับ|ขอซื้อ)[^\n]{0,30}\d|สั่งเพิ่ม|เอาเพิ่ม/.test(_t); } catch (e) {}
+            if (ordPaidActive(_pj) && !_wantsNew) {
+              // ⚠️ เคส "ที่อยู่เต็ม/บ้านเลขที่" ถูกด่าน k262 ด้านบนรับไปจบตั้งแต่ก่อนถึงตรงนี้แล้ว
+              //    (ย้ายขึ้นไปเพราะเดิมมันแขวนอยู่กับ "AI ต้องพิมพ์บล็อกทวน" = ไม่เคยยิงจริง)
+              //    ที่เหลือถึงตรงนี้ = AI ออกบล็อกทวนทั้งที่ลูกค้าไม่ได้สั่งใหม่ → ห้ามออกการ์ดซ้ำ
+              console.log("K260D_PAID_CARD_SUPPRESSED msg=" + _t.slice(0, 40));
+              await lineReply(TOKEN, replyToken, "ออเดอร์ของคุณลูกค้าชำระเงินเรียบร้อยแล้วนะคะ ✅ ไม่ต้องกดยืนยันหรือโอนซ้ำค่ะ\nถ้าต้องการสั่งเพิ่ม แจ้งชื่อรุ่นมาได้เลยนะคะ 💕", userId);
+              return;
+            }
+          }
+        }
+      } catch (e) {}
       let items = parseItems(reply);
+      // 🧾🧾 k260c (เคสจริง 9 ส.ค. 11.24 — เงินจริง): ลูกค้าสั่ง M SWITCH แอปเปิ้ลว่านหางฯ 1 ชิ้น
+      //   AI พิมพ์ทวนซ้ำ 2 บรรทัด: "M SWITCH | แอปเปิ้ลว่านหางจระเข้ | 1" + "M SWITCH | 1"
+      //   → การ์ดคิดเงิน 2 แถว = 700 แทน 350 → ลูกค้าถาม "ทำไม740"
+      //   กติกา: แถว "ไร้กลิ่น" ที่รุ่นซ้ำกับแถวมีกลิ่น และจำนวนเท่ากัน = เสียงสะท้อนของ AI → ตัดทิ้ง
+      //   ⛔ แคบโดยตั้งใจ: จำนวนไม่เท่า = อาจสั่งเพิ่มจริง ไม่แตะ · สองแถวมีกลิ่นต่างกัน = ไม่แตะ
+      try {
+        const _keep = [];
+        for (const it of items) {
+          const _echo = !it.flavor && items.some(o => o !== it && o.model === it.model && o.flavor && o.qty === it.qty);
+          if (_echo) { console.log("K260C_CARD_ECHO_ROW_DROPPED " + it.model + " x" + it.qty); continue; }
+          _keep.push(it);
+        }
+        items = _keep;
+      } catch (e) {}
+      // 🧭🧭 k300 · "ข้อเสนอล่าสุดชนะ" — คำตอบสั้นที่ต้องพึ่งบริบท ห้ามถูกตีความด้วยข้อเสนอเก่า
+      //   เคสจริง ABC Easy 12 ส.ค. 16.00-16.08 (พิสูจน์ด้วยการรัน handleEvent จนได้ยอด 410 ตรงหน้าจอ):
+      //     16.01 บอทเสนอรุ่น A จากรูป → ลูกค้าไม่ตอบ
+      //     16.04 ลูกค้าส่งรูปใหม่ บอทเสนอรุ่น B (2 กลิ่น)
+      //     16.07 ลูกค้าตอบ "อย่างละ 1" → AI ย้อนไปหยิบ **ข้อเสนอ A ที่ตายไปแล้ว** มาทวน
+      //   ต้นเหตุเชิงโครงสร้าง: ข้อเสนอที่ "รอคำตอบอยู่" ไม่เคยถูกทำเครื่องหมายไว้
+      //     ประวัติแชทมีข้อเสนอค้างหลายอัน แล้วปล่อยให้ AI เลือกเอง → เลือกผิดเมื่อไหร่ก็ได้
+      //   กติกากลาง (ไม่ผูกกับชื่อสินค้าใด ๆ): ถ้าลูกค้า **ไม่ได้เอ่ยชื่อรุ่นเอง** = คำตอบนี้พึ่งบริบท
+      //     → บริบทที่ใช้ได้มีอันเดียวคือ "ข้อความล่าสุดของบอทที่เป็นคำถาม/ข้อเสนอ"
+      //     → แถวที่รุ่นไม่ตรงกับข้อเสนอนั้น = ซากของข้อเสนอเก่า ตัดทิ้งก่อนถึงด่าน k125
+      //   ⛔ ด่านนี้ "ตัดของออก" อย่างเดียว ไม่เคยเพิ่มของ → ไม่มีทางทำให้การ์ดมีของที่ไม่มีใครสั่ง
+      //   ⛔ ลูกค้าเอ่ยชื่อรุ่นเอง (สั่งหลายรุ่นพร้อมกัน / สั่งเพิ่มเข้าออเดอร์เดิม) = ข้ามด่านนี้ทั้งหมด
+      //   ⛔ ถ้าตัดแล้วไม่เหลืออะไรเลย = ไม่ตัด (ปล่อยให้ด่าน k125 เดิมตัดสิน ห้ามทำให้ลูกค้าตัน)
+      try {
+        const _t300 = String(msgText || "");
+        if (items.length) {
+          let _lb300 = "";
+          for (let i = (history || []).length - 1; i >= 0; i--) {
+            const h = history[i];
+            if (h && h.role === "assistant" && typeof h.content === "string") { _lb300 = h.content; break; }
+          }
+          const _offerM300 = pendingOfferModel(history, _t300);   // ประตูเดียว ใช้ร่วมกับด่าน k117
+          if (_offerM300) {
+            // ⛔ ของที่อยู่ใน "ออเดอร์ที่บันทึกไว้แล้ว" ไม่ใช่ซากข้อเสนอ — เป็นของที่ลูกค้าสั่งไปแล้วจริง
+            //    (เทส k290 จับผมได้ตรงนี้: เวอร์ชันแรกตัดของเดิมทิ้ง = ลูกค้าสั่งเพิ่มแล้วของเก่าหาย)
+            //    ใช้แหล่งเดียวกับ k290 เป๊ะ ๆ ไม่สร้างกติกาใหม่
+            const _inOrd300 = new Set();
+            try {
+              const _ov = await env.CONV.get("ord:" + shopId + ":" + userId);
+              if (_ov) for (const _it of ((JSON.parse(_ov) || {}).items || [])) {
+                if (_it && _it.model) _inOrd300.add(String(_it.model));
+              }
+            } catch (e) {}
+            const _isStale = (x) => x && x.model && x.model !== _offerM300 && !_inOrd300.has(String(x.model));
+            const _stale = items.filter(_isStale);
+            const _keep300 = items.filter(x => !_isStale(x));
+            if (_stale.length && _keep300.length) {
+              console.log("K300_STALE_OFFER_DROPPED offer=" + _offerM300 + " drop=" + _stale.map(x => x.model).join(","));
+              items = _keep300;
+            } else if (_stale.length && !_keep300.length) {
+              // 🧭 ทุกแถวเป็นซากของข้อเสนอเก่า = AI หลงทางทั้งก้อน (นี่คือเคสจริง 16.07)
+              //   ตัดทิ้งเฉย ๆ ลูกค้าจะโดนถามซ้ำ → สร้างรายการจาก "ข้อเสนอล่าสุด" ที่ลูกค้ากำลังตอบแทน
+              //   ⛔ วัตถุดิบมาจากข้อความที่บอทเพิ่งพูดเองล้วน ๆ + จำนวนที่ลูกค้าเพิ่งบอก
+              //      ไม่มีการเดารุ่น ไม่มีการเดากลิ่น ไม่มีการหยิบจากประวัติเก่า
+              //   ⛔ ต้องเป็น "รับทุกตัวที่เสนอ" เท่านั้น — ถ้าลูกค้าเลือกบางตัว (อันแรก/ตัวที่ 2)
+              //      ระบบไม่มีทางรู้ว่าอันไหน → ไม่เดา ปล่อยให้ด่านเดิมถามกลับ
+              try {
+                if (!RX_PICK_SOME.test(_t300)) {
+                  const _fl300 = ((FLAVORS[_offerM300] && FLAVORS[_offerM300].f) || []).map(FM_BARE).filter(Boolean);
+                  let _hit300 = _fl300.filter(f => _lb300.indexOf(f) !== -1);
+                  _hit300 = _hit300.filter(f => !_hit300.some(g => g !== f && g.length > f.length && g.indexOf(f) !== -1));
+                  if (_hit300.length) {
+                    let _q300 = 1;
+                    const _mq = _t300.match(/(?:อย่างละ|คนละ|ละ)\s*(\d{1,3})/) || _t300.match(/(\d{1,3})\s*(?:ชิ้น|อัน|แท่ง|หัว|กล่อง|กระปุก)/) || _t300.match(/(?:เอา|รับ|ขอ)\s*(\d{1,3})/);
+                    if (_mq) { const _v = parseInt(_mq[1], 10); if (_v > 0 && _v <= 999) _q300 = _v; }
+                    items = _hit300.map(f => ({ model: _offerM300, flavor: f, qty: _q300 }));
+                    console.log("K300_REBUILT_FROM_OFFER offer=" + _offerM300 + " × " + _hit300.length + " กลิ่น × " + _q300
+                      + " (ทิ้งซากเก่า: " + _stale.map(x => x.model).join(",") + ")");
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+        }
+      } catch (e) {}
       // 🛒 k125 (เคสจริง 3/8 14.16 — เจ้าของร้านชี้): ลูกค้าพิมพ์ "ตังแท้ก้ได้ครับ" (ตอบเรื่องแท้/โคลน)
       //   แต่ระบบ **เลือกกลิ่นให้เอง** (บลูไอซ์ + องุ่นว่านหางจระเข้) แล้วออกการ์ด 740 บาท
       //   = การ์ดที่ลูกค้ากดโอนได้จริง แต่ของในนั้นลูกค้าไม่เคยสั่ง → เสียเงินจริง เสียความเชื่อใจ
@@ -9251,13 +13728,125 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             const h = history[i];
             if (h && h.role === "assistant" && typeof h.content === "string") { _lastBot = h.content; break; }
           }
-          const _yes = /^(เอา|เอาเลย|รับ|รับเลย|ตกลง|โอเค|ok|okay|ได้|ได้เลย|จัดเลย|เอาอันนั้น|ตามนั้น|ยืนยัน)\b/i.test(String((ev.message && ev.message.text) || "").trim());
+          // ⚠️ P0-14: เดิมบรรทัดนี้ใช้ /^(เอา|...|ยืนยัน)\b/ — พิสูจน์ด้วยการรันจริงว่า **ตายทั้งบรรทัด**
+          //   อักษรไทยไม่ใช่ \w → \b ไม่เคยเกิดขอบคำ → "เอาเลย/ยืนยัน/ตามนั้น" คืน false หมด
+          //   ข้อยกเว้น "บอทเสนอกลิ่นเดียวแล้วลูกค้ารับ" จึงไม่เคยทำงานกับลูกค้าไทยเลยตั้งแต่ k125
+          const _yes = confirmYes(String((ev.message && ev.message.text) || ""));
+          // 🧺 P0-14: ลูกค้าสั่งแบบเหมา ("เอาทุกกลิ่นอย่างละ 1") = เลือกเองแล้ว โดย "อ้างถึง" รายการที่บอทลิสต์
+          //   ⛔ ยังกันเจตนาเดิมของ k125 ครบ: กลิ่นนั้นต้องเป็นกลิ่นจริงของรุ่นนั้นในแคตตาล็อก
+          //      ระบบแต่งชื่อกลิ่นขึ้นมาเอง หรือหยิบกลิ่นข้ามรุ่น ยังโดนบล็อกเหมือนเดิม
+          const _aggSaid = aggregateAsk(_rawSaid.join(" ")).all;
+          // 🖼️ k285 (เคสจริง ABC Easy 11 ส.ค. 23.56 — ร้าน ABC Easy):
+          //   ลูกค้าวงกลม 3 กลิ่นในรูปเมนู RELX INFINITY (ฝรั่ง · มิกซ์เบอร์รี่ · ราสเบอร์รี่มิ้นต์)
+          //   บอทอ่านรูปถูกครบทั้ง 3 แล้วถามยืนยัน "…อย่างละ 1 ชิ้นใช่ไหมคะ" → ลูกค้าตอบ "ใช่ครับ"
+          //   แต่ด่านนี้บล็อก เพราะทางผ่านเดียวที่มี (k275) คือ "บอทเสนอกลิ่นเดียว" → inBot.length === 3 ไม่เข้า
+          //   ผล: ลูกค้าต้องพิมพ์กลิ่นซ้ำใหม่ทั้งหมดทั้งที่ตกลงไปแล้ว (ออเดอร์ 460 บาทค้าง)
+          //   พิสูจน์แล้วด้วยการรัน handleEvent จริง — ได้ข้อความออกมาตรงกับหน้าจอคำต่อคำ
+          //   ⚠️ ชื่อกลิ่นมาจาก "รูป" ไม่เคยอยู่ในข้อความลูกค้า (ประวัติรูปเก็บแค่ชื่อ **รุ่น**)
+          //      → เส้น "_said.indexOf(nb)" ช่วยไม่ได้ ต้องดูจากข้อเสนอล่าสุดของบอทเท่านั้น
+          //   กติกาใหม่ (แคบมาก) ต้องครบ 3 ข้อพร้อมกัน:
+          //     1) ลูกค้าตอบรับชัดเจน (confirmYes)
+          //     2) การ์ดมี "รุ่นเดียว" และทุกกลิ่นในการ์ดเป็นกลิ่นที่บอทเพิ่งเอ่ยในข้อความล่าสุด
+          //     3) จำนวนกลิ่นตรงกันเป๊ะ ไม่ขาดไม่เกิน
+          //   ⛔ เจตนาเดิมของ k125 อยู่ครบ — นี่คือการ "เพิ่มทางผ่าน" อย่างเดียว
+          //      ไม่มีเส้นไหนที่วันนี้ผ่านอยู่ แล้วจะกลายเป็นโดนบล็อกเพราะบรรทัดพวกนี้
+          //      AI แถมกลิ่นเกิน / ตกกลิ่น / เลือกเองโดยบอทไม่เคยเสนอ = ยังบล็อกเหมือนเดิมทุกกรณี
+          //  k299 (เคสจริง ABC Easy — ลูกค้าตอบรับ "พร้อมบอกจำนวน" ในประโยคเดียว):
+          //    "ใช่ครับ เอาอย่างละ 1" · "ใช่ค่ะ อย่างละ1" · "อย่างละ1" · "เอาอย่างละชิ้น" · "1 ชิ้นทุกอัน"
+          //    confirmYes() รับเฉพาะ "คำรับล้วนๆ" — พอมีคำบอกจำนวนต่อท้าย มันคืน false ทันที
+          //    ผลคือ **ยิ่งลูกค้าตอบละเอียด ยิ่งถูกปฏิเสธ** (พิสูจน์ด้วยการรัน handleEvent จริง:
+          //      "ใช่ครับ" → ออกการ์ด · "ใช่ครับ เอาอย่างละ 1" → K125_CARD_BLOCKED ทั้งที่รายการเดียวกันเป๊ะ)
+          //    ⛔ ขอบเขต: ใช้ตัวแปรนี้ **เฉพาะใน _k285ok เท่านั้น** ไม่แตะ confirmYes() ส่วนกลาง
+          //       ไม่แตะด่านอื่น ไม่แตะการนับจำนวน — จำนวนยังมาจากบล็อกทวนของ AI ตามเดิม
+          //       ("อย่างละ 2" ต้องได้ 2 ทุกรายการ ไม่มีการ fix เป็น 1 ที่ไหนทั้งสิ้น)
+          //    เงื่อนไขอื่นของ k285 คงเดิมครบทุกข้อ: รุ่นเดียว · บอทเพิ่งเสนอกลิ่น ≥2 · กลิ่นตรงเป๊ะไม่ขาดไม่เกิน
+          //    → นี่คือ "เพิ่มทางผ่าน" อย่างเดียว ไม่มีเส้นไหนที่วันนี้ผ่านอยู่แล้วจะกลายเป็นโดนบล็อก
+          //   k300 · ขยายให้ครอบ "คำตอบที่ต้องพึ่งบริบท" ทั้งตระกูล ไม่ใช่แค่คำว่า "อย่างละ"
+          //     วัดของจริงแล้ว: ก่อนแก้มีแค่ "ใช่" กับ "อย่างละ N" ที่ผ่าน ส่วน "เอา 2 · เอาทั้งคู่ ·
+          //     เอาค่ะ · ได้ · ตัวนี้ 2 · อันแรก · อันหลัง" ตกหมด ทั้งที่ AI ทวนรายการถูกต้องแล้ว
+          //     = ลูกค้าตอบเป็นภาษาคนแล้วโดนถามซ้ำ ซึ่งเป็นอาการเดียวกับ k285/k299 ทุกประการ
+          //   ⛔ ใช้เฉพาะในบล็อก _k285ok นี้เท่านั้น ไม่แตะ confirmYes() ส่วนกลาง ไม่แตะด่านอื่น
+          //   ⛔ ปลอดภัยเพราะ k300 ด้านบนล็อกไว้แล้วว่าแถวต้องเป็นรุ่นของ "ข้อเสนอล่าสุด"
+          //      และเงื่อนไขเดิมยังบังคับว่ากลิ่นทุกตัวต้องมาจากข้อเสนอของบอทเท่านั้น
+          const _txt300 = String((ev.message && ev.message.text) || "").trim();
+          //   ⛔ เทส k285 จับผมได้: เวอร์ชันแรกใส่คำว่า "ได้" ลอย ๆ ลงตัวจับ
+          //      → "ขอดูราคาก่อนได้ไหม" (ลูกค้ายังไม่ตกลง!) กลายเป็นการตอบรับ = ออกการ์ดให้คนที่แค่ถามราคา
+          //      กติกาใหม่: ประโยคคำถามไม่นับเป็นการตอบรับเด็ดขาด + คำรับสั้นต้องเป็นทั้งประโยค
+          const _isQuestion300 = /ไหม|มั้ย|มัย|หรือ|รึ|เท่าไหร่|เท่าไร|ราคา|กี่|\?/.test(_txt300);
+          const _qtyAllYes = !_isQuestion300 && (
+            /อย่างละ|ทุกอัน|ทุกกลิ่น|ทุกตัว|ทุกรส|ทุกแบบ|ทั้งคู่|ทั้งสอง|ทั้งหมด/.test(_txt300)
+            || /^(?:เอา|รับ|ขอ|ได้|โอเค|โอเก|ตกลง|จัดมา|เอามา|ok|okay)[\sๆ]*(?:\d{1,3})?\s*(?:ชิ้น|อัน|แท่ง|หัว|กล่อง)?\s*(?:ค่ะ|คะ|ครับ|คับ|จ้า|จ๊ะ|นะคะ|นะครับ|เลย)?\s*$/i.test(_txt300)
+          );
+          //   k300 · "เลือกบางตัวจากที่เสนอ" (อันแรก/อันหลัง/ตัวที่ 2/ตัวนี้) — ยอมให้ไม่ครบทุกกลิ่นได้
+          //     ⛔ เลือกได้เฉพาะจากกลิ่นที่บอทเพิ่งเสนอเท่านั้น (เงื่อนไข every(...) เดิมยังบังคับอยู่)
+          //        AI หยิบกลิ่นนอกข้อเสนอ = ยังบล็อกเหมือนเดิมทุกกรณี
+          const _pickSome300 = RX_PICK_SOME.test(_txt300);
+          let _k285ok = false;
+          try {
+            if ((_yes || _qtyAllYes || _pickSome300) && _lastBot) {
+              const _mdls = [...new Set(items.map(i => String((i && i.model) || "")).filter(Boolean))];
+              if (_mdls.length === 1) {
+                const _fl = ((FLAVORS[_mdls[0]] && FLAVORS[_mdls[0]].f) || []).map(FM_BARE).filter(Boolean);
+                let _hit = _fl.filter(f => _lastBot.indexOf(f) !== -1);
+                // ตัดชื่อกลิ่นที่เป็น "ส่วนหนึ่ง" ของกลิ่นอื่นที่ยาวกว่าออก
+                //   (เช่น "เบอร์รี่" ซ่อนอยู่ใน "มิกซ์เบอร์รี่" ถ้าไม่ตัด จำนวนจะเกินแล้วบล็อกผิดตัว)
+                _hit = _hit.filter(f => !_hit.some(g => g !== f && g.length > f.length && g.indexOf(f) !== -1));
+                const _offer = [...new Set(_hit.map(f => normTH(f)))];
+                const _want = [...new Set(items.map(i => normTH(FM_BARE(String((i && i.flavor) || "")))).filter(Boolean))];
+                const _subsetOk = _pickSome300 && _want.length >= 1 && _want.length < _offer.length;
+                if (_offer.length >= 2 && _want.length >= 1 && _want.every(w => _offer.indexOf(w) !== -1)
+                    && (_want.length === _offer.length || _subsetOk)) {
+                  _k285ok = true;
+                  console.log("K285_MULTI_FLAVOR_CONFIRMED " + _mdls[0] + " × " + _want.length + "/" + _offer.length
+                    + " กลิ่น (ลูกค้าตอบรับข้อเสนอของบอท" + (_subsetOk ? "บางตัวตามที่ระบุ" : "ครบทุกตัว") + ")");
+                }
+              }
+            }
+          } catch (e) {}
+          // 🧾 k290 (เคสจริง ร้าน pppppp 12 ส.ค. 2.39 น. — เงินจริง 700 บาท):
+          //   ลูกค้ามีออเดอร์เดิม MARBO 9K บลูไอซ์ x3 อยู่แล้ว → ขอเพิ่มหัวพอต RELX INFINITY ฝรั่ง 5 หัว
+          //   บอททวนถูกเป๊ะ ลูกค้าตอบ "ใช่ค่ะ" แต่การ์ดออกมามีแต่ MARBO = หัวพอตหายทั้งก้อน
+          //   ต้นเหตุ (พิสูจน์จาก log จริง): K125_CARD_BLOCKED ชี้ว่าตัวที่ไม่มีหลักฐานคือ **"บลูไอซ์"**
+          //     ซึ่งเป็นของ "ออเดอร์เดิม" ที่ลูกค้าเคยพิมพ์เองและผ่านด่านนี้ไปแล้วเมื่อหลายเทิร์นก่อน
+          //     แต่ประวัติแชทเก็บย้อนหลังจำกัด → ข้อความที่ลูกค้าพิมพ์ชื่อกลิ่นหลุดออกจากหน้าต่างไปแล้ว
+          //     → ด่านนี้เลยตัดสินว่า "ลูกค้าไม่ได้เลือกเอง" แล้วบล็อกทั้งการ์ด รวมของใหม่ที่ถูกต้องด้วย
+          //   กติกาใหม่: กลิ่นที่ **อยู่ในออเดอร์ที่บันทึกไว้แล้ว** = เคยผ่านด่านนี้มาแล้ว ไม่ต้องตรวจซ้ำ
+          //   ⛔ เจตนาเดิมของ k125 อยู่ครบ: ของ "ใหม่" ที่ยังไม่เคยอยู่ในออเดอร์ ยังต้องมีหลักฐานเหมือนเดิมทุกกรณี
+          //   ⛔ ไม่ได้ดูแค่ชื่อกลิ่น — ต้องตรงทั้ง "รุ่น + กลิ่น" ที่บันทึกไว้ กันกลิ่นชื่อเดียวกันข้ามรุ่น
+          //   ⚠️ บทเรียนตอนเขียนเทส (เทส B1 จับผมได้): เวอร์ชันแรกผมยกเว้นให้ทุกกรณี
+          //      → เปิดช่องใหม่ทันที: AI ลอกออเดอร์เก่ามาเป็นการ์ดใหม่ได้ ทั้งที่ลูกค้าไม่ได้สั่งอะไรเลย
+          //      (ลูกค้าพิมพ์ "ขอบคุณค่ะ" แล้วมีการ์ดเด้งมา = น่ากลัวมาก)
+          //   → บีบให้แคบลง: ยกเว้นได้ **เฉพาะตอนที่การ์ดมีของใหม่จริงๆ อยู่ด้วย** (= กำลังสั่งเพิ่ม)
+          //      ถ้าการ์ดมีแต่ของเดิมล้วนๆ = ไม่ใช่การสั่งเพิ่ม → ตรวจตามกฎเดิมทุกประการ
+          let _ordPass = new Set();
+          try {
+            const _ov290 = await env.CONV.get("ord:" + shopId + ":" + userId);
+            if (_ov290) {
+              const _oj290 = JSON.parse(_ov290);
+              for (const _it of ((_oj290 && _oj290.items) || [])) {
+                const _b = normTH(FM_BARE(String((_it && _it.flavor) || "")));
+                if (_b) _ordPass.add(String((_it && _it.model) || "") + "|" + _b);
+              }
+              // การ์ดนี้มี "ของใหม่" ที่ยังไม่เคยอยู่ในออเดอร์ไหม
+              const _hasNew290 = items.some(it => {
+                const _k = String((it && it.model) || "") + "|" + normTH(FM_BARE(String((it && it.flavor) || "")));
+                return !_ordPass.has(_k);
+              });
+              if (!_hasNew290) _ordPass = new Set();   // ของเดิมล้วนๆ = ไม่ใช่การสั่งเพิ่ม → ไม่ยกเว้น
+            }
+          } catch (e) {}
           const _unconfirmed = [];
           for (const it of items) {
             const bare = String(it.flavor || "").replace(/\s*\d+(\.\d+)?%\s*$/, "").trim();
             if (!bare) continue;
             const nb = normTH(bare);
+            if (_ordPass.has(String(it.model || "") + "|" + nb)) continue;      // k290: อยู่ในออเดอร์เดิมอยู่แล้ว = เคยผ่านด่านนี้ ✅
             if (nb.length >= 2 && _said.indexOf(nb) !== -1) continue;          // ลูกค้าพิมพ์เอง ✅
+            // 🧺 P0-14: สั่งเหมา + กลิ่นนี้เป็นกลิ่นจริงของรุ่นนี้ → ถือว่าลูกค้าเลือกเองแล้ว ✅
+            if (_aggSaid) {
+              const _fl = (FLAVORS[it.model] && FLAVORS[it.model].f) || [];
+              if (_fl.some(f => normTH(FM_BARE(f)) === nb)) continue;
+            }
             // ✂️ k170 (เจอตอนไล่โฟลว์ 5 ส.ค. — ยืนยันด้วยการรันโค้ดจริง):
             //   ลูกค้าพิมพ์ "เอามาโบ องุ่นว่าน 2 แท่ง" = สั่งครบทุกอย่าง เลือกกลิ่นเอง
             //   แต่ด่านนี้บล็อกการ์ด เพราะเทียบแบบ "ต้องมีชื่อกลิ่นเต็ม" — ลูกค้าพิมพ์แค่ครึ่งชื่อ
@@ -9278,6 +13867,18 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             //    ไม่งั้นด่านนี้จะไปขวางลูกค้าที่สั่งจริงแต่สะกดไม่เป๊ะ = เสียลูกค้าฟรีๆ
             //    ⚠️ ใช้ _lev ตรงๆ ไม่ได้ เพราะมันคืน 9 ทันทีถ้าความยาวต่างเกิน 2
             //       ("สตอเบอรี่" สั้นกว่า "สตรอว์เบอร์รี่" ถึง 5 ตัว) → ต้องวัดจาก "โครงพยัญชนะ" แบบไม่จำกัดความยาว
+            // 🙏 k289 (เจอ 12 ส.ค. ตอนเขียนเทส k285 — เป็นบั๊กเก่าที่ซ่อนอยู่นานแล้ว):
+            //   ตัวเทียบนี้เอา "ทุกคำที่ลูกค้าเคยพิมพ์" ไปเทียบกับชื่อกลิ่นด้วยโครงพยัญชนะ
+            //   → คำสุภาพที่ลูกค้าพิมพ์ทุกประโยค กลายเป็นชื่อกลิ่นไปด้วย:
+            //        "ครับ" (โครง ค-ร-บ) ≈ "ฝรั่ง" (โครง ฝ-ร-ง) ห่าง 2
+            //        "สนใจ" (โครง ส-น-จ) ≈ "ลิ้นจี่" (โครง ล-น-จ) ห่าง 1
+            //   ผลคือระบบ "เลือกกลิ่นให้เอง" แล้วออกการ์ดที่ลูกค้ากดโอนได้ ทั้งที่ไม่เคยเลือก
+            //   = สิ่งที่ด่าน k125 ถูกสร้างมาเพื่อกันโดยตรง (เรื่องเงิน)
+            //   วัดจริง: คำสุภาพ 20 คำ × กลิ่น 317 ชื่อ → จับผิด **89 คู่**
+            //   กติกาใหม่ 2 ชั้น (วัดแล้วเหลือ 0 คู่ และคำสะกดเพี้ยนยังช่วยได้ 795/795 = 100%):
+            //     ① คำสุภาพ/คำสั่งงาน ไม่มีทางเป็นชื่อกลิ่น → ไม่ต้องเอาไปเทียบเลย
+            //     ② พยัญชนะตัวแรกของโครงต้องตรงกัน (กติกาเดียวกับตัวจับกลิ่นหลักที่ใช้อยู่แล้ว)
+            //   ⛔ ห้ามใส่คำที่เป็นชื่อกลิ่นจริงลงในลิสต์นี้ — เทส k289 ตรวจกับแคตตาล็อกทุกชื่อให้อัตโนมัติ
             let _typoOk = false;
             try {
               if (nb.length >= 4) {
@@ -9285,17 +13886,37 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
                 const _lim = Math.max(2, Math.ceil(_sk.length * 0.4));
                 for (const tk of _saidTok) {
                   if (tk.length < 3) continue;
-                  if (_levFull(_skel(tk), _sk) <= _lim) { _typoOk = true; break; }
+                  if (RX_NOT_FLAVOR.test(tk)) continue;                          // ① คำสุภาพ/คำสั่งงาน
+                  const _st = _skel(tk);
+                  if (!_st.length || !_sk.length || _st[0] !== _sk[0]) continue;  // ② ตัวแรกต้องตรง
+                  if (_levFull(_st, _sk) <= _lim) { _typoOk = true; break; }
                 }
               }
             } catch (e) {}
             if (_typoOk) continue;
             // บอทเสนอกลิ่นนี้ "ตัวเดียว" แล้วลูกค้าตอบรับ → ผ่าน
-            if (_yes && _lastBot) {
+            // 🖼️ k275 (เคสจริง ABC Easy 11 ส.ค. 15.09): ลูกค้าวงกลมกลิ่น "โคล่า" ในรูปเมนู
+            //   บอทอ่านรูปถูก ถามยืนยัน "สนใจ DUAL SMASH กลิ่นโคล่า ใช่ไหมคะ รับกี่ชิ้นดีคะ"
+            //   ลูกค้าตอบ "1 ชิ้นครับ" = ตอบรับ + บอกจำนวนในทีเดียว
+            //   แต่ด่านนี้บล็อก เพราะ (1) กลิ่นมาจากรูป ไม่ได้พิมพ์ (2) confirmYes("1 ชิ้นครับ") = false
+            //   → ลูกค้าโดนถามซ้ำทั้งที่บอกครบแล้ว (พิสูจน์ด้วยการรัน handleEvent จริง)
+            //   กติกาใหม่ (แคบ): "ตอบด้วยจำนวนล้วน" = ตอบรับข้อเสนอ เท่ากับพิมพ์ว่า "ใช่"
+            //   ⛔ เจตนาเดิมของ k125 ยังอยู่ครบ: บอทต้องเพิ่งเสนอกลิ่น **ตัวเดียว** ของรุ่นนั้น
+            //      ระบบเลือกกลิ่นเองแบบไม่เคยเสนอ หรือเสนอหลายกลิ่น ยังโดนบล็อกเหมือนเดิม
+            let _accept275 = _yes;
+            try {
+              const _t275 = String((ev.message && ev.message.text) || "");
+              if (!_accept275 && qtyLeadIn(_t275) > 0) _accept275 = true;
+              // ลูกค้าตอบเลขล้วน ("2") หลังบอทถาม "รับกี่ชิ้นดีคะ" = ตอบจำนวน ไม่กำกวม
+              //   ⛔ ต้องมีคำถามจำนวนของบอทค้ำอยู่เท่านั้น เลขลอยในบริบทอื่น (บ้านเลขที่/ยอดเงิน) ไม่นับ
+              if (!_accept275 && /^\s*\d{1,2}\s*$/.test(_t275) && /กี่ชิ้น|กี่อัน|กี่แท่ง|กี่ตัว|รับกี่/.test(_lastBot)) _accept275 = true;
+            } catch (e) {}
+            if (_accept275 && _lastBot) {
               const fl = (FLAVORS[it.model] && FLAVORS[it.model].f) || [];
               const inBot = fl.filter(f => _lastBot.indexOf(String(f).replace(/\s*\d+(\.\d+)?%\s*$/, "").trim()) !== -1);
               if (inBot.length === 1 && normTH(String(inBot[0]).replace(/\s*\d+(\.\d+)?%\s*$/, "")) === nb) continue;
             }
+            if (_k285ok) continue;   // k285: บอทเสนอหลายกลิ่นพร้อมกัน ลูกค้ารับครบทุกตัว ✅
             _unconfirmed.push((it.model || "") + " " + bare);
           }
           if (_unconfirmed.length) {
@@ -9304,7 +13925,12 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             await lineReply(TOKEN, replyToken,
               "ขออนุญาตเช็คให้ชัดก่อนนะคะ 🙏🏻 จะได้ไม่ผิดรายการค่ะ\n\n" +
               (_mdl ? "รบกวนแจ้งกลิ่นที่ต้องการของ " + _mdl + " + จำนวน มาได้เลยค่ะ\n" : "รบกวนแจ้งกลิ่นที่ต้องการ + จำนวน มาได้เลยค่ะ\n") +
-              "(เช่น \"องุ่น 2 ชิ้น\") แล้วแอดมินจะสรุปยอดให้ทันทีค่ะ 💕", userId);
+              // 🍇 k288 (เคสจริง ABC Easy 12 ส.ค. 1.10): เดิมใช้ชื่อกลิ่นจริง "องุ่น" เป็นตัวอย่าง
+              //   ข้อความนี้ถูกเก็บลงประวัติแชท แล้ว AI อ่านย้อนหลังไปเจอคำว่า "องุ่น"
+              //   → ลูกค้าพิมพ์แค่ "ครับ" AI กลับตอบเรื่ององุ่น ทั้งที่ลูกค้าไม่เคยสั่ง
+              //   (องุ่นหมดพอดี ด่านสต็อกเลยเขียนทับเป็น "กลิ่นองุ่น หมดชั่วคราวค่ะ" = ลูกค้างงหนักกว่าเดิม)
+              //   กติกาใหม่: ตัวอย่างในข้อความของจีทู **ห้ามใช้ชื่อกลิ่น/ชื่อรุ่นจริง** ที่มีในแคตตาล็อก
+              "(เช่น \"ชื่อกลิ่น 2 ชิ้น\") แล้วแอดมินจะสรุปยอดให้ทันทีค่ะ 💕", userId);
             return;
           }
         }
@@ -9336,6 +13962,45 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           + "\n" + (history.length ? String(history[history.length - 1].content || "") : "");
         const mk = (txt) => { const s = new Set(), n = normTH(txt); for (const k of FLAVOR_KEYS) if (n.indexOf(normTH(k)) !== -1) s.add(normTH(k)); for (const [re, key] of TH_MODEL) if (re.test(txt)) s.add(normTH(key)); return s; };
         const wide = mk(convText), narrow = mk(narrowText);
+        // 🛒 PE-10 (เคสจริง 8 ส.ค. · Conversation #3) — ด่านนี้ดู "ข้อความ" อย่างเดียว
+        //   ถ้าเทิร์นก่อนหน้าเป็นคำถามที่ไม่มีชื่อสินค้า (เลือกโปร / ถามค่าส่ง / ถามที่อยู่)
+        //   แล้วลูกค้าตอบสั้นๆ ว่า "ยืนยัน" → narrow ว่างเปล่า → okNow = false
+        //   → ตอบ "รบกวนแจ้ง รุ่น+กลิ่น+จำนวน อีกที" ทั้งที่ระบบจำครบอยู่ใน Slot
+        //   = ลูกค้าพร้อมจ่ายแล้วโดนสั่งให้เริ่มใหม่ → ออเดอร์หลุด (โดยเฉพาะออเดอร์ที่เข้าโปร)
+        // แก้ที่ต้นเหตุ: Product Slot คือ "บันทึกของระบบเองว่าลูกค้าสั่งอะไรอยู่"
+        //   ต้องนับเป็นหลักฐานเท่ากับข้อความ ไม่ใช่มองแค่ตัวหนังสือ
+        // ⛔ ไม่ได้ลดการป้องกัน: slot เป็นของรายคน และถูกล้างเมื่อยกเลิก/เปลี่ยนหัวข้อ (k252)
+        //   จึงลากออเดอร์เก่าเข้ามาไม่ได้
+        try {
+          const _sl = await slotLoad(env, shopId, userId);
+          for (const it of ((_sl && _sl.items) || [])) {
+            if (!it) continue;
+            for (const v of [it.model, it.flavor]) {
+              const n = normTH(v || "");
+              if (n) { wide.add(n); narrow.add(n); }
+            }
+          }
+        } catch (e) {}
+        // 🧾 k290 (เคสจริง ร้าน pppppp 12 ส.ค. 2.39 น. — เงินจริง 700 บาท):
+        //   ลูกค้ามีออเดอร์ค้าง MARBO 9K บลูไอซ์ x3 แล้วสั่งเพิ่ม "หัวพอต RELX INFINITY ฝรั่ง 5 หัว
+        //   รวมที่สั่งตอนแรกด้วย" · บอททวนถูก ลูกค้าตอบ "ใช่ค่ะ"
+        //   แต่ด่านนี้ดูแค่บทสนทนา "2 เทิร์นล่าสุด" ซึ่งพูดถึงแต่หัวพอต
+        //   → MARBO ไม่อยู่ใน wide → **ถูกตัดทิ้งเงียบๆ** การ์ดเหลือแต่หัวพอต
+        //   (พิสูจน์ด้วยตัวสอดแนมในสำเนาโค้ด: เข้าด่าน 2 รายการ ออกจากด่าน 1 รายการ)
+        //   ของที่อยู่ใน "ออเดอร์ที่บันทึกไว้แล้ว" ไม่ใช่ของที่ AI ลอกมามั่ว — มันคือของจริงที่ลูกค้าสั่งค้างอยู่
+        //   ⛔ ใส่เข้า wide อย่างเดียว **ห้ามใส่ narrow** — เจตนาเดิมของด่านนี้ยังอยู่ครบ:
+        //      ยังบังคับว่าต้องมีอย่างน้อย 1 รายการที่ตรงกับ "สิ่งที่คุยกันอยู่ตอนนี้"
+        //      ถ้า AI ลอกออเดอร์เก่ามาล้วนๆ โดยลูกค้าคุยเรื่องอื่น → okNow = false → ยังถามใหม่เหมือนเดิม
+        try {
+          const _ov290b = await env.CONV.get("ord:" + shopId + ":" + userId);
+          if (_ov290b) {
+            const _oj290b = JSON.parse(_ov290b);
+            for (const _it of ((_oj290b && _oj290b.items) || [])) {
+              if (!_it) continue;
+              for (const v of [_it.model, _it.flavor]) { const n = normTH(v || ""); if (n) wide.add(n); }
+            }
+          }
+        } catch (e) {}
         // 🐛 k72 (เคสจริง): ลูกค้าพิมพ์ "เอามาโบองุ่น 2 ตัว" → Qwen เขียนบล็อกว่า "มาโบ | องุ่น | 2"
         //   ระบบแปล "มาโบ" = MARBO 9K ได้อยู่แล้ว แต่ด่านกันลอกออเดอร์เก่าเทียบ "ชื่อดิบ" ตรงๆ
         //   "มาโบ" ไม่ตรงกับ "MARBO 9K" → ถือว่าเป็นรุ่นที่ลูกค้าไม่ได้สั่ง → ไม่ออกการ์ด
@@ -9362,6 +14027,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       } catch (e) {}
       // 🛑 กันออกการ์ดก่อนรู้กลิ่น/จำนวนจริง — ถ้าช่องกลิ่นเป็น "คำถาม" (กลิ่นไหน/อะไร/เลือก) หรือจำนวนไม่ชัด → ยังไม่ออกการ์ด ให้ถามก่อน
       const notReady = !items.length || items.some(it => /ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(it.flavor) || !(it.qty > 0));
+      // 🎁🎁 k258 · ของแถมเข้าออเดอร์จาก "ตาราง BUNDLE + Slot" ไม่ใช่จากที่ AI พิมพ์
+      //   เคสจริง 8 ส.ค. ข้อ 3: การ์ดมีแต่ "หัวพอต RELX มิ้นต์ฟรีซ x1 140 บาท"
+      //     → เครื่อง 990 หายจากออเดอร์ + ของแถมถูกคิดเงิน = ผิด 2 ต่อ
+      //   กติกา: ของแถมต้องอ้าง parent ที่อยู่ในออเดอร์เดียวกันเสมอ · ราคาต้องเป็น 0 · ห้ามทับ parent
+      //   ⛔ ห้ามจับคู่ด้วยชื่อแบรนด์ — อ่านจาก bundleFor() เท่านั้น (CREATOR เป็น RELX แต่ไม่แถม)
+      try {
+        if (!notReady && items.length && pslot && pslot.items) {
+          for (const _ch of pslot.items) {
+            if (!_ch || !_ch.free || !_ch.parent || !_ch.model || !(_ch.qty > 0)) continue;
+            if (!items.some(x => x && x.model === _ch.parent)) continue;              // parent ไม่อยู่ในออเดอร์ = ไม่แถม
+            if (items.some(x => x && x.free && x.parent === _ch.parent)) continue;    // ใส่ไปแล้ว
+            items.push({ model: _ch.model, flavor: _ch.flavor || "", qty: _ch.qty, free: true, parent: _ch.parent });
+            console.log("K258_BUNDLE_ROW parent=" + _ch.parent + " child=" + _ch.model + " x" + _ch.qty);
+          }
+        }
+      } catch (e) {}
       // 🚫 เช็คสต็อกจริงก่อนออกการ์ด — คัดรายการที่หมดออก แล้วไปต่อกับตัวที่มีของ (กันวนซ้ำ)
       let outList = [], okItems = items, staleList = [];
       try {
@@ -9375,7 +14056,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           const nowT = Date.now();
           okItems = [];
           for (const it of items) {
-            if (/แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม
+            if (it.free || /แถม|ฟรี/i.test(it.flavor || "")) { okItems.push(it); continue; } // ของแถม ข้าม (k258: รวมของแถมที่มาจากตาราง BUNDLE)
             const q = findStockForItem(smChk, it.model, it.flavor);
             if (q !== null && q <= buf) {
               // 🔎 k9: SKU ที่ตรงสุดหมด แต่ความแรงอื่นของรุ่น+กลิ่นเดียวกันยังมีของ → ไม่ตัดว่าหมด
@@ -9406,14 +14087,48 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         return;
       }
       if (notReady) {
-        // ถามให้ตรงรุ่น: เครื่อง = ถามสี/จำนวน | อื่นๆ = ถามกลิ่น/จำนวน
         const m0 = (items[0] && items[0].model) || "";
-        // เครื่อง = ถามสี | หัวน้ำยา/พอต = ถามกลิ่น (ดูจากชื่อรุ่นเท่านั้น ห้ามดูจากคำตอบ AI ที่อาจพิมพ์คำว่า "เครื่อง" ปนมา)
-        const isDevice = /^เครื่อง/.test(m0.trim()) || /IQOS ILUMA/i.test(m0);
-        const askTr = L("askItem", LANG);
-        const ask = askTr ? (m0 ? (m0 + " — " + askTr) : askTr) : m0
-          ? ("รับ " + m0 + (isDevice ? " สีไหน" : " กลิ่นไหน") + " จำนวนกี่" + (isDevice ? "เครื่อง" : "ชิ้น") + "ดีคะ 💕")
-          : "รับรุ่นไหน กลิ่น/สีอะไร จำนวนเท่าไหร่ดีคะ 💕";
+        // 🧩🧩 k258 · ถามจากทะเบียน ไม่ใช่จาก if
+        //   เดิม: isDevice = /^เครื่อง/ → เครื่องถามสี · ที่เหลือถามกลิ่น
+        //     ⛔ พัง 2 ทาง: (1) เครื่องที่ชื่อไม่ขึ้นต้นว่า "เครื่อง" (M SWITCH 15K โคลน) โดนถามกลิ่น
+        //                   (2) น้ำยาขวดต้องการ nicotine + volume ด้วย แต่ไม่เคยถูกถามเลย
+        //   ใหม่: requiredAttrs(รุ่น) บอกว่าต้องมีอะไร → หักสิ่งที่ลูกค้ายืนยันไปแล้วใน Slot
+        //         → ถามเฉพาะที่ยังขาดจริงๆ ⛔ ห้ามถามซ้ำสิ่งที่ยืนยันแล้ว (เคส JW ลูกค้าบ่น "แจ้งไปหลายรอบแล้ว")
+        let ask = "";
+        try {
+          // ลูกค้าต่างชาติ → ใช้ข้อความแปลเดิม (ยังไม่มีคำแปลของ ATTR_TH) ห้ามยัดภาษาไทยใส่
+          if (m0 && LANG === "th") {
+            // รวมสิ่งที่รู้จาก Slot (ของจริงที่ลูกค้ายืนยัน) เข้ากับสิ่งที่ AI แกะมาได้รอบนี้
+            const _si = (pslot && pslot.items || []).find(x => x && !x.free && x.model === m0) || null;
+            const _merged = {
+              model: m0,
+              flavor: (items[0] && !/ไหน|อะไร|\?|เลือก|กี่|ดีคะ|ระบุ|ทั้งหมด|โปรด/.test(items[0].flavor || "") ? items[0].flavor : "") || (_si && _si.flavor) || "",
+              color: (_si && _si.color) || "",
+              qty: (items[0] && items[0].qty > 0) ? items[0].qty : ((_si && _si.qty) || null),
+              attrs: (_si && _si.attrs) || null
+            };
+            const _miss = missingAttrs(_merged);
+            if (_miss.length) {
+              ask = attrAskMsg(m0, _miss);
+              console.log("K258_ASK_ATTRS model=" + m0 + " missing=" + _miss.join(",")
+                + " known=" + requiredAttrs(m0).filter(a => !!attrGet(_merged, a)).join(","));
+            } else if (requiredAttrs(m0).length) {
+              // ครบแล้ว = ห้ามถามซ้ำ ให้เดินต่อไปทวนรายการเลย
+              ask = "รับ " + m0
+                + (_merged.color ? " " + ATTR_TH.color + _merged.color : "")
+                + (_merged.flavor ? " " + ATTR_TH.flavor + _merged.flavor : "")
+                + (_merged.qty ? " " + _merged.qty + " ชิ้น" : "")
+                + " ใช่ไหมคะ 💕 ถ้าถูกต้อง พิมพ์ \"ยืนยัน\" ได้เลยค่ะ ✨";
+              console.log("K258_ATTRS_COMPLETE model=" + m0);
+            }
+          }
+        } catch (e) { ask = ""; }
+        // หมวดยังไม่ยืนยัน (requiredAttrs = []) หรือยังไม่รู้รุ่น → ใช้ข้อความเดิมทั้งหมด (ห้ามเดา)
+        if (!ask) {
+          const askTr = L("askItem", LANG);
+          ask = askTr ? (m0 ? (m0 + " — " + askTr) : askTr)
+              : (m0 ? ("รับ " + m0 + " กลิ่นไหน จำนวนกี่ชิ้นดีคะ 💕") : "รับรุ่นไหน กลิ่น/สีอะไร จำนวนเท่าไหร่ดีคะ 💕");
+        }
         await lineReply(TOKEN, replyToken, ask, userId);
       } else if (outOfStock) {
         // k109 (เคสจริง 2/8 20.51 น.): ลูกค้าเปลี่ยนเป็น "สตอเบอรี่" → ระบบจับคู่ สตรอว์เบอร์รี่ (หมด) แล้วบอกหมดห้วนๆ
@@ -9458,12 +14173,19 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           const _lines = _c0.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
           try {
             if (env.CONV) {
+              // 🔒 k261 · ORDER LOCK — จุดนี้เดิมเขียน ord: ทับทุกกรณีโดยไม่เคยอ่าน ordPaidActive
+              //   จ่ายเงินแล้วแล้วพิมพ์ "ส่งด่วน" = บอกวิธีส่ง ไม่ใช่สั่งใหม่ → ห้ามล้างออเดอร์ที่จ่ายแล้วทิ้ง
+              const _eOld = await env.CONV.get("ord:" + shopId + ":" + userId);
+              if (_eOld && ordPaidActive(JSON.parse(_eOld))) {
+                console.log("K261_EXPRESS_DRAFT_BLOCKED_PAID");
+              } else {
               const _nm = await lineProfileName(TOKEN, userId);
               await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({
                 name: _nm, items,
                 block: "📦 ออเดอร์ (รอโอน)\n" + _lines + "\nยอดสินค้า " + _c0.goods + "\nค่าส่งด่วน (รอทีมงานเช็ค)\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)",
                 t: Date.now(), status: "รอโอน 💰", uid: userId
               }), { expirationTtl: 259200 });
+              }
             }
           } catch (e) {}
           await lineReply(TOKEN, replyToken,
@@ -9473,7 +14195,55 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               : "🛵 รับแบบส่งด่วน รบกวนแชร์โลเคชั่น (ปักหมุด) จุดจัดส่งมาให้หน่อยนะคะ\nเดี๋ยวทีมงานเช็คค่าส่ง แล้วระบบจะสรุปยอดรวม + ส่งการ์ดยืนยันให้ทันทีค่ะ 💕"), userId);
           return;
         }
-        const calc = computeOrder(items, expFee);
+        // 🎁 k240: อ่านโปรที่ลูกค้าเลือกไว้ (เปลี่ยนใจได้ตลอดจนกว่าจะยืนยันออเดอร์)
+        let _promoPick = null;
+        try {
+          if (env.CONV) {
+            const _pv = await env.CONV.get("promo:" + shopId + ":" + userId);
+            if (_pv) { const _pj = JSON.parse(_pv); if (_pj && (_pj.c === "gift" || _pj.c === "ship")) _promoPick = _pj.c; }
+          }
+        } catch (e) {}
+        const calc = computeOrder(items, expFee, _promoPick);
+        // 🎁 k240 ชั้นที่ 3 · Exclusivity — เข้าเงื่อนไขทั้งส่งฟรีและเครื่องฟรี ต้องให้ลูกค้าเลือก
+        //   ⛔ ห้ามออกการ์ด ห้ามเลือกแทน ห้ามให้ทั้งสองโปรพร้อมกัน
+        if (calc.promoAsk) {
+          console.log("K240_PROMO_ASK qty=" + calc.giftQty);
+          try {
+            if (env.CONV) await env.CONV.put("promo:" + shopId + ":" + userId,
+              JSON.stringify({ c: null, items, t: Date.now() }), { expirationTtl: 7200 });
+          } catch (e) {}
+          // 🧾🔒 k261 · ORDER LOCK — "รอเลือกโปร" ต้องไม่ทำให้ออเดอร์หายไปจากระบบ
+          //   ต้นเหตุที่พิสูจน์ด้วยการรัน (pe-workflow-closing 2b/4b แดงมาตลอด):
+          //     ลูกค้าสั่งครบ → เข้าโปร 2 ทาง → ระบบถามให้เลือก แล้ว **return โดยไม่จดออเดอร์**
+          //     ลูกค้าพิมพ์ "ยืนยันค่ะ" ต่อ → ไม่มี ord: ให้จับ → ตกไปให้ AI → ด่านกันตอบซ้ำกลืนทิ้ง
+          //     = ออเดอร์ 46+20 แท่ง (>20,000 บาท) หลุดมือเงียบ ๆ
+          //   ⛔ ยอดยังไม่นิ่ง (โปรยังไม่เลือก) → บล็อกออเดอร์ต้อง **ไม่มีบรรทัด "รวมยอดชำระ"**
+          //      ใช้แพทเทิร์นเดียวกับ k102 (รอค่าส่งด่วน) → sendPayInfo คืน false เอง = ไม่มีทางส่งเลขบัญชีผิดยอด
+          //   ⛔ ไม่เลือกโปรแทนลูกค้าเด็ดขาด (กฎ k240 ของเจ้าของร้าน)
+          try {
+            if (env.CONV) {
+              const _pOld = await env.CONV.get("ord:" + shopId + ":" + userId);
+              const _pPaid = _pOld ? ordPaidActive(JSON.parse(_pOld)) : false;
+              if (!_pPaid) {
+                const _pLines = calc.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
+                const _pNm = await lineProfileName(TOKEN, userId);
+                await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({
+                  name: _pNm, items, promoPending: true,
+                  block: "📦 ออเดอร์ (รอเลือกโปร)\n" + _pLines + "\nยอดสินค้า " + calc.goods + "\nค่าส่ง (รอลูกค้าเลือกโปร)\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)",
+                  t: Date.now(), status: "รอเลือกโปร 🎁", uid: userId,
+                }), { expirationTtl: 259200 });
+                console.log("K261_ORDER_KEPT_PROMO_PENDING goods=" + calc.goods);
+              }
+            }
+          } catch (e) {}
+          await lineReply(TOKEN, replyToken,
+            "รายการนี้เข้าโปรพอดีเลยค่ะ 🎁\n\n" +
+            "ตอนนี้รับได้ 1 โปรนะคะ เลือกแบบไหนดีคะ\n" +
+            "• ส่งฟรี — ประหยัดค่าส่ง 40 บาท\n" +
+            "• รับเครื่องฟรี 1 เครื่อง (" + GIFT_PROMO.giftModel + " มูลค่า " + GIFT_PROMO.giftValue + ") — ค่าส่ง 40 บาทตามปกติ\n\n" +
+            "พิมพ์ว่า \"ส่งฟรี\" หรือ \"เอาเครื่อง\" ได้เลยค่ะ 💕", userId);
+          return;
+        }
         // 🛑 k14: การ์ดต้องมีราคาครบทุกรายการ — เคสจริง 28/7: ลูกค้าพิมพ์ "เอาครับ" → AI หยิบ
         // "ไอคอส JP FUSION MENTHOL" จากบริบทเก่า ชื่อไม่ตรงตารางราคา → การ์ดยอดสินค้า 0 บาทหลุดออกไป
         // แถวไหนหาราคาไม่เจอ (unknown) หรือยอดสินค้ารวม ≤ 0 = ไม่ออกการ์ด ถามทวนรุ่น/กลิ่น/จำนวนแทน
@@ -9483,7 +14253,7 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           let _again = 0;
           try { if (env.CONV) { _again = +((await env.CONV.get("reask:" + shopId + ":" + userId)) || 0) + 1; await env.CONV.put("reask:" + shopId + ":" + userId, String(_again), { expirationTtl: 600 }); } } catch (e) {}
           if (_again >= 2) {
-            await lineReply(TOKEN, replyToken, "ขออภัยที่ถามซ้ำนะคะ 🙏🏻 แอดมินยังจับชื่อรุ่นไม่ได้ค่ะ\n\nเลือกจากเมนูนี้แล้วส่งชื่อรุ่นมาได้เลยค่ะ 👇\nhttps://cutt.ly/menu4\n(หรือส่งรูปสินค้ามาก็ได้นะคะ เดี๋ยวแอดมินเช็คให้ทันทีค่ะ 💕)", userId);
+            await lineReply(TOKEN, replyToken, "ขออภัยที่ถามซ้ำนะคะ 🙏🏻 แอดมินยังจับชื่อรุ่นไม่ได้ค่ะ\n\nเลือกจากเมนูนี้แล้วส่งชื่อรุ่นมาได้เลยค่ะ 👇\nhttps://cutt.ly/abc-menu\n(หรือส่งรูปสินค้ามาก็ได้นะคะ เดี๋ยวแอดมินเช็คให้ทันทีค่ะ 💕)", userId);
             try { await muteNow("ลูกค้าสั่งซ้ำแต่ระบบจับรุ่นไม่ได้ 🔁 — แอดมินช่วยดู", String(msgText || "")); } catch (e) {}
             return;
           }
@@ -9533,6 +14303,33 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             console.log("SOLDOUT_NOTICE_SENT " + outList.map(x => x.flavor).join(","));
           } catch (e) {}
         }
+        // 📦📦 k293 — ออเดอร์จำนวนมาก ต้องให้คนเคาะราคาก่อน (กติกาเจ้าของร้าน: 20 ชิ้นขึ้นไป)
+        //   เหตุผลเรื่องเงิน: ร้านมี "เรทขายส่ง" อยู่จริง แต่โค้ดคิดให้อัตโนมัติได้เฉพาะ MARBO 9K โคลน
+        //   รุ่นอื่นซื้อ 20+ ชิ้น การ์ดจะคิดราคาปลีกเต็ม → ลูกค้าโอนไปแล้วค่อยมารู้ว่ามีเรทถูกกว่า
+        //   = ต้องคืนเงิน/เกลี่ยยอดทีหลัง ซึ่งกฎร้านห้ามระบบทำเอง
+        //   ⛔ ห้ามเงียบ ห้ามตัน: ลูกค้าได้คำตอบทันทีว่ากำลังเช็คเรทให้ + เข้าคิวแอดมินพร้อมรายการครบ
+        //      (ไม่ออกการ์ด/ไม่ส่งเลขบัญชี เพราะยอดยังไม่นิ่ง — ส่งไปแล้วลูกค้าโอนผิดยอดทันที)
+        //   ⛔ นับเฉพาะของที่ขายจริง ไม่นับของแถม
+        try {
+          //   ⚠️ ใช้ธง free จาก calc.rows ไม่ใช่ it.free — เพราะ "ของแถม" ถูกตัดสินตอนคิดเงิน
+          //      (บางแถวมาจาก AI พิมพ์ว่า "(ฟรี)" ในชื่อกลิ่น ซึ่ง it.free ยังไม่ติด · เทส B4 จับได้)
+          //      rows กับ items เรียงตรงกัน 1:1 เพราะสร้างในลูปเดียวกัน
+          const _qty293 = (items || []).reduce((a, it, i) => {
+            const _r = (calc.rows || [])[i];
+            return a + ((_r && _r.free) ? 0 : (Number(it && it.qty) || 0));
+          }, 0);
+          if (_qty293 >= 20) {
+            console.log("K293_BIG_ORDER_HANDOFF qty=" + _qty293 + " total=" + calc.total);
+            const _lines293 = calc.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
+            await muteNow("📦 ออเดอร์จำนวนมาก " + _qty293 + " ชิ้น — เช็คเรทขายส่งแล้วแจ้งยอดลูกค้า",
+              _lines293 + "\nยอดราคาปลีก " + calc.total + " บาท (ยังไม่หักเรทส่ง)");
+            await lineReply(TOKEN, replyToken,
+              "ได้เลยค่ะ 💕 ออเดอร์จำนวนนี้เข้าเกณฑ์ราคาส่งนะคะ\n"
+              + "ขอทีมงานเช็คเรทพิเศษให้ก่อน เดี๋ยวแจ้งยอดสุทธิกลับในแชทนี้เลยค่ะ 🙏🏻\n\n"
+              + "รายการที่รับไว้:\n" + _lines293, userId, null, false, true);
+            return;
+          }
+        } catch (e) { console.log("K293_FAIL " + String((e && e.message) || e)); }
         await lineFlex(TOKEN, replyToken, "ยืนยันรายการสั่งซื้อ", orderConfirmFlex(calc), userId);
         try { if (env.CONV) await env.CONV.put("card:" + shopId + ":" + userId, JSON.stringify({ sig, t: Date.now() }), { expirationTtl: 7200 }); } catch (e) {}
         // เก็บออเดอร์ด้วยยอดที่โค้ดคิด (ให้ SlipOK เทียบยอดถูก)
@@ -9541,8 +14338,22 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             const itemBlock = calc.rows.map(r => "- " + r.label + " = " + r.line).join("\n");
             const block = "📦 ออเดอร์ (รอโอน)\n" + itemBlock + "\nยอดสินค้า " + calc.goods + "\n" + (calc.express ? "ค่าส่งด่วน " : "ค่าส่ง ") + calc.ship + "\nรวมยอดชำระ " + calc.total + "\nที่อยู่: (รอลูกค้าแจ้งหลังโอน)";
             const name = await lineProfileName(TOKEN, userId);
+            // 🔒 k261 · ORDER LOCK — ถ้ามีออเดอร์ที่ "จ่ายแล้ว" ค้างอยู่ แล้วลูกค้าสั่งใหม่จริง ๆ
+            //   (เคสอุบัติเหตุถูก K260D บล็อกไปก่อนแล้ว — ถึงตรงนี้คือลูกค้าตั้งใจสั่งเพิ่ม)
+            //   ⛔ ระบบยังเก็บออเดอร์ได้คนละ 1 ใบ (คีย์ ord: ต่อ uid) → เขียนทับแล้วหลักฐานการจ่ายหาย
+            //   ทางแก้แคบที่สุดที่ไม่เปลี่ยนโครงคีย์: พกบล็อกของออเดอร์ที่จ่ายแล้วติดไปด้วย (prevPaid)
+            //   หลังบ้านยังเห็นครบ · ⛔ ห้ามใช้ prevPaid ตัดสินสถานะการชำระของออเดอร์ใหม่เด็ดขาด
+            let _prevPaid = null;
+            try {
+              const _pv261 = await env.CONV.get("ord:" + shopId + ":" + userId);
+              if (_pv261) { const _pj261 = JSON.parse(_pv261);
+                if (ordPaidActive(_pj261)) { _prevPaid = { block: _pj261.block, status: _pj261.status, t: _pj261.t };
+                  console.log("K261_ORD_OVERWRITE_AFTER_PAID เก็บออเดอร์เดิมไว้ใน prevPaid"); } }
+            } catch (e) {}
             // k78: เก็บ items ดิบไว้ด้วย → ลูกค้าเปลี่ยนวิธีส่งทีหลัง ระบบคิดยอดใหม่+ออกการ์ดใหม่ได้เอง
-            await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify({ name, block, items, t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 });
+            await env.CONV.put("ord:" + shopId + ":" + userId, JSON.stringify(_prevPaid
+              ? { name, block, items, t: Date.now(), status: "รอโอน 💰", uid: userId, prevPaid: _prevPaid }
+              : { name, block, items, t: Date.now(), status: "รอโอน 💰", uid: userId }), { expirationTtl: 259200 });
             orderStored = true;
             // 💳💳 k188 — ยอดนิ่งแล้ว ส่งช่องทางชำระเงินตามทันที ไม่ต้องรอลูกค้ากดปุ่ม
             //   หลักฐาน (แชทจริง 2,329,448 ข้อความ · เทียบเฉพาะบทที่ไปถึงขั้นแจ้งยอดเหมือนกันทั้งคู่):
@@ -9554,7 +14365,17 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
             //      (KV "pay:<ร้าน>" หรือ Secret PAY_<ร้าน>) ต่อร้านเสมอ นี่คือกฎพฤติกรรม ไม่ใช่ข้อมูลร้าน
             //   ✅ กันเงินพลาดครบ: sendPayInfo คืน false เองถ้ายอดยังไม่นิ่ง (รอค่าส่งด่วน) หรือร้านยังไม่ตั้งบัญชี
             //      ปุ่ม "ยืนยัน" เดิมยังใช้ได้เหมือนเดิมทุกอย่าง (k76/k27/k84 ไม่ถูกแตะ)
-            try { if (await sendPayInfo(env, TOKEN, "", userId, shopId, { block })) console.log("K188_PAY_AFTER_TOTAL"); } catch (e) {}
+            // 🔒🔒🔒 k261 · PAYMENT LOCK (เจ้าของร้านสั่ง 9 ส.ค. — แทนที่พฤติกรรม k188)
+            //   เคสจริงจากสกรีนช็อตลูกค้าทดสอบ: การ์ด "ยืนยันรายการสั่งซื้อ" กับการ์ด
+            //   "สรุปรายการสั่งซื้อ + เลขบัญชี" เด้งพร้อมกันในเทิร์นเดียว **ทั้งที่ลูกค้ายังไม่กดยืนยัน**
+            //   → ลูกค้าโอนตามการ์ดที่ยังไม่ยืนยัน = ยอด/รายการอาจยังไม่ใช่สิ่งที่ลูกค้าต้องการ
+            //   กติกาใหม่: **เลขบัญชีออกได้หลังลูกค้ายืนยันเท่านั้น**
+            //   ⛔ ไม่ได้ตัดทางส่งเลขบัญชีทิ้ง — ยังออกได้ 3 ทางเหมือนเดิม และเร็วเท่าเดิม 1 เทิร์น:
+            //      (1) ปุ่ม "✅ ยืนยันรายการ" บนการ์ด (ส่งข้อความ "ยืนยัน")
+            //      (2) พิมพ์ยืนยันเอง — ตอนนี้รับคำลงท้ายครบแล้ว (k261 CONFIRM LOCK ด้านบน)
+            //      (3) แท็ก [PAYINFO] จากเจตนา (k169) เช่น "จะโอนแล้วค่ะ" · "ขอบัญชีหน่อย"
+            //   ⛔ ห้ามย้ายกลับมาส่งตรงนี้โดยไม่ถามเจ้าของร้าน — นี่คือกฎเรื่องเงิน
+            console.log("K261_PAYMENT_LOCK รอลูกค้ายืนยันก่อนส่งเลขบัญชี total=" + calc.total);
           }
         } catch (e) {}
       } else {
@@ -9575,8 +14396,17 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         const name = await lineProfileName(TOKEN, userId);
         // รักษาสถานะ "ชำระแล้ว ✅" ถ้าเคยตรวจสลิปผ่านแล้ว (บล็อกที่อยู่มาทีหลังไม่ควรรีเซ็ตกลับเป็นรอโอน)
         let status = isOrderBlock ? "ชำระแล้ว ✅ (พร้อมจัดส่ง)" : "รอโอน 💰";
-        try { const prev = await env.CONV.get(ordKey); if (prev) { const pj = JSON.parse(prev); if (pj.status && pj.status.indexOf("✅") !== -1 && !isOrderBlock) status = pj.status; } } catch (e) {}
-        await env.CONV.put(ordKey, JSON.stringify({ name, block: reply.slice(0, 1600), t: Date.now(), status, uid: userId }), { expirationTtl: 259200 }); // เก็บ 3 วัน
+        // 🧾 k262: จุดนี้เขียนทับ ord: ด้วย "ข้อความของ AI" — เดิมทิ้ง items / ship / prevPaid ทั้งก้อน
+        //   → หลังปิดออเดอร์แล้วระบบไม่เหลือรายการดิบให้คิดยอดใหม่/ตรวจย้อนได้เลย (ตัวเลขเงินยังมาจาก k88)
+        //   ⛔ ไม่แตะสูตรเงินและไม่แตะสถานะ — แค่ "ไม่ทำข้อมูลเดิมหาย"
+        let _keep262 = {};
+        try { const prev = await env.CONV.get(ordKey); if (prev) { const pj = JSON.parse(prev);
+          if (pj.status && pj.status.indexOf("✅") !== -1 && !isOrderBlock) status = pj.status;
+          if (pj.items) _keep262.items = pj.items;
+          if (pj.ship) _keep262.ship = pj.ship;
+          if (pj.prevPaid) _keep262.prevPaid = pj.prevPaid;
+        } } catch (e) {}
+        await env.CONV.put(ordKey, JSON.stringify(Object.assign({ name, block: reply.slice(0, 1600), t: Date.now(), status, uid: userId }, _keep262)), { expirationTtl: 259200 }); // เก็บ 3 วัน
         // 💾 จำลูกค้า: ออเดอร์สำเร็จ (มีที่อยู่ครบ) → บันทึกชื่อ/เบอร์/ที่อยู่ไว้ถาวร ครั้งหน้าถาม "ส่งที่เดิมไหม"
         if (isOrderBlock) {
           const gn = (re) => { const m = reply.match(re); return m ? m[1].trim().slice(0, 200) : ""; };
@@ -9585,6 +14415,9 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         }
       }
     } catch (e) {}
+
+    // 🧠 k250 · บันทึก "สิ่งที่ค้างอยู่" ให้เทิร์นถัดไปรู้ว่าถามอะไรไปแล้ว (best-effort)
+    try { await convSave(env, shopId, userId, _CST); } catch (e) {}
 
     // ถ้า AI ส่งต่อเคสให้ทีมงานหลังการขาย → เงียบแชทนี้ให้ทีมงานดูแล (best-effort)
     try { if (!_skipMute && reply.indexOf("ทีมงานหลังการขาย") !== -1) await muteNow("เคสปัญหา/หลังการขาย ⚠️", (userForHistory && userForHistory.content) || ""); } catch (e) {}
@@ -9611,11 +14444,20 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
         } catch (e) {}
         // 🎯 P0: บันทึก Product Slot คู่กับความจำเสมอ (จุดเดียว ไม่กระจาย)
         if (pslotDirty) await slotSave(env, shopId, userId, pslot);
-        const next = stampHist([..._base, userForHistory, { role: "assistant", content: reply }].slice(-20));
+        // 🧾 k260: เทิร์นนี้ออก "การ์ด" จริงหรือเปล่า — ต้องจดลงประวัติด้วย
+        //   เดิมจดแค่ข้อความดิบของ AI → log/replay มองไม่เห็นว่าการ์ดออกไปเมื่อไหร่ = ตาบอดเรื่องปิดการขาย
+        //   ตัวการ์ดถูกจดไว้ใน TURN.replies โดย lineFlex/lineMulti (k260) — หยิบเฉพาะรายการ [การ์ด] มาต่อท้าย
+        let _histReply = reply;
+        try {
+          const _t = TURN.get(userId);
+          const _cards = _t ? _t.replies.filter(x => String(x).indexOf("[การ์ด]") === 0) : [];
+          if (_cards.length) _histReply = reply + "\n" + _cards.join("\n");
+        } catch (e) {}
+        const next = stampHist([..._base, userForHistory, { role: "assistant", content: _histReply }].slice(-20));
         await env.CONV.put(key, JSON.stringify(next), { expirationTtl: HIST_TTL });
         try { const _t = TURN.get(userId); if (_t) _t.written = true; } catch (e) {}   // k158: ทางหลักเขียนแล้ว ไม่ต้องเขียนซ้ำตอนออก
         // 🗒 k10: log ถาวร 30 วัน สำหรับขุดวิเคราะห์
-        await appendChatLog(env, shopId, userId, (typeof userForHistory.content === "string" ? userForHistory.content : "[รูปภาพ]"), reply);
+        await appendChatLog(env, shopId, userId, (typeof userForHistory.content === "string" ? userForHistory.content : "[รูปภาพ]"), _histReply);
       }
     } catch (e) { console.log("HIST_SKIP " + String(e).slice(0, 80)); }
     // 👥 จดรายชื่อแชทที่คุยอยู่ (ให้ทีมงานเลือกปิดแอดมินรายคนได้ในหลังบ้าน) — เก็บ 2 วัน
@@ -9840,7 +14682,7 @@ async function lineLoading(token, userId) {
     await lfetch("https://api.line.me/v2/bot/chat/loading/start", {
       method: "POST",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId: userId, loadingSeconds: 10 }),
+      body: JSON.stringify({ chatId: userId, loadingSeconds: 20 }),   // k244: 10 → 20 กันหมดก่อนคำตอบมา
     });
   } catch (e) {}
 }
@@ -9882,6 +14724,14 @@ function buildQuickReply(reply, userText, sm, buf) {
 // k185b: พารามิเตอร์ sysAck = "ข้อความรับทราบของระบบ" (System Acknowledgement)
 //   ไม่ใช่คำตอบต่อคำถามลูกค้า จึงต้องไม่ถูกนับในด่านกันตอบซ้ำ (k180)
 //   แยกด้วย "ประเภทข้อความ" ไม่ใช่การเทียบข้อความ — ผู้เรียกเป็นคนบอกว่านี่คือข้อความระบบ
+// ✅ k271 · จดว่า "ส่งถึงลูกค้าสำเร็จจริง" (ไม่ใช่แค่ตั้งใจจะส่ง)
+//   ตัวจับเทิร์นเงียบต้องดูผลลัพธ์จริง ไม่งั้นเคสยิงเข้า LINE ไม่สำเร็จจะไม่ถูกจับเลย
+function markSent(userId) {
+  try { const t = userId && TURN.get(userId); if (t) t.sentOk = true; } catch (e) {}
+  // k311: จดแยกไว้อีกที่ — TURN ถูกทับได้เมื่อลูกค้าส่งหลายข้อความพร้อมกัน แต่อันนี้ไม่ทับ
+  try { if (userId) { LASTSENT.set(userId, Date.now());
+    if (LASTSENT.size > 2000) { const k0 = LASTSENT.keys().next().value; LASTSENT.delete(k0); } } } catch (e) {}
+}
 async function lineReply(token, replyToken, text, userId, quick, sysAck, force) {
   // 🔇 k201 ด่านที่ 2 (ก่อนยิง LINE): ถ้าแชทนี้ถูกปิดปากไปแล้วในคำขอนี้ → ไม่ส่งอะไรทั้งสิ้น
   //   ⛔ ยกเว้นข้อความแจ้งรับเรื่องตอน handoff เอง (ส่ง force = true)
@@ -9906,6 +14756,19 @@ async function lineReply(token, replyToken, text, userId, quick, sysAck, force) 
       return;
     }
   }
+  // 🖼️ k312 ด่านขาออก: ถ้อยคำแนว "ร้านไม่มีรูปสินค้า" ห้ามหลุดไปแบบมือเปล่า
+  //   ทางลัดขาเข้าจับได้เกือบหมดแล้ว ตัวนี้เป็นตาข่ายสำรองเผื่อ AI พูดเองจากเส้นทางอื่น
+  //   ⛔ ไม่ลบคำตอบ ไม่เปลี่ยนความหมาย — แค่แนบลิงก์เมนูต่อท้ายให้ลูกค้ามีทางไปต่อ
+  try {
+    if (MENU_URL && /ไม่มีรูป|ไม่มีภาพ|ไม่มีตัวอย่าง/.test(String(text || "")) && String(text || "").indexOf(MENU_URL) === -1) {
+      console.log("K312_NO_PHOTO_REWRITE แนบลิงก์เมนูต่อท้าย");
+      text = String(text || "").replace(/(ขออภัย[^\n]*)(ไม่มีรูป|ไม่มีภาพ|ไม่มีตัวอย่าง)[^\n]*/, "").trim();
+      text = "ดูรูปสินค้าได้ที่เมนูนี้เลยนะคะ 💕\n" + MENU_URL + (text ? "\n\n" + text : "");
+    }
+  } catch (e) {}
+  // 🧾 k267: มีข้อความข้อเท็จจริงที่พักไว้ (รอบส่ง/ETA) → ส่งไปพร้อมคำตอบนี้เลย ตัวหนังสือเดิมเป๊ะ
+  //   ⛔ พักได้เทิร์นละ 1 ก้อน และถูกหยิบไปใช้ครั้งเดียว (factNoteTake ล้างค่าทิ้ง)
+  try { const _fn267 = factNoteTake(userId); if (_fn267) text = _fn267 + "\n\n" + String(text || ""); } catch (e) {}
   // ล้าง markdown ที่ LINE แสดงดิบ (**, ##) + จำกัด ~5000 ตัวอักษร/ข้อความ
   // ล้าง Markdown ที่ LINE แสดงดิบ: **ตัวหนา** · ## หัวข้อ · [ข้อความ](ลิงก์) ที่ทำให้ลิงก์ซ้อนกัน
   const msg = text
@@ -9935,20 +14798,60 @@ async function lineReply(token, replyToken, text, userId, quick, sysAck, force) 
       //     ถ้าลูกค้าถามเรื่องเดิม → ส่งคำตอบเดิมไปตามปกติ แค่ทวนให้ชัดว่ายืนยันอีกครั้ง
       let _askNow = "";
       try { const _tc = TURN.get(userId); _askNow = String((_tc && _tc.userText) || "").replace(/\s+/g, "").toLowerCase(); } catch (e) {}
-      const _prev = LASTOUT.get(userId);
+      // 🔁 k319a: หน่วยความจำก่อน (เร็ว) — ไม่มีค่อยไปหยิบจาก KV (worker เพิ่งเกิด)
+      //   ⛔ ตรรกะตัดสินด้านล่างเป็นของ k180/k149 เดิมทุกบรรทัด เปลี่ยนแค่ "ที่มาของ _prev"
+      let _prev = LASTOUT.get(userId);
+      let _from319 = "mem";
+      if (!_prev) {
+        _prev = await loLoad319(userId);
+        if (_prev) { _from319 = "kv"; console.log("K319A_LASTOUT_FROM_KV uid=" + String(userId).slice(0, 8) + " (worker นี้เพิ่งเกิด)"); }
+        else _from319 = "none";
+      }
       let _sameAsk = false;
       if (_prev && _prev.sig === _sig && Date.now() - _prev.t < 1800000) {
         _sameAsk = !!_askNow && _askNow === _prev.ask;
         _dupN = _sameAsk ? 0 : (_prev.n || 1) + 1;
-        console.log("K180_DUP_REPLY n=" + _dupN + " ลูกค้าถามเรื่องเดิม=" + _sameAsk + " msg=" + msg.slice(0, 40));
+        console.log("K180_DUP_REPLY n=" + _dupN + " ลูกค้าถามเรื่องเดิม=" + _sameAsk + " แหล่ง=" + _from319 + " msg=" + msg.slice(0, 40));
       }
+      // 📍📍 k320b · ข้อเท็จจริงที่มีคำตอบเดียว ห้ามถูกนับว่า "บอทตอบวน"
+      //   เคสจริงโปรดักชัน 14 ส.ค. หลัง deploy k320 (ร้าน ABC EASY):
+      //     ลูกค้าถาม "มีหน้าร้านไหม" → ตอบถูก
+      //     แล้วถาม "ร้านอยู่แถวไหน" · "ขอพิกัดร้าน" · "ส่งโลเคชั่นร้านมา"
+      //     ⇒ คำถามคนละสำนวน (_sameAsk = false) แต่คำตอบความจริงเหมือนกันเป๊ะ
+      //        d180 จึงนับ _dupN = 2,3,4 แล้วเด้ง "ตอบไม่ตรงคำถาม" → "ส่งต่อคนจริง"
+      //   ⇒ ยิ่งด่าน k320 ทำงานถูกต้อง (deterministic) ยิ่งโดนตัวกันตอบซ้ำเล่นงาน
+      //   ⛔ ยกเว้นเฉพาะ "ข้อความความจริงเรื่องที่ตั้งร้าน" เท่านั้น ไม่แตะตรรกะ k180/k319a อื่นเลย
+      try {
+        if (isLocTruth320(msg, userId)) {
+          if (_dupN) console.log("K320B_LOC_TRUTH_OK n=" + _dupN + " → ข้อเท็จจริงคำตอบเดียว ไม่นับว่าตอบวน");
+          _dupN = 0; _sameAsk = false;
+        }
+      } catch (e) { console.log("K320B_ERR " + ((e && e.message) || e)); }
       _repeatSameAsk = _sameAsk;
-      LASTOUT.set(userId, { sig: _sig, ask: _askNow, t: Date.now(), n: _dupN || 1 });
+      const _rec319 = { sig: _sig, ask: _askNow, t: Date.now(), n: _dupN || 1 };
+      LASTOUT.set(userId, _rec319);
       if (LASTOUT.size > 500) { const k0 = LASTOUT.keys().next().value; LASTOUT.delete(k0); }
+      await loSave319(userId, _rec319);          // ⛔ best-effort — KV พังก็ทำงานต่อด้วยหน่วยความจำล้วน
     }
   } catch (e) {}
+  // 🧩 k319e: ก่อนจะตกไปใช้ข้อความกลางของ k180 — ลองถาม "เฉพาะสิ่งที่ลูกค้ายังไม่ได้ตอบ" ก่อน
+  //   ⛔ ยิงเฉพาะรอบแรกที่จับได้ว่าซ้ำ (_dupN === 2) เท่านั้น
+  //      รอบถัดไปปล่อยให้ k180 ทำงานตามเดิม (n≥3 = ส่งต่อคนจริง) ห้ามวนถามเองไม่จบ
+  //   ⛔ ทำไม่ได้เมื่อไหร่ = คืนค่าว่าง แล้วตกไปใช้ของเดิม (ตาข่ายสุดท้ายยังอยู่ครบ)
+  let _ask319e = "";
+  try {
+    if (_dupN === 2 && !_repeatSameAsk && userId) {
+      const _t = TURN.get(userId);
+      if (_t && _t.env318 && _t.shop319) {
+        const _s = await slotLoad(_t.env318, _t.shop319, userId);
+        const _it = slotCurrent(_s);
+        _ask319e = askMissing319e(msg, _it, (_t && _t.userText) || "");
+        if (_ask319e) console.log("K319E_ASK_MISSING " + ((_it && _it.model) || "-") + " → " + _ask319e.split("\n")[0]);
+      }
+    }
+  } catch (e) { console.log("K319E_ERR " + ((e && e.message) || e)); }
   // k180: ลูกค้าถามเรื่องเดิม → ตอบเดิมได้ แค่บอกให้ชัดว่ายืนยันอีกครั้ง (ห้ามโทษตัวเอง ห้ามโยนเข้าคิวคน)
-  const one = { type: "text", text: _repeatSameAsk
+  const one = { type: "text", text: _ask319e ? _ask319e : _repeatSameAsk
     ? "ยืนยันอีกครั้งนะคะ 💕\n\n" + msg
     : _dupN >= 3
     ? "ขออภัยจริงๆ นะคะ 🙏🏻 แอดมินตอบวนอยู่ที่เดิม แปลว่าแอดมินยังไม่เข้าใจคำถามของคุณลูกค้าค่ะ\n\nขอส่งต่อให้ทีมงานคนจริงเข้ามาตอบให้ชัดเจนเลยนะคะ รอสักครู่ค่ะ 💕"
@@ -9978,16 +14881,25 @@ async function lineReply(token, replyToken, text, userId, quick, sysAck, force) 
     },
     body: JSON.stringify({ replyToken, messages: [one] }),
   });
+  if (r.ok) markSent(userId);                                            // k271
   if (!r.ok) {
     console.log("LINE_REPLY_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
     // แผนสอง: reply token หมดอายุ/ใช้ไปแล้ว → ส่งแบบ push แทน (ไม่ต้องใช้ token)
+    // 📮 k318a: ตรวจตราจองก่อน — "token ใช้ไปแล้ว" มี 2 สาเหตุที่ต่างกันสิ้นเชิง
+    //   (ก) เราเองช้าจน token หมดอายุ → ต้อง push ไม่งั้นลูกค้าไม่ได้คำตอบ (ของเดิม คงไว้)
+    //   (ข) worker อีกตัวรับ event เดียวกันนี้แล้วตอบไปเรียบร้อย → push = ลูกค้าได้คำตอบซ้ำ 2 ใบ
+    //   ตราจองแยก 2 กรณีนี้ออกจากกันได้ · ตรวจไม่ได้ = ถือว่าเป็นเจ้าของ → push ตามเดิม
+    if (!(await evOwns318(userId))) {
+      console.log("K318A_SKIP_PUSH_DUP uid=" + String(userId).slice(0, 8) + " (worker อีกตัวตอบ event นี้ไปแล้ว)");
+      return;
+    }
     if (userId && userId !== "anon") {
       const p = await lfetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ to: userId, messages: [one] }),
       });
-      if (!p.ok) console.log("LINE_PUSH_FAIL status=" + p.status);
+      if (!p.ok) console.log("LINE_PUSH_FAIL status=" + p.status); else markSent(userId);   // k271
     }
   }
 }
@@ -10002,6 +14914,36 @@ function btnDark(label, text) {
   };
 }
 // k202: รับข้อความหัวการ์ดได้ (ใช้ซ้ำเป็นการ์ด "เริ่มการสนทนาใหม่" โดยไม่ต้องสร้างการ์ดใหม่)
+// 🔎 k283 · หน้ารายงานสำหรับเจ้าของร้าน — เปิดในมือถือได้เลย ไม่ต้องอ่าน JSON
+function reviewHtml(d) {
+  const esc = (s) => String(s || "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  const sum = Object.entries(d.สรุปอาการ || {}).map(([k, v]) => '<span class="tag">' + esc(k) + " · " + v + "</span>").join("");
+  const cards = (d.เคส || []).map((c, i) => {
+    const lines = c.บทสนทนา.map(x =>
+      '<div class="ln"><b>' + esc(x.เวลา) + '</b> 👤 ' + esc(x.ลูกค้า) + '</div>' +
+      '<div class="ln bot">🤖 ' + esc(x.จีทู) + "</div>").join("");
+    return '<div class="case"><div class="h">#' + (i + 1) + " · " + esc(c.เวลาแรก) + "-" + esc(c.เวลาล่าสุด) +
+      " · " + c.อาการ.map(a => '<span class="bad">' + esc(a) + "</span>").join(" ") + "</div>" + lines + "</div>";
+  }).join("");
+  return '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+    "<title>จีทู · รายงานประจำวัน</title><style>" +
+    "body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:#0f1115;color:#e8eaed;margin:0;padding:16px;line-height:1.5}" +
+    "h1{font-size:19px;margin:0 0 4px}.sub{color:#9aa0a6;font-size:13px;margin-bottom:14px}" +
+    ".box{background:#191c22;border-radius:12px;padding:14px;margin-bottom:12px}" +
+    ".big{font-size:30px;font-weight:700}.ok{color:#5ad17f}.warn{color:#ffb454}" +
+    ".tag{display:inline-block;background:#23272f;border-radius:20px;padding:4px 10px;margin:3px 4px 0 0;font-size:12px}" +
+    ".case{background:#191c22;border-radius:12px;padding:12px;margin-bottom:10px;border-left:3px solid #ffb454}" +
+    ".h{font-size:12px;color:#9aa0a6;margin-bottom:8px}" +
+    ".bad{background:#3a2a1a;color:#ffb454;border-radius:6px;padding:2px 6px;margin-right:4px}" +
+    ".ln{font-size:13px;margin:2px 0;white-space:pre-wrap}.bot{color:#9aa0a6;padding-left:10px}" +
+    "</style><h1>🔎 จีทู · รายงานประจำวัน</h1>" +
+    '<div class="sub">ร้าน ' + esc(d.ร้าน) + " · " + esc(d.ช่วงเวลา) + " · " + esc(d.build) + "</div>" +
+    '<div class="box"><div class="big ' + (d.เคสน่าสงสัย ? "warn" : "ok") + '">' + d.เคสน่าสงสัย + " เคสน่าสงสัย</div>" +
+    "<div>จาก " + d.แชททั้งหมด + " แชท · " + d.ข้อความทั้งหมด + " ข้อความ</div>" +
+    (sum ? '<div style="margin-top:8px">' + sum + "</div>" : "") + "</div>" +
+    (d.เคสน่าสงสัย ? cards : '<div class="box ok">✅ ไม่พบเคสที่น่าสงสัยในช่วงนี้ค่ะ</div>') +
+    '<div class="sub" style="margin-top:14px">ส่งหน้านี้ให้ผู้ช่วยได้เลย เพื่อไล่แก้ทีละเคส</div>';
+}
 function welcomeFlex(headMsg) {
   const lines = String(headMsg || "").split("\n");
   const head = headMsg ? lines[0] : "ABC ยินดีต้อนรับค่ะ ✨";
@@ -10045,12 +14987,34 @@ function parseOrder(reply) {
 // การ์ด 1: ยืนยันรายการสั่งซื้อ (โทนเขียว ABC) + ปุ่ม "ยืนยันรายการ" — รับผลจาก computeOrder
 function orderConfirmFlex(o) {
   const fmt = (n) => Number(n).toLocaleString("en-US");
-  const itemRows = (o.rows && o.rows.length ? o.rows : [{ label: "(รายการสินค้า)", line: 0 }]).map(r => ({
+  // 🧾🧾 k258 · การ์ดต้องแยกให้เห็นชัด: สินค้าหลัก · ของแถม · สินค้าซื้อเพิ่ม · ส่วนลด · ยอดรวม
+  //   เคสจริง 8 ส.ค.: การ์ดรวมทุกอย่างเป็นบรรทัดเดียว → เครื่อง 990 หายไป เหลือแต่ของแถมที่ถูกคิดเงิน
+  //   ⛔ ห้าม merge ข้ามกลุ่ม · ของแถมต้องขึ้นราคา "ฟรี" ไม่ใช่ "-" (ลูกค้าต้องเห็นว่าไม่ถูกคิดเงิน)
+  const SECTIONS = [
+    { key: "main",     head: "" },
+    { key: "extra",    head: "🛒 สินค้าซื้อเพิ่ม" },
+    { key: "free",     head: "🎁 ของแถม (ไม่คิดเงิน)" },
+    { key: "discount", head: "🏷️ ส่วนลด" },
+  ];
+  const src = (o.rows && o.rows.length ? o.rows : [{ label: "(รายการสินค้า)", line: 0, section: "main" }]);
+  const secOf = (r) => r.section || (r.free ? "free" : "main");
+  const line1 = (r) => ({
     type: "box", layout: "horizontal", margin: "sm", contents: [
-      { type: "text", text: r.label, size: "sm", color: "#333333", wrap: true, flex: 5 },
-      { type: "text", text: (r.line ? fmt(r.line) + " บาท" : "-"), size: "sm", color: "#333333", align: "end", flex: 3 }
+      { type: "text", text: r.label, size: "sm", color: r.free ? "#1a7f37" : "#333333", wrap: true, flex: 5 },
+      { type: "text", text: r.free ? "ฟรี 🎁" : (r.line ? fmt(r.line) + " บาท" : "-"),
+        size: "sm", color: r.free ? "#1a7f37" : "#333333", align: "end", flex: 3 }
     ]
-  }));
+  });
+  // 💰 k298: บรรทัดหมายเหตุ "มีอีกแบบราคาต่างกัน" — แสดงใต้ชื่อสินค้า ไม่แตะตัวเลขใดๆ
+  const noteLine = (r) => ({ type: "text", text: "⚠️ " + r.vnote, size: "xxs", color: "#b26a00", wrap: true, margin: "xs" });
+  const itemRows = [];
+  for (const s of SECTIONS) {
+    const inSec = src.filter(r => secOf(r) === s.key);
+    if (!inSec.length) continue;                       // กลุ่มที่ไม่มีของ = ไม่ต้องขึ้นหัวข้อ
+    if (s.head && itemRows.length)
+      itemRows.push({ type: "text", text: s.head, size: "xs", color: "#888888", margin: "lg", weight: "bold" });
+    for (const r of inSec) { itemRows.push(line1(r)); if (r.vnote) itemRows.push(noteLine(r)); }   // k298
+  }
   const sumRow = (label, val) => ({ type: "box", layout: "horizontal", margin: "sm", contents: [
     { type: "text", text: label, size: "sm", color: "#888888" },
     { type: "text", text: val, size: "sm", color: "#555555", align: "end" }
@@ -10139,36 +15103,67 @@ function slipOkFlex(slipAmt, recv, expected, matched) {
 }
 // k203: ส่งหลายข้อความในการตอบครั้งเดียว (การ์ด + ฟอร์มที่อยู่) — ใช้แพทเทิร์นเดิมของ k87/k78
 async function lineMulti(token, replyToken, messages, userId) {
+  // 🧾 k267: ข้อความข้อเท็จจริงที่พักไว้ ต้องออกเป็นก้อนแรกของชุด (ถ้ายังไม่ถูกหยิบไป)
+  try {
+    const _fn267 = factNoteTake(userId);
+    if (_fn267) { messages = [{ type: "text", text: String(_fn267).slice(0, 4900) }, ...(messages || [])]; console.log("K267_FACT_SENT_MULTI"); }
+  } catch (e) {}
+  // 🧾 k260: จดทุกก้อนที่ส่งจริงลงสมุดของเทิร์น (เหตุผลเดียวกับใน lineFlex)
+  try {
+    const _t = userId && TURN.get(userId);
+    if (_t) for (const m of (messages || [])) {
+      if (m && m.type === "text" && m.text) _t.replies.push(String(m.text));
+      else if (m && m.type === "flex") _t.replies.push("[การ์ด] " + String(m.altText || "").slice(0, 120));
+    }
+  } catch (e) {}
   const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
     body: JSON.stringify({ replyToken, messages }),
   });
+  if (r.ok) markSent(userId);                                            // k271
   if (!r.ok && userId && userId !== "anon") {
     console.log("K203_REPLY_FAIL status=" + r.status + " → push แทน");
-    await lfetch("https://api.line.me/v2/bot/message/push", {
+    const _p = await lfetch("https://api.line.me/v2/bot/message/push", {
       method: "POST",
       headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
       body: JSON.stringify({ to: userId, messages }),
     });
+    if (_p && _p.ok) markSent(userId); else console.log("K271_PUSH_FAIL_MULTI");   // k271
   }
 }
 async function lineFlex(token, replyToken, altText, contents, userId, quick) {
   const msg = { type: "flex", altText: altText.slice(0, 400), contents };
+  // 🧾 k267: การ์ดออกในเทิร์นที่ลูกค้าถามเรื่องจัดส่งมาด้วย → ส่งข้อความข้อเท็จจริงนำหน้าการ์ด
+  //   ใช้ช่องทางเดิม (reply เดียว หลายข้อความ) — ไม่มีการยิง push เพิ่ม ไม่เปลืองโควตา
+  try {
+    const _fn267 = factNoteTake(userId);
+    if (_fn267) {
+      try { const _t = userId && TURN.get(userId); if (_t) _t.replies.push(String(_fn267)); } catch (e2) {}
+      console.log("K267_FACT_SENT_WITH_CARD");
+      return await lineMulti(token, replyToken, [{ type: "text", text: String(_fn267).slice(0, 4900) }, msg], userId);
+    }
+  } catch (e) {}
+  // 🧾 k260: การ์ดต้องถูกจดลงสมุดของเทิร์นด้วย — เดิมมีแต่ข้อความตัวหนังสือที่ถูกจด (k158)
+  //   ผลคือ log/replay "ตาบอด" เรื่องปิดการขาย: มองไม่เห็นว่าการ์ดออกไปเมื่อไหร่
+  //   จดแค่ altText พอ (ไม่จด JSON ทั้งก้อน) — replay แค่ต้องรู้ว่า "การ์ดอะไรออก"
+  try { const _t = userId && TURN.get(userId); if (_t) _t.replies.push("[การ์ด] " + String(altText || "").slice(0, 120)); } catch (e) {}
   if (quick && quick.items && quick.items.length) msg.quickReply = quick; // k13: ปุ่มลัดใต้การ์ด (เช่น ส่งสลิปจากอัลบั้ม)
   const r = await lfetch("https://api.line.me/v2/bot/message/reply", {
     method: "POST",
     headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
     body: JSON.stringify({ replyToken, messages: [msg] }),
   });
+  if (r.ok) markSent(userId);                                            // k271
   if (!r.ok) {
     console.log("LINE_FLEX_FAIL status=" + r.status + " " + (await r.text()).slice(0, 200));
     if (userId && userId !== "anon") {
-      await lfetch("https://api.line.me/v2/bot/message/push", {
+      const _p = await lfetch("https://api.line.me/v2/bot/message/push", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ to: userId, messages: [msg] }),
       });
+      if (_p && _p.ok) markSent(userId); else console.log("K271_PUSH_FAIL_FLEX");   // k271
     }
   }
 }
