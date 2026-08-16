@@ -234,6 +234,23 @@ body{padding-bottom:96px!important;}          /* เว้นที่ให้�
 const W='https://abc-line-ai.milin-mengg.workers.dev';
 let KEY=localStorage.getItem('g2key')||'';
 let ON=true, TAB=1, CHATS=[], ONLYOPEN=false;
+/* k338-F1 START */
+/* 🔧 k338 (เคสจริง 16 ส.ค. — เจ้าของร้านรายงาน): กด "ปิดจีทู" แล้วปุ่มเด้งกลับ ต้องกดหลายรอบ
+   ต้นเหตุ: การกดสำเร็จตั้งแต่ครั้งแรก แต่ KV list ของ Cloudflare ตามหลังการเขียนได้ถึง ~60 วิ
+   → loadChats ที่ยิงตามหลัง (1.5 วิ + ทุก 15 วิ) ดึง "สถานะเก่า" มาทับปุ่มที่เพิ่งกด
+   แก้: จำสิ่งที่แอดมินเพิ่งกดไว้ 90 วิ (PENDING) แล้วให้มันชนะผล server จนกว่า server จะตามทัน
+   ⛔ หมดอายุแล้วกลับไปเชื่อ server เสมอ — กันสถานะค้างถาวรถ้าคำสั่งพลาดกลางทาง */
+var PENDING={};
+function pendSet(uid,val){ PENDING[uid]={muted:val, until:Date.now()+90000}; }
+function pendApply(list){
+  var now=Date.now(), out=[];
+  for(var i=0;i<list.length;i++){ var c=list[i], q=PENDING[c.uid];
+    if(q){ if(now>q.until || c.muted===q.muted){ delete PENDING[c.uid]; }
+           else { c=Object.assign({},c); c.muted=q.muted; if(q.muted&&!c.reason) c.reason='แอดมินคุมอยู่'; } }
+    out.push(c); }
+  return out;
+}
+/* k338-F1 END */
 const $=id=>document.getElementById(id);
 function esc(s){ return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
 function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
@@ -272,7 +289,7 @@ function renderShopBar(){
 function switchShop(id){
   if(id===SHOP) return;
   SHOP=id; localStorage.setItem('g2shop',id);
-  CHATS=[]; $('msg').textContent='สลับไปร้าน '+id+' แล้วค่ะ';
+  CHATS=[]; PENDING={}; $('msg').textContent='สลับไปร้าน '+id+' แล้วค่ะ';
   renderShopBar(); init();
 }
 function bakeoff(){
@@ -468,7 +485,7 @@ async function orderDone(uid){ try{ await fetch(q('/ctl/orderdone?uid='+encodeUR
 /* ═══ แท็บ 2: แชท + บทสนทนา ═══ */
 function toggleOnlyOpen(){ ONLYOPEN=!ONLYOPEN; $('foltxt').textContent=ONLYOPEN?'แสดงเฉพาะที่แอดมินคุมอยู่':'แสดงทุกแชท'; renderChats(); }
 async function loadChats(data){
-  try{ const d=data||await (await fetch(q('/ctl/chats'))).json(); CHATS=d.chats||[]; renderChats(); }catch(e){}
+  try{ const d=data||await (await fetch(q('/ctl/chats'))).json(); CHATS=pendApply(d.chats||[]); renderChats(); }catch(e){}
 }
 function renderChats(){
   const kw=($('csearch').value||'').trim().toLowerCase();
@@ -528,17 +545,19 @@ function setMuted(uid,val,reason){
 }
 async function mute1(uid,btn){
   if(btn) btn.textContent='⏸…';
+  pendSet(uid,true);                                   /* k338: กัน loadChats สถานะเก่ามาทับ */
   setMuted(uid,true);                                  // ⚡ เปลี่ยนทันที ไม่รอเซิร์ฟเวอร์
   $('msg').textContent='✅ ปิดจีทูแชทนี้แล้ว';
   try{ await fetch(q('/ctl/mute1?uid='+encodeURIComponent(uid)),{method:'POST'}); }
-  catch(e){ setMuted(uid,false); $('msg').textContent='⚠️ ปิดไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
+  catch(e){ delete PENDING[uid]; setMuted(uid,false); $('msg').textContent='⚠️ ปิดไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
   loadQueue(); setTimeout(function(){ loadChats(); refresh(); },1500);   // เทียบกับเซิร์ฟเวอร์ทีหลัง
 }
 async function unmute1(uid){
+  pendSet(uid,false);                                  /* k338 */
   setMuted(uid,false);                                 // ⚡ เปลี่ยนทันที
   $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว';
   try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); }
-  catch(e){ setMuted(uid,true); $('msg').textContent='⚠️ ทำรายการไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
+  catch(e){ delete PENDING[uid]; setMuted(uid,true); $('msg').textContent='⚠️ ทำรายการไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
   loadQueue(); setTimeout(function(){ loadChats(); refresh(); },1500);
 }
 
