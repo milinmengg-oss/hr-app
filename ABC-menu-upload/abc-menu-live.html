@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>ABC Menu</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:#111;font-family:system-ui,-apple-system,'Segoe UI',sans-serif}
+.wrap{max-width:560px;margin:0 auto;background:#fff;min-height:100vh}
+.live{position:sticky;top:0;z-index:12;background:#0b0b0b;color:#c6f45f;font-size:11.5px;
+  text-align:center;padding:6px 10px;font-weight:700}
+.view{display:none}.view.on{display:block}
+/* เวทีภาพ — ภาพต้นฉบับคือเลเยอร์เดียวที่มองเห็น พิกัดเป็น % จึงตรงทุกความกว้างจอ */
+.stage{position:relative;line-height:0}
+.stage img.base{width:100%;height:auto;display:block}
+.hot{position:absolute;border-radius:999px;cursor:pointer}
+.hot.out{background:rgba(233,233,233,.93);box-shadow:0 0 0 1px rgba(0,0,0,.10) inset;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;line-height:1}
+.hot.out::after{content:"หมด";font-size:11px;font-weight:800;color:#9a9a9a;letter-spacing:.5px}
+.hot.sm.out::after{font-size:9px}
+.backbar{position:fixed;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;z-index:14;
+  background:#0b0b0bf2;backdrop-filter:blur(6px);padding:9px 12px;display:none;gap:8px}
+.backbar.on{display:flex}
+.backbar button{flex:1;border:none;border-radius:11px;padding:11px;font-family:inherit;
+  font-size:13.5px;font-weight:800;cursor:pointer;background:#fff;color:#111}
+.soon{padding:60px 26px;text-align:center;color:#666;font-size:14px;line-height:1.9}
+.soon b{display:block;font-size:17px;color:#111;margin-bottom:8px}
+#sheetbg{display:none;position:fixed;inset:0;background:#000a;z-index:30}
+#sheet{position:fixed;left:0;right:0;bottom:-110%;max-width:560px;margin:0 auto;background:#fff;
+  border-radius:20px 20px 0 0;padding:18px 16px 22px;z-index:31;transition:bottom .22s}
+#sheet.on{bottom:0}
+#sheet h3{font-size:18px;font-weight:800;color:#111}
+#sheet .f{font-size:15px;color:#444;margin-top:2px}
+#sheet .st{margin-top:10px;font-size:13.5px;font-weight:700}
+#sheet .msg{margin-top:12px;background:#f3f3f3;border-radius:12px;padding:11px;font-size:13.5px;color:#222}
+#sheet button{width:100%;margin-top:10px;border:none;border-radius:12px;padding:13px;
+  font-size:14.5px;font-weight:800;font-family:inherit;cursor:pointer}
+.go{background:#111;color:#fff}.cls{background:#eee;color:#333}
+.okmsg{color:#1d7c3d;font-size:12.5px;margin-top:8px;display:block}
+</style></head><body>
+<div class="wrap">
+  <div class="live" id="livetxt">กำลังเช็คสต็อกสด…</div>
+  <div class="view on" id="v_home"><div class="stage" id="homestage">
+    <img class="base" src="img/menu3/0.2.jpg" alt="เมนูสินค้า ABC">
+  </div></div>
+  <div class="view" id="v_cat"><div id="catpages"></div></div>
+</div>
+<div class="backbar" id="backbar"><button onclick="goHome()">‹‹ กลับสู่หน้าหลัก</button></div>
+<div id="sheetbg" onclick="closeSheet()"></div>
+<div id="sheet">
+  <h3 id="sh_m"></h3><div class="f" id="sh_f"></div>
+  <div class="st" id="sh_st"></div>
+  <div class="msg" id="sh_msg"></div><span class="okmsg" id="sh_ok"></span>
+  <button class="go" onclick="orderGo()">📋 คัดลอกข้อความสั่งซื้อ</button>
+  <button class="cls" onclick="closeSheet()">ปิด</button>
+</div>
+<script>
+const W="https://abc-line-ai.milin-mengg.workers.dev";
+const norm=s=>s.trim().replace(/\s+/g," ").toLowerCase();
+let CFG=null, STOCK=null, TRACKED=new Set();
+
+CFG={"home":{"img":"img/menu3/0.2.jpg","hot":[{"c":"หัวน้ำยา","x":18.756,"y":33.35,"w":62.578,"h":4.05},{"c":"BIG POD","x":18.756,"y":38.5,"w":62.578,"h":4.1},{"c":"พอตใช้แล้วทิ้ง","x":18.756,"y":43.7,"w":62.578,"h":4.05},{"c":"SALTNIC","x":18.756,"y":48.85,"w":62.578,"h":4.1},{"c":"FREEBASE","x":18.756,"y":54.05,"w":62.578,"h":4.05},{"c":"เครื่องพอต","x":18.756,"y":59.2,"w":62.578,"h":4.1},{"c":"เครื่อง BIG POD","x":18.756,"y":64.4,"w":62.578,"h":4.05},{"c":"BIG POD KIT","x":18.756,"y":69.55,"w":62.578,"h":4.1},{"c":"IQOS","x":18.756,"y":74.75,"w":62.578,"h":4.05},{"c":"เครื่อง IQOS","x":18.756,"y":79.9,"w":62.578,"h":4.1},{"c":"NIC POUCH","x":18.756,"y":85.1,"w":62.578,"h":4.05}]},"pages":{"หัวน้ำยา":["20"],"BIG POD":["15","16","17","18"],"พอตใช้แล้วทิ้ง":["2","3","4.2","7","8","9","11"],"SALTNIC":["25"],"FREEBASE":[],"เครื่องพอต":["22"],"เครื่อง BIG POD":["19.2"],"BIG POD KIT":["12","13"],"IQOS":[],"เครื่อง IQOS":[],"NIC POUCH":["27.2"]},"spots":{"20":[{"m":"หัวพอต RELX INFINITY","f":"ชาดอกชบาเย็น 3%","x":4.8,"y":16.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ถั่วเขียว 3%","x":27.556,"y":16.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ลิ้นจี่ 3%","x":50.4,"y":16.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"เสาวรส 3%","x":73.156,"y":16.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชาดำเย็น 3%","x":4.711,"y":19.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"น้ำผึ้งส้มโอ 3%","x":27.556,"y":19.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"สตรอว์เบอร์รี่ 3%","x":50.4,"y":19.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"แตงโม 3%","x":73.156,"y":19.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชาพีช 3%","x":4.711,"y":22.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"น้ำเขียวโซดา 3%","x":27.556,"y":22.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"สไปรท์ 3%","x":50.4,"y":22.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"แอปเปิ้ลเขียว 3%","x":73.156,"y":22.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชามะนาวเย็น 3%","x":4.711,"y":25.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"นํ้าส้มโซดา 3%","x":27.556,"y":25.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"องุ่น 3%","x":50.4,"y":25.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"โคล่า 3%","x":73.156,"y":25.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชาหลงจินเย็น 3%","x":4.711,"y":28.65,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ฝรั่ง 3%","x":27.556,"y":28.65,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"องุ่นเขียว 3%","x":50.4,"y":28.65,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ไวท์คอฟฟี่ 3%","x":73.156,"y":28.65,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชาอู่หลงเย็น 3%","x":4.711,"y":31.7,"w":21.422,"h":2.4},{"m":"หัวพอต RELX INFINITY","f":"มะนาวเย็น 3%","x":27.556,"y":31.7,"w":21.422,"h":2.4},{"m":"หัวพอต RELX INFINITY","f":"องุ่นแอปเปิ้ล 3%","x":50.4,"y":31.7,"w":21.422,"h":2.4},{"m":"หัวพอต RELX INFINITY","f":"ชาเขียวมะลิ 3%","x":4.711,"y":34.8,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"มะม่วง 3%","x":27.556,"y":34.8,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"เผือก 3%","x":50.4,"y":34.8,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ชาไทย 3%","x":4.711,"y":37.9,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"รูทเบียร์ 3%","x":27.556,"y":37.9,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"เมล่อน 3%","x":50.4,"y":37.95,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ซิตรัส 5%","x":4.8,"y":42.15,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ยาสูบมิ้นต์ 5%","x":27.556,"y":42.15,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ราสเบอร์รี่มิ้นต์ 5%","x":50.4,"y":42.15,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"มิกซ์เบอร์รี่ 5%","x":4.711,"y":45.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ยาสูบร้อน 5%","x":27.556,"y":45.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"เลม่อนมิ้นต์ 5%","x":50.4,"y":45.25,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"มิ้นต์เอ็กซ์ตร้า 5%","x":4.711,"y":48.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"สเปียร์มิ้นต์ 5%","x":27.556,"y":48.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"แตงโม 5%","x":50.4,"y":48.35,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"มิ้นต์ฟรีซ 5%","x":4.711,"y":51.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"องุ่น 5%","x":27.556,"y":51.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"แอปเปิ้ลเขียว 5%","x":50.4,"y":51.45,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ยาสูบคลาสสิค 5%","x":4.711,"y":54.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"เปปเปอร์มิ้นต์ 5%","x":27.556,"y":54.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"สับปะรด 5%","x":50.4,"y":54.55,"w":21.422,"h":2.35},{"m":"หัวพอต RELX INFINITY","f":"ไอซ์สปาร์คกิ้ง 5%","x":4.711,"y":57.6,"w":21.422,"h":2.4},{"m":"หัวพอต RELX INFINITY","f":"สตรอว์เบอร์รี่ 5%","x":27.556,"y":57.6,"w":21.422,"h":2.4},{"m":"หัวพอต RELX LARGE","f":"แอปเปิ้ลเขียว","x":4.978,"y":79.55,"w":17.244,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"องุ่น","x":23.556,"y":79.55,"w":17.244,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"ลิ้นจี่","x":4.978,"y":82.4,"w":17.244,"h":2.2},{"m":"หัวพอต RELX LARGE","f":"องุ่นแอปเปิ้ล","x":23.644,"y":82.4,"w":17.156,"h":2.2},{"m":"หัวพอต RELX LARGE","f":"โคล่า","x":4.978,"y":85.5,"w":17.156,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"พีช","x":23.644,"y":85.5,"w":17.156,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"ชาหลงจิน","x":4.978,"y":88.45,"w":17.156,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"พีชสตรอว์เบอร์รี่","x":23.644,"y":88.45,"w":17.156,"h":2.25},{"m":"หัวพอต RELX LARGE","f":"บลูเบอร์รี่","x":4.978,"y":91.35,"w":17.156,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"ดับเบิ้ลมิ้นต์ 3%","x":46.489,"y":79.55,"w":15.378,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"บลูเบอร์รี่ 3%","x":62.844,"y":79.55,"w":15.378,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"มะม่วงเขียว 3%","x":79.2,"y":79.55,"w":15.378,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"แตงโม 3%","x":46.489,"y":82.4,"w":15.378,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"เบอร์รี่ชมพู 3%","x":62.844,"y":82.35,"w":15.467,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"องุ่นอโล 3%","x":79.2,"y":82.35,"w":15.378,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"ดับเบิ้ลมิ้นต์ 5%","x":46.489,"y":85.5,"w":15.378,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"ลิ้นจี่ 5%","x":62.844,"y":85.5,"w":15.467,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"แอปเปิ้ลอโล 5%","x":79.111,"y":85.5,"w":15.467,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"พีชสตรอว์เบอร์รี่ 5%","x":46.489,"y":88.4,"w":15.378,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"สับปะรด 5%","x":62.844,"y":88.4,"w":15.467,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"โคล่า 5%","x":79.111,"y":88.4,"w":15.467,"h":2.2},{"m":"หัวพอต RELX ULTRA","f":"มิกซ์เบอร์รี่ 5%","x":46.489,"y":91.25,"w":15.378,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"องุ่นอโล 5%","x":62.844,"y":91.25,"w":15.467,"h":2.25},{"m":"หัวพอต RELX ULTRA","f":"เบอร์รี่ชมพู 5%","x":79.111,"y":91.25,"w":15.467,"h":2.25}]}};
+buildHome(); loadStock();
+
+function buildHome(){
+  const st=document.getElementById("homestage");
+  CFG.home.hot.forEach(h=>{
+    const d=document.createElement("div");
+    d.className="hot";
+    d.style.cssText=`left:${h.x}%;top:${h.y}%;width:${h.w}%;height:${h.h}%`;
+    d.onclick=()=>openCat(h.c);
+    st.appendChild(d);
+  });
+}
+
+function openCat(cat){
+  const pages=CFG.pages[cat]||[];
+  const box=document.getElementById("catpages");
+  box.innerHTML="";
+  if(!pages.length){
+    box.innerHTML='<div class="soon"><b>'+cat+'</b>หมวดนี้กำลังเตรียมไฟล์ภาพอยู่<br>สอบถามสินค้าในหมวดนี้ผ่านแชทไลน์ได้เลยค่ะ</div>';
+  } else {
+    pages.forEach(p=>{
+      const s=document.createElement("div"); s.className="stage";
+      s.innerHTML='<img class="base" loading="lazy" src="img/menu3/'+p+'.jpg" alt="'+cat+'">';
+      (CFG.spots[p]||[]).forEach((sp,i)=>{
+        const d=document.createElement("div");
+        d.className="hot"+(sp.w<4.5?" sm":"");
+        d.style.cssText=`left:${sp.x}%;top:${sp.y}%;width:${sp.w}%;height:${sp.h}%`;
+        d.dataset.p=p; d.dataset.i=i;
+        d.onclick=()=>openSheet(p,i);
+        s.appendChild(d);
+      });
+      box.appendChild(s);
+    });
+  }
+  document.getElementById("v_home").classList.remove("on");
+  document.getElementById("v_cat").classList.add("on");
+  document.getElementById("backbar").classList.add("on");
+  scrollTo(0,0); paintStock();
+}
+function goHome(){
+  document.getElementById("v_cat").classList.remove("on");
+  document.getElementById("v_home").classList.add("on");
+  document.getElementById("backbar").classList.remove("on");
+  scrollTo(0,0);
+}
+
+// ── สต็อกสด: /menustock คีย์ "ชื่อรุ่น|กลิ่น" (normalize ตัวพิมพ์ให้ตรงกัน) ──
+function loadStock(){
+  fetch(W+"/menustock").then(r=>r.json()).then(raw=>{
+    const st={}; TRACKED=new Set();
+    for(const k in raw){ const i=k.indexOf("|"); if(i<0) continue;
+      const mn=k.slice(0,i); st[mn+"|"+norm(k.slice(i+1))]=raw[k]; TRACKED.add(mn); }
+    STOCK=st; paintStock();
+    document.getElementById("livetxt").textContent=
+      "สต็อกสด · อัปเดต "+new Date().toLocaleTimeString("th-TH",{hour:"2-digit",minute:"2-digit"})+" น.";
+  }).catch(()=>{ document.getElementById("livetxt").textContent="แสดงรายการสินค้า"; });
+}
+function paintStock(){
+  if(!STOCK) return;
+  document.querySelectorAll("#catpages .hot").forEach(d=>{
+    const sp=(CFG.spots[d.dataset.p]||[])[d.dataset.i]; if(!sp) return;
+    if(!TRACKED.has(sp.m)) return;                 // ไม่มีข้อมูลรุ่นนี้ = ไม่แตะภาพ
+    d.classList.toggle("out", STOCK[sp.m+"|"+norm(sp.f)]!==true);
+  });
+}
+setInterval(loadStock,120000);
+
+let MSG="";
+function openSheet(p,i){
+  const sp=CFG.spots[p][i];
+  const el=document.querySelector('#catpages .hot[data-p="'+p+'"][data-i="'+i+'"]');
+  const inStock=!el.classList.contains("out");
+  document.getElementById("sh_m").textContent=sp.m;
+  document.getElementById("sh_f").textContent="กลิ่น "+sp.f;
+  document.getElementById("sh_st").innerHTML=inStock
+    ? '<span style="color:#1d7c3d">✅ มีของพร้อมส่ง</span>'
+    : '<span style="color:#b42323">⛔ กลิ่นนี้หมดชั่วคราว — เลือกกลิ่นอื่น หรือสอบถามในแชทได้ค่ะ</span>';
+  MSG="สนใจ "+sp.m+" กลิ่น"+sp.f+" ค่ะ";
+  document.getElementById("sh_msg").textContent=MSG;
+  document.getElementById("sh_ok").textContent="";
+  document.getElementById("sheetbg").style.display="block";
+  document.getElementById("sheet").classList.add("on");
+}
+function closeSheet(){ document.getElementById("sheet").classList.remove("on");
+  document.getElementById("sheetbg").style.display="none"; }
+async function orderGo(){
+  try{ await navigator.clipboard.writeText(MSG); }
+  catch(e){ const t=document.createElement("textarea"); t.value=MSG; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+  document.getElementById("sh_ok").textContent="✅ คัดลอกแล้วค่ะ — กลับไปที่แชทไลน์ แล้ววางข้อความส่งได้เลย";
+}
+</script></body></html>
