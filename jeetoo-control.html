@@ -24,7 +24,7 @@ h1{font-size:19px;display:flex;align-items:center;justify-content:center;gap:9px
 .sub:active{transform:scale(.98);}
 .sub.danger{background:#2a1414;border-color:#5a2626;color:#ff9a9a;}
 .muted{font-size:12.5px;color:#9a9a9a;margin-top:12px;line-height:1.7;}
-input,textarea{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;}
+input,textarea,select{width:100%;background:#222;border:1.5px solid #333;border-radius:12px;padding:12px;color:#f2f2f2;font-family:inherit;font-size:14px;margin-top:10px;}
 #key{text-align:center;}
 textarea{resize:vertical;min-height:96px;line-height:1.6;}
 #msg{font-size:13px;margin-top:12px;min-height:20px;color:#bdfb00;text-align:center;}
@@ -188,6 +188,27 @@ body{padding-bottom:96px!important;}          /* เว้นที่ให้�
         <textarea id="notice" placeholder="ยังไม่มีประกาศ…"></textarea>
         <button class="sub" onclick="saveNotice()">💾 บันทึกให้จีทูรู้</button>
 
+        <!-- 🎁 k399 · โปรโมชั่น — ตั้งเองได้ ไม่ต้องแก้โค้ด/ไม่ต้อง deploy -->
+        <div class="sechead">🎁 โปรโมชั่นของร้าน</div>
+        <div class="stnote">ตรงนี้ <b>มีผลกับการคิดค่าส่งจริง</b> ไม่ใช่แค่คำพูด — จีทูจะใช้ตัวเลขชุดเดียวกันทั้งตอนตอบลูกค้าและตอนคิดยอด<br>
+          พอถึงเวลาสิ้นสุด โปรจะหยุดเอง ไม่ต้องมากดปิด · ⛔ โปรนี้ไม่รวมส่งด่วน/แกร็บ</div>
+        <div id="promostatus" style="font-size:13px;font-weight:600;margin-bottom:10px;">—</div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:10px;">
+          <input type="checkbox" id="pmActive" style="width:18px;height:18px;"> เปิดใช้โปรนี้
+        </label>
+        <input id="pmName" placeholder="ชื่อโปร (ไว้ให้เราจำเอง) เช่น ส่งฟรีครบ 500">
+        <select id="pmType"><option value="FREE_SHIPPING">ส่งฟรีเมื่อซื้อครบตามยอด</option></select>
+        <input id="pmMin" type="number" inputmode="numeric" placeholder="ยอดขั้นต่ำ (บาท) — นับค่าสินค้าก่อนค่าส่ง เช่น 500">
+        <select id="pmMethod"><option value="PARCEL">พัสดุปกติเท่านั้น (ไม่รวมส่งด่วน/แกร็บ)</option></select>
+        <div class="stnote" style="margin:8px 0 4px;">เริ่ม / สิ้นสุด (เวลาไทย)</div>
+        <input id="pmStart" type="datetime-local">
+        <input id="pmEnd" type="datetime-local">
+        <div class="stnote" style="margin:8px 0 4px;">ข้อความที่จีทูใช้ตอบลูกค้า (เว้นว่าง = ระบบเขียนให้เอง)</div>
+        <textarea id="pmMsg" placeholder="เช่น ซื้อครบ 500 บาท ส่งฟรีพัสดุเลยค่ะ (ถึง 23 ส.ค. นี้เท่านั้น)"></textarea>
+        <input id="pmExclude" placeholder="รุ่นที่ไม่ร่วมโปร (คั่นด้วยจุลภาค) — เว้นว่าง = ร่วมทุกอย่าง">
+        <button class="sub" onclick="savePromo()">💾 บันทึกโปรนี้</button>
+        <button class="sub" onclick="clearPromo()" style="background:#1a1a1a;">🗑️ ลบโปรทิ้ง</button>
+
         <div class="sechead">💳 ข้อมูลโอนเงินของร้านนี้</div>
         <div class="stnote">เลขบัญชีที่ระบบส่งให้ลูกค้าตอนกดยืนยันรายการ — แก้ที่นี่ได้เลย มีผลทันที (ระบบจดประวัติการแก้ทุกครั้ง)<br>รูปแบบ: บรรทัด 1 = ธนาคาร + เลขบัญชี · บรรทัด 2 = ชื่อบัญชี</div>
         <textarea id="payinfo" placeholder="ธนาคารกสิกรไทย 123-4-56789-0&#10;ชื่อบัญชี ..."></textarea>
@@ -331,7 +352,7 @@ function go(n){
   [1,2,3].forEach(function(i){ const tb=$('t'+i); if(tb) tb.classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); });
   syncNav(n); window.scrollTo(0,0);
   if(n===2) loadChats();
-  if(n===3){ loadHealth(); loadNotice(); }
+  if(n===3){ loadHealth(); loadNotice(); loadPromo(); }
 }
 
 async function api(act){
@@ -499,7 +520,7 @@ function renderChats(){
     const nm=(it.name||'ลูกค้า (ไม่ทราบชื่อ)').replace(/'/g,'');
     return '<div class="crow"><div class="cname'+(it.muted?' off':'')+'" onclick="showConv(\''+it.uid+'\',\''+esc(nm)+'\')">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')
       +' <i>· '+(it.muted? esc(it.reason||'แอดมินคุมอยู่') : timeAgo(it.t))+' · แตะดูบทสนทนา</i></div>'
-      +(it.muted? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ ให้จีทูต่อ</button>'
+      +(it.muted? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ เปิด G2 แชทนี้</button>'
                 : '<button class="cbtn stop" onclick="mute1(\''+it.uid+'\')">⏸ ปิดจีทู</button>')
       +'</div>';
   }).join('') : '<div class="qempty">ไม่พบแชทที่ตรงเงื่อนไข</div>';
@@ -556,7 +577,8 @@ async function unmute1(uid){
   pendSet(uid,false);                                  /* k338 */
   setMuted(uid,false);                                 // ⚡ เปลี่ยนทันที
   $('msg').textContent='✅ ให้จีทูดูแลแชทนี้ต่อแล้ว';
-  try{ await fetch(q('/ctl/done?uid='+encodeURIComponent(uid)),{method:'POST'}); }
+  /* 🔓 k360 (CASE N): ปุ่มนี้ = เปิด G2 เฉพาะแชทนี้ → ต้องยิง unmute1 · ⛔ ห้ามใช้ /ctl/done (done = เก็บเคสเท่านั้น) */
+  try{ await fetch(q('/ctl/unmute1?uid='+encodeURIComponent(uid)),{method:'POST'}); }
   catch(e){ delete PENDING[uid]; setMuted(uid,true); $('msg').textContent='⚠️ ทำรายการไม่สำเร็จ รบกวนกดใหม่อีกครั้งนะคะ'; return; }
   loadQueue(); setTimeout(function(){ loadChats(); refresh(); },1500);
 }
@@ -572,6 +594,42 @@ async function saveNotice(){
   try{ await fetch(q('/ctl/notice'),{method:'POST',body:$('notice').value});
     $('msg').textContent=$('notice').value.trim()?'✅ จีทูรับรู้ประกาศแล้ว':'✅ ยกเลิกประกาศแล้ว'; loadHealth(); }
   catch(e){ $('msg').textContent='⛔ บันทึกไม่สำเร็จ'; }
+}
+/* ═══ 🎁 k399 · โปรโมชั่น — แอดมินตั้งเอง ไม่ต้องแก้โค้ด ═══ */
+/*  ⛔ ฟอร์มนี้แค่ "ส่งค่า" — เวิร์กเกอร์เป็นคนตรวจก่อนบันทึกเสมอ ถ้าไม่ผ่านจะไม่เขียนทับของเดิม */
+function pmToBox(v){ return String(v||'').trim().replace(' ','T').replace(/\//g,'-').slice(0,16); }
+function pmFromBox(v){ return String(v||'').trim().replace('T',' ').replace(/-/g,'/'); }
+async function loadPromo(){
+  try{
+    const d=await (await fetch(q('/ctl/promo'))).json();
+    const c=d['โปร']||{};
+    $('promostatus').textContent='สถานะตอนนี้: '+(d['สถานะ']||'-');
+    $('pmActive').checked = c.active===true;
+    $('pmName').value=c.name||''; $('pmMin').value=(c.minOrder==null?'':c.minOrder);
+    $('pmStart').value=pmToBox(c.start); $('pmEnd').value=pmToBox(c.end);
+    $('pmMsg').value=c.msg||''; $('pmExclude').value=(c.exclude||[]).join(', ');
+  }catch(e){ $('promostatus').textContent='สถานะตอนนี้: อ่านไม่ได้'; }
+}
+async function savePromo(){
+  const cfg={ v:1, active:$('pmActive').checked, name:$('pmName').value.trim(),
+    type:$('pmType').value, minOrder:Number($('pmMin').value),
+    methods:[$('pmMethod').value], start:pmFromBox($('pmStart').value), end:pmFromBox($('pmEnd').value),
+    msg:$('pmMsg').value.trim(),
+    exclude:$('pmExclude').value.split(',').map(function(x){return x.trim();}).filter(Boolean) };
+  if(cfg.active && !confirm('ยืนยันเปิดโปรนี้?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+'\nซื้อครบ '+cfg.minOrder+' บาท = ส่งฟรีพัสดุ\nถึง '+cfg.end+'\n\nมีผลกับยอดเงินที่ลูกค้าจ่ายจริง')) return;
+  $('msg').textContent='กำลังบันทึก…';
+  try{
+    const r=await fetch(q('/ctl/promo'),{method:'POST',body:JSON.stringify(cfg)});
+    const d=await r.json();
+    if(!r.ok || d.ok===0){ $('msg').textContent='⛔ '+(d['ผิดตรงไหน']||'บันทึกไม่สำเร็จ'); return; }
+    $('msg').textContent='✅ บันทึกโปรแล้ว — '+(d['สถานะ']||''); loadPromo();
+  }catch(e){ $('msg').textContent='⛔ บันทึกไม่สำเร็จ'; }
+}
+async function clearPromo(){
+  if(!confirm('ลบโปรทิ้ง? ค่าส่งจะกลับไปใช้กฎเดิมของร้านทันที')) return;
+  try{ await fetch(q('/ctl/promo'),{method:'POST',body:'null'});
+    $('msg').textContent='✅ ยกเลิกโปรแล้ว'; loadPromo(); }
+  catch(e){ $('msg').textContent='⛔ ทำรายการไม่สำเร็จ'; }
 }
 async function savePay(){
   const v=$('payinfo').value.trim();
