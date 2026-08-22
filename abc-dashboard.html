@@ -832,7 +832,22 @@ async function updParse(file){
     await loadSheetJS();
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(buf,{cellDates:true});
-    const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:null});
+    // 🩹 หาแถวหัวตารางเอง — ห้าม fix ว่าอยู่แถว 1
+    //   เคสจริง 21 ส.ค. 69: ไฟล์ completesales ของ XSelly มีแถวสรุป "รวม" อยู่บรรทัดแรก
+    //   หัวตารางจึงเลื่อนไปแถว 2 (ไฟล์ Sale Rec แบบเดิมหัวตารางอยู่แถว 1)
+    //   ผลตอนนั้น: อ่านได้ 72,351 แถว แต่จับออเดอร์ไม่ได้เลย → พังด้วย error ที่อ่านไม่รู้เรื่อง
+    const ws0=wb.Sheets[wb.SheetNames[0]];
+    const ref=XLSX.utils.decode_range(ws0['!ref']);
+    let hdrRow=-1;
+    for(let R=ref.s.r; R<=Math.min(ref.s.r+19, ref.e.r) && hdrRow<0; R++){
+      for(let C=ref.s.c; C<=ref.e.c; C++){
+        const cell=ws0[XLSX.utils.encode_cell({r:R,c:C})];
+        if(cell && String(cell.v||'').trim()==='ออเดอร์#'){ hdrRow=R; break; }
+      }
+    }
+    if(hdrRow<0) throw new Error('ไม่พบหัวตาราง (ไม่เจอคอลัมน์ "ออเดอร์#" ใน 20 แถวแรก) — ไฟล์อาจเปลี่ยนรูปแบบ');
+    if(hdrRow>0) updLog('ℹ️ หัวตารางอยู่แถวที่ '+(hdrRow+1)+' (ข้ามแถวสรุปด้านบน)');
+    const rows=XLSX.utils.sheet_to_json(ws0,{defval:null,range:hdrRow});
     updLog('อ่านได้ '+rows.length.toLocaleString()+' แถว · กำลังโหลดแผนที่ SKU…');
     const [sa,sb]=await Promise.all([db.collection('dash_secure').doc('skumap_a').get(),db.collection('dash_secure').doc('skumap_b').get()]);
     const SKMAP={};
@@ -857,7 +872,11 @@ async function updParse(file){
     const ok=orders.filter(o=>!o.st.includes('ยกเลิก') && o.dt && !isNaN(o.dt));
     // เดือนหลักของไฟล์
     const mc={}; ok.forEach(o=>{ const k=o.dt.getFullYear()+'-'+String(o.dt.getMonth()+1).padStart(2,'0'); mc[k]=(mc[k]||0)+1; });
-    const M=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0][0];
+    // ⛔ ถ้าไม่มีออเดอร์ที่ใช้ได้เลย ต้องบอกสาเหตุ ไม่ใช่พังเงียบๆ
+    //   เดิมเขียน [0][0] ตรงๆ → ถ้าลิสต์ว่างจะขึ้น "Cannot read properties of undefined" ซึ่งหาสาเหตุไม่ได้
+    const mcList=Object.entries(mc).sort((a,b)=>b[1]-a[1]);
+    if(!mcList.length) throw new Error('อ่านไฟล์ได้ '+rows.length.toLocaleString()+' แถว แต่ไม่พบออเดอร์ที่ใช้ได้เลย — ตรวจว่าไฟล์มีคอลัมน์ "ยอดออเดอร์…" และ "วันเวลาที่สร้างออเดอร์" ครบหรือไม่');
+    const M=mcList[0][0];
     // aggregate
     const A={M, orders:ok.length, revenue:0, daily:{}, dailyRows:{}, prov:{}, geo:{}, prodq:{}, shops:{}, dow:[...Array(7)].map(()=>({o:0,r:0})), hour:[...Array(24)].map(()=>({o:0,r:0})), pairs:{}};
     for(const o of ok){
