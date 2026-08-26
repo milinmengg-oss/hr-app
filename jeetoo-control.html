@@ -50,7 +50,7 @@ textarea{resize:vertical;min-height:96px;line-height:1.6;}
 .exprow span{color:#9fd8bb;}
 .expsend{background:#1f7a4d;border:0;color:#fff;border-radius:8px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px;}
 .expsend:disabled{opacity:.6;cursor:default;}
-.qcard.urgent .qdone{background:#3a2020;border-color:#7a3030;color:#a58a8a;}
+.qcard.urgent .qdone{background:#3a2020;border-color:#7a3030;color:#a58a8a;} .qaccept{flex:1;background:#1a2a3f;border:1.5px solid #2f5d8f;color:#9fc3ea;border-radius:10px;padding:9px 0;font-weight:700;cursor:pointer;font-size:13px;} .qaccept:disabled{opacity:.65;cursor:default;background:#22303f;}
 .qtop{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
 .qtop b{font-size:15px;color:#fff;}
 .qtime{font-size:11px;color:#8a8a8a;white-space:nowrap;}
@@ -420,6 +420,7 @@ async function loadQueue(data){
             +'<span>บาท</span><button class="expsend" onclick="sendExpFee(\''+it.uid+'\',this)">ส่งให้ลูกค้า</button></div></div>'):'')
         +'<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
         +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
+        +'<button class="qaccept" onclick="acceptCase(\''+it.uid+'\',this)">👨‍💼 รับเคส</button>'
         +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เสร็จ</button></div></div>';
     }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
     markUrgent();
@@ -441,7 +442,19 @@ async function sendExpFee(uid,btn){
     loadQueue(); refresh();
   }catch(e){ btn.disabled=false; btn.textContent='ส่งให้ลูกค้า'; toast('ส่งไม่สำเร็จ ลองใหม่นะคะ',1); }
 }
-function markDone2(uid,el){
+/* 👨‍💼 k443 · ADMIN ACCEPT — กด "รับเคส" = บอกระบบว่าแอดมินเข้าดูแลแล้ว
+     → fallback 10 นาทีจะไม่ส่งหาลูกค้าคนนี้ · G2 ยังเงียบเหมือนเดิม (ไม่ปลด mute)
+     ⛔ คนละหน้าที่กับ "✅ เสร็จ" (done = เก็บเคสออกจากคิว) — ห้ามใช้แทนกัน */
+  async function acceptCase(uid,el){
+    try{
+      const r=await fetch(q('/ctl/accept?uid='+encodeURIComponent(uid)),{method:'POST'});
+      if(r&&r.ok){
+        if(el){ el.disabled=true; el.textContent='👨‍💼 กำลังดูแล'; }
+        toast('รับเคสแล้ว — ระบบจะไม่ส่งข้อเสนอเอวาหาลูกค้าคนนี้ค่ะ');
+      } else { toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้งนะคะ'); }
+    }catch(e){ toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้งนะคะ'); }
+  }
+  function markDone2(uid,el){
   const card=el&&el.closest?el.closest('.qcard'):null;
   if(card&&card.classList.contains('urgent')){
     if(!confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหมคะ?\nกดตกลง = จีทูจะกลับมาตอบแชทนี้ต่อ')) return;
