@@ -418,8 +418,9 @@ async function loadQueue(data){
         +(/เช็คค่าส่งด่วน/.test(rs)?('<div class="expbox">🛵 กรอกค่าส่งจากแอปแกร็บ แล้วระบบจะคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง'
             +'<div class="exprow"><input type="number" inputmode="numeric" placeholder="เช่น 185" id="ef_'+it.uid.replace(/[^a-zA-Z0-9]/g,'')+'">'
             +'<span>บาท</span><button class="expsend" onclick="sendExpFee(\''+it.uid+'\',this)">ส่งให้ลูกค้า</button></div></div>'):'')
+        /* 🗑️ k451b (เจ้าของร้านสั่ง 28 ส.ค.): เอาปุ่ม "👁 ดูบทสนทนา" ออกจากการ์ดคิว — ไม่ได้ใช้
+           ⛔ ลบเฉพาะปุ่มในคิวนี้ · ฟังก์ชัน showConv() ยังอยู่ครบ (แท็บแชทแตะชื่อลูกค้ายังดูย้อนหลังได้) */
         +'<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
-        +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
         /* 👨‍💼 k451: สถานะ "รับเคสแล้ว" มาจาก server (accepted) ⇒ refresh/poll แล้วปุ่มไม่รีเซ็ต */
         +(it.accepted
             ? '<button class="qaccept" disabled>👨‍💼 กำลังดูแล</button>'
