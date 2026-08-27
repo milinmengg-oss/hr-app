@@ -234,7 +234,7 @@ body{padding-bottom:96px!important;}          /* เว้นที่ให้�
         <button class="sub danger" onclick="unmute()">🔓 ปลดล็อกทุกแชท (ให้จีทูกลับมาตอบทั้งหมด)</button>
       </div>
 
-      <div class="muted">💡 พอลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน จีทูจะเงียบแชทนั้นแล้วขึ้นในแท็บ "งานวันนี้" ให้เอง · ตอบใน LINE OA แล้วกด "✅ เสร็จ" จีทูจะกลับมาดูแลต่อ</div>
+      <div class="muted">💡 พอลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน จีทูจะเงียบแชทนั้นแล้วขึ้นในแท็บ "งานวันนี้" ให้เอง · ตอบลูกค้าใน LINE แล้วกด ✅ เก็บเคส เพื่อเอาเคสออกจากคิว • G2 จะยังเงียบในแชทนั้น หากต้องการให้ G2 กลับมาตอบ ให้กด ▶️ เปิด G2 แชทนี้ ในแท็บแชท</div>
     </div>
     <div id="msg"></div>
   </div>
@@ -420,8 +420,11 @@ async function loadQueue(data){
             +'<span>บาท</span><button class="expsend" onclick="sendExpFee(\''+it.uid+'\',this)">ส่งให้ลูกค้า</button></div></div>'):'')
         +'<div class="orow"><button class="ochat" onclick="openChat()">💬 เปิดแชท</button>'
         +'<button class="cbtn see" onclick="showConv(\''+it.uid+'\',\''+esc(it.name||'ลูกค้า').replace(/'/g,'')+'\')">👁 ดูบทสนทนา</button>'
-        +'<button class="qaccept" onclick="acceptCase(\''+it.uid+'\',this)">👨‍💼 รับเคส</button>'
-        +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เสร็จ</button></div></div>';
+        /* 👨‍💼 k451: สถานะ "รับเคสแล้ว" มาจาก server (accepted) ⇒ refresh/poll แล้วปุ่มไม่รีเซ็ต */
+        +(it.accepted
+            ? '<button class="qaccept" disabled>👨‍💼 กำลังดูแล</button>'
+            : '<button class="qaccept" onclick="acceptCase(\''+it.uid+'\',this)">👨‍💼 รับเคส</button>')
+        +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เก็บเคส</button></div></div>';
     }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
     markUrgent();
     return list.length;
@@ -457,7 +460,8 @@ async function sendExpFee(uid,btn){
   function markDone2(uid,el){
   const card=el&&el.closest?el.closest('.qcard'):null;
   if(card&&card.classList.contains('urgent')){
-    if(!confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหมคะ?\nกดตกลง = จีทูจะกลับมาตอบแชทนี้ต่อ')) return;
+    /* 📋 k451: บอกผลที่เกิดจริงตาม k365 — done = เก็บเคสออกจากคิว ⛔ ไม่ปลุก G2 */
+    if(!confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหมคะ?\nกดตกลง = เก็บเคสออกจากคิว (จีทูยังไม่กลับมาตอบแชทนี้)')) return;
   }
   markDone(uid);
 }
