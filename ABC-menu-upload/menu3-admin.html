@@ -112,7 +112,7 @@ tr.sel{background:#1d2a3a}
 
 <div class="box" id="bx7" style="display:none">
   <h2>7 · 📄 อัปไฟล์สต็อกจาก XSelly</h2>
-  <div class="sub" style="margin-bottom:8px">ไฟล์ที่ export จาก XSelly (.xlsx) — ระบบจะอ่านคอลัมน์ <b>พร้อมขาย</b> (คงเหลือ − ติดจอง) มาใส่ในเมนู<br>
+  <div class="sub" style="margin-bottom:8px">ไฟล์ที่ export จาก XSelly (.xlsx) — ระบบจะอ่านคอลัมน์ <b>พร้อมขาย</b> (คงเหลือ − ติดจอง) มาใส่ในเมนู <b style="color:#b42323">โดยเก็บแค่ “มีของ / หมด” ไม่เก็บจำนวนจริง</b><br>
   และเทียบให้ว่ามีสินค้า/กลิ่นใหม่ที่ยังไม่มีในเมนูหรือไม่</div>
   <div class="row"><div><input type="file" id="fStock" accept=".xlsx,.xls,.csv"></div></div>
   <div class="st" id="st7"></div>
@@ -399,14 +399,15 @@ $("fStock").onchange=e=>{
                           : ["03","05","00","06","01","20","50"].map(k=>norm(m)+"|"+norm(b)+"|"+k);
         if(!b) ["สีดำ",""].forEach(x=>["00","03"].forEach(k=>tries.push(norm(m)+"|"+norm(x)+"|"+k)));
         const k=tries.find(t=>X.has(t));
-        if(k!==undefined){ stock[key]=X.get(k); hit++; } else missArr.push(sp.m+" | "+sp.f);
+        if(k!==undefined){ stock[key]=(Number(X.get(k))>0?1:0); hit++; }   /* เก็บแค่ 1=มีของ 0=หมด ห้ามเก็บจำนวนจริง ลูกค้าเปิด view-source เห็นได้ */ else missArr.push(sp.m+" | "+sp.f);
       });
       // สินค้าที่มีใน XSelly แต่ยังไม่มีในเมนู
       const inMenu=new Set(Object.values(CFG.spots).flat().map(sp=>norm(ALIAS[sp.m]||sp.m)));
       const newModels=[...new Set([...X.keys()].map(k=>k.split("|")[0]))].filter(m=>!inMenu.has(m));
-      CFG.stock=stock; CFG.stockAt=stamp?stamp.slice(0,16).replace("T"," "):new Date().toLocaleString("th-TH");
+      CFG.stock=stock; delete CFG.stockAt;   /* ไม่ใส่วันที่สต็อกลงไฟล์ลูกค้า */
+      const stampTxt=stamp?stamp.slice(0,16).replace("T"," "):new Date().toLocaleString("th-TH");
       $("st7").className=missArr.length?"st warn":"st ok";
-      $("st7").innerHTML=`✅ อ่านแล้ว <b>${n}</b> SKU · รวมพร้อมขาย <b>${tot.toLocaleString()}</b> ชิ้น · ข้อมูล ณ <b>${CFG.stockAt}</b><br>
+      $("st7").innerHTML=`✅ อ่านแล้ว <b>${n}</b> SKU · รวมพร้อมขาย <b>${tot.toLocaleString()}</b> ชิ้น · ข้อมูล ณ <b>${stampTxt}</b><br>
         จับคู่กับปุ่มในเมนูได้ <b>${hit}</b> จุด${missArr.length?` · จับคู่ไม่ได้ <b>${missArr.length}</b>`:" · ครบทุกจุด"}`;
       let html="";
       if(missArr.length) html+="<b style='color:#ffd479'>จับคู่ไม่ได้:</b> "+missArr.slice(0,20).join(" · ")+(missArr.length>20?" …":"")+"<br><br>";
