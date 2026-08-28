@@ -767,6 +767,27 @@ function init(){
   }
 }
 init();
+/* 📡 k459 (เจ้าของร้านแจ้ง 29 ส.ค.): มีเคสใหม่แล้วต้องกดรีเฟรชเองถึงจะเด้ง
+   ต้นเหตุ: มือถือพับจอ/สลับแอป → เบราว์เซอร์หยุด setInterval ทันที (iOS หยุดสนิท)
+     พอเปิดแผงกลับมา timer ไม่ยิงต่อ → เห็นข้อมูลเก่าค้างจนกว่าจะกดรีเฟรชเอง
+   แก้: กลับมาดูจอเมื่อไหร่ = รีเฟรชทันที (visibilitychange/pageshow/focus/online)
+     + กันยิงรัว 2.5 วิ (สลับแอปไวๆ ไม่สแปมเซิร์ฟเวอร์)
+   ⛔ ไม่แตะ refresh()/loadQueue()/poll 15 วิเดิม — เพิ่มทางเข้าใหม่อย่างเดียว */
+let _lastWake459=0;
+function wakeRefresh459(){
+  try{
+    if(!KEY) return;
+    if(Date.now()-_lastWake459<2500) return;
+    _lastWake459=Date.now();
+    refresh();
+    if(_poll) clearInterval(_poll);          /* รีสตาร์ท timer — บางเบราว์เซอร์ค้างถาวรหลังพับจอนาน */
+    _poll=setInterval(refresh,15000);
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) wakeRefresh459(); });
+window.addEventListener('pageshow',wakeRefresh459);
+window.addEventListener('focus',wakeRefresh459);
+window.addEventListener('online',wakeRefresh459);
 </script>
 <div class="navbar" id="navbar">
   <button class="navbtn on" id="n1" onclick="go(1)"><i>📦</i>งานวันนี้<span class="bdg hide" id="bd1">0</span></button>
