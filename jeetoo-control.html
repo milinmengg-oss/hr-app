@@ -307,6 +307,17 @@ function renderShopBar(){
       +'⚠️ ร้านนี้ยังตั้งค่าไม่ครบ<br>• ข้อมูลโอน: '+esc(cur['ข้อมูลโอน'])+'<br>• ตรวจสลิป: '+esc(cur['ตรวจสลิป'])+'</div>';
   }
 }
+/* 🏷️ k463 (เมงสั่ง 29 ส.ค.): action ระดับร้านต้องบอก "ร้านไหน" ก่อนลงมือเสมอ
+   เหตุผล: ร้านเยอะขึ้น แอดมินสลับร้านค้างไว้แล้วลืม → กดปิดจีทู/เปลี่ยนบัญชีผิดร้านโดยไม่มีอะไรเตือน
+   ⛔ helper ตัวเดียวใช้ทุกจุด · fallback ชื่อร้านดิบถ้าโหลดรายชื่อร้านไม่ได้ (ห้ามโชว์ว่าง/undefined)
+   ⛔ อ่านค่าอย่างเดียว ไม่แตะ SHOP / ไม่แตะการสลับร้าน */
+function shopLabel(){
+  try{
+    var c=SHOPS_ALL.filter(function(s){return s['ร้าน']===SHOP;})[0];
+    var n=c&&c['ชื่อ']?String(c['ชื่อ']).trim():'';
+    return n||String(SHOP||'').toUpperCase();
+  }catch(e){ return String(SHOP||'').toUpperCase(); }
+}
 function switchShop(id){
   if(id===SHOP) return;
   SHOP=id; localStorage.setItem('g2shop',id);
@@ -622,6 +633,15 @@ async function loadNotice(){
     const h=(d['แก้ล่าสุด']||[])[0]; $('paysrc').textContent='ที่มา: '+(d['แหล่งที่มา']||'-')+(h?' · แก้ล่าสุด '+h['เวลา']:''); }catch(e){}
 }
 async function saveNotice(){
+  /* 🏷️ k463: ประกาศ = จีทูเอาไปพูดกับลูกค้า "ทุกคน" ของร้านนี้ — เดิมกดปุ๊บมีผลทันทีโดยไม่ถามเลย
+     ⛔ กดยกเลิก = ออกก่อนทุกอย่าง ไม่มี write ไม่มี action ใด ๆ เกิดขึ้น */
+  {
+    var _nv463=$('notice').value;
+    var _nb463=String(_nv463||'').trim();
+    if(!confirm((_nb463?'ตั้งประกาศให้ร้าน "':'ยกเลิกประกาศของร้าน "')+shopLabel()+'" ?\n\n'
+      +(_nb463||'(ล้างประกาศ — จีทูจะเลิกพูดเรื่องนี้)')
+      +'\n\n'+(_nb463?'ที่จะเอาไปบอกลูกค้าทุกคนของร้านนี้':'มีผลกับลูกค้าทุกคนของร้านนี้'))) return;
+  }
   $('msg').textContent='กำลังบันทึก…';
   try{ await fetch(q('/ctl/notice'),{method:'POST',body:$('notice').value});
     $('msg').textContent=$('notice').value.trim()?'✅ จีทูรับรู้ประกาศแล้ว':'✅ ยกเลิกประกาศแล้ว'; loadHealth(); }
@@ -648,7 +668,7 @@ async function savePromo(){
     methods:[$('pmMethod').value], start:pmFromBox($('pmStart').value), end:pmFromBox($('pmEnd').value),
     msg:$('pmMsg').value.trim(),
     exclude:$('pmExclude').value.split(',').map(function(x){return x.trim();}).filter(Boolean) };
-  if(cfg.active && !confirm('ยืนยันเปิดโปรนี้?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+'\nซื้อครบ '+cfg.minOrder+' บาท = ส่งฟรีพัสดุ\nถึง '+cfg.end+'\n\nมีผลกับยอดเงินที่ลูกค้าจ่ายจริง')) return;
+  if(cfg.active && !confirm('เปิดโปรของร้าน "'+shopLabel()+'" ?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+'\nซื้อครบ '+cfg.minOrder+' บาท = ส่งฟรีพัสดุ\nถึง '+cfg.end+'\n\nมีผลกับยอดเงินที่ลูกค้าจ่ายจริง')) return;
   $('msg').textContent='กำลังบันทึก…';
   try{
     const r=await fetch(q('/ctl/promo'),{method:'POST',body:JSON.stringify(cfg)});
@@ -658,15 +678,15 @@ async function savePromo(){
   }catch(e){ $('msg').textContent='⛔ บันทึกไม่สำเร็จ'; }
 }
 async function clearPromo(){
-  if(!confirm('ลบโปรทิ้ง? ค่าส่งจะกลับไปใช้กฎเดิมของร้านทันที')) return;
+  if(!confirm('ลบโปรของร้าน "'+shopLabel()+'" ทิ้ง?\n\nค่าส่งจะกลับไปใช้กฎเดิมของร้านทันที')) return;
   try{ await fetch(q('/ctl/promo'),{method:'POST',body:'null'});
     $('msg').textContent='✅ ยกเลิกโปรแล้ว'; loadPromo(); }
   catch(e){ $('msg').textContent='⛔ ทำรายการไม่สำเร็จ'; }
 }
 async function savePay(){
   const v=$('payinfo').value.trim();
-  if(v && !confirm('ยืนยันเปลี่ยนเลขบัญชีรับโอน?\n\n'+v+'\n\nลูกค้าทุกคนหลังจากนี้จะโอนเข้าบัญชีนี้ทันที')) return;
-  if(!v && !confirm('ล้างค่า = กลับไปใช้บัญชีตั้งต้นใน Cloudflare — ยืนยัน?')) return;
+  if(v && !confirm('💸 เปลี่ยนเลขบัญชีรับโอนของร้าน "'+shopLabel()+'" ?\n\n'+v+'\n\nลูกค้าทุกคนของร้านนี้หลังจากนี้จะโอนเข้าบัญชีนี้ทันที')) return;
+  if(!v && !confirm('ล้างเลขบัญชีของร้าน "'+shopLabel()+'" ?\n\nจะกลับไปใช้บัญชีตั้งต้นใน Cloudflare')) return;
   try{
     const r=await (await fetch(q('/ctl/payinfo'),{method:'POST',body:v})).json();
     if(r.error){ toast(r.error,1); $('msg').textContent=r.error; return; }
@@ -741,13 +761,13 @@ async function refresh(){
   }catch(e){ $('msg').textContent=e.message; }
 }
 async function toggle(){
-  if(ON && !confirm('ปิดจีทูทั้งร้าน? ลูกค้าทุกคนจะไม่ได้รับคำตอบอัตโนมัติจนกว่าจะเปิดใหม่')) return;
+  if(ON && !confirm('⛔ ปิดจีทูทั้งร้าน "'+shopLabel()+'" ?\n\nลูกค้าทุกคนของร้านนี้จะไม่ได้รับคำตอบอัตโนมัติจนกว่าจะเปิดใหม่')) return;
   $('msg').textContent='กำลังสั่งงาน…';
   try{ const s=await api(ON?'off':'on'); render(s.on,0); $('msg').textContent=s.on?'✅ เปิดจีทูแล้ว':'✅ ปิดจีทูแล้ว'; setTimeout(refresh,800); }
   catch(e){ $('msg').textContent=e.message; }
 }
 async function unmute(){
-  if(!confirm('ปลดล็อกทุกแชท? จีทูจะกลับมาตอบลูกค้าทุกคนทันที รวมคนที่แอดมินกำลังดูแลอยู่')) return;
+  if(!confirm('ปลดล็อกทุกแชทของร้าน "'+shopLabel()+'" ?\n\nจีทูจะกลับมาตอบลูกค้าทุกคนทันที รวมคนที่แอดมินกำลังดูแลอยู่')) return;
   $('msg').textContent='กำลังปลดล็อก…';
   try{ const s=await api('unmute'); $('msg').textContent='✅ ปลดล็อกแล้ว '+s.cleared+' แชท'; refresh(); }
   catch(e){ $('msg').textContent=e.message; }
