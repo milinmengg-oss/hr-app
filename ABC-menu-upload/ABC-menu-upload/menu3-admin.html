@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>หลังบ้านเมนู 3.0 — ABC</title>
+<style>
+:root{--bg:#0e0f12;--card:#17181d;--line:#2b2d35;--tx:#f2f2f4;--dim:#9a9ba3;--lime:#c0ff00;--red:#ff6b6b;--ok:#4ade80}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:system-ui,-apple-system,'Segoe UI',sans-serif;padding:16px;font-size:14px}
+h1{font-size:20px;font-weight:800;margin-bottom:4px}
+.sub{color:var(--dim);font-size:12.5px;margin-bottom:14px;line-height:1.6}
+.box{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px;margin-bottom:12px}
+.box h2{font-size:14.5px;font-weight:800;margin-bottom:8px}
+label{display:block;font-size:12px;color:var(--dim);margin-bottom:4px}
+select,input[type=text],input[type=number]{width:100%;background:#0e0f13;color:var(--tx);border:1px solid var(--line);
+  border-radius:9px;padding:9px 10px;font-family:inherit;font-size:13.5px}
+button{background:var(--lime);color:#111;border:none;border-radius:9px;padding:10px 15px;font-family:inherit;
+  font-size:13.5px;font-weight:800;cursor:pointer}
+button.gray{background:#2a2c33;color:var(--tx)}
+button.warn{background:#3a2020;color:#ffb4b4}
+button:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.row>div{flex:1;min-width:150px}
+.st{font-size:12px;margin-top:8px;line-height:1.6}
+.st.ok{color:var(--ok)} .st.err{color:var(--red)} .st.warn{color:#ffd479}
+#stage{position:relative;max-width:100%;margin-top:10px;line-height:0;background:#000;border-radius:10px;overflow:hidden}
+#stage img{width:100%;display:block}
+.hb{position:absolute;border:2px solid #ff3b3b;border-radius:99px;cursor:pointer;background:rgba(255,59,59,.10)}
+.hb.done{border-color:var(--lime);background:rgba(192,255,0,.12)}
+.hb.sel{border-color:#3b9bff;background:rgba(59,155,255,.25);box-shadow:0 0 0 2px #3b9bff}
+.hb b{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:9px;color:#fff;
+  background:#000a;padding:1px 4px;border-radius:4px;white-space:nowrap;line-height:1.2;font-weight:700}
+.legend{display:flex;gap:14px;font-size:11.5px;color:var(--dim);margin-top:8px;flex-wrap:wrap}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:8px}
+th,td{border-bottom:1px solid var(--line);padding:6px 5px;text-align:left}
+th{color:var(--dim);font-weight:600;font-size:11.5px}
+tr.sel{background:#1d2a3a}
+.mini{font-size:11px;color:var(--dim)}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tab{background:#22242b;border:1px solid var(--line);border-radius:99px;padding:6px 13px;font-size:12.5px;cursor:pointer}
+.tab.on{background:var(--lime);color:#111;font-weight:800;border-color:var(--lime)}
+</style></head><body>
+
+<h1>🖼️ หลังบ้านเมนู 3.0</h1>
+<div class="sub">อัปรูปหน้าเมนูใหม่ → ระบบหาปุ่มให้อัตโนมัติ → จับคู่ชื่อกลิ่น → บันทึกไฟล์ไปอัป GitHub<br>
+<b>ลำดับการทำงาน:</b> 1 โหลดของเดิม → 2 เลือกหน้า → 3 อัปรูปใหม่ → 4 หาปุ่ม → 5 จับคู่กลิ่น → 6 บันทึก</div>
+
+<div class="box">
+  <h2>1 · โหลดข้อมูลเดิม</h2>
+  <div class="row">
+    <div><label>ไฟล์ abc-menu-live.html ที่ใช้อยู่ปัจจุบัน</label>
+      <input type="file" id="fCfg" accept=".html,.json"></div>
+    <div style="flex:0"><button class="gray" onclick="loadFlavors()">ดึงรายการกลิ่นจากระบบ</button></div>
+  </div>
+  <div class="st" id="st1">ยังไม่ได้โหลด — เลือกไฟล์ abc-menu-live.html ที่อัปขึ้น GitHub ล่าสุด</div>
+</div>
+
+<div class="box" id="bx2" style="display:none">
+  <h2>2 · เลือกหน้าที่จะแก้</h2>
+  <div class="row">
+    <div><label>หมวด</label><select id="selCat" onchange="fillPages()"></select></div>
+    <div><label>หน้า</label><select id="selPage" onchange="pickPage()"></select></div>
+    <div style="flex:0"><button class="gray" onclick="newPage()">+ หน้าใหม่</button></div>
+  </div>
+  <div class="st" id="st2"></div>
+</div>
+
+<div class="box" id="bx3" style="display:none">
+  <h2>3 · อัปรูปหน้าเมนูใหม่</h2>
+  <div class="row">
+    <div><label>ไฟล์ PNG/JPG จากกราฟิก (ระบบจะย่อให้เอง)</label><input type="file" id="fImg" accept="image/*"></div>
+  </div>
+  <div class="st" id="st3">ถ้าไม่อัปรูปใหม่ ระบบจะใช้รูปเดิมและแก้เฉพาะการจับคู่กลิ่น</div>
+</div>
+
+<div class="box" id="bx4" style="display:none">
+  <h2>4 · หาปุ่มในภาพ</h2>
+  <div class="tabs">
+    <div class="tab on" data-p="chip" onclick="setPreset(this)">แคปซูลดำ (กลิ่นทั่วไป)</div>
+    <div class="tab" data-p="chipS" onclick="setPreset(this)">แคปซูลดำ เตี้ย</div>
+    <div class="tab" data-p="tile" onclick="setPreset(this)">ไทล์รูปสินค้า (เครื่อง/ซอง)</div>
+  </div>
+  <div class="row">
+    <div><label>ความเข้มสูงสุด</label><input type="number" id="pTh" value="70"></div>
+    <div><label>สูง ต่ำสุด–สูงสุด (px)</label><input type="text" id="pH" value="150-240"></div>
+    <div><label>กว้าง ต่ำสุด–สูงสุด (px)</label><input type="text" id="pW" value="480-1320"></div>
+    <div style="flex:0"><button onclick="detect()">🔍 หาปุ่ม</button></div>
+    <div style="flex:0"><button class="gray" onclick="clearBoxes()">ล้าง</button></div>
+  </div>
+  <div class="st" id="st4"></div>
+  <div class="legend">
+    <span><i class="dot" style="background:#c0ff00"></i>จับคู่กลิ่นแล้ว</span>
+    <span><i class="dot" style="background:#ff3b3b"></i>ยังไม่จับคู่</span>
+    <span><i class="dot" style="background:#3b9bff"></i>กำลังเลือก</span>
+    <span>💡 คลิกปุ่มบนภาพเพื่อเลือก · ลากบนภาพเปล่าเพื่อวาดปุ่มเอง · กด Delete เพื่อลบ</span>
+  </div>
+  <div id="stage"></div>
+</div>
+
+<div class="box" id="bx5" style="display:none">
+  <h2>5 · จับคู่ชื่อกลิ่น</h2>
+  <div class="row">
+    <div><label>รุ่นสินค้า</label><select id="selModel" onchange="fillFlavors()"></select></div>
+    <div><label>กลิ่น / สี</label><select id="selFlavor"></select></div>
+    <div style="flex:0"><button onclick="assign()">✔ ใส่ให้ปุ่มที่เลือก</button></div>
+    <div style="flex:0"><button class="gray" onclick="autoFill()">⚡ เติมอัตโนมัติตามลำดับ</button></div>
+  </div>
+  <div class="st" id="st5"></div>
+  <table id="tbl"><thead><tr><th>#</th><th>รุ่น</th><th>กลิ่น</th><th></th></tr></thead><tbody></tbody></table>
+</div>
+
+
+<div class="box" id="bx7" style="display:none">
+  <h2>7 · 📄 อัปไฟล์สต็อกจาก XSelly</h2>
+  <div class="sub" style="margin-bottom:8px">ไฟล์ที่ export จาก XSelly (.xlsx) — ระบบจะอ่านคอลัมน์ <b>พร้อมขาย</b> (คงเหลือ − ติดจอง) มาใส่ในเมนู <b style="color:#b42323">โดยเก็บแค่ “มีของ / หมด” ไม่เก็บจำนวนจริง</b><br>
+  และเทียบให้ว่ามีสินค้า/กลิ่นใหม่ที่ยังไม่มีในเมนูหรือไม่</div>
+  <div class="row"><div><input type="file" id="fStock" accept=".xlsx,.xls,.csv"></div></div>
+  <div class="st" id="st7"></div>
+  <div id="st7detail" class="mini" style="margin-top:8px;line-height:1.8"></div>
+</div>
+<div class="box" id="bx6" style="display:none">
+  <h2>6 · บันทึก</h2>
+  <div class="row">
+    <div style="flex:0"><button onclick="saveAll()">💾 ดาวน์โหลดไฟล์ที่ต้องอัป</button></div>
+    <div class="mini">จะได้ 2 ไฟล์: <b>abc-menu-live.html</b> (ตัวใหม่) และ <b>รูปที่ย่อแล้ว</b> — เอาไปวางทับใน GitHub</div>
+  </div>
+  <div class="st" id="st6"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+const W="https://abc-line-ai.milin-mengg.workers.dev";
+const norm=s=>String(s).trim().replace(/\s+/g," ").toLowerCase();
+// จับก้อน CFG ในไฟล์เมนู — รองรับทั้งไฟล์เก่า (buildHome เลย) และไฟล์ใหม่ (มีบรรทัด vertxt คั่น)
+const CFGRE=/CFG=(\{[\s\S]*?\});(\s*\n(?:document\.getElementById\("vertxt"\)[^\n]*\n)?buildHome\(\))/;
+const $=id=>document.getElementById(id);
+let CFG=null, HTML="", FLAV={}, PAGE=null, IMG=null, IMGW=0, IMGH=0, BOXES=[], SEL=-1, NEWIMG=null;
+
+const PRESETS={chip:{th:70,h:"150-240",w:"480-1320"},chipS:{th:90,h:"40-105",w:"270-440"},tile:{th:125,h:"190-330",w:"95-185"}};
+function setPreset(el){
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("on")); el.classList.add("on");
+  const p=PRESETS[el.dataset.p]; $("pTh").value=p.th; $("pH").value=p.h; $("pW").value=p.w;
+}
+
+// ── 1) โหลดของเดิม ──
+$("fCfg").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    HTML=r.result;
+    try{
+      const m=HTML.match(CFGRE);
+      CFG=JSON.parse(m?m[1]:HTML);
+      $("st1").className="st ok";
+      $("st1").textContent="✅ โหลดแล้ว — "+Object.keys(CFG.pages).length+" หมวด · "
+        +Object.values(CFG.pages).flat().length+" หน้า · "
+        +Object.values(CFG.spots).reduce((a,b)=>a+b.length,0)+" จุดสต็อก";
+      fillCats(); $("bx2").style.display="block";
+    }catch(err){ $("st1").className="st err"; $("st1").textContent="❌ อ่านไฟล์ไม่ได้ — ต้องเป็น abc-menu-live.html หรือ menu3-config.json"; }
+  };
+  r.readAsText(f);
+};
+async function loadFlavors(){
+  $("st1").className="st"; $("st1").textContent="กำลังดึงรายการกลิ่น…";
+  try{
+    const md=await (await fetch(W+"/menudata?t="+Date.now())).json();
+    FLAV=md.flavors||{};
+    $("st1").className="st ok"; $("st1").textContent="✅ ดึงกลิ่นแล้ว "+Object.keys(FLAV).length+" รุ่น";
+    const s=$("selModel"); s.innerHTML=Object.keys(FLAV).sort().map(n=>`<option>${n}</option>`).join("");
+    fillFlavors();
+  }catch(e){ $("st1").className="st err"; $("st1").textContent="❌ ดึงกลิ่นไม่ได้ ลองใหม่"; }
+}
+function fillFlavors(){
+  const m=$("selModel").value, f=(FLAV[m]&&FLAV[m].f)||[];
+  $("selFlavor").innerHTML=f.map(x=>`<option>${x}</option>`).join("")||"<option></option>";
+}
+function fillCats(){
+  $("selCat").innerHTML=Object.keys(CFG.pages).map(c=>`<option>${c}</option>`).join("");
+  fillPages();
+}
+function fillPages(){
+  const c=$("selCat").value;
+  $("selPage").innerHTML=(CFG.pages[c]||[]).map(p=>`<option>${p}</option>`).join("")||"<option value=''>— ยังไม่มีหน้า —</option>";
+  pickPage();
+}
+function newPage(){
+  const name=prompt("ตั้งชื่อหน้าใหม่ (ตัวเลข เช่น 28 หรือ 28.1)");
+  if(!name) return;
+  const c=$("selCat").value;
+  if(!CFG.pages[c]) CFG.pages[c]=[];
+  if(!CFG.pages[c].includes(name)) CFG.pages[c].push(name);
+  CFG.spots[name]=CFG.spots[name]||[];
+  fillPages(); $("selPage").value=name; pickPage();
+}
+function pickPage(){
+  PAGE=$("selPage").value; if(!PAGE) return;
+  BOXES=(CFG.spots[PAGE]||[]).map(s=>({...s}));
+  NEWIMG=null; SEL=-1;
+  $("st2").className="st"; $("st2").innerHTML="หน้า <b>"+PAGE+"</b> — มีจุดเดิม "+BOXES.length+" จุด";
+  $("bx3").style.display="block"; $("bx7").style.display="block"; $("bx4").style.display="block"; $("bx5").style.display="block"; $("bx6").style.display="block";
+  showImage("img/menu3/"+PAGE+".jpg");
+}
+
+// ── 3) อัปรูปใหม่ ──
+$("fImg").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  $("st3").className="st"; $("st3").textContent="กำลังย่อรูป…";
+  const im=new Image();
+  im.onload=()=>{
+    const max=1400, sc=Math.min(1,max/im.width);
+    const cv=document.createElement("canvas"); cv.width=Math.round(im.width*sc); cv.height=Math.round(im.height*sc);
+    cv.getContext("2d").drawImage(im,0,0,cv.width,cv.height);
+    cv.toBlob(b=>{
+      NEWIMG={blob:b,w:im.width,h:im.height};
+      $("st3").className="st ok";
+      $("st3").textContent=`✅ รูปใหม่ ${im.width}×${im.height} → ย่อเหลือ ${cv.width}×${cv.height} (${Math.round(b.size/1024)} KB)`;
+      showImage(URL.createObjectURL(b));
+    },"image/jpeg",0.82);
+  };
+  im.src=URL.createObjectURL(f);
+};
+function showImage(src){
+  const st=$("stage"); st.innerHTML="";
+  const im=new Image();
+  im.onload=()=>{ IMG=im; IMGW=im.naturalWidth; IMGH=im.naturalHeight; st.appendChild(im); draw(); };
+  im.onerror=()=>{ st.innerHTML='<div style="padding:26px;color:#ff9d9d;font-size:13px;line-height:1.7">ไม่พบรูปเดิมของหน้านี้<br>'
+    +'เปิดไฟล์นี้จากโฟลเดอร์เดียวกับ img/menu3/ หรืออัปรูปใหม่ในขั้นที่ 3</div>'; };
+  im.src=src;
+}
+
+// ── 4) หาปุ่มอัตโนมัติ (connected components) ──
+function rng(s){const a=String(s).split("-").map(Number);return [a[0]||0,a[1]||99999];}
+function detect(){
+  if(!IMG){ $("st4").className="st err"; $("st4").textContent="ยังไม่มีรูป"; return; }
+  const th=+$("pTh").value, [h0,h1]=rng($("pH").value), [w0,w1]=rng($("pW").value);
+  const S=4, cw=Math.round(IMG.naturalWidth/S), ch=Math.round(IMG.naturalHeight/S);
+  const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+  const cx=cv.getContext("2d",{willReadFrequently:true}); cx.drawImage(IMG,0,0,cw,ch);
+  const d=cx.getImageData(0,0,cw,ch).data;
+  const mask=new Uint8Array(cw*ch);
+  for(let i=0,p=0;i<d.length;i+=4,p++){ if(Math.max(d[i],d[i+1],d[i+2])<th) mask[p]=1; }
+  // flood fill หา bounding box ของแต่ละก้อน
+  const lab=new Int32Array(cw*ch).fill(-1); const found=[]; const stack=[];
+  const SCX=IMG.naturalWidth/cw, SCY=IMG.naturalHeight/ch;
+  for(let p=0;p<mask.length;p++){
+    if(!mask[p]||lab[p]>=0) continue;
+    const id=found.length; let x0=cw,y0=ch,x1=0,y1=0;
+    stack.length=0; stack.push(p); lab[p]=id;
+    while(stack.length){
+      const q=stack.pop(), qx=q%cw, qy=(q/cw)|0;
+      if(qx<x0)x0=qx; if(qx>x1)x1=qx; if(qy<y0)y0=qy; if(qy>y1)y1=qy;
+      const nb=[q-1,q+1,q-cw,q+cw];
+      for(const n of nb){ if(n<0||n>=mask.length||!mask[n]||lab[n]>=0) continue;
+        if((n===q-1&&qx===0)||(n===q+1&&qx===cw-1)) continue;
+        lab[n]=id; stack.push(n); }
+    }
+    found.push([x0,y0,x1+1,y1+1]);
+  }
+  const hits=[];
+  for(const [x0,y0,x1,y1] of found){
+    const w=(x1-x0)*SCX, h=(y1-y0)*SCY;
+    if(h>=h0&&h<=h1&&w>=w0&&w<=w1) hits.push({x:x0*SCX,y:y0*SCY,w,h});
+  }
+  hits.sort((a,b)=>a.y-b.y||a.x-b.x);
+  // จัดเป็นแถวแล้วเรียงซ้าย→ขวา
+  const rows=[]; for(const b of hits){
+    const r=rows[rows.length-1];
+    if(r&&Math.abs(b.y-r[0].y)<=h1*0.6) r.push(b); else rows.push([b]);
+  }
+  const ordered=rows.flatMap(r=>r.sort((a,b)=>a.x-b.x));
+  // เทียบกับของเดิม — ทับกันเกิน 50% ให้ยกชื่อเดิมมาใช้
+  const old=BOXES.slice();
+  BOXES=ordered.map(b=>{
+    const nb={m:"",f:"",x:+(b.x/IMGW*100).toFixed(3),y:+(b.y/IMGH*100).toFixed(3),
+              w:+(b.w/IMGW*100).toFixed(3),h:+(b.h/IMGH*100).toFixed(3)};
+    let best=null,bi=0;
+    for(const o of old){
+      const ix=Math.max(0,Math.min(nb.x+nb.w,o.x+o.w)-Math.max(nb.x,o.x));
+      const iy=Math.max(0,Math.min(nb.y+nb.h,o.y+o.h)-Math.max(nb.y,o.y));
+      const inter=ix*iy, uni=nb.w*nb.h+o.w*o.h-inter;
+      const iou=uni>0?inter/uni:0;
+      if(iou>bi){ bi=iou; best=o; }
+    }
+    if(best&&bi>0.5){ nb.m=best.m; nb.f=best.f; }
+    return nb;
+  });
+  const done=BOXES.filter(b=>b.f||b.m).length;
+  $("st4").className=done===BOXES.length?"st ok":"st warn";
+  $("st4").innerHTML=`เจอปุ่ม <b>${BOXES.length}</b> จุด · ยกชื่อเดิมมาได้ <b>${done}</b> · เหลือต้องจับคู่ <b>${BOXES.length-done}</b>`;
+  SEL=-1; draw();
+}
+function clearBoxes(){ BOXES=[]; SEL=-1; draw(); $("st4").textContent="ล้างแล้ว"; }
+
+function draw(){
+  const st=$("stage");
+  st.querySelectorAll(".hb").forEach(e=>e.remove());
+  BOXES.forEach((b,i)=>{
+    const d=document.createElement("div");
+    d.className="hb"+((b.f||b.m)?" done":"")+(i===SEL?" sel":"");
+    d.style.cssText=`left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%`;
+    if(b.f) d.innerHTML=`<b>${b.f}</b>`;
+    d.onclick=ev=>{ ev.stopPropagation(); SEL=i; draw(); syncTable(); };
+    st.appendChild(d);
+  });
+  syncTable();
+}
+function syncTable(){
+  const tb=$("tbl").querySelector("tbody");
+  tb.innerHTML=BOXES.map((b,i)=>`<tr class="${i===SEL?'sel':''}" onclick="SEL=${i};draw()">
+    <td>${i+1}</td><td>${b.m||'<span style="color:#ff6b6b">—</span>'}</td>
+    <td>${b.f||'<span style="color:#ff6b6b">ยังไม่ระบุ</span>'}</td>
+    <td><button class="warn" style="padding:3px 8px;font-size:11px" onclick="event.stopPropagation();delBox(${i})">ลบ</button></td></tr>`).join("");
+  const left=BOXES.filter(b=>!b.f).length;
+  $("st5").className=left?"st warn":"st ok";
+  $("st5").textContent=left?`ยังเหลือ ${left} ปุ่มที่ยังไม่ได้จับคู่กลิ่น`:"✅ จับคู่ครบทุกปุ่มแล้ว";
+}
+function delBox(i){ BOXES.splice(i,1); if(SEL>=BOXES.length) SEL=-1; draw(); }
+function assign(){
+  if(SEL<0){ alert("เลือกปุ่มบนภาพก่อน"); return; }
+  BOXES[SEL].m=$("selModel").value; BOXES[SEL].f=$("selFlavor").value;
+  if(SEL<BOXES.length-1) SEL++;
+  draw();
+}
+function autoFill(){
+  const m=$("selModel").value, list=(FLAV[m]&&FLAV[m].f)||[];
+  if(!list.length){ alert("ยังไม่ได้ดึงรายการกลิ่น หรือรุ่นนี้ไม่มีกลิ่น"); return; }
+  const empty=BOXES.map((b,i)=>[b,i]).filter(([b])=>!b.f);
+  if(!empty.length){ alert("ไม่มีปุ่มว่างให้เติม"); return; }
+  if(empty.length!==list.length &&
+     !confirm(`ปุ่มว่าง ${empty.length} จุด แต่รุ่นนี้มี ${list.length} กลิ่น — เติมตามลำดับเท่าที่มีเลยมั้ย?`)) return;
+  empty.forEach(([b],k)=>{ if(k<list.length){ b.m=m; b.f=list[k]; } });
+  draw();
+}
+document.addEventListener("keydown",e=>{ if(e.key==="Delete"&&SEL>=0) delBox(SEL); });
+
+// วาดปุ่มเองด้วยการลาก
+let dragS=null;
+$("stage").addEventListener("mousedown",e=>{
+  if(e.target.classList.contains("hb")) return;
+  const r=$("stage").getBoundingClientRect();
+  dragS={x:(e.clientX-r.left)/r.width*100,y:(e.clientY-r.top)/r.height*100};
+});
+$("stage").addEventListener("mouseup",e=>{
+  if(!dragS) return;
+  const r=$("stage").getBoundingClientRect();
+  const x2=(e.clientX-r.left)/r.width*100, y2=(e.clientY-r.top)/r.height*100;
+  const x=Math.min(dragS.x,x2), y=Math.min(dragS.y,y2), w=Math.abs(x2-dragS.x), h=Math.abs(y2-dragS.y);
+  dragS=null;
+  if(w<0.8||h<0.4) return;
+  BOXES.push({m:"",f:"",x:+x.toFixed(3),y:+y.toFixed(3),w:+w.toFixed(3),h:+h.toFixed(3)});
+  SEL=BOXES.length-1; draw();
+});
+
+
+// ── 7) อ่านไฟล์สต็อก XSelly ──
+const ALIAS={"ABC LEGO 20K":"ABC LEGO 20K (หัวน้ำยา)","ABC TANK 22K":"ABC TANK 22K (หัวน้ำยา)",
+ "ELFBAR SWAP 25K":"ELFBAR SWAP 25K (หัวน้ำยา)","ESKO BAR SWITCH 20K":"ESKO BAR SWITCH 20K (หัวน้ำยา)",
+ "KS QUIK PRO 15K":"KS QUIK PRO 15K (หัวน้ำยา)","M SWITCH":"หัวพอต M SWITCH",
+ "RELX BOOST POD":"หัวพอต RELX BOOST POD","RELX POD CLEAR 18K":"RELX POD CLEAR 18K (หัวน้ำยา)",
+ "VAZER RELOAD 15K":"VAZER RELOAD 15K (หัวน้ำยา)","เครื่อง M SWITCH 15K (โคลน)":"เครื่อง M SWITCH 15K"};
+const baseF=f=>String(f).replace(/\s*\d+\s*%$/,"").trim();
+const nicOf=f=>{const m=String(f).match(/(\d+)\s*%$/);return m?("0"+m[1]).slice(-2):null;};
+
+$("fStock").onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  if(!CFG){ alert("โหลดไฟล์เมนูในขั้นที่ 1 ก่อน"); return; }
+  $("st7").className="st"; $("st7").textContent="กำลังอ่านไฟล์…";
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(r.result),{type:"array"});
+      const sh=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(sh,{header:1,defval:""});
+      // แถวหัวตารางจริงคือแถวที่มีคำว่า "พร้อมขาย"
+      let hi=rows.findIndex(rw=>rw.some(x=>String(x).trim()==="พร้อมขาย"));
+      if(hi<0){ throw new Error("ไม่เจอคอลัมน์ 'พร้อมขาย' — ไฟล์อาจไม่ใช่รายงานสต็อกจาก XSelly"); }
+      const H=rows[hi].map(x=>String(x).trim());
+      const iSku=0, iAvail=H.indexOf("พร้อมขาย"), iLeft=H.indexOf("คงเหลือ"),
+            iCat=H.indexOf("หมวดหมู่สินค้า"), iDesc=H.indexOf("คำอธิบายสินค้า");
+      const stamp=(rows[0]||[]).map(String).find(x=>/^\d{4}-\d{2}-\d{2}/.test(x))||"";
+      const X=new Map(); let n=0, tot=0;
+      for(let i=hi+1;i<rows.length;i++){
+        const rw=rows[i]; const sku=String(rw[iSku]||"").trim();
+        if(!/^[A-Z]{2}-/.test(sku)) continue;
+        const m=String(rw[iCat]||"").trim();
+        const d=String(rw[iDesc]||""); const fl=(d.split(" - ").pop()||"").trim();
+        const q=parseInt(rw[iAvail],10)||0;
+        const nic=sku.split("-")[4]||"";
+        const k=norm(m)+"|"+norm(baseF(fl))+"|"+nic;
+        X.set(k,(X.get(k)||0)+q); n++; tot+=q;
+      }
+      // จับคู่กับจุดในเมนู
+      const stock={}; let hit=0, missArr=[];
+      const seen=new Set();
+      Object.values(CFG.spots).flat().forEach(sp=>{
+        const key=sp.m+"|"+norm(sp.f); if(seen.has(key)) return; seen.add(key);
+        const m=ALIAS[sp.m]||sp.m, b=baseF(sp.f), nic=nicOf(sp.f);
+        const tries = nic ? [norm(m)+"|"+norm(b)+"|"+nic]
+                          : ["03","05","00","06","01","20","50"].map(k=>norm(m)+"|"+norm(b)+"|"+k);
+        if(!b) ["สีดำ",""].forEach(x=>["00","03"].forEach(k=>tries.push(norm(m)+"|"+norm(x)+"|"+k)));
+        const k=tries.find(t=>X.has(t));
+        if(k!==undefined){ stock[key]=(Number(X.get(k))>0?1:0); hit++; }   /* เก็บแค่ 1=มีของ 0=หมด ห้ามเก็บจำนวนจริง ลูกค้าเปิด view-source เห็นได้ */ else missArr.push(sp.m+" | "+sp.f);
+      });
+      // สินค้าที่มีใน XSelly แต่ยังไม่มีในเมนู
+      const inMenu=new Set(Object.values(CFG.spots).flat().map(sp=>norm(ALIAS[sp.m]||sp.m)));
+      const newModels=[...new Set([...X.keys()].map(k=>k.split("|")[0]))].filter(m=>!inMenu.has(m));
+      CFG.stock=stock; delete CFG.stockAt;   /* ไม่ใส่วันที่สต็อกลงไฟล์ลูกค้า */
+      const stampTxt=stamp?stamp.slice(0,16).replace("T"," "):new Date().toLocaleString("th-TH");
+      $("st7").className=missArr.length?"st warn":"st ok";
+      $("st7").innerHTML=`✅ อ่านแล้ว <b>${n}</b> SKU · รวมพร้อมขาย <b>${tot.toLocaleString()}</b> ชิ้น · ข้อมูล ณ <b>${stampTxt}</b><br>
+        จับคู่กับปุ่มในเมนูได้ <b>${hit}</b> จุด${missArr.length?` · จับคู่ไม่ได้ <b>${missArr.length}</b>`:" · ครบทุกจุด"}`;
+      let html="";
+      if(missArr.length) html+="<b style='color:#ffd479'>จับคู่ไม่ได้:</b> "+missArr.slice(0,20).join(" · ")+(missArr.length>20?" …":"")+"<br><br>";
+      if(newModels.length) html+="<b style='color:#c0ff00'>มีใน XSelly แต่ยังไม่มีในเมนู ("+newModels.length+" รุ่น):</b><br>"+newModels.join(" · ");
+      $("st7detail").innerHTML=html;
+    }catch(err){ $("st7").className="st err"; $("st7").textContent="❌ "+err.message; }
+  };
+  r.readAsArrayBuffer(f);
+};
+
+// ── 6) บันทึก ──
+function dl(blob,name){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function saveAll(){
+  if(!CFG||!PAGE){ alert("ยังไม่ได้เลือกหน้า"); return; }
+  const left=BOXES.filter(b=>!b.f).length;
+  if(left && !confirm(`ยังมี ${left} ปุ่มที่ไม่ได้จับคู่กลิ่น — ปุ่มพวกนี้จะกดไม่ได้และไม่มีสถานะหมด บันทึกเลยมั้ย?`)) return;
+  CFG.spots[PAGE]=BOXES.filter(b=>b.f||b.m);
+  const cat=$("selCat").value;
+  if(!CFG.pages[cat].includes(PAGE)) CFG.pages[cat].push(PAGE);
+  const d=new Date(), z=n=>("0"+n).slice(-2);
+  const vn=Number((String(CFG.ver||"").match(/(\d+)/)||[,4])[1])+1;
+  CFG.ver="เวอร์ชัน "+vn+" · "+Object.values(CFG.spots).reduce((a,b)=>a+b.length,0)+" จุด · "
+    +z(d.getDate())+"/"+z(d.getMonth()+1)+" "+z(d.getHours())+":"+z(d.getMinutes());
+  const json=JSON.stringify(CFG);
+  let out;
+  if(HTML && CFGRE.test(HTML)){
+    out=HTML.replace(CFGRE, (mm,body,tail)=>"CFG="+json+";"+tail);
+    dl(new Blob([out],{type:"text/html"}),"abc-menu-live.html");
+  } else {
+    dl(new Blob([json],{type:"application/json"}),"menu3-config.json");
+  }
+  if(NEWIMG) dl(NEWIMG.blob, PAGE+".jpg");
+  $("st6").className="st ok";
+  $("st6").innerHTML="✅ ดาวน์โหลดแล้ว<br>เอา <b>abc-menu-live.html</b> ไปวางทับที่เดิมใน GitHub"
+    +(NEWIMG?"<br>และเอา <b>"+PAGE+".jpg</b> ไปวางทับใน <b>img/menu3/</b>":"");
+}
+</script></body></html>
