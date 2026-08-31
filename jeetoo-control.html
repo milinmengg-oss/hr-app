@@ -286,7 +286,8 @@ async function loadShops(){
   try{
     const d=await (await fetch(W+'/ctl/shops?key='+encodeURIComponent(KEY))).json();
     SHOPS_ALL=d['ร้าน']||[];
-  }catch(e){ SHOPS_ALL=[]; }
+    try{ localStorage.setItem('g2shops',JSON.stringify(SHOPS_ALL)); }catch(e2){}   /* ⚡ PF1-C1: cache รายชื่อร้าน */
+  }catch(e){ try{ SHOPS_ALL=JSON.parse(localStorage.getItem('g2shops')||'[]'); }catch(e3){ SHOPS_ALL=[]; } }
   if(SHOPS_ALL.length && !SHOPS_ALL.some(function(s){return s['ร้าน']===SHOP;})) SHOP=SHOPS_ALL[0]['ร้าน'];
   renderShopBar();
 }
@@ -355,7 +356,9 @@ function switchShop(id){
   if(id===SHOP) return;
   SHOP=id; localStorage.setItem('g2shop',id);
   CHATS=[]; PENDING={}; $('msg').textContent='สลับไปร้าน '+id+' แล้วค่ะ';
-  renderShopBar(); init();
+  /* ⚡ PF1-C1: สลับร้าน = ใช้ SHOPS_ALL ที่โหลดไว้แล้ว — ไม่ refetch /ctl/shops (จุดช้าสุดจาก PERF-AUDIT) */
+  for(var kpf in _lastHTML_PF1) delete _lastHTML_PF1[kpf];
+  renderShopBar(); initPF1();
 }
 function bakeoff(){
   if(!KEY){ $('msg').textContent='ยังไม่ได้ใส่รหัสค่ะ'; return; }
@@ -443,12 +446,17 @@ function alertNew(oc,qc){
   _seenO=oc;_seenQ=qc; setBadge(oc,qc);
 }
 
+/* ⚡ PF1-C2 (PERF-AUDIT 1 ก.ย. · เมงอนุมัติ): วาดใหม่เฉพาะเมื่อ HTML ที่ประกอบเสร็จ "เปลี่ยนจริง"
+   — กันจอกระตุก/scroll เด้งตอน poll 15 วิ · timeAgo เปลี่ยนป้ายนาที = HTML เปลี่ยน = วาดตามปกติ */
+var _lastHTML_PF1={};
+var _busyPF1=false;
+function setHTML_PF1(id,html){ if(_lastHTML_PF1[id]===html) return; _lastHTML_PF1[id]=html; $(id).innerHTML=html; }
 /* ═══ แท็บ 1 ═══ */
 async function loadQueue(data){
   try{
     const d=data||await (await fetch(q('/ctl/queue'))).json(); const list=d.queue||[];
     $('qcount').textContent = list.length? '('+list.length+')':'';
-    $('queue').innerHTML = list.length? list.map(function(it){
+    setHTML_PF1('queue', list.length? list.map(function(it){
       // 🚨 เคสที่เกี่ยวกับเงิน/ของเสีย = ห้ามกดเสร็จมั่ว ต้องเด่นและมีด่านกั้น
       const rs = String(it.reason||'');
       const urg = /สลิป|ยกเลิก|คืนเงิน|ของเสีย|หลังการขาย|เคลม|ของไม่|ไม่ถึง|ส่งผิด|code 1\d{3}|⛔|⚠/.test(rs);
@@ -470,7 +478,7 @@ async function loadQueue(data){
             ? '<button class="qaccept" disabled>👨‍💼 กำลังดูแล</button>'
             : '<button class="qaccept" onclick="acceptCase(\''+it.uid+'\',this)">👨‍💼 รับเคส</button>')
         +'<button class="qdone" onclick="markDone2(\''+it.uid+'\',this)">✅ เก็บเคส</button></div></div>';
-    }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>';
+    }).join('') : '<div class="qempty">✅ ไม่มีแชทค้าง ทุกอย่างจีทูดูแลอยู่</div>');
     markUrgent();
     return list.length;
   }catch(e){ return 0; }
@@ -544,7 +552,7 @@ async function loadOrders(data){
   try{
     const d=data||await (await fetch(q('/ctl/orders'))).json(); const o=d.orders||[];
     $('ocount').textContent = o.length? '('+o.length+')':'';
-    $('orders').innerHTML = o.length? o.map(function(it){
+    setHTML_PF1('orders', o.length? o.map(function(it){
       const bid='b_'+it.uid.replace(/[^a-zA-Z0-9]/g,''); const b=it.block||'';
       const pick=function(re){ const m=b.match(re); return m? m[1].trim():''; };
       const cName=pick(/ชื่อผู้รับ:[ \t]*(.+)/), cTel=pick(/เบอร์:[ \t]*(.+)/), cAddr=pick(/ที่อยู่:[ \t]*(.+)/);
@@ -569,7 +577,7 @@ async function loadOrders(data){
         +'<button class="ochat" onclick="openChat()">💬 แชท</button>'
         +'<button class="opause" title="ปิดจีทูเฉพาะแชทนี้" onclick="mute1(\''+it.uid+'\',this)">⏸</button>'
         +'<button class="odone" onclick="orderDone2(\''+it.uid+'\',this)">✅ ลงแล้ว</button></div></div>';
-    }).join('') : '<div class="qempty">ยังไม่มีออเดอร์รอลง</div>';
+    }).join('') : '<div class="qempty">ยังไม่มีออเดอร์รอลง</div>');
     markUrgent();
     return o.length;
   }catch(e){ return 0; }
@@ -592,14 +600,14 @@ function renderChats(){
     return true;
   });
   $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
-  $('chatlist').innerHTML = list.length? list.map(function(it){
+  setHTML_PF1('chatlist', list.length? list.map(function(it){
     const nm=(it.name||'ลูกค้า (ไม่ทราบชื่อ)').replace(/'/g,'');
     return '<div class="crow"><div class="cname'+(it.muted?' off':'')+'" onclick="showConv(\''+it.uid+'\',\''+esc(nm)+'\')">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')
       +' <i>· '+(it.muted? esc(it.reason||'แอดมินคุมอยู่') : timeAgo(it.t))+' · แตะดูบทสนทนา</i></div>'
       +(it.muted? '<button class="cbtn go" onclick="unmute1(\''+it.uid+'\')">▶️ เปิด G2 แชทนี้</button>'
                 : '<button class="cbtn stop" onclick="mute1(\''+it.uid+'\')">⏸ ปิดจีทู</button>')
       +'</div>';
-  }).join('') : '<div class="qempty">ไม่พบแชทที่ตรงเงื่อนไข</div>';
+  }).join('') : '<div class="qempty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
 }
 async function showConv(uid,name){
   $('convbox').classList.remove('hidden');
@@ -784,6 +792,9 @@ async function uploadStock(){
 /* ═══ ทั่วไป ═══ */
 async function refresh(){
   /* k111: โหลดทีเดียวจบ — สถานะ+คิว+ออเดอร์+แชท ในคำขอเดียว (เดิม 4 คำขอ) */
+  /* ⚡ PF1-C3: กันรอบซ้อน — รอบเก่ายังไม่จบ (เน็ตช้า/ปลุกจอ) = ข้ามรอบนี้ · จังหวะ poll 15 วิเดิมทุกประการ */
+  if(_busyPF1) return;
+  _busyPF1=true;
   try{
     const r=await fetch(q('/ctl/board'));
     if(r.status===403){ localStorage.removeItem('g2key'); KEY=''; init(); throw new Error('รหัสไม่ถูกต้อง'); }
@@ -792,6 +803,7 @@ async function refresh(){
     const c=await Promise.all([loadOrders(b),loadQueue(b)]); alertNew(c[0]||0,c[1]||0);
     if(TAB===2) loadChats(b);
   }catch(e){ $('msg').textContent=e.message; }
+  finally{ _busyPF1=false; }
 }
 async function toggle(){
   if(ON && !confirm('⛔ ปิดจีทูทั้งร้าน "'+shopLabel()+'" ?\n\nลูกค้าทุกคนของร้านนี้จะไม่ได้รับคำตอบอัตโนมัติจนกว่าจะเปิดใหม่')) return;
@@ -806,6 +818,12 @@ async function unmute(){
   catch(e){ $('msg').textContent=e.message; }
 }
 let _poll=null;
+/* ⚡ PF1-C1: เส้นสลับร้าน — เหมือน init() ทุกอย่าง ยกเว้นไม่ยิง /ctl/shops ซ้ำ (รายชื่อร้านไม่เปลี่ยนตอนสลับ) */
+function initPF1(){
+  refresh();
+  if(_poll) clearInterval(_poll);
+  _poll=setInterval(refresh,15000);
+}
 function init(){
   if(KEY){
     $('keybox').classList.add('hidden'); $('panel').classList.remove('hidden');
