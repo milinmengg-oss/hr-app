@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="th"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex"><title>ตรวจคู่คีย์เมนู ↔ สต็อก</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f2f2f4;color:#111}
+.wrap{max-width:760px;margin:0 auto;padding:14px 12px 60px}
+h1{font-size:19px;margin:6px 0 2px}
+.sub{font-size:12.5px;color:#666;margin-bottom:12px;line-height:1.6}
+.card{background:#fff;border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 4px #0001}
+.big{font-size:15px;font-weight:800;margin-bottom:8px}
+.ok{color:#177a3d}.bad{color:#c22}.warn{color:#b06000}
+.stat{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.stat div{flex:1;min-width:100px;background:#fff;border-radius:12px;padding:10px;text-align:center;box-shadow:0 1px 4px #0001}
+.stat b{display:block;font-size:22px}
+.stat span{font-size:11px;color:#666}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+td,th{padding:6px 8px;border-bottom:1px solid #eee;text-align:left;vertical-align:top;word-break:break-word}
+th{font-size:11px;color:#888;font-weight:700}
+.pill{display:inline-block;border-radius:99px;padding:1px 8px;font-size:10.5px;font-weight:800}
+.p-miss{background:#fde8e8;color:#c22}
+.p-extra{background:#fff3d6;color:#b06000}
+.p-model{background:#e8eefc;color:#2451b3}
+.hint{background:#0b0b0b;color:#c6f45f;border-radius:12px;padding:11px 13px;font-size:12px;line-height:1.7;margin-bottom:12px}
+.hint b{color:#fff}
+button{border:none;border-radius:11px;padding:11px 16px;font:800 13.5px system-ui;background:#111;color:#fff;cursor:pointer;margin-bottom:12px}
+#loading{font-size:13px;color:#666;padding:20px;text-align:center}
+.small{font-size:11px;color:#999;margin-top:4px}
+code{background:#f0f0f0;border-radius:5px;padding:1px 5px;font-size:11.5px}
+</style></head><body><div class="wrap">
+<h1>🔍 ตรวจคู่คีย์ เมนูออนไลน์ ↔ สต็อกสด</h1>
+<div class="sub">เทียบชื่อ <b>รุ่น|กลิ่น</b> ระหว่างเมนูจริงกับ <code>/menustock</code> แบบสด ๆ<br>
+เปิดหน้านี้ทุกครั้งหลังเพิ่มสินค้า/แก้ชื่อใน XSelly — ถ้าทุกอย่างเขียว = ลูกค้าเห็นสถานะถูกต้องแน่นอน</div>
+<button onclick="run()">🔄 ตรวจใหม่</button>
+<div id="out"><div id="loading">กำลังดึงข้อมูล…</div></div>
+</div>
+<script>
+const MENU="abc-menu-live.html";
+const W="https://abc-line-ai.milin-mengg.workers.dev";
+function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;")}
+async function run(){
+  const out=document.getElementById("out");
+  out.innerHTML='<div id="loading">กำลังดึงข้อมูล…</div>';
+  try{
+    const html=await (await fetch(MENU+"?cb="+Date.now(),{cache:"no-store"})).text();
+    const stock=await (await fetch(W+"/menustock",{cache:"no-store"})).json();
+    const ver=(html.match(/"ver":"([^"]+)"/)||[])[1]||"?";
+    /* ดึง spots จาก CFG ในไฟล์เมนู */
+    const m=html.match(/CFG=(\{.*\});?\s*\n/);
+    let cfg=null;
+    if(m){ try{cfg=JSON.parse(m[1])}catch(e){} }
+    if(!cfg){ /* fallback: หา spots ด้วย regex */
+      cfg={spots:{}};
+      let cur=null;
+      for(const g of html.matchAll(/"m":"([^"]+)","f":"([^"]+)"/g)){
+        (cfg.spots["x"]=cfg.spots["x"]||[]).push({m:g[1],f:g[2]});
+      }
+    }
+    const menuKeys=[];       /* [key, page] */
+    for(const p in cfg.spots) for(const s of cfg.spots[p]) menuKeys.push([s.m+"|"+s.f,p]);
+    const menuSet=new Set(menuKeys.map(k=>k[0]));
+    const stockSet=new Set(Object.keys(stock));
+    const miss=menuKeys.filter(([k])=>!stockSet.has(k));          /* เมนูมี สต็อกไม่มี → ขึ้น "หมด" ตลอด */
+    const extra=[...stockSet].filter(k=>!menuSet.has(k));         /* สต็อกมี เมนูไม่มี → ตั้งชื่อไม่ตรง/ของออกเมนูแล้ว */
+    /* เดารุ่นที่สะกดไม่ตรง: กลิ่นเดียวกันแต่รุ่นต่าง */
+    const byFlavor={};
+    for(const k of extra){const [mo,f]=k.split("|"); (byFlavor[f]=byFlavor[f]||[]).push(mo);}
+    const modelHint={};
+    for(const [k] of miss){const [mo,f]=k.split("|");
+      if(byFlavor[f]) modelHint[mo+" → "+byFlavor[f][0]]=(modelHint[mo+" → "+byFlavor[f][0]]||0)+1;}
+    const totalOK=menuKeys.length-miss.length;
+    let h='<div class="stat">'
+      +'<div><b class="ok">'+totalOK+'</b><span>จับคู่ได้</span></div>'
+      +'<div><b class="'+(miss.length?'bad':'ok')+'">'+miss.length+'</b><span>เมนูมี · สต็อกไม่มีคีย์</span></div>'
+      +'<div><b class="'+(extra.length?'warn':'ok')+'">'+extra.length+'</b><span>สต็อกมี · เมนูไม่รู้จัก</span></div></div>';
+    h+='<div class="sub">เมนู '+ver+' · คีย์สต็อกทั้งหมด '+stockSet.size+' · ตรวจเมื่อ '+new Date().toLocaleString('th-TH')+'</div>';
+    if(!miss.length&&!extra.length){
+      h+='<div class="card"><div class="big ok">✅ คีย์ตรงกันครบทุกจุด</div>ลูกค้าเห็นสถานะมี/หมดตรงกับ XSelly แน่นอน</div>';
+    }
+    const hints=Object.entries(modelHint).sort((a,b)=>b[1]-a[1]);
+    if(hints.length){
+      h+='<div class="hint"><b>⚠️ น่าจะเป็นชื่อรุ่นสะกดไม่ตรงกัน:</b><br>'
+        +hints.map(([k,n])=>esc(k)+' ('+n+' กลิ่น)').join('<br>')
+        +'<br><b>ทางแก้:</b> แจ้งห้องเมนูให้ปรับชื่อรุ่นตามฝั่งสต็อก (ห้ามแก้ฝั่ง XSelly เพราะผูกกับออเดอร์)</div>';
+    }
+    if(miss.length){
+      h+='<div class="card"><div class="big bad">🔴 เมนูมีปุ่ม แต่สต็อกไม่มีคีย์ — ลูกค้าเห็น "หมด" ตลอดแม้มีของ</div>'
+        +'<table><tr><th>รุ่น</th><th>กลิ่น</th><th>หน้า</th></tr>'
+        +miss.map(([k,p])=>{const [mo,f]=k.split("|");
+          return '<tr><td>'+esc(mo)+'</td><td>'+esc(f)+'</td><td>'+esc(p)+'</td></tr>'}).join('')
+        +'</table><div class="small">แก้โดย: เพิ่มคีย์ใน /menustock ให้สะกดตรงตามตารางนี้เป๊ะ ๆ (คัดลอกไปได้เลย)</div></div>';
+    }
+    if(extra.length){
+      h+='<div class="card"><div class="big warn">🟡 สต็อกมีคีย์ แต่เมนูไม่มีปุ่มนี้</div>'
+        +'<div class="sub">ปกติถ้าเป็นของที่เอาออกจากเมนูแล้ว (เช่นระบายสต็อก) — แต่ถ้าเป็นของที่ควรอยู่ในเมนู แปลว่าสะกดไม่ตรงกัน</div>'
+        +'<table><tr><th>คีย์ฝั่งสต็อก</th><th>สถานะ</th></tr>'
+        +extra.sort().map(k=>'<tr><td>'+esc(k)+'</td><td>'+(stock[k]===true?'<span class="ok">มีของ</span>':'หมด')+'</td></tr>').join('')
+        +'</table></div>';
+    }
+    out.innerHTML=h;
+  }catch(e){
+    out.innerHTML='<div class="card"><div class="big bad">ดึงข้อมูลไม่สำเร็จ</div>'+esc(String(e))+'</div>';
+  }
+}
+run();
+</script></body></html>
