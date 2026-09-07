@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-09-07-k519-exactfirst";
+const BUILD = "2026-09-08-k520-linemodel";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -16647,6 +16647,45 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               };
               for (const _it of _its) {
                 let _m324 = _it.model;
+                //  🧬🧬 k520 · #225 MODEL BLEED — LINE-SCOPED MODEL BINDING (เมง APPROVE 8 ก.ย.)
+                //    เคสจริง abc16 7 ก.ย. 11:28 — ลูกค้าพิมพ์ 2 บรรทัด คนละรุ่น:
+                //        GARAM 6K กลิ่น พีชสตรอว์เบอร์รี่ x1
+                //        MARBO 9K กลิ่น องุ่นเคียวโฮ x1
+                //      กลิ่น "พีชสตรอว์เบอร์รี่" มีทั้งใน GARAM 6K และ MARBO 9K
+                //      ⇒ ตัวจับคู่ทิ้งรุ่นที่พิมพ์ไว้บนบรรทัดนั้น แล้วเขียน slot เป็น MARBO 9K ทั้งคู่
+                //      ⇒ ราคาสองรุ่นเท่ากันพอดี (350) ด่านตรวจยอดเงินจับไม่ได้ → ส่งของผิดรุ่น
+                //  กติกา: บรรทัดที่ลูกค้าพิมพ์ "ชื่อรุ่น + กลิ่น" ไว้ด้วยกัน = รุ่นบนบรรทัดนั้นถูกต้องเสมอ
+                //    ⛔ ต้องเจอบรรทัดเดียวเท่านั้น (เจอหลายบรรทัด = กำกวม ปล่อยเส้นเดิม)
+                //    ⛔ ต้องผ่าน _typedThis372 (k372) ด้วย = ลูกค้าพิมพ์ชื่อรุ่นนี้มาเองจริง ๆ
+                //    ⛔ บรรทัดที่ไม่มีชื่อรุ่น = ไม่ยุ่ง พฤติกรรมเดิมทุกบรรทัด
+                //    ⛔ ใช้ของเดิมล้วน: _MODEL_IN (resolver เดิม) · _typedThis372 · normTH — ไม่มี matcher ใหม่
+                try {
+                  if (_it.flavor) {
+                    const _fn520 = normTH(String(_it.flavor).replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+                    let _hit520 = null, _n520 = 0;
+                    if (_fn520 && _fn520.length >= 2) {
+                      for (const _ln520 of String(textH || "").split(/\r?\n/)) {
+                        if (!_ln520 || normTH(_ln520).indexOf(_fn520) === -1) continue;   // บรรทัดนี้ต้องมีกลิ่นนี้
+                        let _lm520 = null; try { _lm520 = _MODEL_IN(_ln520); } catch (e520a) {}
+                        if (!_lm520) continue;                                            // บรรทัดไม่มีชื่อรุ่น = ข้าม
+                        //  ⛔ บรรทัดนี้ต้องมี "รุ่นเดียว" เท่านั้น — ถ้ามี 2 รุ่นในบรรทัดเดียว (เช่น
+                        //     "เอา A แตงโม 1 กับ B กลิ่น MENTHOL 1") บรรทัดไม่ใช่หลักฐานว่ากลิ่นนี้เป็นของรุ่นไหน
+                        {
+                          const _u520 = _ln520.toUpperCase(), _k520 = String(_lm520).toUpperCase();
+                          const _j520 = _u520.indexOf(_k520);
+                          const _rest520 = (_j520 === -1) ? _ln520 : (_ln520.slice(0, _j520) + " " + _ln520.slice(_j520 + _k520.length));
+                          let _lm2520 = null; try { _lm2520 = _MODEL_IN(_rest520); } catch (e520b) {}
+                          if (_lm2520 && _lm2520 !== _lm520) continue;                     // หลายรุ่นในบรรทัดเดียว = ไม่ใช่หลักฐาน
+                        }
+                        _n520++; _hit520 = _lm520;
+                      }
+                    }
+                    if (_n520 === 1 && _hit520 && _hit520 !== _m324 && _typedThis372(_hit520)) {
+                      console.log("K520_LINE_MODEL " + _m324 + " → " + _hit520 + " | " + _it.flavor);
+                      _m324 = _hit520;
+                    }
+                  }
+                } catch (e520) {}
                 if (!_typedThis372(_m324) && pslot && Array.isArray(pslot.items)) {
                   try {
                     const _long = pslot.items.find(x => x && x.model && x.model !== _m324
@@ -18495,6 +18534,56 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
           });
         }
       } catch (e) {}
+      //  🧬🧬 k520 P2 · #225 MODEL BLEED ฝั่งการ์ด/ord (เมง APPROVE 8 ก.ย.)
+      //    k370 ข้างบนยิงเฉพาะเมื่อ "รุ่นในการ์ดไม่มีใน Slot เลย" — เคส #225 รุ่นผิดนั้น **มีใน Slot**
+      //    (ลูกค้าสั่ง 2 รุ่น ⇒ MARBO 9K อยู่ใน Slot จริง แต่ไปโผล่ผิดแถว) ⇒ k370 ปล่อยผ่าน
+      //    กติกาเดียวกับ P1: กลิ่นของแถวนี้อยู่ในบรรทัดไหนของลูกค้า → รุ่นบนบรรทัดนั้นคือรุ่นที่ถูก
+      //    ⛔ ยิงเมื่อครบทุกข้อ: ① แถวมีกลิ่น ② เจอบรรทัดที่มีกลิ่นนี้ "บรรทัดเดียว"
+      //       ③ บรรทัดนั้นมีชื่อรุ่นที่ลูกค้าพิมพ์เองแบบยืนเดี่ยว (isLongerModelAt เดียวกับ k370)
+      //       ④ รุ่นนั้นต่างจากรุ่นในแถว ⑤ แคตตาล็อกของรุ่นนั้นมีกลิ่นนี้จริง
+      //    ⛔ ไม่แตะ: จำนวน · กลิ่น · แถวที่ถูกอยู่แล้ว · การ์ดที่ไม่มีกลิ่น
+      try {
+        const _lines520c = String(msgText || "").split(/\r?\n/);
+        if (items.length && _lines520c.length > 1) {
+          items = items.map(it => {
+            try {
+              const _fl = String((it && it.flavor) || ""); if (!_fl) return it;
+              const _m = String((it && it.model) || ""); if (!_m) return it;
+              const _fn = normTH(_fl.replace(/\s*\d+(\.\d+)?%\s*$/, ""));
+              if (!_fn || _fn.length < 2) return it;
+              let _hit = null, _n = 0;
+              for (const _ln of _lines520c) {
+                if (!_ln || normTH(_ln).indexOf(_fn) === -1) continue;
+                let _lm = null; try { _lm = _MODEL_IN(_ln); } catch (e520d) {}
+                if (!_lm) continue;
+                {                                                                //  ⛔ บรรทัดเดียวต้องมีรุ่นเดียว (เหมือน P1)
+                  const _u = _ln.toUpperCase(), _k = String(_lm).toUpperCase();
+                  const _j = _u.indexOf(_k);
+                  const _rest = (_j === -1) ? _ln : (_ln.slice(0, _j) + " " + _ln.slice(_j + _k.length));
+                  let _lm2 = null; try { _lm2 = _MODEL_IN(_rest); } catch (e520h) {}
+                  if (_lm2 && _lm2 !== _lm) continue;
+                }
+                _n++; _hit = _lm;
+              }
+              if (_n !== 1 || !_hit || _hit === _m) return it;
+              let _typed = false;                                            // ลูกค้าพิมพ์รุ่นนี้เองแบบยืนเดี่ยว
+              try {
+                const _raw = String(msgText || "");
+                let _i = _raw.toUpperCase().indexOf(_hit.toUpperCase());
+                while (_i !== -1) {
+                  if (!isLongerModelAt(_raw, _i, _hit)) { _typed = true; break; }
+                  _i = _raw.toUpperCase().indexOf(_hit.toUpperCase(), _i + 1);
+                }
+              } catch (e520e) {}
+              if (!_typed) return it;
+              const _cat = (FLAVORS[_hit] && FLAVORS[_hit].f) || [];         // รุ่นนั้นต้องมีกลิ่นนี้จริง
+              if (!_cat.some(x => normTH(String(x).replace(/\s*\d+(\.\d+)?%\s*$/, "")) === _fn)) return it;
+              console.log("K520_CARD_LINE_MODEL card=" + _m + " -> line=" + _hit + " | " + _fl);
+              return Object.assign({}, it, { model: _hit });
+            } catch (e520f) { return it; }
+          });
+        }
+      } catch (e520g) {}
       // 🍉🍉 k492 · FLV-B CARD FLAVOR GROUND (เมงอนุมัติ 2 ก.ย. · mirror k370 ฝั่ง "กลิ่น"):
       //   การ์ดสร้างจากข้อความที่ LLM พิมพ์ — LLM ย่อชื่อกลิ่นได้โดยไม่มีด่านจับ (TRACE-FLV1 ข้อ ⑥)
       //   กติกา (แคบ · อ่านแคตตาล็อก+slot ล้วน · ห้ามเดา) — ยิงเมื่อครบ 3 ข้อ:
