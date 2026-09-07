@@ -50,7 +50,7 @@ function shopList(env) {
 // ===== โมเดล AI (ลองไล่จากบนลงล่าง ถ้าตัวบนล่มจะสลับให้อัตโนมัติ) =====
 // ตัวบน = คุณภาพดี (ต้องมีเครดิต) / ตัวล่างมี :free = ใช้ได้แม้เครดิต $0 (แต่คุณภาพ/ความเร็วด้อยกว่า)
 // 🔖 เวอร์ชันโค้ด — เช็คได้ที่ /version ว่า Cloudflare รันตัวนี้อยู่จริงมั้ย
-const BUILD = "2026-09-07-k516-stockrace";
+const BUILD = "2026-09-07-k515-askflavorlen";
 
 // ⚡ k94 (แอดมินแจ้ง 2/8): กด "เสร็จ" ในแผงควบคุมแล้วแอดมินเงียบต่ออีกเกือบ 1 นาที
 //   สาเหตุ: Cloudflare KV แคชค่าที่อ่านไว้ ~60 วิ → ลบคีย์มิ้วต์แล้วขอบเครือข่ายยังเห็นค่าเก่า
@@ -5365,6 +5365,32 @@ function askParse480(text) {
     if (/กลิ่นไหน|รับกลิ่น|เลือกกลิ่น|สนใจกลิ่น/.test(s)) {
       const fc = [...s.matchAll(/^\s*-\s*([^\n]{2,40})$/gm)].map(m => m[1].trim());
       return { type: "flavor", model, flavor: "", choices: fc.slice(0, 20), t: Date.now() };
+    }
+  } catch (e) {}
+  return null;
+}
+//  🗣️🗣️ k515 · #213 ASK-FLAVOR-LENGTH (เมง APPROVE 7 ก.ย.) — ตัวจับคู่ "เข้มพิเศษ" สำหรับคำตอบยาว 16-40 ตัว
+//    ปัญหา: gate ≤15 ตัดชื่อกลิ่นยาวทิ้ง 192/971 (19.8%) · JOIWAY TWINS 13/16 · เคสจริง "ลูกอมเรนโบว์ / มิ้นต์"
+//    แต่จะปล่อยเข้า askBind480 ตรง ๆ ไม่ได้ — substring 2 ทางจะจับประโยคเล่าเรื่องผิด (พิสูจน์ 3/6 เคส)
+//  กติกาเดียว: normTH(คำตอบ) ต้อง **เท่ากับ** normTH(ตัวเลือก) เต็มตัว และตรงเพียง 1 ตัวเลือก
+//    ⛔ ไม่มี substring · ไม่มี contains · ไม่มี fuzzy · ไม่เดารุ่น · ไม่แตะ % (ROOT-B แยกเคส)
+//    ⛔ hit 0 หรือ >1 = null (ไหลเส้นเดิม ถามต่อ) · ใช้ได้เฉพาะ type "flavor" เท่านั้น
+//  ชั้นเทียบ 2 ชั้น (ทั้งคู่เป็น "เท่ากับ" ล้วน ๆ ไม่ใช่ fuzzy):
+//    ① ข้อความดิบ (trim) · ② ข้อความหลังถอดคำนำ/คำลงท้ายสุภาพ ด้วย regex ชุดเดียวกับ askBind480 (KHA/tail)
+function askBindExact515(t0, la) {
+  try {
+    if (!la || la.type !== "flavor" || !Array.isArray(la.choices) || !la.choices.length) return null;
+    const t = String(t0 || "").trim();
+    if (!t) return null;
+    const KHA = "(?:ครับ|คร้าบ|คับ|ค้าบ|ค่ะ|คะ|จ้า|ฮะ|นะ|น้า)*";
+    const tail = new RegExp("^(?:เอา|รับ|ขอ)?\\s*(.+?)\\s*" + KHA + "[\\s!.]*$");
+    const core = (t.match(tail) || [, t])[1] || t;
+    for (const cand of [t, core]) {
+      const cn = normTH(cand);
+      if (cn.length < 2) continue;
+      const hit = la.choices.filter(c => normTH(String(c)) === cn);      // ⛔ "เท่ากับ" เท่านั้น
+      if (hit.length === 1) return ("เอา " + (la.model || "") + " " + hit[0]).replace(/\s+/g, " ").trim();
+      if (hit.length > 1) return null;                                    // กำกวม = ห้ามเดา
     }
   } catch (e) {}
   return null;
@@ -13415,7 +13441,10 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
       //   ⛔ ไม่มี lastAsk / stale / เลขนอก choices / กำกวม = ไหลเส้นเดิมทุกประการ (ห้ามเดา)
       //   ⛔ ลูกค้าเอ่ยรุ่นใหม่คนละตัว = บริบทใหม่ชนะ → ล้าง lastAsk เก่าทิ้ง
       try {
-        if (env.CONV && t.length <= 15) {
+        //  🗣️ k515: เดิม gate ≤15 ครอบ "ทั้งบล็อก" ⇒ ข้อความยาวไม่ได้ตรวจ TTL และไม่ได้ล้าง ask ตอนเปลี่ยนรุ่นด้วย
+        //    เปิดถึง 40 ตัว (ชื่อกลิ่นยาวสุดในแคตตาล็อก 31 + เผื่อคำสุภาพ) · >40 = ไม่เข้าเลย เหมือน k516 ทุกประการ
+        //    ⛔ ช่วง 16-40 "อ่าน/ล้าง state ได้" แต่ **bind ได้เฉพาะทางตรงเป๊ะ** (ดู K515 ด้านล่าง)
+        if (env.CONV && t.length <= 40) {
           const _lv480 = await env.CONV.get("ask:" + shopId + ":" + userId);
           if (_lv480) {
             const _la480 = JSON.parse(_lv480);
@@ -13426,7 +13455,10 @@ async function handleEventCore(ev, env, TOKEN, shopId) {
               await env.CONV.delete("ask:" + shopId + ":" + userId);
               console.log("K480_ASK_CLEAR model-change " + _la480.model + " → " + _mNew480);
             } else {
-              let _ex480 = askBind480(t, _la480);
+              //  🗣️ k515: ≤15 = เส้นเดิมทุกบรรทัด (askBind480 · substring/% semantics ไม่ถูกแตะ)
+              //    16-40 = เส้นใหม่ "ตรงเป๊ะ + unique 1 ตัว" เท่านั้น · ไม่ตรง = null → ไหลเส้นเดิม (ถามต่อ)
+              let _ex480 = (t.length <= 15) ? askBind480(t, _la480) : askBindExact515(t, _la480);
+              if (_ex480 && t.length > 15) console.log("K515_ASK_EXACT len=" + t.length + " type=" + _la480.type);
               if (_ex480 && typeof _ex480 === "object") {
                 //  strength: เติมจำนวนเดิมจาก slot (แถวเดียว รุ่นตรง) — เลขจำนวนชัด กัน % ถูกตีเป็นจำนวน
                 let _q480 = 0;
