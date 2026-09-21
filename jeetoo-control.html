@@ -588,7 +588,7 @@ function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(function(){ c
    URL = https://chat.line.biz/{SHOP_LINE_ID[shop]}/chat/{uid} · copy ชื่อลูกค้าลง clipboard ก่อน (ภายใน click gesture)
    ⛔ ไม่มี uid / shop / mapping → ไม่เปิด URL · แจ้งข้อความอ่านง่าย · เปิดแท็บใหม่แบบ noopener */
 const SHOP_LINE_ID = {
-  abc12: 'U0994eeac699638b55ffdd0d4bbb0761b'   // ✅ เม้งยืนยัน 21 ก.ย. — ร้านอื่นเพิ่มเมื่อเม้งให้ id (LINE OA chat id ขึ้นต้น U…)
+  abc12: 'U4fcadbe60766cd0befd035ef0df23bbb'   // ✅ เม้งยืนยันจากเทสจริง 21 ก.ย. (ค่าเดิม U0994… ผิด → 404) — ร้านอื่นเพิ่มเมื่อเม้งให้ id (LINE OA chat id ขึ้นต้น U…)
 };
 function openChat(uid,shop,name){
   uid=String(uid||'').trim(); shop=String(shop||SHOP||'').trim().toLowerCase(); name=String(name||'').trim();
