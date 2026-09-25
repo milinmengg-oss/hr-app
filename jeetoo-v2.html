@@ -131,7 +131,7 @@ h3 b{color:var(--txt);}
 .bub.j{background:#20252f;color:#e8eaf0;border:1px solid var(--line);border-bottom-left-radius:4px;}
 .bwho{font-size:10.5px;color:var(--mut);margin:8px 0 -2px;}
 .sendrow{display:flex;gap:8px;margin-top:10px;align-items:center;}
-.sendrow input{opacity:.5;}
+.sendrow input{opacity:1;} .sendrow input:disabled{opacity:.5;}
 
 /* ── ตั้งค่า ── */
 .set{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;}
@@ -274,10 +274,10 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
         <div class="acts hidden" id="convacts" style="justify-content:flex-start;margin:8px 0;"></div>
         <div class="convbody" id="convbody"><div class="empty">ยังไม่ได้เลือกแชท</div></div>
         <div class="sendrow">
-          <input placeholder="พิมพ์ตอบลูกค้า… (เร็ว ๆ นี้)" disabled>
-          <button disabled title="ยังไม่มี endpoint ส่งข้อความ — ระยะ 2">ส่ง</button>
+          <input id="sendtxt" placeholder="พิมพ์ตอบลูกค้า… (Enter = ส่ง)" maxlength="1000" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendReply();}" disabled>
+          <button class="p" id="sendbtn" onclick="sendReply()" disabled>ส่ง</button>
         </div>
-        <div class="mut" style="margin-top:4px;">ส่งข้อความจากหน้านี้: <b>เร็ว ๆ นี้</b> — ตอนนี้ตอบลูกค้าใน LINE OA ตามเดิม</div>
+        <div class="mut" style="margin-top:4px;" id="sendhint">เลือกแชทก่อน · ส่งจากที่นี่ = ข้อความไปหาลูกค้าในไลน์ทันที และจีทูจะเงียบแชทนี้ให้ (คุณคุมเอง) — กด ▶️ ให้เอวาตอบต่อ เมื่อคุยเสร็จ</div>
       </div>
     </div>
   </section>
@@ -289,7 +289,10 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       <p>พิมพ์อะไรที่นี่ จีทูจะรู้ทันทีและเอาไปตอบลูกค้าได้เลย เช่น "MARBO องุ่นของเข้าแล้ว" · ลบข้อความให้ว่างแล้วบันทึก = ยกเลิกประกาศ</p>
       <div class="scope"><span class="on" id="sc1" onclick="setScope('one')">ร้านนี้</span><span id="sc2" onclick="setScope('all')">ทุกร้านที่ฉันดูแล</span></div>
       <textarea id="notice" placeholder="ยังไม่มีประกาศ…"></textarea>
-      <div class="acts"><div class="sp"></div><button class="p big" onclick="saveNotice()">💾 บันทึกประกาศ</button></div>
+      <div class="acts" style="justify-content:flex-start;align-items:center;gap:10px;">
+        <label class="mut" for="nuntil">หมดอายุวันที่ (ไม่ใส่ = ไม่หมด)</label><input type="date" id="nuntil" style="width:170px;">
+        <div class="sp"></div><button class="p big" onclick="saveNotice()">💾 บันทึกประกาศ</button></div>
+      <div class="mut" id="noticecur" style="margin-top:6px;line-height:1.6;"></div>
       <div class="result-list" id="noticeres"></div>
     </div>
 
@@ -680,6 +683,7 @@ function renderConvActs(){
 }
 async function showConv(uid,name){
   CUR_UID=uid; CUR_NAME=name||'';
+  setSendEnabled(true);
   $('conv').classList.add('open'); $('convname').textContent='💬 '+(name||'ลูกค้า'); $('convbody').innerHTML='<div class="empty">กำลังโหลด…</div>';
   renderChats(); renderConvActs();
   try{
@@ -695,7 +699,7 @@ async function showConv(uid,name){
     const cb=$('convbody'); cb.scrollTop=cb.scrollHeight;
   }catch(e){ $('convbody').innerHTML='<div class="empty">โหลดไม่ได้</div>'; }
 }
-function closeConv(){ $('conv').classList.remove('open'); if(!CUR_UID){ return; } CUR_UID=''; $('convname').textContent='เลือกแชทจากรายการซ้าย'; $('convbody').innerHTML='<div class="empty">ยังไม่ได้เลือกแชท</div>'; $('convacts').classList.add('hidden'); $('convstate').classList.add('hidden'); $('convchips').innerHTML=''; $('convline').classList.add('hidden'); renderChats(); }
+function closeConv(){ $('conv').classList.remove('open'); setSendEnabled(false); if(!CUR_UID){ return; } CUR_UID=''; $('convname').textContent='เลือกแชทจากรายการซ้าย'; $('convbody').innerHTML='<div class="empty">ยังไม่ได้เลือกแชท</div>'; $('convacts').classList.add('hidden'); $('convstate').classList.add('hidden'); $('convchips').innerHTML=''; $('convline').classList.add('hidden'); renderChats(); }
 /* ↗ LINE OA (panel-chat1) — mapping เดิมของแผงเก่า */
 const SHOP_LINE_ID={ abc12:'U4fcadbe60766cd0befd035ef0df23bbb' };
 function openLineChat(){
@@ -707,8 +711,15 @@ function openLineChat(){
 
 /* ── แท็บ ตั้งค่า ── */
 async function loadSettings(){ loadNotice(); loadPromo(); loadPay(); loadHealth(); }
-function setScope(s){ SCOPE=s; $('sc1').classList.toggle('on',s==='one'); $('sc2').classList.toggle('on',s==='all'); renderHeader(); $('noticeres').innerHTML=''; }
-async function loadNotice(){ try{ const r=await fetchJ(q('/ctl/notice')); if(r.ok&&!inputFocused()) $('notice').value=r.d['ประกาศ']||''; }catch(e){} }
+function setScope(s){ SCOPE=s; $('sc1').classList.toggle('on',s==='one'); $('sc2').classList.toggle('on',s==='all'); renderHeader(); $('noticeres').innerHTML=''; loadNotice(); }
+/* 📣 k588: GET คืน {ประกาศ(ที่ใช้อยู่), ร้านนี้:{text,until}, ทุกร้าน:{text,until}, ที่ใช้อยู่} · หลังบ้านเก่า/worker เก่า = string อย่างเดียว */
+let NOTICE_ALL=null;
+async function loadNotice(){ try{ const r=await fetchJ(q('/ctl/notice')); if(!r.ok) return; const d=r.d||{};
+    const own=d['ร้านนี้']||{text:d['ประกาศ']||'',until:''}, all=d['ทุกร้าน']||null; NOTICE_ALL=all;
+    if(!inputFocused()){ const src=SCOPE==='all'&&all?all:own; $('notice').value=src.text||''; $('nuntil').value=(src.until||''); }
+    const fmt=n=>n&&n.text?('“'+n.text.slice(0,80)+(n.text.length>80?'…':'')+'”'+(n.until?' · หมด '+n.until:'')):'— ไม่มี —';
+    $('noticecur').innerHTML='ร้านนี้: '+esc(fmt(own))+'<br>ทุกร้าน: '+esc(fmt(all))+(d['ที่ใช้อยู่']?'<br>👉 ตอนนี้จีทูใช้: <b>'+esc(d['ที่ใช้อยู่'])+'</b>':'');
+  }catch(e){} }
 /* 📣 POST /ctl/notice body=ข้อความดิบ · "ทุกร้าน" = วนยิงทีละร้านในรายการ sidebar · แจ้งผลรายร้าน */
 async function saveNotice(){
   const txt=$('notice').value, has=!!txt.trim();
@@ -717,14 +728,35 @@ async function saveNotice(){
   const names=targets.map(id=>shopLabel(id)).join(', ');
   if(!confirm((has?'ตั้งประกาศให้ ':'ยกเลิกประกาศของ ')+(targets.length>1?targets.length+' ร้าน: ':'ร้าน ')+names+' ?\n\n'+(has?txt.trim():'(ล้างประกาศ — จีทูจะเลิกพูดเรื่องนี้)')+'\n\nมีผลกับลูกค้าทุกคนของร้านที่เลือก')) return;
   $('noticeres').innerHTML='<span class="mut">กำลังบันทึก…</span>';
-  const res=await Promise.all(targets.map(async id=>{ try{ const r=await fetch(qs('/ctl/notice',id),{method:'POST',body:txt}); return {id,ok:r.ok,status:r.status}; }catch(e){ return {id,ok:false,status:'เน็ต'}; } }));
+  const until=($('nuntil').value||'').trim(); const qu=until?'&until='+enc(until):'';
+  //  📣 k588: "ทุกร้าน" = ตั้งครั้งเดียวที่ notice:_all (scope=all) · ถ้าสิทธิ์ไม่ถึง (403) หรือ worker เก่าไม่รู้จัก → วนทีละร้านแบบเดิม
+  if(SCOPE==='all'){ try{ const r=await fetch(q('/ctl/notice')+'&scope=all'+qu,{method:'POST',body:txt}); let d={}; try{ d=await r.json(); }catch(e){}
+      if(r.ok&&d&&d['ทุกร้าน']===true){ $('noticeres').innerHTML='<div class="okk">✅ ตั้งครั้งเดียวสำหรับทุกร้าน'+(until?' · หมดอายุ '+esc(until):'')+'</div>'; toast(has?'จีทูรับรู้ประกาศแล้ว (ทุกร้าน)':'ยกเลิกประกาศทุกร้านแล้ว'); loadNotice(); refresh(true); return; }
+      if(r.ok&&d&&d.error){ $('noticeres').innerHTML='<div class="bd">⛔ '+esc(d.error)+'</div>'; toast(d.error,1); return; }
+    }catch(e){} }
+  const res=await Promise.all(targets.map(async id=>{ try{ const r=await fetch(qs('/ctl/notice',id)+qu,{method:'POST',body:txt}); let d={}; try{ d=await r.json(); }catch(e){} if(r.ok&&d&&d.error) return {id,ok:false,status:d.error}; return {id,ok:r.ok,status:r.status}; }catch(e){ return {id,ok:false,status:'เน็ต'}; } }));
   const fail=res.filter(x=>!x.ok);
   $('noticeres').innerHTML=res.map(x=>'<div class="'+(x.ok?'okk':'bd')+'">'+(x.ok?'✅':'⛔')+' '+esc(shopLabel(x.id))+(x.ok?'':' — ไม่สำเร็จ ('+esc(x.status)+')')+'</div>').join('');
   if(fail.some(x=>x.status===403)) { forbidden(); return; }
   if(!fail.length) toast(has?'จีทูรับรู้ประกาศแล้ว ('+res.length+' ร้าน)':'ยกเลิกประกาศแล้ว ('+res.length+' ร้าน)');
   else toast('บันทึกไม่ครบ — พลาด: '+fail.map(x=>shopLabel(x.id)).join(', '),1);
-  refresh(true);
+  loadNotice(); refresh(true);
 }
+/* 💬 k588 · #286: ส่งข้อความหาลูกค้าจากหลังบ้าน = POST /ctl/reply?uid body=ข้อความ · worker push ผ่านไลน์ร้าน + เงียบจีทูแชทนี้ */
+async function sendReply(){
+  const inp=$('sendtxt'), btn=$('sendbtn'); const txt=(inp.value||'').trim();
+  if(!CUR_UID){ toast('เลือกแชทก่อน',1); return; }
+  if(!txt){ inp.focus(); return; }
+  btn.disabled=true; btn.textContent='กำลังส่ง…';
+  try{ const r=await fetchJ(q('/ctl/reply?uid='+enc(CUR_UID)),{method:'POST',body:txt});
+    if(r.ok&&r.d&&r.d.ok){ inp.value=''; const cb=$('convbody');
+      cb.innerHTML=cb.innerHTML.replace(/<div class="empty">[^<]*(ยังไม่มี|โหลดไม่ได้)[^<]*<\/div>/,'')+'<div class="bwho">👨‍💼 คุณ (จากหลังบ้าน)</div><div class="bub j">'+esc(txt)+'</div>'; cb.scrollTop=cb.scrollHeight;
+      pendSet(CUR_UID,true); setMuted(CUR_UID,true,'แอดมินตอบจากหลังบ้าน 💬'); toast('ส่งถึงลูกค้าแล้ว · จีทูเงียบแชทนี้ให้'); }
+    else toast((r.d&&r.d.error)||'ส่งไม่สำเร็จ ('+r.status+')',1);
+  }catch(e){ if(e.message!=='forbidden') toast('ส่งไม่สำเร็จ ลองใหม่',1); }
+  btn.disabled=false; btn.textContent='ส่ง'; inp.focus();
+}
+function setSendEnabled(on){ $('sendtxt').disabled=!on; $('sendbtn').disabled=!on; $('sendhint').textContent=on?'ส่งจากที่นี่ = ข้อความไปหาลูกค้าในไลน์ทันที และจีทูจะเงียบแชทนี้ให้ (คุณคุมเอง) — คุยเสร็จกด ▶️ ให้เอวาตอบต่อ':'เลือกแชทก่อน'; }
 /* 🎁 โปร — ฟิลด์เดียวกับแผงเก่า (k399) · worker ตรวจก่อนบันทึก */
 function pmToBox(v){ return String(v||'').trim().replace(' ','T').replace(/\//g,'-').slice(0,16); }
 function pmFromBox(v){ return String(v||'').trim().replace('T',' ').replace(/-/g,'/'); }
