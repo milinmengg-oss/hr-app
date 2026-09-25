@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>จีทู หลังบ้าน v2</title>
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+/* ═══ หลังบ้านใหม่ ระยะ 1 (panel-v2) — โทนจากแบบร่าง v5 ═══ */
+:root{--bg:#0f1115;--panel:#171a21;--panel2:#1c2130;--line:#262b36;--txt:#e8eaf0;--mut:#8b93a7;--acc:#4f8cff;--ok:#2ecc71;--warn:#f5a623;--bad:#ff5c5c;--shop:#7c5cff;--g:16px;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--txt);font-family:'Kanit',-apple-system,'Noto Sans Thai',sans-serif;font-size:15px;line-height:1.5;overflow-x:hidden;}
+button{font-family:inherit;font-size:14px;border:1px solid var(--line);background:#20252f;color:var(--txt);padding:8px 13px;border-radius:10px;cursor:pointer;white-space:nowrap;}
+button:active{transform:scale(.97);}
+button:disabled{opacity:.55;cursor:default;transform:none;}
+button.p{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:700;}
+button.g{background:#1f6b45;border-color:#1f6b45;color:#fff;font-weight:700;}
+button.w{background:#3a2c10;border-color:#6b5200;color:#ffd37a;}
+button.d{background:#3a1414;border-color:#7a2020;color:#ff9c9c;font-weight:700;}
+button.big{padding:11px 18px;font-size:15px;font-weight:700;border-radius:11px;}
+button.s{padding:5px 10px;font-size:13px;}
+input,textarea,select{width:100%;font-family:inherit;font-size:15px;background:#0f1115;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:10px 12px;}
+textarea{resize:vertical;min-height:88px;line-height:1.6;}
+input[type=checkbox]{width:18px;height:18px;}
+.hidden{display:none!important;}
+.mut{color:var(--mut);font-size:13px;}
+a{color:#9cc0ff;}
+
+/* ── หน้าใส่รหัส ── */
+#keyscreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:var(--g);}
+#keyscreen .card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:24px;}
+#keyscreen h1{font-size:20px;margin-bottom:6px;}
+#keyscreen input{margin:14px 0 10px;text-align:center;}
+#keymsg{min-height:20px;font-size:13px;color:var(--bad);margin-top:8px;text-align:center;}
+
+/* ── โครงหน้า ── */
+.app{display:grid;grid-template-columns:240px 1fr;min-height:100vh;}
+aside{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;}
+.brand{padding:16px 18px;font-weight:800;letter-spacing:.4px;border-bottom:1px solid var(--line);}
+.brand small{display:block;color:var(--mut);font-weight:400;font-size:12px;}
+.shops{flex:1;overflow:auto;padding:8px;}
+.shops .lbl{padding:6px 12px;font-size:12px;color:var(--mut);}
+.shop{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;color:var(--txt);border:1px solid transparent;}
+.shop:hover{background:#1f2430;}
+.shop.on{background:#232a3a;border-color:#34405a;}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;background:#666;}
+.shop .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.shop .c{font-size:11px;color:var(--warn);}
+.badge{background:var(--bad);color:#fff;font-size:11px;padding:1px 7px;border-radius:999px;font-weight:700;min-width:20px;text-align:center;}
+.badge.o{background:var(--warn);color:#222;}
+.badge.z{display:none;}
+.legend{padding:10px 12px 4px;font-size:11px;color:var(--mut);line-height:1.7;border-top:1px dashed var(--line);margin-top:8px;}
+.legend .c{color:var(--warn);}
+.stat span.acc b{color:#9fc3ea;}
+.mapbtn{display:inline-flex;align-items:center;gap:4px;background:#1a2a3f;color:#9fc3ea;border:1px solid #2f5d8f;border-radius:10px;padding:11px 14px;font-size:15px;font-weight:700;text-decoration:none;white-space:nowrap;}
+.mapbtn:hover{background:#22365a;}
+.me{padding:12px 18px;border-top:1px solid var(--line);font-size:12px;color:var(--mut);line-height:1.6;}
+.me button{width:100%;margin-top:8px;font-size:12px;padding:6px;}
+main{display:flex;flex-direction:column;min-width:0;}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px var(--g);border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:20;}
+.shopname{font-size:20px;font-weight:800;display:flex;align-items:center;gap:10px;min-width:0;}
+.shopname .dot{width:14px;height:14px;box-shadow:0 0 10px currentColor;}
+.pill{font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--mut);white-space:nowrap;}
+.pill.ok{border-color:#1f6b45;color:#7be0a5;}
+.pill.off{border-color:#6b1f1f;color:#ff9c9c;}
+.pill.warn{border-color:#6b5200;color:#ffd37a;}
+.sp{flex:1;}
+.tabs{display:flex;gap:4px;padding:10px var(--g) 0;border-bottom:1px solid var(--line);background:var(--panel);}
+.tab{padding:10px 18px;border-radius:10px 10px 0 0;color:var(--mut);cursor:pointer;border:1px solid transparent;border-bottom:none;font-size:15px;font-weight:600;background:transparent;}
+.tab.on{background:var(--bg);color:var(--txt);border-color:var(--line);}
+.tab b{margin-left:6px;color:var(--bad);}
+section{padding:18px var(--g) 40px;}
+h3{font-size:13px;letter-spacing:1.2px;color:var(--mut);margin:20px 0 8px;font-weight:600;display:flex;align-items:center;gap:8px;}
+h3 b{color:var(--txt);}
+.stat{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.stat span{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;color:var(--mut);}
+.stat span b{color:var(--txt);margin-right:4px;}
+.stat span.bad b{color:var(--bad);} .stat span.warn b{color:var(--warn);} .stat span.ok b{color:var(--ok);}
+.empty{color:var(--mut);font-size:13px;padding:10px 4px;}
+.notice-strip{background:#1c2130;border:1px dashed #34405a;border-radius:10px;padding:8px 12px;color:#b9c3d9;font-size:13px;margin:10px 0 0;white-space:pre-wrap;word-break:break-word;}
+
+/* ── การ์ดงาน ── */
+.row{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:8px;}
+.row.urg{background:#241618;border-color:#7a2020;box-shadow:0 0 0 1px rgba(255,92,92,.18);}
+.row.acc{border-color:#2f5d8f;}
+.row .d{min-width:0;}
+.row .who{font-size:17px;font-weight:700;}
+.row .t{color:var(--mut);font-size:13px;}
+.row .t.late{color:var(--warn);font-weight:600;}
+.row .why{color:var(--mut);font-size:13px;white-space:pre-wrap;word-break:break-word;}
+.row .msg{color:#cfd6e6;font-size:13.5px;margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:6px;margin-right:6px;background:#26304a;color:#9cc0ff;vertical-align:middle;}
+.tag.urg{background:#4a2020;color:#ffb3b3;}
+.tag.pay{background:#1f3b2a;color:#9be0b6;}
+.tag.acc{background:#1a2a3f;color:#9fc3ea;}
+.acts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;}
+.fee2{display:flex;gap:8px;align-items:center;}
+.fee2 input{width:110px;text-align:center;font-size:16px;font-weight:700;}
+.oblock{font-size:12.5px;color:#d5dbe8;margin-top:8px;line-height:1.55;white-space:pre-wrap;word-break:break-word;background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:9px 10px;max-height:200px;overflow:auto;}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.chip{background:#1b1f28;border:1px solid #34405a;color:#cfd6e6;border-radius:999px;padding:4px 11px;font-size:12px;font-weight:600;cursor:pointer;}
+.chip.ok{background:#1f3b2a;border-color:#2e7d32;color:#9be0b6;}
+.owarn{display:flex;align-items:center;gap:8px;background:#c62828;color:#fff;font-weight:700;font-size:13px;border-radius:9px;padding:8px 11px;margin:8px 0 0;line-height:1.45;}
+.blink{animation:pulse 1.1s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.row.bad{background:#241618;border-color:#7a2020;}
+.row.bad .odone{opacity:.45;}
+.row.bad.ok .odone{opacity:1;}
+.row.bad.ok .oack{display:none;}
+
+/* ── แชท ── */
+.split{display:grid;grid-template-columns:minmax(260px,1fr) 1.4fr;gap:14px;align-items:start;}
+.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+.filters .chip.on{background:#26304a;border-color:#4f8cff;color:#fff;}
+.crow{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--line);background:var(--panel);border-radius:10px;margin-bottom:6px;cursor:pointer;}
+.crow.on{border-color:var(--acc);background:#1d2536;}
+.crow .cn{min-width:0;flex:1;}
+.crow .cn b{display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.crow .cn i{font-style:normal;font-size:12px;color:var(--mut);}
+.crow.mut .cn i{color:var(--warn);}
+.conv{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-height:340px;position:sticky;top:120px;}
+.conv .ch{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;}
+.conv .ch b{font-size:16px;}
+.convbody{max-height:52vh;overflow:auto;padding:4px 2px;}
+.bub{max-width:88%;padding:8px 12px;border-radius:14px;font-size:13.5px;line-height:1.6;margin:6px 0;white-space:pre-wrap;word-break:break-word;}
+.bub.u{background:#1f3a1f;color:#dff5df;margin-left:auto;border-bottom-right-radius:4px;}
+.bub.j{background:#20252f;color:#e8eaf0;border:1px solid var(--line);border-bottom-left-radius:4px;}
+.bwho{font-size:10.5px;color:var(--mut);margin:8px 0 -2px;}
+.sendrow{display:flex;gap:8px;margin-top:10px;align-items:center;}
+.sendrow input{opacity:.5;}
+
+/* ── ตั้งค่า ── */
+.set{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:12px;}
+.set h4{margin:0 0 6px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.set p{margin:0 0 10px;color:var(--mut);font-size:13px;line-height:1.6;}
+.set .f{margin-top:8px;}
+.set label.ck{display:flex;align-items:center;gap:8px;font-size:14px;margin:8px 0;}
+.set .acts{margin-top:10px;}
+.scope{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:10px;}
+.scope span{padding:5px 12px;font-size:13px;color:var(--mut);cursor:pointer;}
+.scope span.on{background:#26304a;color:#fff;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.hgrid{font-size:13px;line-height:1.9;}
+.hgrid span{color:var(--mut);}
+.set.danger{border-color:#7a2020;background:#1c1214;margin-top:28px;}
+.set.danger h4{color:#ff9c9c;}
+details.tech{margin-top:16px;color:var(--mut);}
+details.tech summary{cursor:pointer;font-size:13px;padding:8px 0;}
+details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;overflow:auto;max-height:260px;color:#b9c3d9;}
+.result-list{font-size:13px;line-height:1.8;margin-top:8px;}
+.result-list .okk{color:#7be0a5;} .result-list .bd{color:#ff9c9c;}
+
+/* ── toast ── */
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(14px);z-index:90;background:#1c3b1c;border:1.5px solid #2e7d32;color:#d8ffd8;padding:12px 18px;border-radius:14px;font-size:13.5px;font-weight:700;max-width:88vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:0 8px 26px rgba(0,0,0,.5);white-space:pre-wrap;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.bad{background:#3a1414;border-color:#c62828;color:#ffd6d6;}
+
+/* ── มือถือ ── */
+.chipstrip{display:none;}
+.navbar{display:none;}
+.convoverlay{display:none;}
+@media(max-width:900px){
+  .app{grid-template-columns:1fr;}
+  aside{display:none;}
+  .chipstrip{display:flex;gap:8px;overflow-x:auto;padding:10px var(--g);background:var(--panel);border-bottom:1px solid var(--line);-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .chipstrip::-webkit-scrollbar{display:none;}
+  .schip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#20252f;border-radius:999px;padding:6px 12px;font-size:13px;white-space:nowrap;flex:none;color:var(--txt);}
+  .schip.on{border-color:#34405a;background:#232a3a;font-weight:700;}
+  .schip .badge{margin-left:2px;}
+  header{position:static;}
+  .tabs{display:none;}
+  section{padding-bottom:96px;}
+  .row{grid-template-columns:1fr;}
+  .acts{justify-content:flex-start;}
+  .split{grid-template-columns:1fr;}
+  .conv{position:fixed;inset:0;z-index:70;border-radius:0;overflow:auto;display:none;padding-bottom:96px;}
+  .conv.open{display:block;}
+  .convbody{max-height:none;}
+  .grid2{grid-template-columns:1fr;}
+  .navbar{position:fixed;left:0;right:0;bottom:0;z-index:60;display:flex;background:var(--panel);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+  .navbtn{flex:1;background:transparent;border:0;color:var(--mut);font-size:11px;font-weight:700;padding:8px 2px 6px;border-radius:12px;position:relative;line-height:1.25;}
+  .navbtn i{display:block;font-style:normal;font-size:21px;margin-bottom:3px;}
+  .navbtn.on{color:#9cc0ff;background:#1e2433;}
+  .navbtn .bdg{position:absolute;top:2px;right:calc(50% - 26px);min-width:19px;height:19px;line-height:19px;background:var(--bad);color:#fff;border-radius:19px;font-size:11px;font-weight:800;padding:0 5px;}
+  .navbtn .bdg.z{display:none;}
+  .shopname{font-size:18px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ หน้าใส่รหัส (เหมือนแผงเก่า · เก็บที่ localStorage g2key) ═══ -->
+<div id="keyscreen" class="hidden">
+  <div class="card">
+    <h1>🔐 จีทู หลังบ้าน v2</h1>
+    <div class="mut">ใส่รหัสแอดมิน (XSELLY_KEY) ครั้งแรกครั้งเดียว — จำไว้ในเครื่องนี้</div>
+    <input type="password" id="keyin" placeholder="รหัสแอดมิน" autocomplete="off">
+    <button class="p big" style="width:100%" onclick="saveKey()">บันทึกรหัส</button>
+    <div id="keymsg"></div>
+  </div>
+</div>
+
+<!-- ═══ แอปหลัก ═══ -->
+<div class="app hidden" id="app">
+<aside>
+  <div class="brand">จีทู หลังบ้าน <small>ระยะ 1 · เลือกร้านเพื่อทำงาน</small></div>
+  <div class="shops">
+    <div class="lbl" id="shoplbl">ร้านที่ฉันดูแล</div>
+    <div id="shoplist"></div>
+    <div class="legend">● สีประจำร้าน (ไม่ใช่สถานะ) · <span class="c">⚠️</span> ยังตั้งค่าไม่ครบ · <span class="badge" style="font-size:10px;padding:0 6px;">5</span> งานค้าง (แดง = มีลูกค้ารอคน · เหลือง = มีแค่ค่าส่ง/ออเดอร์)</div>
+  </div>
+  <div class="me">
+    <div id="meline">👤 เห็นเฉพาะร้านที่รหัสนี้มีสิทธิ์</div>
+    <button onclick="logout()">ออก / เปลี่ยนรหัส</button>
+    <button onclick="location.href='jeetoo-control.html'">↩︎ กลับหน้าเก่า</button>
+  </div>
+</aside>
+<main>
+  <div class="chipstrip" id="chipstrip"></div>
+  <header>
+    <div class="shopname"><span class="dot" id="hdot"></span><span id="hname">—</span></div>
+    <span class="pill" id="pillbot">กำลังเช็ค…</span>
+    <span class="pill" id="pillbuild">build —</span>
+    <span class="pill warn hidden" id="pillready" onclick="go(3)" style="cursor:pointer">⚠️ ตั้งค่าไม่ครบ</span>
+    <div class="sp"></div>
+    <span class="pill" id="pillpoll">อัปเดตเองทุก 15 วิ</span>
+    <button class="s" onclick="manualRefresh()" title="รีเฟรช">🔄</button>
+  </header>
+  <div class="tabs">
+    <div class="tab on" id="tab1" onclick="go(1)">📥 งาน <b id="tcount"></b></div>
+    <div class="tab" id="tab2" onclick="go(2)">💬 แชท</div>
+    <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
+  </div>
+
+  <!-- ═══ แท็บ 1: งาน ═══ -->
+  <section id="p1">
+    <div class="stat" id="stat"></div>
+    <div id="noticestrip" class="notice-strip hidden"></div>
+    <h3>🚨 ลูกค้ารอคน — ยังไม่มีใครรับ <b id="cnt_q"></b></h3>
+    <div id="sec_q"></div>
+    <h3>👨‍💼 รับแล้ว — กำลังดูแลอยู่ <b id="cnt_a"></b></h3>
+    <div id="sec_a"></div>
+    <h3>🛵 ใส่ค่าส่งด่วน <b id="cnt_f"></b></h3>
+    <div id="sec_f"></div>
+    <h3>📦 โอนแล้ว — รอลง XSelly <b id="cnt_o"></b></h3>
+    <div id="sec_o"></div>
+    <div class="mut" style="margin-top:18px;line-height:1.7;">💡 ลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน → จีทูเงียบแชทนั้นแล้วขึ้นที่นี่เอง · ตอบลูกค้าใน LINE แล้วกด ✅ เก็บเคส (จีทูกลับมาดูแลแชทนั้นต่อทันที) · อยากให้เงียบต่อ ใช้ ⏸ ในแท็บแชท</div>
+  </section>
+
+  <!-- ═══ แท็บ 2: แชท ═══ -->
+  <section id="p2" class="hidden">
+    <div class="split">
+      <div>
+        <input id="csearch" placeholder="🔍 ค้นหาชื่อลูกค้า" oninput="renderChats()" style="margin-bottom:10px;">
+        <div class="filters">
+          <span class="chip on" data-f="all" onclick="setFilter('all')">ทั้งหมด</span>
+          <span class="chip" data-f="wait" onclick="setFilter('wait')">รอคน</span>
+          <span class="chip" data-f="bot" onclick="setFilter('bot')">เอวากำลังคุย</span>
+          <span class="mut" id="folcnt" style="align-self:center;"></span>
+        </div>
+        <div id="chatlist"></div>
+        <div class="mut" style="margin-top:10px;">💡 แตะชื่อลูกค้าเพื่อดูบทสนทนาย้อนหลัง 30 วัน — ไม่ต้องไปเปิดหาใน LINE</div>
+      </div>
+      <div class="conv" id="conv">
+        <div class="ch">
+          <button class="s" onclick="closeConv()">✕</button>
+          <b id="convname">เลือกแชทจากรายการซ้าย</b>
+          <span class="pill hidden" id="convstate"></span>
+          <div class="sp"></div>
+          <button class="s hidden" id="convline" onclick="openLineChat()">↗ LINE OA</button>
+        </div>
+        <div class="chips" id="convchips"></div>
+        <div class="acts hidden" id="convacts" style="justify-content:flex-start;margin:8px 0;"></div>
+        <div class="convbody" id="convbody"><div class="empty">ยังไม่ได้เลือกแชท</div></div>
+        <div class="sendrow">
+          <input placeholder="พิมพ์ตอบลูกค้า… (เร็ว ๆ นี้)" disabled>
+          <button disabled title="ยังไม่มี endpoint ส่งข้อความ — ระยะ 2">ส่ง</button>
+        </div>
+        <div class="mut" style="margin-top:4px;">ส่งข้อความจากหน้านี้: <b>เร็ว ๆ นี้</b> — ตอนนี้ตอบลูกค้าใน LINE OA ตามเดิม</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ แท็บ 3: ตั้งค่า ═══ -->
+  <section id="p3" class="hidden">
+    <div class="set">
+      <h4>📣 ประกาศให้จีทูรู้ <span class="pill" id="noticeshop"></span></h4>
+      <p>พิมพ์อะไรที่นี่ จีทูจะรู้ทันทีและเอาไปตอบลูกค้าได้เลย เช่น "MARBO องุ่นของเข้าแล้ว" · ลบข้อความให้ว่างแล้วบันทึก = ยกเลิกประกาศ</p>
+      <div class="scope"><span class="on" id="sc1" onclick="setScope('one')">ร้านนี้</span><span id="sc2" onclick="setScope('all')">ทุกร้านที่ฉันดูแล</span></div>
+      <textarea id="notice" placeholder="ยังไม่มีประกาศ…"></textarea>
+      <div class="acts"><div class="sp"></div><button class="p big" onclick="saveNotice()">💾 บันทึกประกาศ</button></div>
+      <div class="result-list" id="noticeres"></div>
+    </div>
+
+    <div class="set">
+      <h4>🎁 โปรที่คิดยอด (มีผลกับค่าส่งจริง)</h4>
+      <p>จีทูใช้ตัวเลขชุดเดียวกันทั้งตอนตอบลูกค้าและตอนคิดยอด · ถึงเวลาสิ้นสุดโปรจะหยุดเอง · ⛔ ไม่รวมส่งด่วน/แกร็บ</p>
+      <div id="promostatus" style="font-size:13.5px;font-weight:600;margin-bottom:8px;">—</div>
+      <label class="ck"><input type="checkbox" id="pmActive"> เปิดใช้โปรนี้</label>
+      <input class="f" id="pmName" placeholder="ชื่อโปร (ไว้ให้เราจำเอง) เช่น ส่งฟรีครบ 500">
+      <div class="grid2">
+        <select class="f" id="pmType"><option value="FREE_SHIPPING">ส่งฟรีเมื่อซื้อครบตามยอด</option></select>
+        <select class="f" id="pmMethod"><option value="PARCEL">พัสดุปกติเท่านั้น</option></select>
+      </div>
+      <input class="f" id="pmMin" type="number" inputmode="numeric" placeholder="ยอดขั้นต่ำ (บาท) — นับค่าสินค้าก่อนค่าส่ง เช่น 500">
+      <div class="grid2">
+        <div><div class="mut" style="margin-top:8px;">เริ่ม (เวลาไทย)</div><input id="pmStart" type="datetime-local"></div>
+        <div><div class="mut" style="margin-top:8px;">สิ้นสุด (เวลาไทย)</div><input id="pmEnd" type="datetime-local"></div>
+      </div>
+      <textarea class="f" id="pmMsg" placeholder="ข้อความที่จีทูใช้ตอบลูกค้า (เว้นว่าง = ระบบเขียนให้เอง)"></textarea>
+      <input class="f" id="pmExclude" placeholder="รุ่นที่ไม่ร่วมโปร (คั่นด้วยจุลภาค) — เว้นว่าง = ร่วมทุกอย่าง">
+      <div class="acts"><button onclick="clearPromo()">🗑️ ลบโปรทิ้ง</button><div class="sp"></div><button class="p big" onclick="savePromo()">💾 บันทึกโปรนี้</button></div>
+    </div>
+
+    <div class="grid2">
+      <div class="set">
+        <h4>💳 บัญชีรับโอน — ร้านที่เลือก</h4>
+        <p>บรรทัด 1 = ธนาคาร + เลขบัญชี · บรรทัด 2 = ชื่อบัญชี · มีผลทันที (ระบบจดประวัติ)</p>
+        <textarea id="payinfo" placeholder="ธนาคารกสิกรไทย 123-4-56789-0&#10;ชื่อบัญชี ..."></textarea>
+        <div class="mut" id="paysrc" style="margin-top:6px;"></div>
+        <div class="acts"><div class="sp"></div><button class="p" onclick="savePay()">💾 บันทึกเลขบัญชี</button></div>
+      </div>
+      <div class="set">
+        <h4>📦 สต็อก</h4>
+        <p id="stockage">อายุสต็อก: —</p>
+        <p>export "สินค้าคงคลัง" จาก XSelly (ติ๊ก SKU + คำอธิบายสินค้า) แล้วเลือกไฟล์ · สต็อกใช้ร่วมทุกร้าน</p>
+        <input type="file" id="stockfile" accept=".xlsx,.xls" onchange="pickStock()">
+        <div class="mut" id="stpre" style="margin-top:8px;"></div>
+        <div class="acts"><div class="sp"></div><button class="g hidden" id="stbtn" onclick="uploadStock()">⬆️ อัปเดตสต็อกเข้าระบบ</button></div>
+      </div>
+    </div>
+
+    <div class="set danger">
+      <h4>🚨 ฉุกเฉิน — ร้าน <span id="dangershop">—</span></h4>
+      <p>ปุ่มด้านล่างกระทบลูกค้าทุกคนของร้านนี้ทันที · ระบบจะถามยืนยัน 2 ครั้ง</p>
+      <div class="acts" style="justify-content:flex-start;">
+        <button class="d big" id="togglebtn" onclick="toggleBot()">…</button>
+        <button class="d" onclick="unmuteAll()">🔓 ปลดล็อกทุกแชท (จีทูกลับมาตอบทั้งหมด)</button>
+      </div>
+    </div>
+
+    <details class="tech">
+      <summary>🧑‍🔧 ช่างเทคนิค (เทียบโมเดล · health ดิบ)</summary>
+      <div class="set" style="margin-top:8px;">
+        <h4>🧪 เทียบโมเดล AI</h4>
+        <p>ยิงคำถามดัก 10 ข้อเข้าทุกโมเดล แล้วให้คะแนน /100 · 1-2 นาที · เปิดแท็บใหม่</p>
+        <button onclick="bakeoff()">▶️ เริ่มเทียบโมเดล</button>
+      </div>
+      <div class="set">
+        <h4>❤️ /ctl/health ดิบ <button class="s" onclick="loadHealth()">🔄</button></h4>
+        <pre id="healthraw">—</pre>
+      </div>
+    </details>
+  </section>
+</main>
+</div>
+
+<div class="navbar" id="navbar">
+  <button class="navbtn on" id="n1" onclick="go(1)"><i>📥</i>งาน<span class="bdg z" id="bd1">0</span></button>
+  <button class="navbtn" id="n2" onclick="go(2)"><i>💬</i>แชท</button>
+  <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   จีทู หลังบ้าน v2 · ระยะ 1 (panel-only · worker ไม่แตะ)
+   สัญญา API: docs-panel-v2-api-contract.md — ทุกเส้น/ method/ params เหมือน jeetoo-control.html
+   ═══════════════════════════════════════════════════════════════════ */
+const W='https://abc-line-ai.milin-mengg.workers.dev';
+let KEY=localStorage.getItem('g2key')||'';                 // ⚠️ ชื่อเดียวกับแผงเก่า — ไม่ต้องใส่รหัสใหม่
+let SHOP=localStorage.getItem('g2shop')||'v20';
+let SHOPS=[];                                              // จาก /ctl/shops (server กรองสิทธิ์แล้ว · k465)
+let TAB=1, CHATS=[], FILTER='all', SCOPE='one', ON=true, BUILD='';
+let CUR_UID='', CUR_NAME='';
+const CACHE={};                                            // board ต่อร้าน {shop:{queue,orders,chats,on,muted,t}}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sid=s=>String(s||'').replace(/[^a-zA-Z0-9]/g,'');
+const enc=encodeURIComponent;
+/* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
+const qs=(p,shop)=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+enc(KEY)+'&shop='+enc(shop);
+const q=p=>qs(p,SHOP);
+
+/* ── toast (ห้ามโชว์สำเร็จถ้า request พลาด) ── */
+let _tt=null;
+function toast(msg,bad){ const el=$('toast'); el.textContent=msg; el.className='show'+(bad?' bad':''); clearTimeout(_tt); _tt=setTimeout(()=>{el.className='';},bad?4500:2400); }
+function timeAgo(t){ if(!t) return ''; const s=Math.floor((Date.now()-t)/1000); if(s<60) return s+' วิ.ที่แล้ว'; if(s<3600) return Math.floor(s/60)+' นาทีที่แล้ว'; return Math.floor(s/3600)+' ชม.ที่แล้ว'; }
+function waitMin(t){ if(!t) return {txt:'',late:false}; const m=Math.floor((Date.now()-t)/60000); const txt=m<1?'รอไม่ถึงนาที':m<60?'รอ '+m+' นาที':'รอ '+Math.floor(m/60)+' ชม. '+(m%60)+' นาที'; return {txt,late:m>=10}; }
+
+/* ── รหัส / 403 ── */
+function saveKey(){ const v=$('keyin').value.trim(); if(!v){ $('keymsg').textContent='ใส่รหัสก่อนค่ะ'; return; } KEY=v; localStorage.setItem('g2key',KEY); $('keymsg').textContent=''; init(); }
+function logout(){ if(!confirm('ออกจากหลังบ้าน และลบรหัสออกจากเครื่องนี้?')) return; localStorage.removeItem('g2key'); KEY=''; init(); }
+function forbidden(){ localStorage.removeItem('g2key'); KEY=''; stopPoll(); init(); toast('รหัสไม่ถูกต้อง หรือไม่มีสิทธิ์ร้านนี้',1); }
+async function fetchJ(url,opt){                            // fetch + จับ 403 + parse
+  const r=await fetch(url,opt||{});
+  if(r.status===403){ forbidden(); throw new Error('forbidden'); }
+  let d={}; try{ d=await r.json(); }catch(e){ d={}; }
+  return {ok:r.ok, status:r.status, d};
+}
+
+/* ── สีร้าน (k464 · hash คงที่ ไม่พึ่ง server) ── */
+function shopColor(id){
+  try{ const t=String(id||''); let h=0; for(let i=0;i<t.length;i++) h=(h*31+t.charCodeAt(i))>>>0;
+    const hue=h%360,sat=.62,lit=.58,c=(1-Math.abs(2*lit-1))*sat,x=c*(1-Math.abs((hue/60)%2-1)),m=lit-c/2; let r=0,g=0,b=0;
+    if(hue<60){r=c;g=x;}else if(hue<120){r=x;g=c;}else if(hue<180){g=c;b=x;}else if(hue<240){g=x;b=c;}else if(hue<300){r=x;b=c;}else{r=c;b=x;}
+    const hx=v=>{ let n=Math.round((v+m)*255); n=Math.max(0,Math.min(255,n)); const s=n.toString(16); return s.length<2?'0'+s:s; };
+    return '#'+hx(r)+hx(g)+hx(b);
+  }catch(e){ return '#8f8f8f'; }
+}
+function shopRec(id){ return SHOPS.filter(s=>s['ร้าน']===(id||SHOP))[0]; }
+function shopLabel(id){ const c=shopRec(id); const n=c&&c['ชื่อ']?String(c['ชื่อ']).trim():''; return n||String(id||SHOP||'').toUpperCase(); }
+function shopColorOf(id){ return (shopRec(id)&&shopRec(id).color)||shopColor(id); }
+/* ⚠️ อะไรยังไม่ตั้ง (จาก /ctl/shops · ⛔ = ยังไม่ตั้ง) — บอกชื่อของที่ขาด ไม่ใช่แค่ "ไม่ครบ" */
+function missingOf(c){ if(!c) return []; const m=[]; if(String(c['ข้อมูลโอน']||'').indexOf('⛔')===0) m.push('บัญชีรับโอน'); if(String(c['ตรวจสลิป']||'').indexOf('⛔')===0) m.push('ตรวจสลิปอัตโนมัติ'); if(!m.length&&String(c['พร้อมเปิด']||'').indexOf('⛔')===0) m.push('ค่าบางอย่าง'); return m; }
+function pendingCount(id){ const c=CACHE[id]; if(!c) return null; return (c.queue||[]).length+(c.orders||[]).length; }
+function urgentCount(id){ const c=CACHE[id]; if(!c) return 0; return (c.queue||[]).filter(it=>!/เช็คค่าส่งด่วน/.test(String(it.reason||''))).length; }
+
+/* ── ร้าน ── */
+async function loadShops(){
+  try{
+    const r=await fetchJ(W+'/ctl/shops?key='+enc(KEY));
+    if(r.ok){ SHOPS=r.d['ร้าน']||[]; try{ localStorage.setItem('g2shops',JSON.stringify(SHOPS)); }catch(e){} }
+    else throw new Error('shops '+r.status);
+  }catch(e){ if(e.message==='forbidden') return; try{ SHOPS=JSON.parse(localStorage.getItem('g2shops')||'[]'); }catch(e2){ SHOPS=[]; } if(!SHOPS.length) toast('โหลดรายชื่อร้านไม่ได้',1); }
+  if(SHOPS.length && !SHOPS.some(s=>s['ร้าน']===SHOP)) SHOP=SHOPS[0]['ร้าน'];
+  renderShops(); renderHeader();
+}
+function renderShops(){
+  const items=SHOPS.map(s=>{ const id=s['ร้าน'], col=shopColorOf(id), on=id===SHOP, n=pendingCount(id), u=urgentCount(id);
+    const miss=missingOf(s), warn=miss.length>0;
+    const badge='<span class="badge '+(u>0?'':'o')+(n?'':' z')+'" id="bdg_'+sid(id)+'">'+(n==null?'':n)+'</span>';
+    return {id,col,on,warn,miss,badge,name:s['ชื่อ']||id};
+  });
+  $('shoplbl').textContent='ร้านที่ฉันดูแล ('+SHOPS.length+' ร้าน)';
+  $('shoplist').innerHTML=items.map(it=>'<div class="shop'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span><span class="n">'+esc(it.name)+(it.warn?' <span class="c" title="ยังไม่ตั้ง: '+esc(it.miss.join(' + '))+'">⚠️</span>':'')+'</span>'+it.badge+'</div>').join('')||'<div class="empty">ไม่มีร้านในสิทธิ์</div>';
+  $('chipstrip').innerHTML=items.map(it=>'<span class="schip'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span>'+esc(it.name)+(it.warn?' ⚠️':'')+it.badge.replace('id="bdg_','id="bdgm_')+'</span>').join('');
+}
+function renderHeader(){
+  const c=shopRec(SHOP); const col=shopColorOf(SHOP);
+  $('hname').textContent=shopLabel(); $('hdot').style.background=col; $('hdot').style.color=col;
+  const miss=missingOf(c);
+  $('pillready').classList.toggle('hidden',!miss.length);
+  $('pillready').textContent='⚠️ ยังไม่ตั้ง: '+miss.join(' + ');
+  $('pillready').title='กดเพื่อไปหน้าตั้งค่า · '+(c?('ข้อมูลโอน: '+(c['ข้อมูลโอน']||'-')+' · ตรวจสลิป: '+(c['ตรวจสลิป']||'-')):'');
+  $('noticeshop').textContent=SCOPE==='one'?shopLabel():'ทุกร้าน ('+SHOPS.length+')';
+  $('dangershop').textContent=shopLabel();
+  document.title=shopLabel()+' — จีทู หลังบ้าน v2';
+}
+function selectShop(id){
+  if(!id) return;
+  const changed=id!==SHOP;
+  SHOP=id; localStorage.setItem('g2shop',id);
+  if(changed){ CHATS=[]; PENDING={}; CUR_UID=''; closeConv(); }
+  renderShops(); renderHeader();
+  refresh(true);                                            // ✅ ดึงทุกอย่างของร้านใหม่ (แก้บั๊กเก่าที่ต้องรีโหลดหน้า)
+  if(TAB===3) loadSettings();
+  if(changed) toast('สลับไปร้าน '+shopLabel()+' แล้ว');
+}
+
+/* ── แท็บ ── */
+function go(n){
+  TAB=n;
+  [1,2,3].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
+  window.scrollTo(0,0);
+  if(n===2) renderChats();
+  if(n===3) loadSettings();
+}
+
+/* ── k338 PENDING: กด mute/unmute แล้วให้ชนะผล server 90 วิ ── */
+let PENDING={};
+function pendSet(uid,val){ PENDING[uid]={muted:val,until:Date.now()+90000}; }
+function pendApply(list){ const now=Date.now(); return list.map(c=>{ const p=PENDING[c.uid]; if(!p) return c; if(now>p.until||c.muted===p.muted){ delete PENDING[c.uid]; return c; } const x=Object.assign({},c,{muted:p.muted}); if(p.muted&&!x.reason) x.reason='แอดมินคุมอยู่'; return x; }); }
+
+/* ── โหลด board ของร้านปัจจุบัน ── */
+let _busy=false, _poll=null, _pollAll=null;
+function inputFocused(){ const a=document.activeElement; return !!(a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type!=='file'&&a.type!=='checkbox'))); }
+async function refresh(force){
+  if(!KEY) return;
+  if(_busy) return;
+  if(!force && inputFocused()){ $('pillpoll').textContent='หยุดอัปเดตชั่วคราว (กำลังพิมพ์)'; return; }
+  _busy=true; const shop=SHOP;
+  try{
+    const r=await fetchJ(q('/ctl/board'));
+    if(!r.ok) throw new Error('board '+r.status);
+    if(shop!==SHOP) return;                                 // สลับร้านระหว่างรอ — ทิ้งผลเก่า
+    const b=r.d; BUILD=b.build||BUILD;
+    CACHE[shop]={queue:b.queue||[],orders:b.orders||[],chats:b.chats||[],on:b.on!==false,muted:b.muted||0,notice:b['ประกาศ']||'',t:Date.now()};
+    ON=b.on!==false; CHATS=pendApply(b.chats||[]);
+    renderBot(); renderWork(); renderChats(); renderShops();
+    $('pillpoll').textContent='อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){ if(e.message!=='forbidden'){ $('pillpoll').textContent='⚠️ โหลดไม่ได้ ลองใหม่'; } }
+  finally{ _busy=false; }
+}
+function manualRefresh(){ refresh(true); if(TAB===3) loadSettings(); toast('รีเฟรชแล้ว'); }
+function renderBot(){
+  const p=$('pillbot'); p.textContent=ON?'● จีทูกำลังตอบลูกค้า':'● จีทูปิดอยู่ — แอดมินคุมเอง'; p.className='pill '+(ON?'ok':'off');
+  $('pillbuild').textContent='build '+(BUILD||'—');
+  const t=$('togglebtn'); t.textContent=ON?'⏸ ปิดจีทูทั้งร้าน':'▶️ เปิดจีทูกลับมาตอบ'; t.className=ON?'d big':'g big';
+}
+/* นับทุกร้านทุก 60 วิ (board ต่อร้าน 1 request — ป้ายตัวเลขข้างชื่อร้าน) */
+async function refreshAllCounts(){
+  if(!KEY||!SHOPS.length) return;
+  const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
+  await Promise.all(others.map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,t:Date.now()}; }catch(e){} }));
+  renderShops();
+}
+
+/* ── แท็บ งาน ── */
+const URG_RE=/สลิป|ยกเลิก|คืนเงิน|ของเสีย|หลังการขาย|เคลม|ของไม่|ไม่ถึง|ส่งผิด|code 1\d{3}|⛔|⚠/;
+const FEE_RE=/เช็คค่าส่งด่วน/;
+const BAD_RE=/สลิปมีปัญหา|ยอดไม่ตรง|สลิปซ้ำ|code 1\d{3}|ตรวจไม่ผ่าน|เช็คด่วน|⛔/;
+const ACKED={};                                            // ออเดอร์ที่กด "เช็คแล้ว ยอดถูก" (client เท่านั้น เหมือนแผงเก่า)
+function doneKey(){ return 'g2v2done:'+SHOP+':'+new Date().toISOString().slice(0,10); }
+function bumpDone(){ try{ localStorage.setItem(doneKey(),String((parseInt(localStorage.getItem(doneKey())||'0',10)||0)+1)); }catch(e){} }
+function doneToday(){ try{ return parseInt(localStorage.getItem(doneKey())||'0',10)||0; }catch(e){ return 0; } }
+const _last={};
+function setHTML(id,html){ if(_last[id]===html) return; _last[id]=html; $(id).innerHTML=html; }
+function renderWork(){
+  const c=CACHE[SHOP]||{queue:[],orders:[]};
+  const byOld=(a,b)=>(a.t||0)-(b.t||0);
+  const qAll=c.queue.filter(it=>!FEE_RE.test(String(it.reason||''))).sort(byOld);
+  const qWait=qAll.filter(it=>!it.accepted);                // ยังไม่มีใครรับ
+  const qAcc=qAll.filter(it=>!!it.accepted);                // รับแล้ว (แยกกอง ไม่ปนกับที่รอ)
+  const qFee=c.queue.filter(it=>FEE_RE.test(String(it.reason||''))).sort(byOld);
+  const orders=(c.orders||[]).slice().sort(byOld);
+  const total=qWait.length+qAcc.length+qFee.length+orders.length;
+  $('stat').innerHTML='<span class="'+(qWait.length?'bad':'')+'"><b>'+qWait.length+'</b>ลูกค้ารอคน</span><span class="'+(qAcc.length?'acc':'')+'"><b>'+qAcc.length+'</b>รับแล้ว</span><span class="'+(qFee.length?'warn':'')+'"><b>'+qFee.length+'</b>รอค่าส่งด่วน</span><span class="'+(orders.length?'warn':'')+'"><b>'+orders.length+'</b>รอลง XSelly</span><span class="ok"><b>'+doneToday()+'</b>เสร็จวันนี้ (เครื่องนี้)</span>'+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
+  $('tcount').textContent=total||''; const bd=$('bd1'); bd.textContent=total>99?'99+':total; bd.classList.toggle('z',total===0);
+  $('cnt_q').textContent=qWait.length||''; $('cnt_a').textContent=qAcc.length||''; $('cnt_f').textContent=qFee.length||''; $('cnt_o').textContent=orders.length||'';
+  const ns=$('noticestrip'); if(c.notice){ ns.textContent='📣 ประกาศที่ตั้งไว้: '+c.notice; ns.classList.remove('hidden'); } else ns.classList.add('hidden');
+
+  const rowQ=it=>{
+    const rs=String(it.reason||''), urg=URG_RE.test(rs), w=waitMin(it.t);
+    const tip=urg?(/สลิป/.test(rs)?'เช็คเงินเข้าบัญชีจริงก่อนกดเก็บเคส':/ยกเลิก/.test(rs)?'ลูกค้าขอยกเลิก — เช็คว่าลงออเดอร์ไปแล้วหรือยัง':'ตอบลูกค้าใน LINE ให้จบก่อนกดเก็บเคส'):'';
+    return '<div class="row'+(urg?' urg':'')+(it.accepted?' acc':'')+'" id="qc_'+sid(it.uid)+'"><div class="d">'
+      +(urg?'<span class="tag urg">ด่วน</span>':'')+(it.accepted?'<span class="tag acc">👨‍💼 รับแล้ว</span>':'')
+      +'<span class="who">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
+      +'<div class="why">'+esc(rs)+'</div>'+(it.msg?'<div class="msg">“'+esc(it.msg)+'”</div>':'')
+      +(urg?'<div class="owarn"><span class="blink">🚨</span><span>'+esc(tip)+'</span></div>':'')
+      +'</div><div class="acts">'
+      +(it.accepted?'<button class="p big" disabled>👨‍💼 กำลังดูแล</button>':'<button class="p big" onclick="acceptCase(\''+esc(it.uid)+'\',this)">👨‍💼 รับเคส</button>')
+      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬 เปิดแชท</button>'
+      +'<button class="g big" onclick="markDone(\''+esc(it.uid)+'\','+(urg?1:0)+',this)">✅ เก็บเคส</button></div></div>';
+  };
+  setHTML('sec_q', qWait.length? qWait.map(rowQ).join('') : '<div class="empty">✅ ไม่มีลูกค้ารอคน — จีทูดูแลอยู่ทั้งหมด</div>');
+  setHTML('sec_a', qAcc.length? qAcc.map(rowQ).join('') : '<div class="empty">ไม่มีเคสที่รับไว้ — กด "รับเคส" ด้านบนแล้วเคสจะย้ายมาที่นี่</div>');
+
+  setHTML('sec_f', qFee.length? qFee.map(it=>{
+    const w=waitMin(it.t); const nm=String(it.name||'').trim();
+    // 🗺 ลิงก์แผนที่: ถ้ามี lat/lng ใช้เลย · ไม่มีก็ดึงจากข้อความที่จีทูใส่มา (https://www.google.com/maps?q=lat,lng) แล้วซ่อนลิงก์ยาว ๆ ออกจากข้อความ
+    let mapUrl=(it.lat&&it.lng)?'https://maps.google.com/?q='+enc(it.lat+','+it.lng):''; let msg=String(it.msg||'');
+    if(!mapUrl){ const m=msg.match(/https?:\/\/[^\s"'<>]*maps[^\s"'<>]*/i); if(m){ mapUrl=m[0]; msg=msg.replace(m[0],'').replace(/^📍\s*$/m,''); } }
+    msg=msg.replace(/ก๊อปลิงก์เปิดใน Grab แล้วแจ้งราคาลูกค้าได้เลย/,'').trim();
+    const mapBtn=mapUrl?'<a class="mapbtn" href="'+esc(mapUrl)+'" target="_blank" rel="noopener">🗺 เปิดแผนที่</a>':'';
+    return '<div class="row" id="qc_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nm||'ลูกค้า (ไม่ทราบชื่อ)')+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
+      +'<div class="why">📍 '+esc(it.reason||'')+(it.km?' · ~'+esc(it.km)+' กม.':'')+'</div>'+(msg?'<div class="msg">“'+esc(msg)+'”</div>':'')
+      +'<div class="mut" style="margin-top:6px;">เปิดแผนที่ → ดูค่าส่งในแอปแกร็บ → กรอกตัวเลข → ส่งราคา (ระบบคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง)</div></div>'
+      +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
+      +'<button class="s" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬</button>'
+      +'<button class="s" onclick="markDone(\''+esc(it.uid)+'\',0,this)">✅ เก็บเคส</button></div></div>';
+  }).join('') : '<div class="empty">ไม่มีเคสรอค่าส่งด่วน</div>');
+
+  setHTML('sec_o', orders.length? orders.map(it=>{
+    const bid='b_'+sid(it.uid), b=String(it.block||''), st=String(it.status||''), bad=BAD_RE.test(st), ok=!!ACKED[it.uid];
+    const why=bad?(/code 1014/.test(st)?'สลิปนี้เคยถูกใช้มาแล้ว (สลิปซ้ำ)':/ยอดไม่ตรง/.test(st)?'ยอดเงินในสลิปไม่ตรงกับยอดออเดอร์':'ระบบตรวจสลิปไม่ผ่าน'):'';
+    const tag=bad?'<span class="tag urg">'+esc(st)+'</span>':'<span class="tag pay">'+esc(st)+'</span>';
+    return '<div class="row'+(bad?' bad':'')+(ok?' ok':'')+'" id="oc_'+sid(it.uid)+'"><div class="d">'+tag+'<span class="who">'+esc(it.name||'ลูกค้า')+'</span> <span class="t">· '+esc(timeAgo(it.t))+'</span>'
+      +(bad?'<div class="owarn"><span class="blink">🚨</span><span>ห้ามลงออเดอร์นี้จนกว่าจะเช็คเงินเข้าจริง — '+esc(why)+'</span></div>':'')
+      +'<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'+chipsFromBlock(b)+'</div>'
+      +'<div class="acts">'
+      +(bad?'<button class="w oack" onclick="ackBad(\''+esc(it.uid)+'\')">🔓 เช็คแล้ว ยอดถูก</button>':'')
+      +'<button class="big" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอกทั้งออเดอร์</button>'
+      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬</button>'
+      +'<button class="g big odone" onclick="orderDone(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\',this)">✅ ลง XSelly แล้ว</button></div></div>';
+  }).join('') : '<div class="empty">ยังไม่มีออเดอร์รอลง</div>');
+}
+function chipsFromBlock(b){
+  const pick=re=>{ const m=String(b||'').match(re); return m?m[1].trim():''; };
+  const n=pick(/ชื่อผู้รับ:[ \t]*(.+)/), t=pick(/เบอร์:[ \t]*(.+)/), a=pick(/ที่อยู่:[ \t]*(.+)/), items=String(b||'').split('\n').filter(l=>/^-\s/.test(l.trim())).join('\n');
+  let h=''; const ch=(lb,v)=>'<button class="chip" data-v="'+esc(v)+'" onclick="copyTxt(this,this.dataset.v)">'+lb+'</button>';
+  if(n) h+=ch('👤 ชื่อ',n); if(t) h+=ch('📞 เบอร์',t); if(a) h+=ch('📍 ที่อยู่',a); if(items) h+=ch('🛒 รายการ',items);
+  return h?'<div class="chips">'+h+'</div>':'';
+}
+function copyTxt(btn,txt){ navigator.clipboard.writeText(txt).then(()=>{ const o=btn.textContent; btn.textContent='✅'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o;btn.classList.remove('ok');},1200); }).catch(()=>toast('คัดลอกไม่ได้',1)); }
+function copyOrder(id,btn){ const el=$(id); if(!el) return; navigator.clipboard.writeText(el.innerText).then(()=>{ const o=btn.textContent; btn.textContent='✅ คัดลอกแล้ว'; setTimeout(()=>{btn.textContent=o;},1500); }).catch(()=>toast('คัดลอกไม่ได้',1)); }
+
+/* 👨‍💼 รับเคส = POST /ctl/accept?uid */
+async function acceptCase(uid,el){
+  try{ const r=await fetchJ(q('/ctl/accept?uid='+enc(uid)),{method:'POST'});
+    if(r.ok){ if(el){ el.disabled=true; el.textContent='👨‍💼 กำลังดูแล'; } const c=CACHE[SHOP]; if(c) c.queue.forEach(it=>{ if(it.uid===uid) it.accepted=Date.now(); }); toast('รับเคสแล้ว — ระบบจะไม่ส่งข้อเสนอเอวาหาลูกค้าคนนี้'); }
+    else toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้ง',1);
+  }catch(e){ if(e.message!=='forbidden') toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้ง',1); }
+}
+/* ✅ เก็บเคส (k454) = /ctl/done + /ctl/unmute1 คู่ขนาน · ตัวใดพลาด = ไม่โชว์สำเร็จ (perf2) */
+async function markDone(uid,urg,el){
+  if(urg && !confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย (ร้าน '+shopLabel()+')\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหม?\nตกลง = เก็บเคสออกจากคิว และจีทูจะกลับมาตอบแชทนี้ต่อ')) return;
+  if(el){ el.disabled=true; el.textContent='กำลังเก็บ…'; }
+  const rs=await Promise.allSettled([fetch(q('/ctl/done?uid='+enc(uid)),{method:'POST'}), fetch(q('/ctl/unmute1?uid='+enc(uid)),{method:'POST'})]);
+  const okDone=rs[0].status==='fulfilled'&&rs[0].value.ok, okUn=rs[1].status==='fulfilled'&&rs[1].value.ok;
+  if(rs.some(x=>x.status==='fulfilled'&&x.value.status===403)){ forbidden(); return; }
+  if(okDone&&okUn){ pendSet(uid,false); setMuted(uid,false); bumpDone(); const c=CACHE[SHOP]; if(c) c.queue=c.queue.filter(it=>it.uid!==uid); renderWork(); toast('เก็บเคสแล้ว — จีทูกลับมาดูแลแชทนี้ต่อ ✨'); }
+  else{ if(el){ el.disabled=false; el.textContent='✅ เก็บเคส'; } toast('เก็บเคสไม่ครบ: '+(okDone?'':'เก็บเคส(done) พลาด ')+(okUn?'':'เปิดจีทู(unmute1) พลาด')+' — ลองใหม่อีกครั้ง',1); }
+  setTimeout(()=>refresh(true),1200);
+}
+/* 🛵 ค่าส่งด่วน = GET /expfee?uid&fee (k87) */
+async function sendExpFee(uid,btn){
+  const inp=$('ef_'+sid(uid)); const fee=parseInt(String(inp&&inp.value||'').replace(/[^0-9]/g,''),10);
+  if(!(fee>0)){ toast('กรอกค่าส่งเป็นตัวเลขก่อน (ตามแอปแกร็บเป๊ะ ๆ)',1); if(inp) inp.focus(); return; }
+  if(!confirm('ส่งค่าส่งด่วน '+fee+' บาท ให้ลูกค้า (ร้าน '+shopLabel()+')?\n\nระบบจะคิดยอดรวมใหม่และส่งการ์ดยืนยันให้อัตโนมัติ')) return;
+  btn.disabled=true; btn.textContent='กำลังส่ง…';
+  try{ const r=await fetchJ(q('/expfee?uid='+enc(uid)+'&fee='+fee));
+    if(r.ok){ btn.textContent='ส่งแล้ว ✅'; toast((r.d['ผล']||'ส่งแล้ว')+(r.d['ยอดรวมใหม่']?'\nยอดรวมใหม่ '+r.d['ยอดรวมใหม่']+' บาท':'')); setTimeout(()=>refresh(true),1200); }
+    else{ btn.disabled=false; btn.textContent='ส่งราคา'; toast(r.d['ผล']||'ส่งไม่สำเร็จ',1); }
+  }catch(e){ btn.disabled=false; btn.textContent='ส่งราคา'; if(e.message!=='forbidden') toast('ส่งไม่สำเร็จ ลองใหม่',1); }
+}
+/* 🔓 ack สลิปมีปัญหา (client เท่านั้น เหมือนแผงเก่า) */
+function ackBad(uid){
+  if(!confirm('ยืนยันว่าเช็คแล้วว่าเงินเข้าบัญชีจริง (ร้าน '+shopLabel()+')?\n\nถ้ายังไม่แน่ใจ กดยกเลิกแล้วเช็คก่อน')) return;
+  ACKED[uid]=true; const el=$('oc_'+sid(uid)); if(el) el.classList.add('ok');
+}
+/* ✅ ลง XSelly แล้ว = POST /ctl/orderdone?uid */
+async function orderDone(uid,name,el){
+  const rec=((CACHE[SHOP]||{}).orders||[]).filter(o=>o.uid===uid)[0];
+  const isBad=rec?BAD_RE.test(String(rec.status||'')):false;         // ตัดสินจากข้อมูล ไม่ใช่ class บนจอ
+  if(isBad&&!ACKED[uid]){ toast('⛔ ออเดอร์นี้สลิปมีปัญหา — กด "🔓 เช็คแล้ว ยอดถูก" ก่อนถึงจะลงได้',1); return; }
+  if(!confirm('ลง XSelly แล้ว — เอาออเดอร์ของ "'+(name||uid.slice(-6))+'" ออกจากคิวร้าน '+shopLabel()+'?')) return;
+  if(el){ el.disabled=true; el.textContent='กำลังเก็บ…'; }
+  try{ const r=await fetchJ(q('/ctl/orderdone?uid='+enc(uid)),{method:'POST'});
+    if(r.ok){ bumpDone(); const c=CACHE[SHOP]; if(c) c.orders=c.orders.filter(it=>it.uid!==uid); renderWork(); renderShops(); toast('เก็บออเดอร์แล้ว'); }
+    else{ if(el){ el.disabled=false; el.textContent='✅ ลง XSelly แล้ว'; } toast('ทำรายการไม่สำเร็จ ('+r.status+')',1); }
+  }catch(e){ if(el){ el.disabled=false; el.textContent='✅ ลง XSelly แล้ว'; } if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ',1); }
+}
+
+/* ── แท็บ แชท ── */
+function setFilter(f){ FILTER=f; document.querySelectorAll('.filters .chip').forEach(c=>c.classList.toggle('on',c.dataset.f===f)); renderChats(); }
+function renderChats(){
+  const kw=($('csearch').value||'').trim().toLowerCase();
+  const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1) return false; return true; });
+  $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
+  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')"><div class="cn"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
+    +(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
+}
+function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
+/* ⏸ = POST /ctl/mute1 · ▶️ = POST /ctl/unmute1 (k161 optimistic + k338 pending) */
+async function mute1(uid,btn){
+  if(btn) btn.textContent='⏸…';
+  pendSet(uid,true); setMuted(uid,true);
+  try{ const r=await fetchJ(q('/ctl/mute1?uid='+enc(uid)),{method:'POST'}); if(!r.ok) throw new Error('mute '+r.status); toast('ปิดจีทูแชทนี้แล้ว — แอดมินคุมเอง'); }
+  catch(e){ delete PENDING[uid]; setMuted(uid,false); if(e.message!=='forbidden') toast('ปิดไม่สำเร็จ กดใหม่อีกครั้ง',1); return; }
+  setTimeout(()=>refresh(true),1500);
+}
+async function unmute1(uid,btn){
+  if(btn) btn.textContent='▶️…';
+  pendSet(uid,false); setMuted(uid,false);
+  try{ const r=await fetchJ(q('/ctl/unmute1?uid='+enc(uid)),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('ให้เอวาตอบแชทนี้ต่อแล้ว'); }
+  catch(e){ delete PENDING[uid]; setMuted(uid,true); if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ กดใหม่อีกครั้ง',1); return; }
+  setTimeout(()=>refresh(true),1500);
+}
+/* 💬 เปิดบทสนทนา (จากทุกแท็บ) — ใช้ /ctl/log + /ctl/conv เหมือนแผงเก่า */
+function openConvFrom(uid,name){ if(TAB!==2) go(2); showConv(uid,name); }
+function chatRec(uid){ return CHATS.filter(c=>c.uid===uid)[0]; }
+function renderConvActs(){
+  const c=chatRec(CUR_UID); const a=$('convacts'); const st=$('convstate');
+  a.classList.remove('hidden');
+  const muted=c?!!c.muted:false;
+  st.classList.remove('hidden'); st.textContent=c?(muted?'⏸ จีทูหยุดตอบ':'🤖 เอวาตอบอยู่'):'ไม่อยู่ใน 30 แชทล่าสุด'; st.className='pill '+(c?(muted?'off':'ok'):'');
+  a.innerHTML=(muted?'<button class="g" onclick="unmute1(\''+esc(CUR_UID)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="w" onclick="mute1(\''+esc(CUR_UID)+'\',this)">⏸ ปิดจีทูแชทนี้</button>');
+  const ord=((CACHE[SHOP]||{}).orders||[]).filter(o=>o.uid===CUR_UID)[0];
+  $('convchips').innerHTML=ord?chipsFromBlock(ord.block).replace('<div class="chips">','').replace(/<\/div>$/,''):'<span class="mut">ยังไม่มีออเดอร์ค้างของลูกค้าคนนี้ — ชิปคัดลอกจะขึ้นเมื่อมีออเดอร์</span>';
+  $('convline').classList.toggle('hidden',!SHOP_LINE_ID[String(SHOP).toLowerCase()]);
+}
+async function showConv(uid,name){
+  CUR_UID=uid; CUR_NAME=name||'';
+  $('conv').classList.add('open'); $('convname').textContent='💬 '+(name||'ลูกค้า'); $('convbody').innerHTML='<div class="empty">กำลังโหลด…</div>';
+  renderChats(); renderConvActs();
+  try{
+    const rs=await Promise.all([fetch(q('/ctl/log?uid='+enc(uid))).then(r=>r.json()).catch(()=>({})), fetch(q('/ctl/conv?uid='+enc(uid))).then(r=>r.json()).catch(()=>({}))]);
+    if(uid!==CUR_UID) return;
+    const lg=rs[0].log||[], m=rs[1]['บทสนทนา']||[];
+    const fmt=t=>{ const d=new Date(t); return d.getDate()+'/'+(d.getMonth()+1)+' '+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); };
+    if(lg.length){
+      $('convbody').innerHTML='<div class="empty">🗒 ประวัติย้อนหลัง '+lg.length+' ข้อความ (เก็บ 30 วัน)</div>'+lg.map(x=>'<div class="bwho" style="text-align:right">ลูกค้า · '+fmt(x.t)+'</div><div class="bub u">'+esc(x.u)+'</div><div class="bwho">จีทู</div><div class="bub j">'+esc(x.b)+'</div>').join('');
+    } else if(m.length){
+      $('convbody').innerHTML=m.map(x=>'<div class="bwho" style="text-align:'+(x.who==='ลูกค้า'?'right':'left')+'">'+esc(x.who)+'</div><div class="bub '+(x.who==='ลูกค้า'?'u':'j')+'">'+esc(x.text)+'</div>').join('');
+    } else $('convbody').innerHTML='<div class="empty">ยังไม่มีบทสนทนาเก็บไว้</div>';
+    const cb=$('convbody'); cb.scrollTop=cb.scrollHeight;
+  }catch(e){ $('convbody').innerHTML='<div class="empty">โหลดไม่ได้</div>'; }
+}
+function closeConv(){ $('conv').classList.remove('open'); if(!CUR_UID){ return; } CUR_UID=''; $('convname').textContent='เลือกแชทจากรายการซ้าย'; $('convbody').innerHTML='<div class="empty">ยังไม่ได้เลือกแชท</div>'; $('convacts').classList.add('hidden'); $('convstate').classList.add('hidden'); $('convchips').innerHTML=''; $('convline').classList.add('hidden'); renderChats(); }
+/* ↗ LINE OA (panel-chat1) — mapping เดิมของแผงเก่า */
+const SHOP_LINE_ID={ abc12:'U4fcadbe60766cd0befd035ef0df23bbb' };
+function openLineChat(){
+  const oa=SHOP_LINE_ID[String(SHOP).toLowerCase()]; if(!CUR_UID||!oa){ toast('ยังไม่ตั้งค่า LINE OA id ของร้านนี้',1); return; }
+  if(CUR_NAME){ try{ navigator.clipboard.writeText(CUR_NAME).catch(()=>{}); }catch(e){} }
+  window.open('https://chat.line.biz/'+enc(oa)+'/chat/'+enc(CUR_UID),'_blank','noopener');
+  toast('เปิด LINE OA'+(CUR_NAME?' · คัดลอกชื่อแล้ว':''));
+}
+
+/* ── แท็บ ตั้งค่า ── */
+async function loadSettings(){ loadNotice(); loadPromo(); loadPay(); loadHealth(); }
+function setScope(s){ SCOPE=s; $('sc1').classList.toggle('on',s==='one'); $('sc2').classList.toggle('on',s==='all'); renderHeader(); $('noticeres').innerHTML=''; }
+async function loadNotice(){ try{ const r=await fetchJ(q('/ctl/notice')); if(r.ok&&!inputFocused()) $('notice').value=r.d['ประกาศ']||''; }catch(e){} }
+/* 📣 POST /ctl/notice body=ข้อความดิบ · "ทุกร้าน" = วนยิงทีละร้านในรายการ sidebar · แจ้งผลรายร้าน */
+async function saveNotice(){
+  const txt=$('notice').value, has=!!txt.trim();
+  const targets=SCOPE==='all'?SHOPS.map(s=>s['ร้าน']):[SHOP];
+  if(!targets.length){ toast('ไม่มีร้านให้ตั้ง',1); return; }
+  const names=targets.map(id=>shopLabel(id)).join(', ');
+  if(!confirm((has?'ตั้งประกาศให้ ':'ยกเลิกประกาศของ ')+(targets.length>1?targets.length+' ร้าน: ':'ร้าน ')+names+' ?\n\n'+(has?txt.trim():'(ล้างประกาศ — จีทูจะเลิกพูดเรื่องนี้)')+'\n\nมีผลกับลูกค้าทุกคนของร้านที่เลือก')) return;
+  $('noticeres').innerHTML='<span class="mut">กำลังบันทึก…</span>';
+  const res=await Promise.all(targets.map(async id=>{ try{ const r=await fetch(qs('/ctl/notice',id),{method:'POST',body:txt}); return {id,ok:r.ok,status:r.status}; }catch(e){ return {id,ok:false,status:'เน็ต'}; } }));
+  const fail=res.filter(x=>!x.ok);
+  $('noticeres').innerHTML=res.map(x=>'<div class="'+(x.ok?'okk':'bd')+'">'+(x.ok?'✅':'⛔')+' '+esc(shopLabel(x.id))+(x.ok?'':' — ไม่สำเร็จ ('+esc(x.status)+')')+'</div>').join('');
+  if(fail.some(x=>x.status===403)) { forbidden(); return; }
+  if(!fail.length) toast(has?'จีทูรับรู้ประกาศแล้ว ('+res.length+' ร้าน)':'ยกเลิกประกาศแล้ว ('+res.length+' ร้าน)');
+  else toast('บันทึกไม่ครบ — พลาด: '+fail.map(x=>shopLabel(x.id)).join(', '),1);
+  refresh(true);
+}
+/* 🎁 โปร — ฟิลด์เดียวกับแผงเก่า (k399) · worker ตรวจก่อนบันทึก */
+function pmToBox(v){ return String(v||'').trim().replace(' ','T').replace(/\//g,'-').slice(0,16); }
+function pmFromBox(v){ return String(v||'').trim().replace('T',' ').replace(/-/g,'/'); }
+async function loadPromo(){
+  try{ const r=await fetchJ(q('/ctl/promo')); if(!r.ok) throw 0; const d=r.d, c=d['โปร']||{};
+    $('promostatus').textContent='สถานะตอนนี้: '+(d['สถานะ']||'-')+(d['ข้อความที่จีทูจะใช้ตอบ']&&d['ข้อความที่จีทูจะใช้ตอบ']!=='— ไม่มี —'?' · จีทูจะตอบว่า: '+d['ข้อความที่จีทูจะใช้ตอบ']:'');
+    if(inputFocused()) return;
+    $('pmActive').checked=c.active===true; $('pmName').value=c.name||''; $('pmMin').value=(c.minOrder==null?'':c.minOrder);
+    $('pmStart').value=pmToBox(c.start); $('pmEnd').value=pmToBox(c.end); $('pmMsg').value=c.msg||''; $('pmExclude').value=(c.exclude||[]).join(', ');
+  }catch(e){ $('promostatus').textContent='สถานะตอนนี้: อ่านไม่ได้'; }
+}
+async function savePromo(){
+  const cfg={v:1,active:$('pmActive').checked,name:$('pmName').value.trim(),type:$('pmType').value,minOrder:Number($('pmMin').value),methods:[$('pmMethod').value],start:pmFromBox($('pmStart').value),end:pmFromBox($('pmEnd').value),msg:$('pmMsg').value.trim(),exclude:$('pmExclude').value.split(',').map(x=>x.trim()).filter(Boolean)};
+  if(cfg.active && !confirm('เปิดโปรของร้าน "'+shopLabel()+'" ?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+'\nซื้อครบ '+cfg.minOrder+' บาท = ส่งฟรีพัสดุ\nถึง '+cfg.end+'\n\nมีผลกับยอดเงินที่ลูกค้าจ่ายจริง')) return;
+  try{ const r=await fetchJ(q('/ctl/promo'),{method:'POST',body:JSON.stringify(cfg)});
+    if(!r.ok||r.d.ok===0){ toast('⛔ '+(r.d['ผิดตรงไหน']||'บันทึกไม่สำเร็จ'),1); return; }
+    toast('บันทึกโปรแล้ว — '+(r.d['สถานะ']||'')); loadPromo();
+  }catch(e){ if(e.message!=='forbidden') toast('บันทึกไม่สำเร็จ',1); }
+}
+async function clearPromo(){
+  if(!confirm('ลบโปรของร้าน "'+shopLabel()+'" ทิ้ง?\n\nค่าส่งจะกลับไปใช้กฎเดิมของร้านทันที')) return;
+  try{ const r=await fetchJ(q('/ctl/promo'),{method:'POST',body:'null'}); if(!r.ok||r.d.ok===0){ toast('ลบไม่สำเร็จ',1); return; } toast('ยกเลิกโปรแล้ว'); loadPromo(); }
+  catch(e){ if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ',1); }
+}
+/* 💳 บัญชี GET/POST /ctl/payinfo */
+async function loadPay(){
+  try{ const r=await fetchJ(q('/ctl/payinfo')); if(!r.ok) throw 0; const d=r.d; if(!inputFocused()) $('payinfo').value=d['ข้อมูลโอน']||'';
+    const h=(d['แก้ล่าสุด']||[])[0]; $('paysrc').textContent='ที่มา: '+(d['แหล่งที่มา']||'-')+(h?' · แก้ล่าสุด '+h['เวลา']:''); }catch(e){ $('paysrc').textContent='อ่านไม่ได้'; }
+}
+async function savePay(){
+  const v=$('payinfo').value.trim();
+  if(v && !confirm('💸 เปลี่ยนเลขบัญชีรับโอนของร้าน "'+shopLabel()+'" ?\n\n'+v+'\n\nลูกค้าทุกคนของร้านนี้หลังจากนี้จะโอนเข้าบัญชีนี้ทันที')) return;
+  if(!v && !confirm('ล้างเลขบัญชีของร้าน "'+shopLabel()+'" ?\n\nจะกลับไปใช้บัญชีตั้งต้นใน Cloudflare')) return;
+  try{ const r=await fetchJ(q('/ctl/payinfo'),{method:'POST',body:v});
+    if(!r.ok||r.d.error){ toast(r.d.error||'บันทึกไม่สำเร็จ',1); return; }
+    toast('บันทึกเลขบัญชีสำเร็จ — การ์ดโอนเงินหลังจากนี้ใช้บัญชีใหม่ทันที'); loadPay();
+  }catch(e){ if(e.message!=='forbidden') toast('บันทึกไม่สำเร็จ',1); }
+}
+/* ❤️ GET /ctl/health → build pill + อายุสต็อก + JSON ดิบ */
+async function loadHealth(){
+  try{ const r=await fetchJ(q('/ctl/health')); if(!r.ok) throw 0; const d=r.d;
+    BUILD=d.build||BUILD; renderBot();
+    $('stockage').textContent='อายุสต็อก: '+(d['สต็อกอัปเดตล่าสุด']||'ไม่ทราบ')+' · '+(d['สต็อกในระบบ']||'')+' · ซิงก์ฐาน '+(d['ซิงก์ไฟล์ฐานล่าสุด']||'-');
+    $('healthraw').textContent=JSON.stringify(d,null,1);
+  }catch(e){ $('healthraw').textContent='เช็คไม่ได้'; }
+}
+/* 📦 สต็อก — parser เดิมของแผงเก่า · โหลด SheetJS เฉพาะตอนเลือกไฟล์ (หน้าไม่พึ่ง CDN ตอนใช้งานปกติ) */
+let _stockData=null,_skuData=null;
+function ensureXLSX(){ return new Promise((res,rej)=>{ if(window.XLSX) return res(); const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload=()=>res(); s.onerror=()=>rej(new Error('โหลดตัวอ่าน Excel ไม่ได้ (ต้องต่อเน็ต)')); document.head.appendChild(s); }); }
+async function pickStock(){
+  const f=$('stockfile').files[0]; if(!f) return;
+  $('stpre').textContent='กำลังอ่านไฟล์…'; $('stbtn').classList.add('hidden');
+  try{ await ensureXLSX(); }catch(e){ $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ '+esc(e.message)+'</span>'; return; }
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''});
+      let hdr=-1; for(let i=0;i<Math.min(rows.length,10);i++){ if(String(rows[i][0]||'').indexOf('ชื่อสินค้า')!==-1){hdr=i;break;} }
+      if(hdr<0) throw new Error('ไม่พบหัวตาราง — ต้อง export จากเมนู "สินค้าคงคลัง"');
+      const H=rows[hdr].map(x=>String(x||'').trim()); const cSku=H.indexOf('SKU'),cQty=H.indexOf('พร้อมขาย'),cName=H.indexOf('คำอธิบายสินค้า');
+      if(cSku<0||cQty<0) throw new Error('ไฟล์ไม่มีคอลัมน์ SKU หรือ พร้อมขาย');
+      if(cName<0) throw new Error('ไฟล์ไม่มีคอลัมน์ "คำอธิบายสินค้า" — ตอน export ต้องติ๊กช่องนี้ด้วย');
+      const stock={},sku={}; let n=0,have=0;
+      for(let i=hdr+1;i<rows.length;i++){ const r=rows[i],s=String(r[cSku]||'').trim(),nm=String(r[cName]||'').trim(); if(!s||!nm) continue; const qq=parseInt(String(r[cQty]||'0').replace(/[^0-9-]/g,''),10)||0; stock[nm]=qq; sku[s]=nm; n++; if(qq>1) have++; }
+      if(!n) throw new Error('อ่านข้อมูลไม่ได้สักแถว');
+      _stockData=stock; _skuData=sku;
+      $('stpre').innerHTML='✅ อ่านได้ <b>'+n+'</b> รายการ · มีของ <b>'+have+'</b> · หมด <b>'+(n-have)+'</b>'; $('stbtn').classList.remove('hidden');
+    }catch(err){ _stockData=null; $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ '+esc(err.message)+'</span>'; }
+  };
+  rd.readAsArrayBuffer(f);
+}
+/* POST /seed/stockmap + /seed/skumap (key เท่านั้น · สต็อกใช้ร่วมทุกร้าน) */
+async function uploadStock(){
+  if(!_stockData) return;
+  if(!confirm('อัปเดตสต็อก '+Object.keys(_stockData).length+' รายการเข้าระบบจีทู (ใช้ร่วมทุกร้าน)?')) return;
+  const b=$('stbtn'); b.textContent='กำลังอัปเดต…'; b.disabled=true;
+  try{
+    const r1=await fetch(W+'/seed/stockmap?key='+enc(KEY),{method:'POST',body:JSON.stringify(_stockData)});
+    if(r1.status===403){ forbidden(); return; } if(!r1.ok) throw new Error(await r1.text());
+    const r2=await fetch(W+'/seed/skumap?key='+enc(KEY),{method:'POST',body:JSON.stringify(_skuData)});
+    if(!r2.ok) throw new Error('skumap: '+(await r2.text()));
+    $('stpre').innerHTML='🎉 อัปเดตแล้ว ('+Object.keys(_stockData).length+' รายการ)'; toast('สต็อกอัปเดตแล้ว จีทูใช้ตัวเลขใหม่ทันที'); loadHealth();
+  }catch(err){ $('stpre').innerHTML='<span style="color:#ff8f8f">⛔ '+esc(String(err.message||err))+'</span>'; toast('อัปเดตสต็อกไม่สำเร็จ',1); }
+  b.textContent='⬆️ อัปเดตสต็อกเข้าระบบ'; b.disabled=false;
+}
+/* 🚨 ฉุกเฉิน — confirm 2 ชั้น · POST /ctl/on|off · POST /ctl/unmute */
+async function toggleBot(){
+  const lb=shopLabel();
+  if(ON){ if(!confirm('⛔ ปิดจีทูทั้งร้าน "'+lb+'" ?\n\nลูกค้าทุกคนของร้านนี้จะไม่ได้รับคำตอบอัตโนมัติจนกว่าจะเปิดใหม่')) return;
+          if(!confirm('ยืนยันอีกครั้ง: ปิดจีทูของร้าน "'+lb+'" เดี๋ยวนี้?')) return; }
+  else  { if(!confirm('เปิดจีทูของร้าน "'+lb+'" กลับมาตอบลูกค้า?')) return;
+          if(!confirm('ยืนยันอีกครั้ง: จีทูจะเริ่มตอบลูกค้าร้าน "'+lb+'" ทันที')) return; }
+  try{ const r=await fetchJ(q('/ctl/'+(ON?'off':'on')),{method:'POST'});
+    if(!r.ok){ toast('สั่งงานไม่สำเร็จ ('+r.status+')',1); return; }
+    ON=r.d.on!==false; renderBot(); toast(ON?'เปิดจีทูแล้ว':'ปิดจีทูแล้ว — แอดมินคุมเองทั้งร้าน'); setTimeout(()=>refresh(true),800);
+  }catch(e){ if(e.message!=='forbidden') toast('สั่งงานไม่สำเร็จ',1); }
+}
+async function unmuteAll(){
+  const lb=shopLabel();
+  if(!confirm('ปลดล็อกทุกแชทของร้าน "'+lb+'" ?\n\nจีทูจะกลับมาตอบลูกค้าทุกคนทันที รวมคนที่แอดมินกำลังดูแลอยู่')) return;
+  if(!confirm('ยืนยันอีกครั้ง: ปลดล็อกทุกแชทของร้าน "'+lb+'" — เคสในคิวจะหายทั้งหมด')) return;
+  try{ const r=await fetchJ(q('/ctl/unmute'),{method:'POST'}); if(!r.ok){ toast('ปลดล็อกไม่สำเร็จ ('+r.status+')',1); return; } PENDING={}; toast('ปลดล็อกแล้ว '+(r.d.cleared||0)+' แชท'); refresh(true); }
+  catch(e){ if(e.message!=='forbidden') toast('ปลดล็อกไม่สำเร็จ',1); }
+}
+function bakeoff(){ if(!KEY) return; const m='google/gemini-2.5-flash-lite,qwen/qwen3.7-flash,deepseek/deepseek-chat'; window.open(W+'/bakeoff?key='+enc(KEY)+'&m='+enc(m),'_blank'); }
+
+/* ── วงจรชีวิต ── */
+function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); _poll=_pollAll=null; }
+function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),15000); _pollAll=setInterval(refreshAllCounts,60000); }
+async function init(){
+  if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
+  $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
+  await loadShops(); if(!KEY) return;
+  await refresh(true); startPoll(); refreshAllCounts();
+}
+let _lastWake=0;
+function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden) wakeRefresh(); });
+window.addEventListener('pageshow',wakeRefresh); window.addEventListener('focus',wakeRefresh); window.addEventListener('online',wakeRefresh);
+document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='keyin') saveKey(); });
+init();
+</script>
+</body>
+</html>
