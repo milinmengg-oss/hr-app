@@ -430,8 +430,10 @@ async function loadShops(){
   if(SHOPS.length && !SHOPS.some(s=>s['ร้าน']===SHOP)) SHOP=SHOPS[0]['ร้าน'];
   renderShops(); renderHeader();
 }
+/* เรียงร้าน: ตามเลขร้าน (V1, V2, … V22) · ร้านที่ไม่มีเลข (Easy) ไว้ท้ายสุด — เม้ง 25 ก.ย. */
+function shopOrder(a,b){ const num=s=>{ const m=String(s['ร้าน']||'').match(/(\d+)$/); return m?parseInt(m[1],10):Infinity; }; const na=num(a),nb=num(b); if(na!==nb) return na-nb; return String(a['ร้าน']).localeCompare(String(b['ร้าน'])); }
 function renderShops(){
-  const items=SHOPS.map(s=>{ const id=s['ร้าน'], col=shopColorOf(id), on=id===SHOP, n=pendingCount(id), u=urgentCount(id);
+  const items=SHOPS.slice().sort(shopOrder).map(s=>{ const id=s['ร้าน'], col=shopColorOf(id), on=id===SHOP, n=pendingCount(id), u=urgentCount(id);
     const miss=missingOf(s), warn=miss.length>0;
     const badge='<span class="badge '+(u>0?'':'o')+(n?'':' z')+'" id="bdg_'+sid(id)+'">'+(n==null?'':n)+'</span>';
     return {id,col,on,warn,miss,badge,name:s['ชื่อ']||id};
