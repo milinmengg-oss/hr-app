@@ -299,6 +299,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="set">
       <h4>🎁 โปรที่คิดยอด (มีผลกับค่าส่งจริง)</h4>
       <p>จีทูใช้ตัวเลขชุดเดียวกันทั้งตอนตอบลูกค้าและตอนคิดยอด · ถึงเวลาสิ้นสุดโปรจะหยุดเอง · ⛔ ไม่รวมส่งด่วน/แกร็บ</p>
+      <div class="scope"><span class="on" id="pc1" onclick="setPromoScope('one')">ร้านนี้</span><span id="pc2" onclick="setPromoScope('all')">ทุกร้านที่ฉันดูแล</span></div>
       <div id="promostatus" style="font-size:13.5px;font-weight:600;margin-bottom:8px;">—</div>
       <label class="ck"><input type="checkbox" id="pmActive"> เปิดใช้โปรนี้</label>
       <input class="f" id="pmName" placeholder="ชื่อโปร (ไว้ให้เราจำเอง) เช่น ส่งฟรีครบ 500">
@@ -313,7 +314,8 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       </div>
       <textarea class="f" id="pmMsg" placeholder="ข้อความที่จีทูใช้ตอบลูกค้า (เว้นว่าง = ระบบเขียนให้เอง)"></textarea>
       <input class="f" id="pmExclude" placeholder="รุ่นที่ไม่ร่วมโปร (คั่นด้วยจุลภาค) — เว้นว่าง = ร่วมทุกอย่าง">
-      <div class="acts"><button onclick="clearPromo()">🗑️ ลบโปรทิ้ง</button><div class="sp"></div><button class="p big" onclick="savePromo()">💾 บันทึกโปรนี้</button></div>
+      <div class="acts"><button onclick="clearPromo()">🗑️ ลบโปรทิ้ง</button><div class="sp"></div><button class="p big" id="pmSaveBtn" onclick="savePromo()">💾 บันทึกโปรนี้</button></div>
+      <div class="result-list" id="promores"></div>
     </div>
 
     <div class="grid2">
@@ -400,7 +402,9 @@ function saveKey(){ const v=$('keyin').value.trim(); if(!v){ $('keymsg').textCon
 function logout(){ if(!confirm('ออกจากหลังบ้าน และลบรหัสออกจากเครื่องนี้?')) return; localStorage.removeItem('g2key'); KEY=''; init(); }
 function forbidden(){ localStorage.removeItem('g2key'); KEY=''; stopPoll(); init(); toast('รหัสไม่ถูกต้อง หรือไม่มีสิทธิ์ร้านนี้',1); }
 async function fetchJ(url,opt){                            // fetch + จับ 403 + parse
-  const r=await fetch(url,opt||{});
+  //  ⏱ 26 ก.ย.: หมดเวลา 15 วิ — เดิมถ้าเน็ตค้าง fetch ไม่กลับ _busy ค้าง true → หน้าหยุดอัปเดตถาวรจนรีโหลด
+  opt=Object.assign({},opt||{}); let _ac=null; try{ if(typeof AbortController!=='undefined'&&!opt.signal){ _ac=new AbortController(); opt.signal=_ac.signal; setTimeout(()=>{ try{ _ac.abort(); }catch(e){} },15000); } }catch(e){}
+  const r=await fetch(url,opt);
   if(r.status===403){ forbidden(); throw new Error('forbidden'); }
   let d={}; try{ d=await r.json(); }catch(e){ d={}; }
   return {ok:r.ok, status:r.status, d};
@@ -486,6 +490,7 @@ let _busy=false, _poll=null, _pollAll=null;
 function inputFocused(){ const a=document.activeElement; return !!(a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type!=='file'&&a.type!=='checkbox'))); }
 async function refresh(force){
   if(!KEY) return;
+  if(!force && typeof document!=='undefined' && document.hidden) return;   // 💤 แท็บถูกซ่อน = ไม่ยิง (กลับมาแล้ว wakeRefresh ยิงให้)
   if(_busy) return;
   if(!force && inputFocused()){ $('pillpoll').textContent='หยุดอัปเดตชั่วคราว (กำลังพิมพ์)'; return; }
   _busy=true; const shop=SHOP;
@@ -508,11 +513,19 @@ function renderBot(){
   const t=$('togglebtn'); t.textContent=ON?'⏸ ปิดจีทูทั้งร้าน':'▶️ เปิดจีทูกลับมาตอบ'; t.className=ON?'d big':'g big';
 }
 /* นับทุกร้านทุก 60 วิ (board ต่อร้าน 1 request — ป้ายตัวเลขข้างชื่อร้าน) */
+let _allBusy=false;
 async function refreshAllCounts(){
   if(!KEY||!SHOPS.length) return;
-  const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
-  await Promise.all(others.map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,t:Date.now()}; }catch(e){} }));
-  renderShops();
+  if(typeof document!=='undefined' && document.hidden) return;
+  if(_allBusy) return; _allBusy=true;
+  try{
+    const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
+    //  🚦 26 ก.ย.: ยิงทีละ 5 ร้าน (เดิม 22 ร้านพร้อมกันทุกนาที × ทุกเครื่องแอดมิน = กระแทก worker/KV) · ผลเหมือนเดิม
+    for(let i=0;i<others.length;i+=5){
+      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,t:Date.now()}; }catch(e){} }));
+      renderShops();
+    }
+  }finally{ _allBusy=false; }
 }
 
 /* ── แท็บ งาน ── */
@@ -768,15 +781,30 @@ async function loadPromo(){
     $('pmStart').value=pmToBox(c.start); $('pmEnd').value=pmToBox(c.end); $('pmMsg').value=c.msg||''; $('pmExclude').value=(c.exclude||[]).join(', ');
   }catch(e){ $('promostatus').textContent='สถานะตอนนี้: อ่านไม่ได้'; }
 }
+/* 🎁 ทุกร้าน (เม้ง 26 ก.ย.): โปรจัดเหมือนกันทุกร้าน → กรอกครั้งเดียว ยิง /ctl/promo ทีละร้านในสิทธิ์ (endpoint เดิม · worker ไม่ต้องแก้) · แจ้งผลรายร้าน */
+let PSCOPE='one';
+function setPromoScope(sc){ PSCOPE=sc; $('pc1').classList.toggle('on',sc==='one'); $('pc2').classList.toggle('on',sc==='all'); $('promores').innerHTML=''; $('pmSaveBtn').textContent=sc==='all'?'💾 บันทึกโปรนี้ให้ทุกร้าน ('+SHOPS.length+')':'💾 บันทึกโปรนี้'; }
+async function promoFanout(body,label){
+  const targets=SHOPS.map(s=>s['ร้าน']); if(!targets.length){ toast('ไม่มีร้านให้ตั้ง',1); return; }
+  $('promores').innerHTML='<span class="mut">กำลังบันทึก '+targets.length+' ร้าน…</span>';
+  const res=await Promise.all(targets.map(async id=>{ try{ const r=await fetch(qs('/ctl/promo',id),{method:'POST',body}); let d={}; try{ d=await r.json(); }catch(e){} return {id,ok:r.ok&&d.ok!==0,status:r.status,why:d['ผิดตรงไหน']||''}; }catch(e){ return {id,ok:false,status:'เน็ต',why:''}; } }));
+  const fail=res.filter(x=>!x.ok);
+  $('promores').innerHTML=res.map(x=>'<div class="'+(x.ok?'okk':'bd')+'">'+(x.ok?'✅':'⛔')+' '+esc(shopLabel(x.id))+(x.ok?'':' — ไม่สำเร็จ ('+esc(x.why||x.status)+')')+'</div>').join('');
+  if(fail.some(x=>x.status===403)){ forbidden(); return; }
+  if(!fail.length) toast(label+' ('+res.length+' ร้าน)'); else toast('ไม่ครบ — พลาด: '+fail.map(x=>shopLabel(x.id)).join(', '),1);
+  loadPromo();
+}
 async function savePromo(){
   const cfg={v:1,active:$('pmActive').checked,name:$('pmName').value.trim(),type:$('pmType').value,minOrder:Number($('pmMin').value),methods:[$('pmMethod').value],start:pmFromBox($('pmStart').value),end:pmFromBox($('pmEnd').value),msg:$('pmMsg').value.trim(),exclude:$('pmExclude').value.split(',').map(x=>x.trim()).filter(Boolean)};
   if(cfg.active && !confirm('เปิดโปรของร้าน "'+shopLabel()+'" ?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+'\nซื้อครบ '+cfg.minOrder+' บาท = ส่งฟรีพัสดุ\nถึง '+cfg.end+'\n\nมีผลกับยอดเงินที่ลูกค้าจ่ายจริง')) return;
+  if(PSCOPE==='all'){ if(!confirm('ตั้งโปรนี้ให้ทุกร้านที่ฉันดูแล ('+SHOPS.length+' ร้าน)?\n\n'+(cfg.name||'(ไม่มีชื่อ)')+' · ครบ '+cfg.minOrder+' บาท · ถึง '+cfg.end+'\n\nโปรเดิมของแต่ละร้านจะถูกทับ')) return; await promoFanout(JSON.stringify(cfg),'บันทึกโปรทุกร้านแล้ว'); return; }
   try{ const r=await fetchJ(q('/ctl/promo'),{method:'POST',body:JSON.stringify(cfg)});
     if(!r.ok||r.d.ok===0){ toast('⛔ '+(r.d['ผิดตรงไหน']||'บันทึกไม่สำเร็จ'),1); return; }
     toast('บันทึกโปรแล้ว — '+(r.d['สถานะ']||'')); loadPromo();
   }catch(e){ if(e.message!=='forbidden') toast('บันทึกไม่สำเร็จ',1); }
 }
 async function clearPromo(){
+  if(PSCOPE==='all'){ if(!confirm('ลบโปรทิ้ง "ทุกร้านที่ฉันดูแล" ('+SHOPS.length+' ร้าน)?\n\nค่าส่งทุกร้านจะกลับไปใช้กฎเดิมทันที')) return; await promoFanout('null','ยกเลิกโปรทุกร้านแล้ว'); return; }
   if(!confirm('ลบโปรของร้าน "'+shopLabel()+'" ทิ้ง?\n\nค่าส่งจะกลับไปใช้กฎเดิมของร้านทันที')) return;
   try{ const r=await fetchJ(q('/ctl/promo'),{method:'POST',body:'null'}); if(!r.ok||r.d.ok===0){ toast('ลบไม่สำเร็จ',1); return; } toast('ยกเลิกโปรแล้ว'); loadPromo(); }
   catch(e){ if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ',1); }
@@ -866,7 +894,7 @@ function bakeoff(){ if(!KEY) return; const m='google/gemini-2.5-flash-lite,qwen/
 
 /* ── วงจรชีวิต ── */
 function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); _poll=_pollAll=null; }
-function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),15000); _pollAll=setInterval(refreshAllCounts,60000); }
+function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),15000); _pollAll=setInterval(refreshAllCounts,90000); }
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
