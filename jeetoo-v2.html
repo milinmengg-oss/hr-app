@@ -548,7 +548,7 @@ function renderWork(){
   const orders=(c.orders||[]).slice().sort(byOld);
   const total=qWait.length+qAcc.length+qFee.length+orders.length;
   const chip=(k,cls,n,lb)=>'<span class="'+cls+(VIEW===k?' on':'')+'" onclick="setView(\''+k+'\')" title="กดเพื่อดูเฉพาะกลุ่มนี้"><b>'+n+'</b>'+lb+'</span>';
-  $('stat').innerHTML=chip('q',qWait.length?'bad':'',qWait.length,'ลูกค้ารอคน')+chip('a',qAcc.length?'acc':'',qAcc.length,'รับแล้ว')+chip('f',qFee.length?'warn':'',qFee.length,'รอค่าส่งด่วน')+chip('o',orders.length?'warn':'',orders.length,'รอลง XSelly')+'<span class="ok"><b>'+doneToday()+'</b>เสร็จวันนี้ (เครื่องนี้)</span>'+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
+  $('stat').innerHTML=chip('q',qWait.length?'bad':'',qWait.length,'ลูกค้ารอคน')+chip('a',qAcc.length?'acc':'',qAcc.length,'รับแล้ว')+chip('f',qFee.length?'warn':'',qFee.length,'รอค่าส่งด่วน')+chip('o',orders.length?'warn':'',orders.length,'รอลง XSelly')+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
   applyView();
   $('tcount').textContent=total||''; const bd=$('bd1'); bd.textContent=total>99?'99+':total; bd.classList.toggle('z',total===0);
   $('cnt_q').textContent=qWait.length||''; $('cnt_a').textContent=qAcc.length||''; $('cnt_f').textContent=qFee.length||''; $('cnt_o').textContent=orders.length||'';
