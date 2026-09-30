@@ -388,7 +388,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     </div>
     <div class="kpis" id="stkpi"></div>
     <div class="tblwrap"><table class="sttab" id="sttab"></table></div>
-    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู (ลูกค้าที่แอดมินปิดเองใน LINE โดยไม่ผ่านการ์ด จะไม่นับ) · ปิดการขาย % = จ่ายแล้ว ÷ ทัก · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
+    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู · <b>ปิดการขาย</b> = แอดมินกด "ลง XSelly แล้ว" · % = ปิดการขาย ÷ ทัก · <b>ใหม่</b> = เห็นครั้งแรกภายใน 7 วัน · <b>ยอดขาย</b> = ยอดรวมจากการ์ดตอนกดลง XSelly · "สลิปผ่านอัตโนมัติ" มีเฉพาะร้านที่เปิดตรวจสลิป · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
   </section>
 </main>
 </div>
@@ -549,22 +549,27 @@ function mins(ms){ ms=Number(ms||0); if(!ms) return '—'; const m=Math.round(ms
 function renderStats(d,day){
   const n=k=>Number(d[k]||0);
   const touch=n('touch'), handoff=n('handoff'), ai=Number(d.ai_closed!=null?d.ai_closed:Math.max(0,touch-handoff)), open=n('open_now'), order=n('order'), paid=n('paid'), xs=n('xs_done');
+  const has2=d.new!=null;                                   // k621 (ใหม่/เก่า · เพิ่มเพื่อน · ยอดขาย) — ก่อน k621 ขึ้น = ไม่มีฟิลด์ → โชว์ "—"
+  const nw=n('new'), fol=n('follow'), sales=n('sales');
+  const baht=v=>Number(v||0).toLocaleString('th-TH');
   const k=(cls,v,label)=>'<div class="kpi '+cls+'"><b>'+v+'</b><small>'+label+'</small></div>';
   $('stkpi').innerHTML=
-    k('',touch,'ลูกค้าทัก')+
+    k('',touch+(has2?' <span style="font-size:14px;color:var(--mut)">ใหม่ '+nw+'</span>':''),'ลูกค้าทัก')+
+    k('',has2?fol:'—','เพิ่มเพื่อนวันนี้')+
     k('ok',ai+' <span style="font-size:14px;color:var(--mut)">('+pct(ai,touch)+')</span>','เอวาปิดเอง')+
     k(handoff?'warn':'',handoff,'ส่งคน')+
     k(open?'bad':'',open,'ค้างตอนนี้')+
     k('',mins(d.avg_wait_ms),'รอแอดมินรับเฉลี่ย')+
     k('',order,'ยืนยันออเดอร์')+
-    k('ok',paid,'จ่ายแล้ว')+
-    k('',xs,'ลง XSelly แล้ว')+
-    k('ok',pct(paid,touch),'ปิดการขาย');
+    k('ok',xs,'ปิดการขาย (ลง XSelly)')+
+    k('ok',pct(xs,touch),'ปิดการขาย %')+
+    k('ok',has2?baht(sales)+' ฿':'—','ยอดขาย (จากการ์ด)')+
+    k('',paid,'สลิปผ่านอัตโนมัติ');
   const rows=(d.by_shop||[]).slice().sort((a,b)=>shopOrder({'ร้าน':a.shop},{'ร้าน':b.shop}));
-  const tr=r=>'<tr><td><span class="dot" style="background:'+shopColorOf(r.shop)+'"></span>'+esc(shopLabel(r.shop))+'</td><td>'+Number(r.touch||0)+'</td><td>'+Number(r.handoff||0)+'</td><td>'+Number(r.order||0)+'</td><td>'+Number(r.paid||0)+'</td><td>'+Number(r.xs_done||0)+'</td><td>'+pct(Number(r.paid||0),Number(r.touch||0))+'</td></tr>';
-  $('sttab').innerHTML='<thead><tr><th>ร้าน · '+esc(day)+'</th><th>ทัก</th><th>ส่งคน</th><th>ยืนยันออเดอร์</th><th>จ่ายแล้ว</th><th>ลง XSelly</th><th>ปิดการขาย</th></tr></thead><tbody>'+
-    (rows.map(tr).join('')||'<tr><td colspan="7" class="mut">ยังไม่มีข้อมูลวันนี้</td></tr>')+
-    (rows.length>1?'<tr class="tot"><td>รวม</td><td>'+touch+'</td><td>'+handoff+'</td><td>'+order+'</td><td>'+paid+'</td><td>'+xs+'</td><td>'+pct(paid,touch)+'</td></tr>':'')+'</tbody>';
+  const tr=r=>'<tr><td><span class="dot" style="background:'+shopColorOf(r.shop)+'"></span>'+esc(shopLabel(r.shop))+'</td><td>'+Number(r.touch||0)+'</td><td>'+(r.new!=null?Number(r.new||0):'—')+'</td><td>'+(r.follow!=null?Number(r.follow||0):'—')+'</td><td>'+Number(r.handoff||0)+'</td><td>'+Number(r.order||0)+'</td><td>'+Number(r.xs_done||0)+'</td><td>'+pct(Number(r.xs_done||0),Number(r.touch||0))+'</td><td>'+(r.sales!=null?baht(r.sales):'—')+'</td></tr>';
+  $('sttab').innerHTML='<thead><tr><th>ร้าน · '+esc(day)+'</th><th>ทัก</th><th>ใหม่</th><th>เพิ่มเพื่อน</th><th>ส่งคน</th><th>ยืนยันออเดอร์</th><th>ปิดการขาย</th><th>%</th><th>ยอดขาย ฿</th></tr></thead><tbody>'+
+    (rows.map(tr).join('')||'<tr><td colspan="9" class="mut">ยังไม่มีข้อมูลวันนี้</td></tr>')+
+    (rows.length>1?'<tr class="tot"><td>รวม</td><td>'+touch+'</td><td>'+(has2?nw:'—')+'</td><td>'+(has2?fol:'—')+'</td><td>'+handoff+'</td><td>'+order+'</td><td>'+xs+'</td><td>'+pct(xs,touch)+'</td><td>'+(has2?baht(sales):'—')+'</td></tr>':'')+'</tbody>';
 }
 
 /* ── k338 PENDING: กด mute/unmute แล้วให้ชนะผล server 90 วิ ── */
@@ -735,8 +740,12 @@ async function orderDone(uid,name,el){
   const rec=((CACHE[SHOP]||{}).orders||[]).filter(o=>o.uid===uid)[0];
   const isBad=rec?BAD_RE.test(String(rec.status||'')):false;         // ตัดสินจากข้อมูล ไม่ใช่ class บนจอ
   if(isBad&&!ACKED[uid]){ toast('⛔ ออเดอร์นี้สลิปมีปัญหา — กด "🔓 เช็คแล้ว ยอดถูก" ก่อนถึงจะลงได้',1); return; }
-  if(!confirm('ลง XSelly แล้ว — เอาออเดอร์ของ "'+(name||uid.slice(-6))+'" ออกจากคิวร้าน '+shopLabel()+'?')) return;
-  if(el){ el.disabled=true; el.textContent='กำลังเก็บ…'; }
+  //  30 ก.ย.: เบราว์เซอร์บางเครื่องบล็อกกล่องถามของหน้านี้ → confirm() คืน false ทันที (ไม่ถึง 80ms) → กดแล้วเงียบ ไม่มีอะไรเกิด
+  //           แก้: ถ้ากล่องไม่ขึ้น ให้ยืนยันด้วยการกดปุ่มเดิมซ้ำอีกครั้งแทน (กล่องขึ้นปกติ = ทำงานเหมือนเดิม)
+  const armed=!!(el&&el.dataset.arm==='1');
+  if(!armed){ const _t0=Date.now(); const _ok=confirm('ลง XSelly แล้ว — เอาออเดอร์ของ "'+(name||uid.slice(-6))+'" ออกจากคิวร้าน '+shopLabel()+'?');
+    if(!_ok){ if(el&&Date.now()-_t0<80){ el.dataset.arm='1'; el.textContent='กดอีกครั้งเพื่อยืนยัน'; toast('กล่องยืนยันถูกบล็อก — กดปุ่มอีกครั้งเพื่อลง XSelly'); setTimeout(()=>{ if(el.dataset.arm==='1'){ el.dataset.arm=''; el.textContent='✅ ลง XSelly แล้ว'; } },6000); } return; } }
+  if(el){ el.dataset.arm=''; el.disabled=true; el.textContent='กำลังเก็บ…'; }
   try{ const r=await fetchJ(q('/ctl/orderdone?uid='+enc(uid)),{method:'POST'});
     if(r.ok){ bumpDone(); const c=CACHE[SHOP]; if(c) c.orders=c.orders.filter(it=>it.uid!==uid); renderWork(); renderShops(); toast('เก็บออเดอร์แล้ว'); }
     else{ if(el){ el.disabled=false; el.textContent='✅ ลง XSelly แล้ว'; } toast('ทำรายการไม่สำเร็จ ('+r.status+')',1); }
