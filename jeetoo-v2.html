@@ -418,6 +418,8 @@ function applyView(){ ['q','a','f','o'].forEach(k=>{ $('grp_'+k).classList.toggl
 const CACHE={};                                            // board ต่อร้าน {shop:{queue,orders,chats,on,muted,t}}
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+//  30 ก.ย.: ค่าที่ใส่ใน onclick="fn('…')" ต้องหนี \ และ ' แบบ JS ก่อน แล้วค่อย esc — ชื่อลูกค้ามี ' (อา'หรั่ง) เคยทำให้ปุ่มบนการ์ดพังเงียบ
+const escA=s=>esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
 const sid=s=>String(s||'').replace(/[^a-zA-Z0-9]/g,'');
 const enc=encodeURIComponent;
 /* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
@@ -656,7 +658,7 @@ function renderWork(){
       +(urg?'<div class="owarn"><span class="blink">🚨</span><span>'+esc(tip)+'</span></div>':'')
       +'</div><div class="acts">'
       +(it.accepted?'<button class="p big" disabled>👨‍💼 กำลังดูแล</button>':'<button class="p big" onclick="acceptCase(\''+esc(it.uid)+'\',this)">👨‍💼 รับเคส</button>')
-      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬 เปิดแชท</button>'
+      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬 เปิดแชท</button>'
       +'<button class="g big" onclick="markDone(\''+esc(it.uid)+'\','+(urg?1:0)+',this)">✅ เก็บเคส</button></div></div>';
   };
   setHTML('sec_q', qWait.length? qWait.map(rowQ).join('') : '<div class="empty">✅ ไม่มีลูกค้ารอคน — จีทูดูแลอยู่ทั้งหมด</div>');
@@ -673,7 +675,7 @@ function renderWork(){
       +'<div class="why">📍 '+esc(it.reason||'')+(it.km?' · ~'+esc(it.km)+' กม.':'')+'</div>'+(msg?'<div class="msg">“'+esc(msg)+'”</div>':'')
       +'<div class="mut" style="margin-top:6px;">เปิดแผนที่ → ดูค่าส่งในแอปแกร็บ → กรอกตัวเลข → ส่งราคา (ระบบคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง)</div></div>'
       +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
-      +'<button class="s" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬</button>'
+      +'<button class="s" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬</button>'
       +'<button class="s" onclick="markDone(\''+esc(it.uid)+'\',0,this)">✅ เก็บเคส</button></div></div>';
   }).join('') : '<div class="empty">ไม่มีเคสรอค่าส่งด่วน</div>');
 
@@ -687,8 +689,8 @@ function renderWork(){
       +'<div class="acts">'
       +(bad?'<button class="w oack" onclick="ackBad(\''+esc(it.uid)+'\')">🔓 เช็คแล้ว ยอดถูก</button>':'')
       +'<button class="big" onclick="copyOrder(\''+bid+'\',this)">📋 คัดลอกทั้งออเดอร์</button>'
-      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')">💬</button>'
-      +'<button class="g big odone" onclick="orderDone(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\',this)">✅ ลง XSelly แล้ว</button></div></div>';
+      +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬</button>'
+      +'<button class="g big odone" onclick="orderDone(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\',this)">✅ ลง XSelly แล้ว</button></div></div>';
   }).join('') : '<div class="empty">ยังไม่มีออเดอร์รอลง</div>');
 }
 function chipsFromBlock(b){
@@ -758,7 +760,7 @@ function renderChats(){
   const kw=($('csearch').value||'').trim().toLowerCase();
   const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1) return false; return true; });
   $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
-  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+esc(it.name||'')+'\')"><div class="cn"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
+  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
     +(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
 }
 function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
