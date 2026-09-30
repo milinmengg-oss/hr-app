@@ -79,6 +79,21 @@ h3 b{color:var(--txt);}
 .stat span.bad b{color:var(--bad);} .stat span.warn b{color:var(--warn);} .stat span.ok b{color:var(--ok);}
 .stat span[onclick]{cursor:pointer;} .stat span[onclick]:hover{border-color:#4f8cff;}
 .stat span.on{background:#26304a;border-color:#4f8cff;color:#fff;}
+/* 📊 สรุปรายวัน */
+.stbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:12px;}
+.stbar input[type=date],.stbar select{width:auto;margin:0;padding:6px 10px;}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:14px;}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;}
+.kpi b{display:block;font-size:26px;line-height:1.1;color:var(--txt);}
+.kpi small{display:block;color:var(--mut);font-size:12px;margin-top:4px;}
+.kpi.ok b{color:var(--ok);} .kpi.bad b{color:var(--bad);} .kpi.warn b{color:var(--warn);}
+.tblwrap{overflow-x:auto;}
+.sttab{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+.sttab th,.sttab td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;}
+.sttab th:first-child,.sttab td:first-child{text-align:left;}
+.sttab th{color:var(--mut);font-weight:600;font-size:12px;}
+.sttab tr.tot td{font-weight:700;border-top:2px solid var(--line);}
+.sttab td .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
 .grp{scroll-margin-top:130px;}
 .empty{color:var(--mut);font-size:13px;padding:10px 4px;}
 .notice-strip{background:#1c2130;border:1px dashed #34405a;border-radius:10px;padding:8px 12px;color:#b9c3d9;font-size:13px;margin:10px 0 0;white-space:pre-wrap;word-break:break-word;}
@@ -234,6 +249,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="tab on" id="tab1" onclick="go(1)">📥 งาน <b id="tcount"></b></div>
     <div class="tab" id="tab2" onclick="go(2)">💬 แชท</div>
     <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
+    <div class="tab hidden" id="tab4" onclick="go(4)">📊 สรุป</div>
   </div>
 
   <!-- ═══ แท็บ 1: งาน ═══ -->
@@ -358,6 +374,22 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       </div>
     </details>
   </section>
+
+  <!-- ═══ แท็บ 4: 📊 สรุปรายวัน (30 ก.ย. · /ctl/stats · เห็นเฉพาะ owner/BOSS_CODE · 403 = ซ่อนแท็บ ไม่ logout) ═══ -->
+  <section id="p4" class="hidden">
+    <div class="stbar">
+      <button class="s" onclick="statsDay(-1)" title="วันก่อน">◀</button>
+      <input type="date" id="stday" onchange="loadStats()">
+      <button class="s" onclick="statsDay(1)" title="วันถัดไป">▶</button>
+      <button class="s" onclick="statsToday()">วันนี้</button>
+      <select id="stshop" onchange="loadStats()"><option value="all">ทุกร้าน</option></select>
+      <button class="s" onclick="loadStats()" title="รีเฟรช">🔄</button>
+      <span class="mut" id="stmsg"></span>
+    </div>
+    <div class="kpis" id="stkpi"></div>
+    <div class="tblwrap"><table class="sttab" id="sttab"></table></div>
+    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู (ลูกค้าที่แอดมินปิดเองใน LINE โดยไม่ผ่านการ์ด จะไม่นับ) · ปิดการขาย % = จ่ายแล้ว ÷ ทัก · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
+  </section>
 </main>
 </div>
 
@@ -365,6 +397,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <button class="navbtn on" id="n1" onclick="go(1)"><i>📥</i>งาน<span class="bdg z" id="bd1">0</span></button>
   <button class="navbtn" id="n2" onclick="go(2)"><i>💬</i>แชท</button>
   <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
+  <button class="navbtn hidden" id="n4" onclick="go(4)"><i>📊</i>สรุป</button>
 </div>
 <div id="toast"></div>
 
@@ -447,6 +480,7 @@ function renderShops(){
   });
   $('shoplbl').textContent='ร้านที่ฉันดูแล ('+SHOPS.length+' ร้าน)';
   $('shoplist').innerHTML=items.map(it=>'<div class="shop'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span><span class="n">'+esc(it.name)+(it.warn?' <span class="c" title="ยังไม่ตั้ง: '+esc(it.miss.join(' + '))+'">⚠️</span>':'')+'</span>'+it.badge+'</div>').join('')||'<div class="empty">ไม่มีร้านในสิทธิ์</div>';
+  if(STATS_ON) fillStatsShops();
   $('chipstrip').innerHTML=items.map(it=>'<span class="schip'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span>'+esc(it.name)+(it.warn?' ⚠️':'')+it.badge.replace('id="bdg_','id="bdgm_')+'</span>').join('');
 }
 function renderHeader(){
@@ -474,10 +508,63 @@ function selectShop(id){
 /* ── แท็บ ── */
 function go(n){
   TAB=n;
-  [1,2,3].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
+  [1,2,3,4].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
   window.scrollTo(0,0);
   if(n===2) renderChats();
   if(n===3) loadSettings();
+  if(n===4) loadStats();
+}
+
+/* ── 📊 สรุปรายวัน (30 ก.ย. · /ctl/stats · owner/BOSS_CODE เท่านั้น) ──
+   ⚠️ ห้ามใช้ fetchJ ตรงนี้: 403 จาก /ctl/stats แปลว่า "ไม่ใช่เจ้านาย" ไม่ใช่ "รหัสผิด" → แค่ซ่อนแท็บ ห้าม logout */
+let STATS_ON=false, _stBusy=false;
+function thaiDay(ms){ return new Date((ms||Date.now())+7*3600e3).toISOString().slice(0,10); }
+async function fetchRaw(url){ let _ac=null; const o={}; try{ if(typeof AbortController!=='undefined'){ _ac=new AbortController(); o.signal=_ac.signal; setTimeout(()=>{ try{ _ac.abort(); }catch(e){} },15000); } }catch(e){} return fetch(url,o); }
+async function probeStats(){
+  let on=false;
+  try{ const r=await fetchRaw(W+'/ctl/stats?key='+enc(KEY)+'&day='+thaiDay()+'&shop=all'); on=!!(r&&r.ok); }catch(e){ on=false; }
+  STATS_ON=on;
+  $('tab4').classList.toggle('hidden',!on); $('n4').classList.toggle('hidden',!on);
+  if(on){ if(!$('stday').value) $('stday').value=thaiDay(); fillStatsShops(); }
+  else if(TAB===4) go(1);
+}
+function fillStatsShops(){ const cur=$('stshop').value||'all'; $('stshop').innerHTML='<option value="all">ทุกร้าน ('+SHOPS.length+')</option>'+SHOPS.slice().sort(shopOrder).map(s=>'<option value="'+esc(s['ร้าน'])+'">'+esc(s['ชื่อ']||s['ร้าน'])+'</option>').join(''); $('stshop').value=cur; }
+function statsDay(d){ const v=$('stday').value||thaiDay(); const t=Date.parse(v+'T00:00:00Z')+d*864e5; $('stday').value=new Date(t).toISOString().slice(0,10); loadStats(); }
+function statsToday(){ $('stday').value=thaiDay(); loadStats(); }
+async function loadStats(){
+  if(!STATS_ON||_stBusy) return; _stBusy=true;
+  const day=$('stday').value||thaiDay(), shop=$('stshop').value||'all';
+  $('stmsg').textContent='กำลังโหลด…';
+  let d=null;
+  try{ const r=await fetchRaw(W+'/ctl/stats?key='+enc(KEY)+'&day='+enc(day)+'&shop='+enc(shop));
+    if(r.status===403){ _stBusy=false; STATS_ON=false; probeStats(); return; }
+    if(r.ok){ try{ d=await r.json(); }catch(e){ d=null; } }
+  }catch(e){ d=null; }
+  _stBusy=false;
+  if(!d){ $('stmsg').textContent='โหลดไม่ได้ ลองใหม่'; return; }
+  $('stmsg').textContent=''; renderStats(d,day);
+}
+function pct(a,b){ return b>0?Math.round(a*100/b)+'%':'—'; }
+function mins(ms){ ms=Number(ms||0); if(!ms) return '—'; const m=Math.round(ms/60000); return m<1?'<1 นาที':m+' นาที'; }
+function renderStats(d,day){
+  const n=k=>Number(d[k]||0);
+  const touch=n('touch'), handoff=n('handoff'), ai=Number(d.ai_closed!=null?d.ai_closed:Math.max(0,touch-handoff)), open=n('open_now'), order=n('order'), paid=n('paid'), xs=n('xs_done');
+  const k=(cls,v,label)=>'<div class="kpi '+cls+'"><b>'+v+'</b><small>'+label+'</small></div>';
+  $('stkpi').innerHTML=
+    k('',touch,'ลูกค้าทัก')+
+    k('ok',ai+' <span style="font-size:14px;color:var(--mut)">('+pct(ai,touch)+')</span>','เอวาปิดเอง')+
+    k(handoff?'warn':'',handoff,'ส่งคน')+
+    k(open?'bad':'',open,'ค้างตอนนี้')+
+    k('',mins(d.avg_wait_ms),'รอแอดมินรับเฉลี่ย')+
+    k('',order,'ยืนยันออเดอร์')+
+    k('ok',paid,'จ่ายแล้ว')+
+    k('',xs,'ลง XSelly แล้ว')+
+    k('ok',pct(paid,touch),'ปิดการขาย');
+  const rows=(d.by_shop||[]).slice().sort((a,b)=>shopOrder({'ร้าน':a.shop},{'ร้าน':b.shop}));
+  const tr=r=>'<tr><td><span class="dot" style="background:'+shopColorOf(r.shop)+'"></span>'+esc(shopLabel(r.shop))+'</td><td>'+Number(r.touch||0)+'</td><td>'+Number(r.handoff||0)+'</td><td>'+Number(r.order||0)+'</td><td>'+Number(r.paid||0)+'</td><td>'+Number(r.xs_done||0)+'</td><td>'+pct(Number(r.paid||0),Number(r.touch||0))+'</td></tr>';
+  $('sttab').innerHTML='<thead><tr><th>ร้าน · '+esc(day)+'</th><th>ทัก</th><th>ส่งคน</th><th>ยืนยันออเดอร์</th><th>จ่ายแล้ว</th><th>ลง XSelly</th><th>ปิดการขาย</th></tr></thead><tbody>'+
+    (rows.map(tr).join('')||'<tr><td colspan="7" class="mut">ยังไม่มีข้อมูลวันนี้</td></tr>')+
+    (rows.length>1?'<tr class="tot"><td>รวม</td><td>'+touch+'</td><td>'+handoff+'</td><td>'+order+'</td><td>'+paid+'</td><td>'+xs+'</td><td>'+pct(paid,touch)+'</td></tr>':'')+'</tbody>';
 }
 
 /* ── k338 PENDING: กด mute/unmute แล้วให้ชนะผล server 90 วิ ── */
@@ -900,6 +987,7 @@ async function init(){
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
   await loadShops(); if(!KEY) return;
   await refresh(true); startPoll(); refreshAllCounts();
+  probeStats();                                             // 📊 โชว์แท็บสรุปเฉพาะคนที่ /ctl/stats ตอบ 200 (ไม่ await · ไม่ block งาน)
 }
 let _lastWake=0;
 function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); }
