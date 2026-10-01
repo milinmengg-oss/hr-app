@@ -388,7 +388,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     </div>
     <div class="kpis" id="stkpi"></div>
     <div class="tblwrap"><table class="sttab" id="sttab"></table></div>
-    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู · <b>ปิดการขาย</b> = แอดมินกด "ลง XSelly แล้ว" · % = ปิดการขาย ÷ ทัก · <b>ใหม่</b> = เห็นครั้งแรกภายใน 7 วัน · <b>ยอดขาย</b> = ยอดรวมจากการ์ดตอนกดลง XSelly · "สลิปผ่านอัตโนมัติ" มีเฉพาะร้านที่เปิดตรวจสลิป · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
+    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู · <b>เอวาดูแลเอง</b> = แชทที่คุยจบโดยไม่ส่งคน (ถามราคา/ถามของ ไม่ใช่ยอดขาย) · <b>ปิดการขาย</b> = แอดมินกด "ลง XSelly แล้ว" · % = ปิดการขาย ÷ ทัก · <b>ใหม่</b> = เห็นครั้งแรกภายใน 7 วัน · <b>ยอดขาย</b> = ยอดรวมจากการ์ดตอนกดลง XSelly · "สลิปผ่านอัตโนมัติ" มีเฉพาะร้านที่เปิดตรวจสลิป · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
   </section>
 </main>
 </div>
@@ -558,7 +558,7 @@ function renderStats(d,day){
   $('stkpi').innerHTML=
     k('',touch+(has2?' <span style="font-size:14px;color:var(--mut)">ใหม่ '+nw+'</span>':''),'ลูกค้าทัก')+
     k('',has2?fol:'—','เพิ่มเพื่อนวันนี้')+
-    k('ok',ai+' <span style="font-size:14px;color:var(--mut)">('+pct(ai,touch)+')</span>','เอวาปิดเอง')+
+    k('',ai+' <span style="font-size:14px;color:var(--mut)">('+pct(ai,touch)+')</span>','เอวาดูแลเอง ไม่ส่งคน')+
     k(handoff?'warn':'',handoff,'ส่งคน')+
     k(open?'bad':'',open,'ค้างตอนนี้')+
     k('',mins(d.avg_wait_ms),'รอแอดมินรับเฉลี่ย')+
