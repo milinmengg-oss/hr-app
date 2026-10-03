@@ -886,6 +886,9 @@ async function showConv(uid,name){
   CUR_UID=uid; CUR_NAME=name||'';
   setSendEnabled(true);
   $('conv').classList.add('open'); $('convname').textContent='💬 '+(name||'ลูกค้า'); $('convbody').innerHTML='<div class="empty">กำลังโหลด…</div>';
+  //  🆔 k701: โชว์รหัส LINE (คลิกเพื่อคัดลอก) — ใช้ใส่ "LINE ทดลอง" ในแท็บซื้อซ้ำ / แจ้งเคส
+  try{ let _u=$('convuid'); if(!_u){ _u=document.createElement('span'); _u.id='convuid'; _u.className='mut'; _u.style.cssText='font-size:11px;margin-left:8px;cursor:pointer;word-break:break-all;'; _u.title='คลิกเพื่อคัดลอกรหัส LINE'; $('convname').after(_u); }
+    _u.textContent='🆔 '+uid; _u.onclick=()=>{ try{ navigator.clipboard.writeText(uid); toast('คัดลอกรหัส LINE แล้ว'); }catch(e){} }; }catch(e){}
   renderChats(); renderConvActs();
   try{
     const rs=await Promise.all([fetch(q('/ctl/log?uid='+enc(uid))).then(r=>r.json()).catch(()=>({})), fetch(q('/ctl/conv?uid='+enc(uid))).then(r=>r.json()).catch(()=>({}))]);
@@ -900,7 +903,7 @@ async function showConv(uid,name){
     const cb=$('convbody'); cb.scrollTop=cb.scrollHeight;
   }catch(e){ $('convbody').innerHTML='<div class="empty">โหลดไม่ได้</div>'; }
 }
-function closeConv(){ $('conv').classList.remove('open'); setSendEnabled(false); if(!CUR_UID){ return; } CUR_UID=''; $('convname').textContent='เลือกแชทจากรายการซ้าย'; $('convbody').innerHTML='<div class="empty">ยังไม่ได้เลือกแชท</div>'; $('convacts').classList.add('hidden'); $('convstate').classList.add('hidden'); $('convchips').innerHTML=''; $('convline').classList.add('hidden'); renderChats(); }
+function closeConv(){ $('conv').classList.remove('open'); setSendEnabled(false); if(!CUR_UID){ return; } CUR_UID=''; $('convname').textContent='เลือกแชทจากรายการซ้าย'; try{ const _u=$('convuid'); if(_u) _u.textContent=''; }catch(e){} $('convbody').innerHTML='<div class="empty">ยังไม่ได้เลือกแชท</div>'; $('convacts').classList.add('hidden'); $('convstate').classList.add('hidden'); $('convchips').innerHTML=''; $('convline').classList.add('hidden'); renderChats(); }
 /* ↗ LINE OA (panel-chat1) — mapping เดิมของแผงเก่า */
 const SHOP_LINE_ID={ abc12:'U4fcadbe60766cd0befd035ef0df23bbb' };
 function openLineChat(){
