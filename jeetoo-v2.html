@@ -250,6 +250,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="tab" id="tab2" onclick="go(2)">💬 แชท</div>
     <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
     <div class="tab hidden" id="tab4" onclick="go(4)">📊 สรุป</div>
+    <div class="tab" id="tab5" onclick="go(5)">🔁 ซื้อซ้ำ</div>
   </div>
 
   <!-- ═══ แท็บ 1: งาน ═══ -->
@@ -390,6 +391,29 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="tblwrap"><table class="sttab" id="sttab"></table></div>
     <div class="mut" style="margin-top:12px;line-height:1.7;">📌 นับเฉพาะที่ผ่านจีทู · <b>เอวาดูแลเอง</b> = แชทที่คุยจบโดยไม่ส่งคน (ถามราคา/ถามของ ไม่ใช่ยอดขาย) · <b>ปิดการขาย</b> = แอดมินกด "ลง XSelly แล้ว" · % = ปิดการขาย ÷ ทัก · <b>ใหม่</b> = เห็นครั้งแรกภายใน 7 วัน · <b>ยอดขาย</b> = ยอดรวมจากการ์ดตอนกดลง XSelly · "สลิปผ่านอัตโนมัติ" มีเฉพาะร้านที่เปิดตรวจสลิป · แท็บนี้เห็นเฉพาะเจ้านาย/ผู้ดูแล</div>
   </section>
+
+  <!-- ═══ แท็บ 5: ซื้อซ้ำ (#293 REBUY · เอวาทักลูกค้าเก่าตอนของใกล้หมด) ═══ -->
+  <section id="p5" class="hidden">
+    <div class="stbar">
+      <select id="rbshop" onchange="loadRebuy()"></select>
+      <select id="rbdays" onchange="loadRebuy()"><option value="7">7 วัน</option><option value="30" selected>30 วัน</option><option value="90">90 วัน</option></select>
+      <button class="s" onclick="loadRebuy()" title="รีเฟรช">🔄</button>
+      <span class="mut" id="rbmsg"></span>
+    </div>
+    <div class="kpis" id="rbkpi"></div>
+    <div class="mut" id="rbstate" style="margin:8px 0 12px;line-height:1.7;"></div>
+    <div class="set hidden" id="rbcfg">
+      <h4>⚙️ ตั้งค่าซื้อซ้ำ <span class="pill">เจ้าของเท่านั้น</span></h4>
+      <p>ร้านที่เปิดให้เอวาทัก (คั่นด้วย , เช่น abceasy,abc8) — ว่าง = ยังไม่ทักร้านไหนเลย</p>
+      <input id="rbshops" placeholder="abceasy" style="width:100%;">
+      <div class="acts"><div class="sp"></div><button class="p" onclick="rebuySave('shops')">💾 บันทึกร้าน</button></div>
+      <p style="margin-top:10px;">LINE ทดลอง (userId คั่นด้วย ,) — คนในลิสต์จะถูกทัก 10 นาทีหลังกดลง XSelly ไม่สนร้าน/เวลา</p>
+      <input id="rbtest" placeholder="Uxxxxxxxx,Uyyyyyyyy" style="width:100%;">
+      <div class="acts"><div class="sp"></div><button class="p" onclick="rebuySave('test')">💾 บันทึก LINE ทดลอง</button></div>
+      <div class="acts" style="justify-content:flex-start;margin-top:10px;"><label><input type="checkbox" id="rboff" onchange="rebuySave('off')"> ⛔ หยุดทักทั้งหมดชั่วคราว (ทุกร้าน)</label></div>
+    </div>
+    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 เอวาทักลูกค้าเก่าตอนของใกล้หมด (10:00–20:00) · ทักสูงสุด 2 ครั้ง ห่าง 7 วัน · ข้ามคนที่แอดมินดูแลอยู่/มีออเดอร์ค้าง · ลูกค้าพิม "ไม่ต้องเตือน" = หยุดถาวร</div>
+  </section>
 </main>
 </div>
 
@@ -398,6 +422,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <button class="navbtn" id="n2" onclick="go(2)"><i>💬</i>แชท</button>
   <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
   <button class="navbtn hidden" id="n4" onclick="go(4)"><i>📊</i>สรุป</button>
+  <button class="navbtn" id="n5" onclick="go(5)"><i>🔁</i>ซื้อซ้ำ</button>
 </div>
 <div id="toast"></div>
 
@@ -510,11 +535,12 @@ function selectShop(id){
 /* ── แท็บ ── */
 function go(n){
   TAB=n;
-  [1,2,3,4].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
+  [1,2,3,4,5].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
   window.scrollTo(0,0);
   if(n===2) renderChats();
   if(n===3) loadSettings();
   if(n===4) loadStats();
+  if(n===5) loadRebuy();                                    // 🔁 #293 ซื้อซ้ำ
 }
 
 /* ── 📊 สรุปรายวัน (30 ก.ย. · /ctl/stats · owner/BOSS_CODE เท่านั้น) ──
@@ -575,6 +601,49 @@ function renderStats(d,day){
 }
 
 /* ── k338 PENDING: กด mute/unmute แล้วให้ชนะผล server 90 วิ ── */
+/* ── 🔁 ซื้อซ้ำ (#293 REBUY · /ctl/rebuy) — stats ทุกบทบาท · ตั้งค่าเฉพาะเจ้าของ (server ตัดสิน 403) ── */
+let _rbBusy=false;
+function fillRebuyShops(){ const cur=$('rbshop').value||SHOP; $('rbshop').innerHTML=SHOPS.slice().sort(shopOrder).map(s=>'<option value="'+esc(s['ร้าน'])+'">'+esc(s['ชื่อ']||s['ร้าน'])+'</option>').join(''); if([...$('rbshop').options].some(o=>o.value===cur)) $('rbshop').value=cur; }
+async function loadRebuy(){
+  if(_rbBusy) return; _rbBusy=true;
+  if(!$('rbshop').options.length) fillRebuyShops();
+  const shop=$('rbshop').value||SHOP, days=$('rbdays').value||'30';
+  $('rbmsg').textContent='กำลังโหลด…';
+  let d=null;
+  try{ const r=await fetchRaw(W+'/ctl/rebuy?key='+enc(KEY)+'&shop='+enc(shop)+'&op=stats&days='+enc(days)); if(r.ok){ try{ d=await r.json(); }catch(e){ d=null; } } }catch(e){ d=null; }
+  _rbBusy=false;
+  if(!d){ $('rbmsg').textContent='โหลดไม่ได้ ลองใหม่'; return; }
+  $('rbmsg').textContent=''; renderRebuy(d,shop);
+}
+function renderRebuy(d,shop){
+  const n=k=>Number(d[k]||0), baht=v=>Number(v||0).toLocaleString('th-TH');
+  const k=(cls,v,label)=>'<div class="kpi '+cls+'"><b>'+v+'</b><small>'+label+'</small></div>';
+  $('rbkpi').innerHTML=
+    k('',n('sent'),'เอวาทักไป')+
+    k('',n('rebuy')+' <span style="font-size:14px;color:var(--mut)">'+pct(n('rebuy'),n('sent'))+'</span>','กดสั่งเดิม')+
+    k('',n('menu'),'กดดูกลิ่น')+
+    k('',n('no'),'ยังไม่เอา')+
+    k('',n('done'),'ลง XSelly แล้ว (ซื้อซ้ำสำเร็จ)')+
+    k('',baht(d.baht)+' ฿','ยอดซื้อซ้ำ')+
+    k('',n('pending'),'รอถึงกำหนดทัก');
+  $('rbstate').innerHTML=(d.off?'⛔ <b>หยุดทักทั้งหมดอยู่</b>':(d.active?'🟢 ร้านนี้ <b>เปิดทัก</b>':'⚪ ร้านนี้ <b>ยังไม่เปิดทัก</b>'))+' · ร้านที่เปิด: '+(d.shops?esc(d.shops):'—')+' · LINE ทดลอง '+n('test')+' คน · ช่วง '+n('days')+' วัน';
+  const own=!!d.owner; $('rbcfg').classList.toggle('hidden',!own);
+  if(own){ if(document.activeElement!==$('rbshops')) $('rbshops').value=d.shops||''; $('rboff').checked=!!d.off; }
+}
+async function rebuySave(op){
+  let v='';
+  if(op==='shops') v=$('rbshops').value.trim();
+  else if(op==='test') v=$('rbtest').value.trim();
+  else if(op==='off') v=$('rboff').checked?'1':'';
+  if(op==='off' && v==='1' && !confirm('หยุดทักซื้อซ้ำทั้งหมดทุกร้าน?')){ $('rboff').checked=false; return; }
+  if(op==='shops' && !v && !confirm('ล้างรายชื่อร้าน = เอวาจะไม่ทักร้านไหนเลย ยืนยัน?')) return;
+  const shop=$('rbshop').value||SHOP;
+  try{ const r=await fetchRaw(W+'/ctl/rebuy?key='+enc(KEY)+'&shop='+enc(shop)+'&op='+enc(op)+'&v='+enc(v),{method:'POST'});
+    if(r&&r.ok){ toast('บันทึกแล้ว'); if(op==='test') $('rbtest').value=''; loadRebuy(); }
+    else if(r&&r.status===403) toast('เฉพาะเจ้าของร้านเท่านั้น',1);
+    else toast('บันทึกไม่ได้ ลองใหม่',1);
+  }catch(e){ toast('บันทึกไม่ได้ ลองใหม่',1); }
+}
 let PENDING={};
 function pendSet(uid,val){ PENDING[uid]={muted:val,until:Date.now()+90000}; }
 function pendApply(list){ const now=Date.now(); return list.map(c=>{ const p=PENDING[c.uid]; if(!p) return c; if(now>p.until||c.muted===p.muted){ delete PENDING[c.uid]; return c; } const x=Object.assign({},c,{muted:p.muted}); if(p.muted&&!x.reason) x.reason='แอดมินคุมอยู่'; return x; }); }
