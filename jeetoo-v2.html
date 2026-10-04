@@ -403,6 +403,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="kpis" id="rbkpi"></div>
     <div class="mut" id="rbstate" style="margin:8px 0 12px;line-height:1.7;"></div>
     <div class="grp" id="grp_rb"><h3>📣 รอแอดมินทักเสนอส่วนลด — เอวาทักครบ 2 ครั้งแล้วยังไม่กลับมา <b id="cnt_rb"></b></h3><div id="sec_rb"></div></div>
+    <div class="grp" id="grp_rq"><h3>🗓 คิวที่เอวาจะทัก — ใครบ้าง · ของอะไร · วันไหน <b id="cnt_rq"></b> <button class="s" onclick="RQ_OPEN=!RQ_OPEN;renderRebuyQueue()" id="rq_tgl">แสดง</button></h3><div id="sec_rq"></div></div>
     <div class="set hidden" id="rbcfg">
       <h4>⚙️ ตั้งค่าซื้อซ้ำ <span class="pill">เจ้าของเท่านั้น</span></h4>
       <p>ร้านที่เปิดให้เอวาทัก (คั่นด้วย , เช่น abceasy,abc8) — ว่าง = ยังไม่ทักร้านไหนเลย</p>
@@ -625,7 +626,7 @@ function renderRebuy(d,shop){
     k('',baht(d.baht)+' ฿','ยอดซื้อซ้ำ')+
     k('',n('admin'),'แอดมินทักเอง')+
     k('',n('pending'),'รอถึงกำหนดทัก');
-  loadRebuyList(shop);
+  loadRebuyList(shop); loadRebuyQueue(shop);
   $('rbstate').innerHTML=(d.off?'⛔ <b>หยุดทักทั้งหมดอยู่</b>':(d.active?'🟢 ร้านนี้ <b>เปิดทัก</b>':'⚪ ร้านนี้ <b>ยังไม่เปิดทัก</b>'))+' · ร้านที่เปิด: '+(d.shops?esc(d.shops):'—')+' · LINE ทดลอง '+n('test')+' คน · ช่วง '+n('days')+' วัน';
   const own=!!d.owner; $('rbcfg').classList.toggle('hidden',!own);
   if(own){ if(document.activeElement!==$('rbshops')) $('rbshops').value=d.shops||''; $('rboff').checked=!!d.off; }
@@ -641,6 +642,26 @@ async function loadRebuyList(shop){
     +'<div class="mut" style="margin-top:6px;">ทักไปเสนอส่วนลด/โปรเอง แล้วกด "ทักแล้ว" ให้หายจากลิสต์</div></div>'
     +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\')">💬 เปิดแชท</button><button class="p" onclick="rebuyAdminDone(\''+escA(it.uid)+'\',this)">✅ ทักแล้ว</button></div></div>').join('')
     : '<div class="empty">ยังไม่มีเคสค้าง 🎉</div>');
+}
+let RQ_OPEN=false, RQ_DATA=[];
+async function loadRebuyQueue(shop){
+  let d=null;
+  try{ const r=await fetchRaw(W+'/ctl/rebuy?key='+enc(KEY)+'&shop='+enc(shop)+'&op=queue'); if(r.ok){ try{ d=await r.json(); }catch(e){ d=null; } } }catch(e){ d=null; }
+  RQ_DATA=(d&&d.queue)||[]; $('cnt_rq').textContent=RQ_DATA.length?String(RQ_DATA.length):''; renderRebuyQueue();
+}
+function renderRebuyQueue(){
+  $('rq_tgl').textContent=RQ_OPEN?'ซ่อน':'แสดง';
+  if(!RQ_OPEN){ setHTML('sec_rq',''); return; }
+  const fmt=ms=>{ if(!ms) return '—'; const d=new Date(Number(ms)+7*3600e3); return d.getUTCDate()+'/'+(d.getUTCMonth()+1)+' '+String(d.getUTCHours()).padStart(2,'0')+':'+String(d.getUTCMinutes()).padStart(2,'0'); };
+  const stTxt=it=> it.st==='wait'?'⏳ รอถึงกำหนด → ทักครั้งแรก '+fmt(it.next)
+    : it.st==='sent'&&it.stage<2?'📨 ทักแล้ว 1 ครั้ง ('+fmt(it.last)+') → ทักอีกครั้ง '+fmt(it.next)
+    : it.st==='sent'?'📨 ทักครบ 2 ครั้ง ('+fmt(it.last)+') → รอขึ้นลิสต์แอดมิน'
+    : it.st==='admin'?'✅ แอดมินทักแล้ว'
+    : it.st==='no'?'🙅 ลูกค้ายังไม่เอา'
+    : it.st==='stop'?'⛔ ลูกค้าขอไม่ให้เตือน' : esc(it.st);
+  setHTML('sec_rq', RQ_DATA.length? RQ_DATA.map(it=>'<div class="row"><div class="d"><span class="who">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'+(it.test?' <span class="pill">ทดลอง</span>':'')+' <span class="t">· ซื้อ '+esc(fmt(it.t))+'</span>'
+    +'<div class="why">🛒 '+esc(it.items||'')+(it.amt?' · '+Number(it.amt).toLocaleString('th-TH')+' ฿':'')+'</div><div class="mut" style="margin-top:4px;">'+stTxt(it)+'</div></div>'
+    +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\')">💬 เปิดแชท</button></div></div>').join('') : '<div class="empty">ยังไม่มีใครในคิว</div>');
 }
 async function rebuyAdminDone(uid,btn){
   if(!confirm('ยืนยันว่าแอดมินทักลูกค้าคนนี้แล้ว? (จะหายจากลิสต์ · เอวาไม่ทักซ้ำ)')) return;
