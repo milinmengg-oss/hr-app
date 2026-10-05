@@ -383,6 +383,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       <input type="date" id="stday" onchange="loadStats()">
       <button class="s" onclick="statsDay(1)" title="วันถัดไป">▶</button>
       <button class="s" onclick="statsToday()">วันนี้</button>
+      <select id="strange" onchange="loadStats()" title="ช่วงที่รวม (นับย้อนหลังถึงวันที่เลือก)"><option value="1">รายวัน</option><option value="7">7 วัน</option><option value="30">30 วัน</option><option value="m">เดือนนี้</option></select>
       <select id="stshop" onchange="loadStats()"><option value="all">ทุกร้าน</option></select>
       <button class="s" onclick="loadStats()" title="รีเฟรช">🔄</button>
       <span class="mut" id="stmsg"></span>
@@ -561,12 +562,14 @@ async function probeStats(){
 function fillStatsShops(){ const cur=$('stshop').value||'all'; $('stshop').innerHTML='<option value="all">ทุกร้าน ('+SHOPS.length+')</option>'+SHOPS.slice().sort(shopOrder).map(s=>'<option value="'+esc(s['ร้าน'])+'">'+esc(s['ชื่อ']||s['ร้าน'])+'</option>').join(''); $('stshop').value=cur; }
 function statsDay(d){ const v=$('stday').value||thaiDay(); const t=Date.parse(v+'T00:00:00Z')+d*864e5; $('stday').value=new Date(t).toISOString().slice(0,10); loadStats(); }
 function statsToday(){ $('stday').value=thaiDay(); loadStats(); }
+function statsDays(day){ const v=($('strange')&&$('strange').value)||'1'; if(v==='m'){ const dd=parseInt(String(day).slice(8,10),10); return isFinite(dd)&&dd>0?dd:1; } const n=parseInt(v,10); return isFinite(n)&&n>1?n:1; }
 async function loadStats(){
   if(!STATS_ON||_stBusy) return; _stBusy=true;
   const day=$('stday').value||thaiDay(), shop=$('stshop').value||'all';
+  const days=statsDays(day);                                // k704: 1 / 7 / 30 / เดือนนี้ (= วันที่ของเดือน)
   $('stmsg').textContent='กำลังโหลด…';
   let d=null;
-  try{ const r=await fetchRaw(W+'/ctl/stats?key='+enc(KEY)+'&day='+enc(day)+'&shop='+enc(shop));
+  try{ const r=await fetchRaw(W+'/ctl/stats?key='+enc(KEY)+'&day='+enc(day)+'&shop='+enc(shop)+(days>1?'&days='+days:''));
     if(r.status===403){ _stBusy=false; STATS_ON=false; probeStats(); return; }
     if(r.ok){ try{ d=await r.json(); }catch(e){ d=null; } }
   }catch(e){ d=null; }
@@ -585,7 +588,7 @@ function renderStats(d,day){
   const k=(cls,v,label)=>'<div class="kpi '+cls+'"><b>'+v+'</b><small>'+label+'</small></div>';
   $('stkpi').innerHTML=
     k('',touch+(has2?' <span style="font-size:14px;color:var(--mut)">ใหม่ '+nw+'</span>':''),'ลูกค้าทัก')+
-    k('',has2?fol:'—','เพิ่มเพื่อนวันนี้')+
+    k('',has2?fol:'—',(Number(d.days||1)>1?'เพิ่มเพื่อน':'เพิ่มเพื่อนวันนี้'))+
     k('',ai+' <span style="font-size:14px;color:var(--mut)">('+pct(ai,touch)+')</span>','เอวาดูแลเอง ไม่ส่งคน')+
     k(handoff?'warn':'',handoff,'ส่งคน')+
     k(open?'bad':'',open,'ค้างตอนนี้')+
@@ -597,7 +600,7 @@ function renderStats(d,day){
     k('',paid,'สลิปผ่านอัตโนมัติ');
   const rows=(d.by_shop||[]).slice().sort((a,b)=>shopOrder({'ร้าน':a.shop},{'ร้าน':b.shop}));
   const tr=r=>'<tr><td><span class="dot" style="background:'+shopColorOf(r.shop)+'"></span>'+esc(shopLabel(r.shop))+'</td><td>'+Number(r.touch||0)+'</td><td>'+(r.new!=null?Number(r.new||0):'—')+'</td><td>'+(r.follow!=null?Number(r.follow||0):'—')+'</td><td>'+Number(r.handoff||0)+'</td><td>'+Number(r.order||0)+'</td><td>'+Number(r.xs_done||0)+'</td><td>'+pct(Number(r.xs_done||0),Number(r.touch||0))+'</td><td>'+(r.sales!=null?baht(r.sales):'—')+'</td></tr>';
-  $('sttab').innerHTML='<thead><tr><th>ร้าน · '+esc(day)+'</th><th>ทัก</th><th>ใหม่</th><th>เพิ่มเพื่อน</th><th>ส่งคน</th><th>ยืนยันออเดอร์</th><th>ปิดการขาย</th><th>%</th><th>ยอดขาย ฿</th></tr></thead><tbody>'+
+  $('sttab').innerHTML='<thead><tr><th>ร้าน · '+esc((Number(d.days||1)>1&&d.from)?(d.from+' → '+day+' ('+d.days+' วัน)'):day)+'</th><th>ทัก</th><th>ใหม่</th><th>เพิ่มเพื่อน</th><th>ส่งคน</th><th>ยืนยันออเดอร์</th><th>ปิดการขาย</th><th>%</th><th>ยอดขาย ฿</th></tr></thead><tbody>'+
     (rows.map(tr).join('')||'<tr><td colspan="9" class="mut">ยังไม่มีข้อมูลวันนี้</td></tr>')+
     (rows.length>1?'<tr class="tot"><td>รวม</td><td>'+touch+'</td><td>'+(has2?nw:'—')+'</td><td>'+(has2?fol:'—')+'</td><td>'+handoff+'</td><td>'+order+'</td><td>'+xs+'</td><td>'+pct(xs,touch)+'</td><td>'+(has2?baht(sales):'—')+'</td></tr>':'')+'</tbody>';
 }
