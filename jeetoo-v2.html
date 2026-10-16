@@ -478,7 +478,9 @@ async function loadShops(){
 /* เรียงร้าน: ตามเลขร้าน (V1, V2, … V22) · ร้านที่ไม่มีเลข (Easy) ไว้ท้ายสุด — เม้ง 25 ก.ย. */
 function shopOrder(a,b){ const num=s=>{ const m=String(s['ร้าน']||'').match(/(\d+)$/); return m?parseInt(m[1],10):Infinity; }; const na=num(a),nb=num(b); if(na!==nb) return na-nb; return String(a['ร้าน']).localeCompare(String(b['ร้าน'])); }
 function renderShops(){
-  const items=SHOPS.slice().sort(shopOrder).map(s=>{ const id=s['ร้าน'], col=shopColorOf(id), on=id===SHOP, n=pendingCount(id), u=urgentCount(id);
+  //  🔴 k713: ร้านที่มีเคสแดง (ลูกค้ารอคน) ขึ้นก่อน · ในกลุ่มเดียวกันเรียงตามเลขร้านเหมือนเดิม
+  const red713=s=>urgentCount(s['ร้าน'])>0?0:1;
+  const items=SHOPS.slice().sort((a,b)=>(red713(a)-red713(b))||shopOrder(a,b)).map(s=>{ const id=s['ร้าน'], col=shopColorOf(id), on=id===SHOP, n=pendingCount(id), u=urgentCount(id);
     const miss=missingOf(s), warn=miss.length>0;
     const badge='<span class="badge '+(u>0?'':'o')+(n?'':' z')+'" id="bdg_'+sid(id)+'">'+(n==null?'':n)+'</span>';
     return {id,col,on,warn,miss,badge,name:s['ชื่อ']||id};
@@ -504,6 +506,8 @@ function selectShop(id){
   SHOP=id; localStorage.setItem('g2shop',id);
   if(changed){ CHATS=[]; PENDING={}; CUR_UID=''; closeConv(); }
   renderShops(); renderHeader();
+  //  ⚡ k712: มีแคชของร้านนั้น (จากนับทุกร้าน/เคยเปิด) → วาดทันที ไม่โชว์ของร้านเก่า · refresh ด้านล่างทับด้วยของใหม่
+  if(changed&&CACHE[id]){ const c=CACHE[id]; ON=c.on!==false; CHATS=pendApply(c.chats||[]); renderBot(); renderWork(); renderChats(); }
   refresh(true);                                            // ✅ ดึงทุกอย่างของร้านใหม่ (แก้บั๊กเก่าที่ต้องรีโหลดหน้า)
   if(TAB===3) loadSettings();
   if(changed) toast('สลับไปร้าน '+shopLabel()+' แล้ว');
@@ -670,21 +674,33 @@ function pendApply(list){ const now=Date.now(); return list.map(c=>{ const p=PEN
 
 /* ── โหลด board ของร้านปัจจุบัน ── */
 let _busy=false, _poll=null, _pollAll=null, _again708=false;   // 🔄 k708: force ที่มาตอน _busy → รันซ้ำเมื่อจบ
+let _drawn712=0;                                            // ⚡ k712: เวลาที่วาดกระดานล่าสุด (ตอบ same นาน ๆ → วาดซ้ำจากแคชทุก 60 วิ)
 function inputFocused(){ const a=document.activeElement; return !!(a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type!=='file'&&a.type!=='checkbox'))); }
 async function refresh(force){
   if(!KEY) return;
   if(!force && typeof document!=='undefined' && document.hidden) return;   // 💤 แท็บถูกซ่อน = ไม่ยิง (กลับมาแล้ว wakeRefresh ยิงให้)
   if(_busy){ if(force) _again708=true; return; }   // 🔄 k708: เปลี่ยนร้านระหว่าง poll → ไม่ทิ้ง
-  if(!force && inputFocused()){ $('pillpoll').textContent='หยุดอัปเดตชั่วคราว (กำลังพิมพ์)'; return; }
+  //  ⌨️ k711: เดิมโฟกัสช่องพิมพ์ = หยุดดึงทั้งหน้า → ตอนนี้ดึงต่อ · กล่องที่มีช่องโฟกัสอยู่ไม่ถูกวาดทับ (setHTML)
   _busy=true; const shop=SHOP;
   try{
-    const r=await fetchJ(q('/ctl/board'));
+    //  ⚡ k712: มี v/h ของร้านนี้ (worker k777+) → ถามว่า "เปลี่ยนไหม" · worker เก่าไม่มี h → URL เดิมเป๊ะ
+    const c0=CACHE[shop]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):'';
+    const r=await fetchJ(q('/ctl/board'+sq));
     if(!r.ok) throw new Error('board '+r.status);
     if(shop!==SHOP) return;                                 // สลับร้านระหว่างรอ — ทิ้งผลเก่า
-    const b=r.d; BUILD=b.build||BUILD;
-    CACHE[shop]={queue:b.queue||[],orders:b.orders||[],chats:b.chats||[],on:b.on!==false,muted:b.muted||0,notice:b['ประกาศ']||'',t:Date.now()};
+    const b=r.d;
+    if(b&&b.same===1){                                      // ⚡ k712: ไม่เปลี่ยน → ไม่วาด (วาดซ้ำจากแคชทุก 60 วิ ให้ "รอ X นาที" เดิน)
+      const cc=CACHE[shop];
+      if(!(cc&&cc.h&&cc.h===b.h)){ if(cc) cc.h=''; _again708=true; return; }   // ผิดปกติ: แคชไม่ตรง → ดึงเต็มทันที ไม่ล้างจอ
+      cc.t=Date.now();
+      if(Date.now()-_drawn712>=60000){ CHATS=pendApply(cc.chats||[]); renderWork(); renderChats(); _drawn712=Date.now(); }
+      $('pillpoll').textContent='อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+      return;
+    }
+    BUILD=b.build||BUILD;
+    CACHE[shop]={queue:b.queue||[],orders:b.orders||[],chats:b.chats||[],on:b.on!==false,muted:b.muted||0,notice:b['ประกาศ']||'',t:Date.now(),v:b.v,h:b.h};
     ON=b.on!==false; CHATS=pendApply(b.chats||[]);
-    renderBot(); renderWork(); renderChats(); renderShops();
+    renderBot(); renderWork(); renderChats(); renderShops(); _drawn712=Date.now();
     $('pillpoll').textContent='อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   }catch(e){ if(e.message!=='forbidden'){ $('pillpoll').textContent='⚠️ โหลดไม่ได้ ลองใหม่'; } }
   finally{ _busy=false; if(_again708){ _again708=false; refresh(true); } }   // 🔄 k708
@@ -704,7 +720,7 @@ async function refreshAllCounts(){
     const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
     //  🚦 26 ก.ย.: ยิงทีละ 5 ร้าน (เดิม 22 ร้านพร้อมกันทุกนาที × ทุกเครื่องแอดมิน = กระแทก worker/KV) · ผลเหมือนเดิม
     for(let i=0;i<others.length;i+=5){
-      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,t:Date.now()}; }catch(e){} }));
+      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
       renderShops();
     }
   }finally{ _allBusy=false; }
@@ -719,7 +735,11 @@ function doneKey(){ return 'g2v2done:'+SHOP+':'+new Date().toISOString().slice(0
 function bumpDone(){ try{ localStorage.setItem(doneKey(),String((parseInt(localStorage.getItem(doneKey())||'0',10)||0)+1)); }catch(e){} }
 function doneToday(){ try{ return parseInt(localStorage.getItem(doneKey())||'0',10)||0; }catch(e){ return 0; } }
 const _last={};
-function setHTML(id,html){ if(_last[id]===html) return; _last[id]=html; $(id).innerHTML=html; }
+const FEE711={};                                           // ⌨️ k711: ค่าส่งด่วนที่พิมพ์ค้าง ต่อ uid (poll วาดกล่องใหม่แล้วใส่กลับ)
+function setHTML(id,html){ if(_last[id]===html) return; const box=$(id);
+  //  ⌨️ k711: เคอร์เซอร์อยู่ในช่องพิมพ์ข้างในกล่องนี้ (เช่น ช่องค่าส่งด่วน) → ข้ามรอบนี้ ไม่จำ _last (ออกจากช่องแล้ววาดรอบถัดไป)
+  try{ const a=document.activeElement; if(a&&box&&box!==a&&typeof box.contains==='function'&&box.contains(a)&&inputFocused()) return; }catch(e){}
+  _last[id]=html; box.innerHTML=html; }
 function renderWork(){
   const c=CACHE[SHOP]||{queue:[],orders:[]};
   const byOld=(a,b)=>(a.t||0)-(b.t||0);
@@ -762,7 +782,7 @@ function renderWork(){
     return '<div class="row" id="qc_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nm||'ลูกค้า (ไม่ทราบชื่อ)')+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
       +'<div class="why">📍 '+esc(it.reason||'')+(it.km?' · ~'+esc(it.km)+' กม.':'')+'</div>'+(msg?'<div class="msg">“'+esc(msg)+'”</div>':'')
       +'<div class="mut" style="margin-top:6px;">เปิดแผนที่ → ดูค่าส่งในแอปแกร็บ → กรอกตัวเลข → ส่งราคา (ระบบคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง)</div></div>'
-      +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
+      +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"'+(FEE711[it.uid]?' value="'+esc(FEE711[it.uid])+'"':'')+' oninput="FEE711[\''+esc(it.uid)+'\']=this.value"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
       +'<button class="s" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬</button>'
       +'<button class="s" onclick="markDone(\''+esc(it.uid)+'\',0,this)">✅ เก็บเคส</button></div></div>';
   }).join('') : '<div class="empty">ไม่มีเคสรอค่าส่งด่วน</div>');
@@ -816,7 +836,7 @@ async function sendExpFee(uid,btn){
   if(!confirm('ส่งค่าส่งด่วน '+fee+' บาท ให้ลูกค้า (ร้าน '+shopLabel()+')?\n\nระบบจะคิดยอดรวมใหม่และส่งการ์ดยืนยันให้อัตโนมัติ')) return;
   btn.disabled=true; btn.textContent='กำลังส่ง…';
   try{ const r=await fetchJ(q('/expfee?uid='+enc(uid)+'&fee='+fee));
-    if(r.ok){ btn.textContent='ส่งแล้ว ✅'; toast((r.d['ผล']||'ส่งแล้ว')+(r.d['ยอดรวมใหม่']?'\nยอดรวมใหม่ '+r.d['ยอดรวมใหม่']+' บาท':'')); setTimeout(()=>refresh(true),1200); }
+    if(r.ok){ delete FEE711[uid]; btn.textContent='ส่งแล้ว ✅'; toast((r.d['ผล']||'ส่งแล้ว')+(r.d['ยอดรวมใหม่']?'\nยอดรวมใหม่ '+r.d['ยอดรวมใหม่']+' บาท':'')); setTimeout(()=>refresh(true),1200); }
     else{ btn.disabled=false; btn.textContent='ส่งราคา'; toast(r.d['ผล']||'ส่งไม่สำเร็จ',1); }
   }catch(e){ btn.disabled=false; btn.textContent='ส่งราคา'; if(e.message!=='forbidden') toast('ส่งไม่สำเร็จ ลองใหม่',1); }
 }
@@ -1044,7 +1064,7 @@ async function loadHealth(){
 
 /* ── วงจรชีวิต ── */
 function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); _poll=_pollAll=null; }
-function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),15000); _pollAll=setInterval(refreshAllCounts,90000); }
+function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,90000); }   // ⚡ k712: 15 → 5 วิ (worker k777 ตอบ same ได้)
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
