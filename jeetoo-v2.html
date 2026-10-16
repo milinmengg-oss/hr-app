@@ -277,6 +277,10 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
         </div>
         <div id="chatlist"></div>
         <div class="mut" style="margin-top:10px;">💡 แตะชื่อลูกค้าเพื่อดูบทสนทนาย้อนหลัง 30 วัน — ไม่ต้องไปเปิดหาใน LINE</div>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="s g" id="unmuteall709" onclick="unmuteAll709(this)">▶️ ให้เอวาตอบทุกแชทในร้านนี้</button>
+          <span class="mut">ปลดล็อกทุกแชทที่ปิดจีทูไว้ของร้านที่เลือก (แอดมินที่กำลังคุมแชทอยู่จะถูกปลดด้วย)</span>
+        </div>
       </div>
       <div class="conv" id="conv">
         <div class="ch">
@@ -862,6 +866,16 @@ async function unmute1(uid,btn){
   try{ const r=await fetchJ(q('/ctl/unmute1?uid='+enc(uid)),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('ให้เอวาตอบแชทนี้ต่อแล้ว'); }
   catch(e){ delete PENDING[uid]; setMuted(uid,true); if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ กดใหม่อีกครั้ง',1); return; }
   setTimeout(()=>refresh(true),1500);
+}
+/* ▶️ k709 (เม้ง 16 ต.ค. · แอดมินขอ): ปลดล็อกทุกแชทของร้านที่เลือก = POST /ctl/unmute (worker มีอยู่แล้ว · ต่อร้าน · ลบ mute:<shop>:* ทั้งหมด) · confirm 1 ชั้น */
+async function unmuteAll709(btn){
+  const n=(CHATS||[]).filter(c=>c&&c.muted).length;
+  if(!confirm('ให้เอวากลับมาตอบทุกแชทของร้าน '+shopLabel()+' ('+n+' แชทที่ปิดอยู่)?\nแอดมินที่กำลังคุมแชทอยู่จะถูกปลดด้วย')) return;
+  if(btn){ btn.disabled=true; btn.textContent='▶️ กำลังปลด…'; }
+  try{ const r=await fetchJ(q('/ctl/unmute'),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('เอวากลับมาตอบทุกแชทของร้านนี้แล้ว ('+((r.d&&r.d.cleared)||0)+' แชท)'); }
+  catch(e){ if(e.message!=='forbidden') toast('ปลดไม่สำเร็จ ลองใหม่อีกครั้ง',1); }
+  if(btn){ btn.disabled=false; btn.textContent='▶️ ให้เอวาตอบทุกแชทในร้านนี้'; }
+  setTimeout(()=>refresh(true),1200);
 }
 /* 💬 เปิดบทสนทนา (จากทุกแท็บ) — ใช้ /ctl/log + /ctl/conv เหมือนแผงเก่า */
 function openConvFrom(uid,name){ if(TAB!==2) go(2); showConv(uid,name); }
