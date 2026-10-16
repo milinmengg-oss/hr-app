@@ -872,10 +872,22 @@ async function unmuteAll709(btn){
   const n=(CHATS||[]).filter(c=>c&&c.muted).length;
   if(!confirm('ให้เอวากลับมาตอบทุกแชทของร้าน '+shopLabel()+' ('+n+' แชทที่ปิดอยู่)?\nแอดมินที่กำลังคุมแชทอยู่จะถูกปลดด้วย')) return;
   if(btn){ btn.disabled=true; btn.textContent='▶️ กำลังปลด…'; }
-  try{ const r=await fetchJ(q('/ctl/unmute'),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('เอวากลับมาตอบทุกแชทของร้านนี้แล้ว ('+((r.d&&r.d.cleared)||0)+' แชท)'); }
-  catch(e){ if(e.message!=='forbidden') toast('ปลดไม่สำเร็จ ลองใหม่อีกครั้ง',1); }
+  //  🔁 k710: ร้านที่มีแชทปิดค้างเยอะ คำขอเดียวลบไม่หมด (ตอบ {err}) → ยิงซ้ำจนตอบ cleared=0 · สูงสุด 40 รอบ
+  let total=0, rounds=0, ok=false;
+  try{
+    for(;rounds<40;rounds++){
+      const r=await fetchJ(q('/ctl/unmute'),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status);
+      const c=(r.d&&typeof r.d.cleared==='number')?r.d.cleared:null;
+      if(c===0){ ok=true; break; }
+      if(c!==null) total+=c;
+      if(btn) btn.textContent='▶️ กำลังปลด… ('+total+' แชท)';
+      await new Promise(res=>setTimeout(res,250));
+    }
+    if(ok) toast('เอวากลับมาตอบทุกแชทของร้านนี้แล้ว ('+total+' แชท)');
+    else toast('ปลดไปแล้ว '+total+' แชท แต่ยังเหลืออยู่ — กดปุ่มอีกครั้ง',1);
+  }catch(e){ if(e.message!=='forbidden') toast('ปลดไม่สำเร็จ (ทำได้ '+total+' แชท) ลองใหม่อีกครั้ง',1); }
   if(btn){ btn.disabled=false; btn.textContent='▶️ ให้เอวาตอบทุกแชทในร้านนี้'; }
-  setTimeout(()=>refresh(true),1200);
+  setTimeout(()=>refresh(true),1500);
 }
 /* 💬 เปิดบทสนทนา (จากทุกแท็บ) — ใช้ /ctl/log + /ctl/conv เหมือนแผงเก่า */
 function openConvFrom(uid,name){ if(TAB!==2) go(2); showConv(uid,name); }
