@@ -665,12 +665,12 @@ function pendSet(uid,val){ PENDING[uid]={muted:val,until:Date.now()+90000}; }
 function pendApply(list){ const now=Date.now(); return list.map(c=>{ const p=PENDING[c.uid]; if(!p) return c; if(now>p.until||c.muted===p.muted){ delete PENDING[c.uid]; return c; } const x=Object.assign({},c,{muted:p.muted}); if(p.muted&&!x.reason) x.reason='แอดมินคุมอยู่'; return x; }); }
 
 /* ── โหลด board ของร้านปัจจุบัน ── */
-let _busy=false, _poll=null, _pollAll=null;
+let _busy=false, _poll=null, _pollAll=null, _again708=false;   // 🔄 k708: force ที่มาตอน _busy → รันซ้ำเมื่อจบ
 function inputFocused(){ const a=document.activeElement; return !!(a&&(a.tagName==='TEXTAREA'||(a.tagName==='INPUT'&&a.type!=='file'&&a.type!=='checkbox'))); }
 async function refresh(force){
   if(!KEY) return;
   if(!force && typeof document!=='undefined' && document.hidden) return;   // 💤 แท็บถูกซ่อน = ไม่ยิง (กลับมาแล้ว wakeRefresh ยิงให้)
-  if(_busy) return;
+  if(_busy){ if(force) _again708=true; return; }   // 🔄 k708: เปลี่ยนร้านระหว่าง poll → ไม่ทิ้ง
   if(!force && inputFocused()){ $('pillpoll').textContent='หยุดอัปเดตชั่วคราว (กำลังพิมพ์)'; return; }
   _busy=true; const shop=SHOP;
   try{
@@ -683,7 +683,7 @@ async function refresh(force){
     renderBot(); renderWork(); renderChats(); renderShops();
     $('pillpoll').textContent='อัปเดตล่าสุด '+new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
   }catch(e){ if(e.message!=='forbidden'){ $('pillpoll').textContent='⚠️ โหลดไม่ได้ ลองใหม่'; } }
-  finally{ _busy=false; }
+  finally{ _busy=false; if(_again708){ _again708=false; refresh(true); } }   // 🔄 k708
 }
 function manualRefresh(){ refresh(true); if(TAB===3) loadSettings(); toast('รีเฟรชแล้ว'); }
 function renderBot(){
