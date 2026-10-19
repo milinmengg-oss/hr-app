@@ -105,7 +105,11 @@ h3 b{color:var(--txt);}
 .rbbar.today .st{opacity:1;box-shadow:0 0 12px rgba(79,140,255,.6);}
 .rbxl{display:flex;gap:6px;padding:4px 6px 0;} .rbxl span{flex:1;text-align:center;font-size:10px;color:var(--mut);min-width:0;}
 .rbxl span.today{color:var(--txt);font-weight:700;}
-.rblg{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px;} .rblg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;}
+.rblg{display:flex;gap:14px;font-size:12px;color:var(--mut);margin-top:6px;}
+/* k718 · ฮีโร่กดดูรายชื่อ + แท่งทอง */
+.rbhero.who .rbh.tap{cursor:pointer;} .rbhero.who .rbh.tap:hover{filter:brightness(1.15);} .rbhero.who .rbh.tap.on{outline:2px solid var(--txt);}
+.rbhero:not(.who) .h718hint{display:none;} .h718hint{display:block;font-size:11px;color:var(--txt);opacity:.7;margin-top:4px;}
+.rbbar .dn{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:40%;max-width:14px;border-radius:4px 4px 0 0;background:var(--warn);box-shadow:0 0 6px rgba(245,166,35,.6);} .rblg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px;}
 .tblwrap{overflow-x:auto;}
 .sttab{width:100%;border-collapse:collapse;font-size:14px;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
 .sttab th,.sttab td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap;}
@@ -396,7 +400,8 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       <span class="mut" id="rbmsg"></span>
     </div>
     <div class="rbhero" id="rbhero"></div>   <!-- k717 -->
-    <div class="grp" id="grp_rbc" style="display:none;margin-bottom:12px;"><h3>📈 ทักไป vs ตอบกลับ <span class="mut" style="font-weight:400;font-size:13px;">(รายวัน · ชี้แท่งดูตัวเลข)</span> <span id="rbd_btns"></span></h3><div class="rbchart" id="rbchart"></div><div class="rbxl" id="rbxl"></div><div class="rblg"><span><i style="background:var(--acc)"></i>ทักไป</span><span><i style="background:var(--ok)"></i>ตอบกลับ</span></div></div>
+    <div class="grp" id="grp_rbw" style="display:none;margin-bottom:12px;"><h3><span id="rbw_title"></span> <span id="rbw_btns"></span> <button class="s" style="padding:4px 12px;font-size:13px;margin-left:6px;" onclick="whoClose()">ปิด</button></h3><div id="rbw_list"></div></div>   <!-- k718 -->
+    <div class="grp" id="grp_rbc" style="display:none;margin-bottom:12px;"><h3>📈 ทักไป · ตอบกลับ · กลับมาซื้อ <span class="mut" style="font-weight:400;font-size:13px;">(รายวัน · ชี้แท่งดูตัวเลข)</span> <span id="rbd_btns"></span></h3><div class="rbchart" id="rbchart"></div><div class="rbxl" id="rbxl"></div><div class="rblg"><span><i style="background:var(--acc)"></i>ทักไป</span><span><i style="background:var(--ok)"></i>ตอบกลับ</span><span><i style="background:var(--warn)"></i>กลับมาซื้อ</span></div></div>
     <div class="kpis" id="rbkpi"></div>
     <div class="grp" id="grp_rbd" style="display:none;margin-top:12px;"><h3>📅 ตารางรายวัน <button class="s" style="padding:4px 12px;font-size:13px;margin-left:6px;" onclick="var t=$('rbdwrap');t.style.display=t.style.display==='none'?'':'none';this.textContent=t.style.display==='none'?'ดูตาราง':'ซ่อนตาราง'">ดูตาราง</button></h3><div class="tblwrap" id="rbdwrap" style="display:none;"><table class="sttab" id="rbdtab"></table></div></div>
     <div class="mut" id="rbstate" style="margin:8px 0 12px;line-height:1.7;"></div>
@@ -633,10 +638,11 @@ function renderRebuy(d,shop){
   window._rbStats717=d;
   $('rbhero').innerHTML=
     '<div class="rbh blue"><span class="ic">🚀</span><b id="h717_today">–</b><small>ทักไปวันนี้<br><span id="h717_yday">เมื่อวาน –</span></small></div>'
-   +'<div class="rbh green"><span class="ic">💬</span><b id="h717_reply">–</b><small>ตอบกลับ (14 วัน)<br><span id="h717_replyn">–</span></small></div>'
-   +'<div class="rbh gold"><span class="ic">🛒</span><b>'+n('done')+'</b><small>กลับมาซื้อ · '+baht(d.baht)+' ฿<br>ช่วง '+esc(String(d.days||''))+' วัน · ทักรวม '+n('sent')+'</small></div>'
+   +'<div class="rbh green tap" id="hb718_reply" onclick="whoTap(\'reply\')"><span class="ic">💬</span><b id="h717_reply">–</b><small>ตอบกลับ (14 วัน)<br><span id="h717_replyn">–</span><span class="h718hint">👆 กดดูว่าใครตอบ</span></small></div>'
+   +'<div class="rbh gold tap" id="hb718_done" onclick="whoTap(\'done\')"><span class="ic">🛒</span><b>'+n('done')+'</b><small>กลับมาซื้อ · '+baht(d.baht)+' ฿<br>ช่วง '+esc(String(d.days||''))+' วัน · ทักรวม '+n('sent')+'<span class="h718hint">👆 กดดูว่าใครกลับมาซื้อ</span></small></div>'
    +'<div class="rbh red"><span class="ic">⚠️</span><b id="h717_over">–</b><small>เลยกำหนดแล้ว ยังไม่ได้ทัก<br><span id="h717_wait">รอถึงกำหนด '+n('pending')+'</span></small></div>';
   loadRebuyList(shop); loadRebuyQueue(shop); loadRebuyDays(shop);   /* k716 */
+  loadRebuyWho(shop);   /* k718 */
   $('rbstate').innerHTML=(d.off?'⛔ <b>หยุดทักทั้งหมดอยู่</b>':(d.active?'🟢 ร้านนี้ <b>เปิดทัก</b>':'⚪ ร้านนี้ <b>ยังไม่เปิดทัก</b>'))+' · ร้านที่เปิด: '+(d.shops?esc(d.shops):'—')+' · LINE ทดลอง '+n('test')+' คน · ช่วง '+n('days')+' วัน';
   const own=!!d.owner; $('rbcfg').classList.toggle('hidden',!own);
   if(own){ if(document.activeElement!==$('rbshops')) $('rbshops').value=d.shops||''; $('rboff').checked=!!d.off; }
@@ -674,9 +680,9 @@ async function loadRebuyDays(shop){
     const H=(id,v)=>{ const e=$(id); if(e) e.innerHTML=v; };
     H('h717_today',t717); H('h717_yday','เมื่อวาน '+y717+(y717?(t717>=y717?' ▲':' ▼'):''));
     H('h717_reply',rs?Math.round(rr*100/rs)+'%':'–'); H('h717_replyn',rr+' จาก '+rs+' คน · '+d.length+' วัน');
-    const show=d.slice(0,Math.min(d.length,RBD_N)).reverse(); const mx=Math.max(1,...show.map(x=>N(x,'sent')));
-    $('rbchart').innerHTML=show.map((x,i)=>{ const sv=N(x,'sent'), rv=N(x,'reply'); const hs=Math.round(sv*100/mx), hr=sv?Math.round(rv*100/sv):0; const last=i===show.length-1;
-      return '<div class="rbbar'+(last?' today':'')+'" title="'+dl(x)+' · ทัก '+sv+' · ตอบ '+rv+'"><span class="v">'+(sv||'')+'</span><div class="st" style="height:'+(sv?Math.max(hs,3):0)+'%"><div class="rp" style="height:'+hr+'%"></div></div></div>'; }).join('');
+    const show=d.slice(0,Math.min(d.length,RBD_N)).reverse(); const mx=Math.max(1,...show.map(x=>Math.max(N(x,'sent'),N(x,'done'))));   /* k718: + done */
+    $('rbchart').innerHTML=show.map((x,i)=>{ const sv=N(x,'sent'), rv=N(x,'reply'), dv=N(x,'done'); const hs=Math.round(sv*100/mx), hr=sv?Math.round(rv*100/sv):0, hd=dv?Math.max(Math.round(dv*100/mx),3):0; const last=i===show.length-1;
+      return '<div class="rbbar'+(last?' today':'')+'" title="'+dl(x)+' · ทัก '+sv+' · ตอบ '+rv+' · กลับมาซื้อ '+dv+'"><span class="v">'+(sv||'')+'</span><div class="st" style="height:'+(sv?Math.max(hs,3):0)+'%"><div class="rp" style="height:'+hr+'%"></div></div>'+(dv?'<div class="dn" style="height:'+hd+'%"></div>':'')+'</div>'; }).join('');
     $('rbxl').innerHTML=show.map((x,i)=>'<span class="'+(i===show.length-1?'today':'')+'">'+(show.length>16&&i%2?'' :dl(x))+'</span>').join('');
     $('grp_rbc').style.display='';
   }catch(e717){}
@@ -686,6 +692,38 @@ async function loadRebuyDays(shop){
     +d.map(row).join('')
     +'<tr class="tot"><td>รวม '+d.length+' วัน</td><td>'+tot.sent+'</td><td>'+tot.reply+' <span style="color:var(--mut);font-size:12px;">'+pct(tot.reply,tot.sent)+'</span></td><td>'+tot.rebuy+'</td><td>'+tot.done+'</td><td>'+tot.baht.toLocaleString('th-TH')+'</td></tr>';
   $('grp_rbd').style.display='';
+}
+/* k718 · รายชื่อ "ใคร" ตอบกลับ / กลับมาซื้อ จาก /ctl/rebuy?op=who (worker k806+) — worker เก่าไม่ได้ {who:[…]} = ช่องฮีโร่กดไม่ได้ + ซ่อนกล่องเงียบ ๆ */
+let WHO_N=14, WHO_KIND='', WHO_DATA=[], WHO_OK=false, _whoSeq=0;
+async function loadRebuyWho(shop){
+  const seq=++_whoSeq; let d=null;
+  try{ const r=await fetchRaw(W+'/ctl/rebuy?key='+enc(KEY)+'&shop='+enc(shop)+'&op=who&kind=all&days='+enc(WHO_N)); if(r.ok){ try{ d=await r.json(); }catch(e){ d=null; } } }catch(e){ d=null; }
+  if(seq!==_whoSeq) return;   /* สลับร้าน/กดช่วงใหม่ระหว่างรอ = ทิ้งผลเก่า */
+  WHO_OK=!!(d&&Array.isArray(d.who)); WHO_DATA=WHO_OK?d.who:[];
+  const h=$('rbhero'); if(h&&h.classList) h.classList.toggle('who',WHO_OK);
+  if(!WHO_OK){ WHO_KIND=''; $('grp_rbw').style.display='none'; return; }
+  renderRebuyWho();
+}
+function whoTap(kind){ if(!WHO_OK) return; WHO_KIND=(WHO_KIND===kind)?'':kind; renderRebuyWho(); }
+function whoClose(){ WHO_KIND=''; renderRebuyWho(); }
+function whoSet(n){ WHO_N=n; loadRebuyWho($('rbshop').value||SHOP); }
+function renderRebuyWho(){
+  ['reply','done'].forEach(k=>{ const e=$('hb718_'+k); if(e&&e.classList) e.classList.toggle('on',WHO_OK&&WHO_KIND===k); });
+  if(!WHO_OK||!WHO_KIND){ $('grp_rbw').style.display='none'; return; }
+  const fmt=ms=>{ if(!ms) return '—'; const d=new Date(Number(ms)+7*3600e3); return d.getUTCDate()+'/'+(d.getUTCMonth()+1); };
+  const L=WHO_DATA.filter(x=>x&&x.kind===WHO_KIND);
+  const isDone=WHO_KIND==='done';
+  const sum=L.reduce((a,x)=>a+Number(x.amt||0),0);
+  $('rbw_title').innerHTML=(isDone?'🛒 ใครกลับมาซื้อ':'💬 ใครตอบกลับ')+' <span class="mut" style="font-weight:400;font-size:13px;">('+WHO_N+' วัน · '+L.length+' คน'+(isDone&&sum?' · '+sum.toLocaleString('th-TH')+' ฿':'')+')</span>';
+  const B=n=>'<button class="'+(WHO_N===n?'p':'s')+'" style="padding:4px 10px;font-size:13px;margin-left:4px;" onclick="whoSet('+n+')">'+n+' วัน</button>';
+  $('rbw_btns').innerHTML=B(14)+B(30)+B(90);
+  const gap=x=>{ const s=Number(x.sentAt||0), t=Number(x.t||0); if(!s||!t) return ''; const dd=Math.max(0,Math.floor((t-s)/864e5)); return ' ('+(dd?dd+' วัน':'วันเดียวกัน')+')'; };
+  setHTML('rbw_list', L.length? L.map(x=>'<div class="row"><div class="d"><span class="who">'+esc(x.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'
+    +' <span class="t">· ทัก '+esc(fmt(x.sentAt))+' → '+(isDone?'กลับมาซื้อ ':'ตอบ ')+esc(fmt(x.t))+esc(gap(x))+'</span>'
+    +'<div class="why" style="color:var(--txt);">🛒 '+esc(x.items||'—')+(Number(x.amt||0)>0?' · <b style="color:var(--ok)">'+Number(x.amt).toLocaleString('th-TH')+' ฿</b>':'')+'</div></div>'
+    +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(x.uid||'')+'\',\''+escA(x.name||'')+'\')">💬 เปิดแชท</button></div></div>').join('')
+    : '<div class="empty">'+(isDone?'ยังไม่มีใครกลับมาซื้อในช่วงนี้':'ยังไม่มีใครตอบกลับในช่วงนี้')+'</div>');
+  $('grp_rbw').style.display='';
 }
 let RQ_OPEN=false, RQ_DATA=[];
 let RQ_STATE='';   /* k714: '' ปกติ · 'loading' กำลังดึง · 'fail' ดึงไม่ทัน/ไม่สำเร็จ */
