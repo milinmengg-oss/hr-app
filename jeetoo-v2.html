@@ -854,8 +854,10 @@ function renderRebuyQueue(){
   const overD=it=>Math.max(0,Math.floor((Date.now()-Number(it.next||0))/864e5));
   const stTxt=it=> isOver(it)?D('⚠️ เลยกำหนดมา '+overD(it)+' วัน — ยังไม่ได้ทัก','var(--bad)')+' <span class="mut" style="font-size:13px;">(กำหนด '+fmt(it.next)+')</span>'
     : it.st==='wait'?'⏳ รอถึงกำหนด → ทักครั้งแรก '+D(fmt(it.next),'var(--warn)')
-    : it.st==='sent'&&it.stage<2?'📨 ทักแล้ว 1 ครั้ง ('+fmt(it.last)+') → ทักอีกครั้ง '+D(fmt(it.next),'var(--warn)')
-    : it.st==='sent'?'📨 ทักครบ 2 ครั้ง ('+fmt(it.last)+') → '+D('รอขึ้นลิสต์แอดมิน','var(--bad)')
+    : it.st==='sent'&&it.stage<2&&Number(it.next||0)>0?'📨 ทักแล้ว 1 ครั้ง ('+fmt(it.last)+') → ทักอีกครั้ง '+D(fmt(it.next),'var(--warn)')
+    : it.st==='sent'?'📨 ทักแล้ว ('+fmt(it.last)+') → '+D('ไม่ตอบ 7 วัน = ขึ้นลิสต์ให้แอดมิน','var(--bad)')   /* k720: k841 ทักครั้งเดียว */
+    : it.st==='unreach'?D('📵 ส่งไม่ถึง (ลูกค้าบล็อก/ปิดแชท)','var(--mut)')+(it.why?' <span class="mut" style="font-size:13px;">'+esc(it.why)+'</span>':'')   /* k720: k829 */
+    : it.st==='nostock'?D('📦 ของหมดเกิน 30 วัน — เลิกทัก','var(--mut)')   /* k720: k838 */
     : it.st==='admin'?D('✅ แอดมินทักแล้ว','var(--ok)')
     : it.st==='no'?D('🙅 ลูกค้ายังไม่เอา','var(--mut)')
     : it.st==='stop'?D('⛔ ลูกค้าขอไม่ให้เตือน','var(--bad)') : esc(it.st);
