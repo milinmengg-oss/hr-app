@@ -1302,17 +1302,67 @@ async function loadHealth(){
 /* POST /seed/stockmap + /seed/skumap (key เท่านั้น · สต็อกใช้ร่วมทุกร้าน) */
 
 /* ── วงจรชีวิต ── */
-function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); _poll=_pollAll=null; }
-function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,20000); }   /* k722: 90 → 20 วิ */   // ⚡ k712: 15 → 5 วิ (worker k777 ตอบ same ได้)
+/* ── 📡 k723 · งานรอบ 34 ข้อ 2: ถาม /ctl/pulse (worker k844) ทุก 3 วิ → ดึง /ctl/board เฉพาะร้านที่ป้ายขยับ ──
+   ร้านที่เปิด = วาดใหม่ทันที · ร้านอื่น = อัปเดตตัวเลข badge · แชทร้านที่เปิด (c) ขยับ = ดึงได้ไม่ถี่กว่า 5 วิ (เท่า k722)
+   ป้ายขยับแต่กระดานยังตอบ same (KV ตามไม่ทัน) → ถามซ้ำอีก ≤2 ครั้ง ห่าง 5 วิ
+   ตาข่าย: ยังดึงเต็มแบบเดิมทุก 60 วิ (ร้านที่เปิด + ร้านอื่น) เผื่อ KV ช้า/ป้ายหาย
+   pulse ล้ม (404 = worker เก่า / error / timeout / ตอบไม่มี v) → กลับโหมด k722 (5 / 20 วิ) เอง · ลองถามใหม่ (404 ทุก 5 นาที · อื่น ๆ ทุก 60 วิ)
+   แท็บซ่อน = ไม่ยิง · ไม่ยิงซ้อน (รอบก่อนยังไม่จบ = ข้าม) */
+let _pulse723=null, _pulseBusy723=false, _pulseMode723=0, _probe723=null;   // mode: 0 = ยังไม่รู้ · 1 = ใช้ pulse · -1 = โหมด k722
+let PV723={}, PC723={shop:'',c:0}, CHK723={}, _openAt723=0, _openPend723=false;
+async function pulseFetch723(){
+  const opt={}; try{ if(typeof AbortController!=='undefined'){ const ac=new AbortController(); opt.signal=ac.signal; setTimeout(()=>{ try{ ac.abort(); }catch(e){} },8000); } }catch(e){}
+  const r=await fetch(qs('/ctl/pulse',SHOP)+'&open='+enc(SHOP),opt);   // key+shop เหมือนทุก request (worker อ่านแค่ key/open)
+  let d=null; try{ d=await r.json(); }catch(e){ d=null; }
+  return {ok:!!r.ok, status:r.status, d};
+}
+function pulseOff723(status){
+  const was=_pulseMode723; _pulseMode723=-1;
+  if(was!==-1) startPoll();
+  if(_probe723) clearTimeout(_probe723);
+  _probe723=setTimeout(()=>{ _probe723=null; pulse723(); }, status===404?300000:60000);
+}
+async function boardOne723(id){   // ร้านอื่น: ถามแบบเดียวกับ refreshAllCounts (since/h) → 'new' | 'same' | 'err'
+  try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));
+    if(!r.ok) return 'err'; if(r.d.same) return 'same';
+    CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; return 'new';
+  }catch(e){ return 'err'; }
+}
+async function openOne723(){ const h0=CACHE[SHOP]&&CACHE[SHOP].h; _openAt723=Date.now(); _openPend723=false; await refresh(true); const h1=CACHE[SHOP]&&CACHE[SHOP].h; return (h1&&h1===h0)?'same':'new'; }
+function recheck723(id,res){ const k=CHK723[id]; if(!k) return; if(res==='new'||k.n<=0){ delete CHK723[id]; return; } k.n--; k.at=Date.now()+5000; }
+async function pulse723(){
+  if(!KEY||_pulseBusy723) return;
+  if(typeof document!=='undefined'&&document.hidden) return;
+  if(_pulseMode723===-1&&_probe723) return;                 // โหมด k722 รอเวลาลองใหม่อยู่
+  _pulseBusy723=true;
+  try{
+    let r=null; try{ r=await pulseFetch723(); }catch(e){ r=null; }
+    if(!r||!r.ok||!r.d||!r.d.v||typeof r.d.v!=='object'){ pulseOff723(r?r.status:0); return; }
+    if(_pulseMode723!==1){ const was=_pulseMode723; _pulseMode723=1; if(_probe723){ clearTimeout(_probe723); _probe723=null; } if(was===-1) startPoll(); }
+    const now=Date.now(), v=r.d.v, todo=[]; let openGo=false;
+    for(const id in v){ const nv=Number(v[id])||0; if((id in PV723)&&PV723[id]!==nv) CHK723[id]={n:2,at:0}; PV723[id]=nv; }
+    const cv=(r.d.c&&(SHOP in r.d.c))?(Number(r.d.c[SHOP])||0):null;
+    if(cv!==null){ if(PC723.shop===SHOP&&PC723.c!==cv) _openPend723=true; PC723={shop:SHOP,c:cv}; }
+    for(const id in CHK723){ if(now<CHK723[id].at) continue; if(id===SHOP) openGo=true; else todo.push(id); }
+    if(!openGo&&_openPend723&&now-_openAt723>=5000) openGo=true;
+    if(openGo){ const res=await openOne723(); recheck723(SHOP,res); }
+    for(let i=0;i<todo.length;i+=5){ const part=todo.slice(i,i+5); const rs=await Promise.all(part.map(boardOne723)); part.forEach((id,j)=>recheck723(id,rs[j])); renderShops(); }
+  }finally{ _pulseBusy723=false; }
+}
+function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); if(_pulse723) clearInterval(_pulse723); _poll=_pollAll=_pulse723=null; }
+function startPoll(){ stopPoll();
+  if(_pulseMode723===-1){ _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,20000); }   /* k722 เดิม (worker เก่า / pulse ล้ม) */   // ⚡ k712: 15 → 5 วิ · k722: 90 → 20 วิ
+  else{ _poll=setInterval(()=>refresh(false),60000); _pollAll=setInterval(refreshAllCounts,60000); _pulse723=setInterval(pulse723,3000); }   /* 📡 k723: pulse 3 วิ + ตาข่ายดึงเต็ม 60/60 วิ */
+}
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
   await loadShops(); if(!KEY) return;
-  await refresh(true); startPoll(); refreshAllCounts();
+  await refresh(true); startPoll(); refreshAllCounts(); pulse723();   /* 📡 k723: ถาม pulse ทันที (รู้เร็วว่า worker มี pulse ไหม) */
   probeStats();                                             // 📊 โชว์แท็บสรุปเฉพาะคนที่ /ctl/stats ตอบ 200 (ไม่ await · ไม่ block งาน)
 }
 let _lastWake=0;
-function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); refreshAllCounts(); }   /* k722: กลับมาที่หน้า = อัปเดตตัวเลขทุกร้านทันที */
+function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); refreshAllCounts(); pulse723(); }   /* k722: กลับมาที่หน้า = อัปเดตตัวเลขทุกร้านทันที · 📡 k723: + pulse ทันที */
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) wakeRefresh(); });
 window.addEventListener('pageshow',wakeRefresh); window.addEventListener('focus',wakeRefresh); window.addEventListener('online',wakeRefresh);
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='keyin') saveKey(); });
