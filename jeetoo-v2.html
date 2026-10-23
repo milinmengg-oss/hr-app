@@ -419,7 +419,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="kpis" id="rbkpi"></div>
     <div class="grp" id="grp_rbd" style="display:none;margin-top:12px;"><h3>📅 ตารางรายวัน <button class="s" style="padding:4px 12px;font-size:13px;margin-left:6px;" onclick="var t=$('rbdwrap');t.style.display=t.style.display==='none'?'':'none';this.textContent=t.style.display==='none'?'ดูตาราง':'ซ่อนตาราง'">ดูตาราง</button></h3><div class="tblwrap" id="rbdwrap" style="display:none;"><table class="sttab" id="rbdtab"></table></div></div>
     <div class="mut" id="rbstate" style="margin:8px 0 12px;line-height:1.7;"></div>
-    <div class="grp" id="grp_rb"><h3>📣 รอแอดมินทักเสนอส่วนลด — เอวาทักครบ 2 ครั้งแล้วยังไม่กลับมา <b id="cnt_rb"></b></h3><div id="sec_rb"></div></div>
+    <div class="grp" id="grp_rb"><h3>📣 รอแอดมินทักเสนอส่วนลด — เอวาทักแล้ว ลูกค้าเงียบเกิน 7 วัน <b id="cnt_rb"></b></h3><div id="sec_rb"></div></div>
     <div class="grp" id="grp_rq"><h3>🗓 คิวที่เอวาจะทัก — ใครบ้าง · ของอะไร · วันไหน <b id="cnt_rq"></b> <button class="p" style="padding:8px 18px;font-size:15px;margin-left:8px;" onclick="RQ_OPEN=!RQ_OPEN;renderRebuyQueue()" id="rq_tgl">แสดง</button></h3><div id="sec_rq"></div></div>
     <div class="set hidden" id="rbcfg">
       <h4>⚙️ ตั้งค่าซื้อซ้ำ <span class="pill">เจ้าของเท่านั้น</span></h4>
@@ -431,7 +431,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
       <div class="acts"><div class="sp"></div><button class="p" onclick="rebuySave('test')">💾 บันทึก LINE ทดลอง</button></div>
       <div class="acts" style="justify-content:flex-start;margin-top:10px;"><label><input type="checkbox" id="rboff" onchange="rebuySave('off')"> ⛔ หยุดทักทั้งหมดชั่วคราว (ทุกร้าน)</label></div>
     </div>
-    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 เอวาทักลูกค้าเก่าตอนของใกล้หมด (10:00–20:00) 1 ข้อความ + ลิงก์เมนู · ทักสูงสุด 2 ครั้ง ห่าง 7 วัน · เงียบอีก 3 วัน → ขึ้นลิสต์ด้านบนให้แอดมินทักเสนอส่วนลดเอง · ลูกค้าพิม "ไม่ต้องเตือน" = หยุดถาวร</div>
+    <div class="mut" style="margin-top:12px;line-height:1.7;">📌 เอวาทักลูกค้าเก่าตอนของใกล้หมด (10:00–20:00) 1 ข้อความ + ลิงก์เมนู · ทักคนละ 1 ครั้ง · เงียบเกิน 7 วัน → ขึ้นลิสต์ด้านบนให้แอดมินทักเสนอส่วนลดเอง · ของหมดรอมีของค่อยทัก (ไม่เกิน 30 วัน) · ส่งไม่ถึง 3 วัน = เลิกทัก · ลูกค้าพิม "ไม่ต้องเตือน" = หยุดถาวร</div>
     </div>   <!-- k719 · /rbdetail -->
   </section>
 </main>
@@ -828,7 +828,7 @@ function renderRebuyNames(){
       +sec('rbn_h_done','ใครกลับมาซื้อ',D,D.map(x=>row(x,'ทัก '+esc(dm(x.sentAt))+' → กลับมาซื้อ '+esc(dm(x.t)),chat(x))).join(''),'ยังไม่มีใครกลับมาซื้อในช่วงนี้'); }
   const A=RB_LIST719||[];
   h+=RBS.adm===undefined?'<h3 id="rbn_h_adm">รอแอดมินเสนอส่วนลด</h3><div class="empty">กำลังโหลด…</div>'
-    : sec('rbn_h_adm','รอแอดมินเสนอส่วนลด',A,A.map(x=>row(x,'เอวาทักครบ 2 ครั้ง ล่าสุด '+esc(dm(x.last)),chat(x)+'<button class="p" onclick="rebuyAdminDone(\''+escA(x.uid||'')+'\',this'+sh(x)+')">ทักแล้ว</button>')).join(''),'ไม่มีใครรอ');
+    : sec('rbn_h_adm','รอแอดมินเสนอส่วนลด',A,A.map(x=>row(x,'เอวาทักล่าสุด '+esc(dm(x.last)),chat(x)+'<button class="p" onclick="rebuyAdminDone(\''+escA(x.uid||'')+'\',this'+sh(x)+')">ทักแล้ว</button>')).join(''),'ไม่มีใครรอ');
   setHTML('rbn_list',h);
 }
 let RQ_OPEN=false, RQ_DATA=[];
@@ -959,7 +959,7 @@ async function refreshAllCounts(){
     const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
     //  🚦 26 ก.ย.: ยิงทีละ 5 ร้าน (เดิม 22 ร้านพร้อมกันทุกนาที × ทุกเครื่องแอดมิน = กระแทก worker/KV) · ผลเหมือนเดิม
     for(let i=0;i<others.length;i+=5){
-      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const r=await fetchJ(qs('/ctl/board',id)); if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
+      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));   /* k722: ถามว่าเปลี่ยนไหม (เบา) */ if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
       renderShops();
     }
   }finally{ _allBusy=false; }
@@ -1303,7 +1303,7 @@ async function loadHealth(){
 
 /* ── วงจรชีวิต ── */
 function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); _poll=_pollAll=null; }
-function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,90000); }   // ⚡ k712: 15 → 5 วิ (worker k777 ตอบ same ได้)
+function startPoll(){ stopPoll(); _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,20000); }   /* k722: 90 → 20 วิ */   // ⚡ k712: 15 → 5 วิ (worker k777 ตอบ same ได้)
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
@@ -1312,7 +1312,7 @@ async function init(){
   probeStats();                                             // 📊 โชว์แท็บสรุปเฉพาะคนที่ /ctl/stats ตอบ 200 (ไม่ await · ไม่ block งาน)
 }
 let _lastWake=0;
-function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); }
+function wakeRefresh(){ if(!KEY) return; if(Date.now()-_lastWake<2500) return; _lastWake=Date.now(); refresh(false); startPoll(); refreshAllCounts(); }   /* k722: กลับมาที่หน้า = อัปเดตตัวเลขทุกร้านทันที */
 document.addEventListener('visibilitychange',()=>{ if(!document.hidden) wakeRefresh(); });
 window.addEventListener('pageshow',wakeRefresh); window.addEventListener('focus',wakeRefresh); window.addEventListener('online',wakeRefresh);
 document.addEventListener('keydown',e=>{ if(e.key==='Enter'&&document.activeElement&&document.activeElement.id==='keyin') saveKey(); });
