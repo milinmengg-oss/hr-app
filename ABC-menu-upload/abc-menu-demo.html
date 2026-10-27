@@ -215,12 +215,19 @@ const IMGV="82";
    เรียงตอนเปิดหมวดเท่านั้น (ไม่สลับที่กลางจอตอนรีเฟรชสต็อก) · ไม่เก็บ/ไม่แสดงตัวเลขสต็อกบนหน้าจอ */
 const PIN={"03":["ABC 8K"]};   /* ปักหมุด: ใส่ชื่อรุ่นตามที่ปรากฏใน CFG.cards[หน้า].list[].m เรียงจากบนลงล่าง · ว่าง = ไม่ปักหมุด · ตอนนี้ปัก ABC 8K (พี่เม้งสั่ง) */
 let HOLDT=null;
+let SORTMODE="A";   /* A = ตามจำนวนรสที่มีของ (ตามเอกสาร) · B = ราคาถูกก่อน · C = มีของก่อนแล้วราคาถูกก่อน */
 function cardCount(p,ci){ let n=0; (CFG.spots[p]||[]).forEach(function(sp){ if(sp.c===ci && spOK(sp)) n++; }); return n; }
 function cardOrder(p,CD){
   const idx=CD.list.map(function(c,i){return i;}), cnt=idx.map(function(i){return cardCount(p,i);});
   const pinned=[]; (PIN[p]||[]).forEach(function(m){ const i=CD.list.findIndex(function(c){return c.m===m;}); if(i>=0&&pinned.indexOf(i)<0) pinned.push(i); });
   const rest=idx.filter(function(i){return pinned.indexOf(i)<0;});
-  const live=rest.filter(function(i){return cnt[i]>0;}).sort(function(a,b){return (cnt[b]-cnt[a])||(a-b);});
+  const pr=function(i){ const v=priceOf(CD.list[i].m); return (v==null)?1e9:v; };
+  if(SORTMODE==="B"){      /* ข: ราคาถูกก่อน (ไม่สนสต็อก) · ราคาเท่ากันคงลำดับเดิม · รุ่นหมดยังเป็นสีเทาแต่ไม่ย้ายที่ */
+    return pinned.concat(rest.slice().sort(function(a,b){return (pr(a)-pr(b))||(a-b);}));
+  }
+  const live=rest.filter(function(i){return cnt[i]>0;}).sort(SORTMODE==="C"
+    ? function(a,b){return (pr(a)-pr(b))||(cnt[b]-cnt[a])||(a-b);}   /* ค: มีของก่อน แล้วราคาถูกก่อน (ราคาเท่ากัน รสมากกว่าขึ้นก่อน) */
+    : function(a,b){return (cnt[b]-cnt[a])||(a-b);});                /* ก: ตามจำนวนรสที่มีของ (ตามเอกสาร) */
   const dead=rest.filter(function(i){return cnt[i]===0;});
   return pinned.concat(live,dead);
 }
@@ -717,9 +724,15 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
     ".fogbar button.on{background:#c6f45f;color:#111}";
   document.head.appendChild(css);
   var bar=document.createElement("div"); bar.className="fogbar";
-  bar.innerHTML='<b>เดโม่ · ฝ้า:</b><button type="button" data-m="live" class="on">ตามสต็อกจริง</button><button type="button" data-m="all">ฝ้าทุกจุด</button><button type="button" data-m="none">ปิดฝ้า</button><span style="width:100%;height:0"></span><b>จำลองสต็อก:</b><button type="button" data-sim="a">รุ่นหมดทุกรส (Quik · INFY)</button><button type="button" data-sim="b">Marbo 9K เหลือ 5 รส</button>';
+  bar.innerHTML='<b>เดโม่ · ฝ้า:</b><button type="button" data-m="live" class="on">ตามสต็อกจริง</button><button type="button" data-m="all">ฝ้าทุกจุด</button><button type="button" data-m="none">ปิดฝ้า</button><span style="width:100%;height:0"></span><b>เรียงแบบ:</b><button type="button" data-sort="A" class="on">ก. ตามจำนวนรส</button><button type="button" data-sort="B">ข. ราคาถูกก่อน</button><button type="button" data-sort="C">ค. มีของ+ราคาถูกก่อน</button><span style="width:100%;height:0"></span><b>จำลองสต็อก:</b><button type="button" data-sim="a">รุ่นหมดทุกรส (Quik · INFY)</button><button type="button" data-sim="b">Marbo 9K เหลือ 5 รส</button>';
   var top=document.querySelector(".topbar")||document.body; top.insertBefore(bar, top.firstChild);
   bar.insertAdjacentHTML("beforeend",'<span style="width:100%;text-align:center;opacity:.75;font-size:11.5px">ปุ่มรีวิว: ใช้ข้อมูลชีต ณ 22 ต.ค. (เฉพาะแถวที่ผ่านเงื่อนไข) ฝังในไฟล์</span>');
+  function setSort(k){
+    SORTMODE=k;
+    bar.querySelectorAll("button[data-sort]").forEach(function(x){ x.classList.toggle("on", x.dataset.sort===k); });
+    if(CATNOW) openCat(CATNOW);
+  }
+  var qs=new URLSearchParams(location.search).get("sort"); if(qs==="A"||qs==="B"||qs==="C") setSort(qs);   /* ลิงก์ตรง: ?sort=B */
   var simKeys={a:[],b:[]};
   function sim(b){
     var k=b.dataset.sim, ks=simKeys[k];
@@ -743,9 +756,10 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
   window.paintStock=function(){ if(mode==="live") orig(); else apply(); };
   bar.addEventListener("click",function(e){
     var b=e.target.closest("button"); if(!b) return;
+    if(b.dataset.sort){ setSort(b.dataset.sort); return; }
     if(b.dataset.sim){ sim(b); return; }
     mode=b.dataset.m;
-    bar.querySelectorAll("button").forEach(function(x){ x.classList.toggle("on", x===b); });
+    bar.querySelectorAll("button[data-m]").forEach(function(x){ x.classList.toggle("on", x===b); });
     apply();
   });
 })();
