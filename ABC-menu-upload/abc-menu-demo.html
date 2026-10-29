@@ -237,7 +237,7 @@ function sortCards(onlyHeld){
     const p=(CFG.pages[CATNOW]||[])[si], CD=(CFG.cards||{})[p]; if(!CD) return;
     if(onlyHeld && !st.classList.contains("hold")) return;
     if(!STOCK){ st.classList.add("hold"); wait=true; return; }     /* ยังไม่มีสต็อก → รอก่อน ไม่เดาลำดับ */
-    const els=[].slice.call(st.children).filter(function(e){return e.classList.contains("card");});
+    const els=[]; [].slice.call(st.children).forEach(function(e){ if(e.classList.contains("card")) els[+e.dataset.ci]=e; });   /* จับคู่ด้วยเลขการ์ดเดิม (ไม่ใช่ลำดับใน DOM) เพื่อจัดเรียงซ้ำได้ถูก */
     cardOrder(p,CD).forEach(function(i){ st.appendChild(els[i]); });
     st.classList.remove("hold");
   });
@@ -714,7 +714,7 @@ if(new URLSearchParams(location.search).get("debug")) document.querySelector(".t
 buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
 </script><script>
 /* ── แถบทดสอบฝ้า: โผล่เฉพาะตอนเปิดไฟล์ abc-menu-demo.html (ไฟล์เดียวกับ live ทุกไบต์ แต่ลูกค้าไม่เห็น)
-   ตามสต็อกจริง = ฝ้าตามสต็อกสด (ค่าเริ่มต้น) · ฝ้าทุกจุด = ไว้ให้กราฟิกเช็กว่าฝ้าคลุมพอดีทุกช่อง · ปิดฝ้า = ดูภาพเต็ม ── */
+   ตามสต็อกจริง = ฝ้าตามสต็อกสด (ค่าเริ่มต้น) · มีของทั้งหมด = จำลองว่าทุกรสมีของ (ไม่ฝ้า ไม่เทา เรียงราคาล้วน) · ฝ้าทุกจุด = ไว้ให้กราฟิกเช็กว่าฝ้าคลุมพอดีทุกช่อง · ปิดฝ้า = ดูภาพเต็ม ── */
 (function(){
   if(!/abc-menu-demo/.test(location.pathname)) return;
   var mode="live";
@@ -724,13 +724,16 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
     ".fogbar button.on{background:#c6f45f;color:#111}";
   document.head.appendChild(css);
   var bar=document.createElement("div"); bar.className="fogbar";
-  bar.innerHTML='<b>เดโม่ · ฝ้า:</b><button type="button" data-m="live" class="on">ตามสต็อกจริง</button><button type="button" data-m="all">ฝ้าทุกจุด</button><button type="button" data-m="none">ปิดฝ้า</button>';
+  bar.innerHTML='<b>เดโม่ · ฝ้า:</b><button type="button" data-m="live" class="on">ตามสต็อกจริง</button><button type="button" data-m="full">มีของทั้งหมด</button><button type="button" data-m="all">ฝ้าทุกจุด</button><button type="button" data-m="none">ปิดฝ้า</button>';
   var top=document.querySelector(".topbar")||document.body; top.insertBefore(bar, top.firstChild);
   bar.insertAdjacentHTML("beforeend",'<span style="width:100%;text-align:center;opacity:.75;font-size:11.5px">ปุ่มรีวิว: ใช้ข้อมูลชีต ณ 22 ต.ค. (เฉพาะแถวที่ผ่านเงื่อนไข) ฝังในไฟล์</span>');
-  var orig=window.paintStock;
+  var orig=window.paintStock, origOK=window.spOK;
+  /* มีของทั้งหมด = จำลองว่าทุกรสมีของ: ไม่มีฝ้า ไม่มีการ์ดสีเทา และเรียงการ์ดตามราคาถูก→แพงล้วนๆ (ใช้ดูลำดับเต็มของเมนู) */
+  window.spOK=function(sp){ return mode==="full" ? true : origOK(sp); };
   function apply(){
     if(mode==="live"){ orig(); return; }
     document.querySelectorAll("#catpages .hot").forEach(function(d){ d.classList.toggle("out", mode==="all"); });
+    if(typeof paintAlloff==="function") paintAlloff();
   }
   window.paintStock=function(){ if(mode==="live") orig(); else apply(); };
   bar.addEventListener("click",function(e){
@@ -738,6 +741,7 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
     mode=b.dataset.m;
     bar.querySelectorAll("button").forEach(function(x){ x.classList.toggle("on", x===b); });
     apply();
+    if(typeof sortCards==="function" && typeof STOCK!=="undefined" && STOCK) sortCards(false);   /* จัดลำดับการ์ดใหม่ตามโหมด (มีของทั้งหมด = เรียงราคาล้วน · โหมดอื่น = ตามสต็อกจริง) */
   });
 })();
 </script>
