@@ -465,6 +465,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 //  30 ก.ย.: ค่าที่ใส่ใน onclick="fn('…')" ต้องหนี \ และ ' แบบ JS ก่อน แล้วค่อย esc — ชื่อลูกค้ามี ' (อา'หรั่ง) เคยทำให้ปุ่มบนการ์ดพังเงียบ
 const escA=s=>esc(String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"));
+const nmOf=x=>{ const n=String((x&&x.name)||'').trim(); if(n) return n; const u=String((x&&x.uid)||''); return u.length>=6?'ลูกค้า …'+u.slice(-6):'ลูกค้า (ไม่ทราบชื่อ)'; };
 const sid=s=>String(s||'').replace(/[^a-zA-Z0-9]/g,'');
 const enc=encodeURIComponent;
 /* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
@@ -671,7 +672,7 @@ async function loadRebuyList(shop){
   RB_LIST719=list; rbSumSet719(shop,'adm',(d&&Array.isArray(d.list))?list.length:null,d&&d.fail719); renderRebuyNames();   /* k719 */
   $('cnt_rb').textContent=list.length?String(list.length):'';
   const ago=ms=>{ const dd=Math.floor((Date.now()-Number(ms||0))/864e5); return dd<=0?'วันนี้':dd+' วันก่อน'; };
-  setHTML('sec_rb', list.length? list.map(it=>'<div class="row" id="rb_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+' <span class="t">· เอวาทักล่าสุด '+esc(ago(it.last))+'</span>'
+  setHTML('sec_rb', list.length? list.map(it=>'<div class="row" id="rb_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nmOf(it))+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+' <span class="t">· เอวาทักล่าสุด '+esc(ago(it.last))+'</span>'
     +'<div class="why">🛒 '+esc(it.items||'')+(it.amt?' · '+Number(it.amt).toLocaleString('th-TH')+' ฿':'')+'</div>'
     +'<div class="mut" style="margin-top:6px;">ทักไปเสนอส่วนลด/โปรเอง แล้วกด "ทักแล้ว" ให้หายจากลิสต์</div></div>'
     +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button><button class="p" onclick="rebuyAdminDone(\''+escA(it.uid)+'\',this'+(it.shop?',\''+escA(it.shop)+'\'':'')+')">✅ ทักแล้ว</button></div></div>').join('')
@@ -736,7 +737,7 @@ function renderRebuyWho(){
   const B=n=>'<button class="'+(WHO_N===n?'p':'s')+'" style="padding:4px 10px;font-size:13px;margin-left:4px;" onclick="whoSet('+n+')">'+n+' วัน</button>';
   $('rbw_btns').innerHTML=B(14)+B(30)+B(90);
   const gap=x=>{ const s=Number(x.sentAt||0), t=Number(x.t||0); if(!s||!t) return ''; const dd=Math.max(0,Math.floor((t-s)/864e5)); return ' ('+(dd?dd+' วัน':'วันเดียวกัน')+')'; };
-  setHTML('rbw_list', L.length? L.map(x=>'<div class="row"><div class="d"><span class="who">'+esc(x.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'+(x.shop?' <span class="pill">'+esc(shopLabel(x.shop))+'</span>':'')
+  setHTML('rbw_list', L.length? L.map(x=>'<div class="row"><div class="d"><span class="who">'+esc(nmOf(x))+'</span>'+(x.shop?' <span class="pill">'+esc(shopLabel(x.shop))+'</span>':'')
     +' <span class="t">· ทัก '+esc(fmt(x.sentAt))+' → '+(isDone?'กลับมาซื้อ ':'ตอบ ')+esc(fmt(x.t))+esc(gap(x))+'</span>'
     +'<div class="why" style="color:var(--txt);">🛒 '+esc(x.items||'—')+(Number(x.amt||0)>0?' · <b style="color:var(--ok)">'+Number(x.amt).toLocaleString('th-TH')+' ฿</b>':'')+'</div></div>'
     +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(x.uid||'')+'\',\''+escA(x.name||'')+'\''+(x.shop?',\''+escA(x.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
@@ -816,7 +817,7 @@ function renderRebuyNames(){
   const tag=x=>all&&x.shop?' <span class="pill">'+esc(shopLabel(x.shop))+'</span>':'';
   const sh=x=>x.shop?',\''+escA(x.shop)+'\'':'';
   const chat=x=>'<button class="s" onclick="openConvFrom(\''+escA(x.uid||'')+'\',\''+escA(x.name||'')+'\''+sh(x)+')">เปิดแชท</button>';
-  const row=(x,when,acts)=>'<div class="row"><div class="d"><span class="who">'+esc(x.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'+tag(x)+' <span class="t">· '+when+'</span>'
+  const row=(x,when,acts)=>'<div class="row"><div class="d"><span class="who">'+esc(nmOf(x))+'</span>'+tag(x)+' <span class="t">· '+when+'</span>'
     +'<div class="why" style="color:var(--txt);">'+esc(x.items||'—')+(Number(x.amt||0)>0?' · '+Number(x.amt).toLocaleString('th-TH')+' ฿':'')+'</div></div><div class="acts">'+acts+'</div></div>';
   const people=k=>{ const seen={}; return (RBN_DATA||[]).filter(x=>{ if(!x||x.kind!==k) return false; const id=(x.shop||'')+'|'+(x.uid||x.name||''); if(seen[id]) return false; seen[id]=1; return true; }); };   /* คนเดียวหลายครั้ง = 1 คน */
   const sec=(id,title,L,body,empty)=>'<h3 id="'+id+'">'+title+' <b>'+L.length+'</b> คน</h3>'+(L.length?body:'<div class="empty">'+empty+'</div>');
@@ -876,7 +877,7 @@ function renderRebuyQueue(){
     +'</div>';
   let LIST=RQ_DATA.filter(it=> RQ_FILTER==='wait'?isWait(it) : RQ_FILTER==='sent'?isSent(it) : RQ_FILTER==='done'?isDone(it) : true);
   if(RQ_FILTER==='sent') LIST=LIST.slice().sort((a,b)=>(b.last||0)-(a.last||0));   /* ทักล่าสุดก่อน */
-  setHTML('sec_rq', dash + (LIST.length? LIST.map(it=>'<div class="row"><div class="d"><span class="who">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+(it.test?' <span class="pill">ทดลอง</span>':'')+' <span class="t">· ซื้อ '+D(esc(fmt(it.t)),'var(--acc)')+'</span>'
+  setHTML('sec_rq', dash + (LIST.length? LIST.map(it=>'<div class="row"><div class="d"><span class="who">'+esc(nmOf(it))+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+(it.test?' <span class="pill">ทดลอง</span>':'')+' <span class="t">· ซื้อ '+D(esc(fmt(it.t)),'var(--acc)')+'</span>'
     +'<div class="why" style="color:var(--txt);">🛒 '+esc(it.items||'')+(it.amt?' · '+D(Number(it.amt).toLocaleString('th-TH')+' ฿','var(--ok)'):'')+'</div><div style="margin-top:4px;font-size:14px;color:var(--txt);">'+stTxt(it)+'</div></div>'
     +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
     : (RQ_STATE==='loading' ? '<div class="empty">⏳ กำลังโหลดคิว… (ร้านใหญ่ใช้เวลา 20–40 วิ)</div>'
@@ -1004,7 +1005,7 @@ function renderWork(){
     const tip=urg?(/สลิป/.test(rs)?'เช็คเงินเข้าบัญชีจริงก่อนกดเก็บเคส':/ยกเลิก/.test(rs)?'ลูกค้าขอยกเลิก — เช็คว่าลงออเดอร์ไปแล้วหรือยัง':'ตอบลูกค้าใน LINE ให้จบก่อนกดเก็บเคส'):'';
     return '<div class="row'+(urg?' urg':'')+(it.accepted?' acc':'')+'" id="qc_'+sid(it.uid)+'"><div class="d">'
       +(urg?'<span class="tag urg">ด่วน</span>':'')+(it.accepted?'<span class="tag acc">👨‍💼 รับแล้ว</span>':'')
-      +'<span class="who">'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
+      +'<span class="who">'+esc(nmOf(it))+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
       +'<div class="why">'+esc(rs)+'</div>'+(it.msg?'<div class="msg">“'+esc(it.msg)+'”</div>':'')
       +(urg?'<div class="owarn"><span class="blink">🚨</span><span>'+esc(tip)+'</span></div>':'')
       +'</div><div class="acts">'
@@ -1022,7 +1023,7 @@ function renderWork(){
     if(!mapUrl){ const m=msg.match(/https?:\/\/[^\s"'<>]*maps[^\s"'<>]*/i); if(m){ mapUrl=m[0]; msg=msg.replace(m[0],'').replace(/^📍\s*$/m,''); } }
     msg=msg.replace(/ก๊อปลิงก์เปิดใน Grab แล้วแจ้งราคาลูกค้าได้เลย/,'').trim();
     const mapBtn=mapUrl?'<a class="mapbtn" href="'+esc(mapUrl)+'" target="_blank" rel="noopener">🗺 เปิดแผนที่</a>':'';
-    return '<div class="row" id="qc_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nm||'ลูกค้า (ไม่ทราบชื่อ)')+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
+    return '<div class="row" id="qc_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nm||nmOf(it))+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
       +'<div class="why">📍 '+esc(it.reason||'')+(it.km?' · ~'+esc(it.km)+' กม.':'')+'</div>'+(msg?'<div class="msg">“'+esc(msg)+'”</div>':'')
       +'<div class="mut" style="margin-top:6px;">เปิดแผนที่ → ดูค่าส่งในแอปแกร็บ → กรอกตัวเลข → ส่งราคา (ระบบคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง)</div></div>'
       +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"'+(FEE711[it.uid]?' value="'+esc(FEE711[it.uid])+'"':'')+' oninput="FEE711[\''+esc(it.uid)+'\']=this.value"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
@@ -1115,7 +1116,7 @@ function renderChats(){
   const kw=($('csearch').value||'').trim().toLowerCase();
   const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1) return false; return true; });
   $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
-  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(it.name||'ลูกค้า (ไม่ทราบชื่อ)')+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
+  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(nmOf(it))+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
     +(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
 }
 function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
