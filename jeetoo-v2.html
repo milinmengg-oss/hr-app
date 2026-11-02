@@ -1158,7 +1158,20 @@ async function unmuteAll709(btn){
   setTimeout(()=>refresh(true),1500);
 }
 /* 💬 เปิดบทสนทนา (จากทุกแท็บ) — ใช้ /ctl/log + /ctl/conv เหมือนแผงเก่า */
-function openConvFrom(uid,name,shop){ if(shop&&shop!==SHOP&&SHOPS.some(s=>s['ร้าน']===shop)) selectShop(shop); if(TAB!==2) go(2); showConv(uid,name); }   /* k719: shop = แถวจาก "ทุกร้าน" */
+/* cs2 (2 พ.ย.): หัวหน้าแอดมินขอให้ "เปิดแชท" เด้งไปแชทลูกค้าคนนั้นใน LINE OA Manager · รหัสฝั่ง LINE ≠ รหัสเอวา จึงถาม /ctl/chatmap (k895 · ตัวจับคู่รันบนเครื่องเม้งทุก 30 นาที) · ยังไม่มีคู่ = เปิดหน้าร้านใน LINE + ก๊อปชื่อลูกค้าไว้ให้วางในช่องค้นหา · ระบบยังไม่รู้จักร้าน = เปิดแชทในหลังบ้านอย่างเดียวเหมือนเดิม */
+function openLineChat_cs2(uid,name,shop){
+  if(!/^U[0-9a-f]{32}$/.test(String(uid||''))) return;
+  let w=null; try{ w=window.open('about:blank','_blank'); }catch(e){ w=null; }   // เปิดแท็บก่อน (ต้องอยู่ในจังหวะที่ผู้ใช้กด)
+  const sh=shop||SHOP;
+  fetchJ(qs('/ctl/chatmap',sh)+'&uid='+enc(uid)).then(r=>{
+    const d=(r&&r.ok&&r.d)||{};
+    if(d.url&&d.chatId){ if(w) w.location=d.url; else location.href=d.url; return; }
+    if(d.url){ try{ navigator.clipboard&&navigator.clipboard.writeText(name||''); }catch(e){}
+      toast&&toast('ยังไม่มีรหัส LINE ของลูกค้าคนนี้ · ก๊อปชื่อ "'+(name||'')+'" ไว้แล้ว วางในช่องค้นหาของ LINE'); if(w) w.location=d.url; return; }
+    if(w) try{ w.close(); }catch(e){}
+  }).catch(()=>{ if(w) try{ w.close(); }catch(e){} });
+}
+function openConvFrom(uid,name,shop){ openLineChat_cs2(uid,name,shop); if(shop&&shop!==SHOP&&SHOPS.some(s=>s['ร้าน']===shop)) selectShop(shop); if(TAB!==2) go(2); showConv(uid,name); }   /* k719: shop = แถวจาก "ทุกร้าน" */
 function chatRec(uid){ return CHATS.filter(c=>c.uid===uid)[0]; }
 function renderConvActs(){
   const c=chatRec(CUR_UID); const a=$('convacts'); const st=$('convstate');
