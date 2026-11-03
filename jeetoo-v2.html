@@ -280,6 +280,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   </header>
   <div class="tabs">
     <div class="tab on" id="tab1" onclick="go(1)">📥 งาน <b id="tcount"></b></div>
+    <div class="tab" id="tab6" onclick="go(6)">🛠 หลังการขาย <b id="tcount6"></b></div>
     <div class="tab" id="tab2" onclick="go(2)">💬 แชท</div>
     <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
     <div class="tab hidden" id="tab4" onclick="go(4)">📊 สรุป</div>
@@ -299,6 +300,13 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   </section>
 
   <!-- ═══ แท็บ 2: แชท ═══ -->
+  <!-- ═══ แท็บ 6: หลังการขาย (cs5) ═══ -->
+  <section id="p6" class="hidden">
+    <div class="mut" style="margin:0 0 8px;font-size:13px;">🛠 เคสที่เอวาติดป้าย <b>หลังการขาย / เคลม / ของไม่ถึง / ส่งผิด / ยกเลิก / คืนเงิน / พัสดุ</b> — ทีม CS ดูหน้านี้ · ทีมขายดูแท็บ "งาน"</div>
+    <div class="grp" id="grp_q6"><h3>🚨 เคสหลังการขายรอคน — ยังไม่มีใครรับ <b id="cnt_q6"></b></h3><div id="sec_q6"></div></div>
+    <div class="grp" id="grp_a6"><h3>👨‍💼 รับแล้ว — CS กำลังดูแลอยู่ <b id="cnt_a6"></b></h3><div id="sec_a6"></div></div>
+    <div class="mut" style="margin-top:18px;line-height:1.7;">💡 ตอบลูกค้าใน LINE ให้จบ แล้วกด ✅ เก็บเคส · เคสไหนอยู่ผิดฝั่ง บอก Claude เพื่อปรับเกณฑ์</div>
+  </section>
   <section id="p2" class="hidden">
     <div class="split">
       <div>
@@ -439,6 +447,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
 
 <div class="navbar" id="navbar">
   <button class="navbtn on" id="n1" onclick="go(1)"><i>📥</i>งาน<span class="bdg z" id="bd1">0</span></button>
+  <button class="navbtn" id="n6" onclick="go(6)"><i>🛠</i>หลังการขาย<span class="bdg z" id="bd6">0</span></button>
   <button class="navbtn" id="n2" onclick="go(2)"><i>💬</i>แชท</button>
   <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
   <button class="navbtn hidden" id="n4" onclick="go(4)"><i>📊</i>สรุป</button>
@@ -456,6 +465,9 @@ let KEY=localStorage.getItem('g2key')||'';                 // ⚠️ ชื่�
 let SHOP=localStorage.getItem('g2shop')||'v20';
 let SHOPS=[];                                              // จาก /ctl/shops (server กรองสิทธิ์แล้ว · k465)
 let TAB=1, CHATS=[], FILTER='all', SCOPE='one', ON=true, BUILD='';
+/* cs5: เคสหลังการขาย (CS) แยกจากงานขาย — ดูจากเหตุผลที่เอวาติดป้ายตอนส่งต่อ */
+const CS_RE=/หลังการขาย|เคลม|ของไม่ถึง|ไม่ได้รับ(ของ|สินค้า)|ส่งผิด|ของเสีย|ของไม่ครบ|ยกเลิก|คืนเงิน|เลขพัสดุ|สถานะ(การ)?จัดส่ง|ตามออเดอร์|แพ็ค|พัสดุ/;
+function isCS(it){ return CS_RE.test(String((it&&it.reason)||'')); }
 let CUR_UID='', CUR_NAME='';
 let VIEW='all';                                            // 'all' | 'q' | 'a' | 'f' | 'o' — กดชิปสถิติเพื่อดูเฉพาะกลุ่ม (กดซ้ำ = กลับดูทั้งหมด)
 function setView(k){ VIEW=(VIEW===k||k==='all')?'all':k; renderWork(); if(VIEW!=='all'){ const g=$('grp_'+VIEW); if(g) g.scrollIntoView({behavior:'smooth',block:'start'}); } }
@@ -559,7 +571,7 @@ function selectShop(id){
 /* ── แท็บ ── */
 function go(n){
   TAB=n;
-  [1,2,3,4,5].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });
+  [1,2,3,4,5,6].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });   /* cs5: +6 */
   window.scrollTo(0,0);
   if(n===2) renderChats();
   if(n===3) loadSettings();
@@ -987,9 +999,13 @@ function setHTML(id,html){ if(_last[id]===html) return; const box=$(id);
 function renderWork(){
   const c=CACHE[SHOP]||{queue:[],orders:[]};
   const byOld=(a,b)=>(a.t||0)-(b.t||0);
-  const qAll=doneHideApply(c.queue).filter(it=>!FEE_RE.test(String(it.reason||''))).sort(byOld);
+  const qEvery=doneHideApply(c.queue).filter(it=>!FEE_RE.test(String(it.reason||''))).sort(byOld);
+  const qAll=qEvery.filter(it=>!isCS(it));                   /* cs5: แท็บ งาน = เฉพาะเคสขาย */
+  const qCS=qEvery.filter(isCS);                             /* cs5: แท็บ หลังการขาย */
   const qWait=qAll.filter(it=>!it.accepted);                // ยังไม่มีใครรับ
   const qAcc=qAll.filter(it=>!!it.accepted);                // รับแล้ว (แยกกอง ไม่ปนกับที่รอ)
+  const qWait6=qCS.filter(it=>!it.accepted), qAcc6=qCS.filter(it=>!!it.accepted);
+  try{ const t6=qCS.length; $('tcount6').textContent=t6||''; const b6=$('bd6'); b6.textContent=t6>99?'99+':t6; b6.classList.toggle('z',t6===0); $('cnt_q6').textContent=qWait6.length||''; $('cnt_a6').textContent=qAcc6.length||''; }catch(e){}
   const qFee=c.queue.filter(it=>FEE_RE.test(String(it.reason||''))).sort(byOld);
   const orders=(c.orders||[]).slice().sort(byOld);
   const total=qWait.length+qAcc.length+qFee.length+orders.length;
@@ -1015,6 +1031,8 @@ function renderWork(){
   };
   setHTML('sec_q', qWait.length? qWait.map(rowQ).join('') : '<div class="empty">✅ ไม่มีลูกค้ารอคน — จีทูดูแลอยู่ทั้งหมด</div>');
   setHTML('sec_a', qAcc.length? qAcc.map(rowQ).join('') : '<div class="empty">ไม่มีเคสที่รับไว้ — กด "รับเคส" ด้านบนแล้วเคสจะย้ายมาที่นี่</div>');
+  try{ setHTML('sec_q6', qWait6.length? qWait6.map(rowQ).join('') : '<div class="empty">✅ ไม่มีเคสหลังการขายรอคน</div>');
+       setHTML('sec_a6', qAcc6.length? qAcc6.map(rowQ).join('') : '<div class="empty">ไม่มีเคสหลังการขายที่รับไว้</div>'); }catch(e){}   /* cs5 */
 
   setHTML('sec_f', qFee.length? qFee.map(it=>{
     const w=waitMin(it.t); const nm=String(it.name||'').trim();
