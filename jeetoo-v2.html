@@ -275,6 +275,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <span class="pill" id="pillbuild">build —</span>
     <span class="pill warn hidden" id="pillready" onclick="go(3)" style="cursor:pointer">⚠️ ตั้งค่าไม่ครบ</span>
     <div class="sp"></div>
+    <span class="pill" id="pillwho" onclick="askWho(true)" title="กดเพื่อเปลี่ยนชื่อ" style="cursor:pointer">👤</span>
     <span class="pill" id="pillpoll">อัปเดตเองทุก 15 วิ</span>
     <button class="s" onclick="manualRefresh()" title="รีเฟรช">🔄</button>
   </header>
@@ -483,6 +484,17 @@ const enc=encodeURIComponent;
 /* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
 const qs=(p,shop)=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+enc(KEY)+'&shop='+enc(shop);
 const q=p=>qs(p,SHOP);
+/* 👤 cs6: ชื่อเล่นแอดมิน (จำในเครื่องนี้) — แนบไปกับทุกปุ่มที่กด เพื่อรู้ว่าใครรับ/เก็บ/ปิดเคส */
+let WHO=''; try{ WHO=(localStorage.getItem('g2who')||'').trim(); }catch(e){}
+function askWho(force){
+  if(WHO && !force) return WHO;
+  let v=prompt('👤 ชื่อเล่นของคุณ (ใช้บันทึกว่าใครรับเคส/เก็บเคส)',WHO||'');
+  v=String(v==null?'':v).trim().slice(0,24);
+  if(!v){ if(!WHO) toast('ต้องใส่ชื่อเล่นก่อนถึงจะกดปุ่มได้',1); return WHO; }
+  WHO=v; try{ localStorage.setItem('g2who',WHO); }catch(e){} showWho(); return WHO;
+}
+function showWho(){ const el=$('pillwho'); if(el) el.textContent='👤 '+(WHO||'ยังไม่ใส่ชื่อ'); }
+const by=p=>p+'&by='+enc(WHO||'-');
 
 /* ── toast (ห้ามโชว์สำเร็จถ้า request พลาด) ── */
 let _tt=null;
@@ -1075,20 +1087,22 @@ function copyOrder(id,btn){ const el=$(id); if(!el) return; navigator.clipboard.
 
 /* 👨‍💼 รับเคส = POST /ctl/accept?uid */
 async function acceptCase(uid,el){
-  try{ const r=await fetchJ(q('/ctl/accept?uid='+enc(uid)),{method:'POST'});
+  try{ if(!askWho(false)) return; const r=await fetchJ(q(by('/ctl/accept?uid='+enc(uid))),{method:'POST'});
     if(r.ok){ if(el){ el.disabled=true; el.textContent='👨‍💼 กำลังดูแล'; } const c=CACHE[SHOP]; if(c) c.queue.forEach(it=>{ if(it.uid===uid) it.accepted=Date.now(); }); toast('รับเคสแล้ว — ระบบจะไม่ส่งข้อเสนอเอวาหาลูกค้าคนนี้'); }
     else toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้ง',1);
   }catch(e){ if(e.message!=='forbidden') toast('รับเคสไม่สำเร็จ ลองใหม่อีกครั้ง',1); }
 }
 /* ✅ เก็บเคส (k454) = /ctl/done + /ctl/unmute1 คู่ขนาน · ตัวใดพลาด = ไม่โชว์สำเร็จ (perf2) */
 async function markDone(uid,urg,el){
+  if(!askWho(false)) return;
+  if(!urg && !confirm('✅ เก็บเคส (ร้าน '+shopLabel()+')\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหม?\nถ้ายังไม่ได้ตอบ กดยกเลิก แล้วไปตอบก่อน — เคสที่เก็บโดยไม่ตอบจะถูกบันทึกชื่อคนกด ('+WHO+')')) return;
   if(urg && !confirm('⚠️ เคสนี้เกี่ยวกับเงิน/ของเสีย (ร้าน '+shopLabel()+')\n\nตอบลูกค้าใน LINE เรียบร้อยแล้วใช่ไหม?\nตกลง = เก็บเคสออกจากคิว และจีทูจะกลับมาตอบแชทนี้ต่อ')) return;
   if(el){ el.disabled=true; el.textContent='กำลังเก็บ…'; }
   /* 🧷 26 ต.ค. (เคสเด้งกลับ 100 ใบ · ABC V13): เดิมยิง done กับ unmute1 "พร้อมกัน" → ถ้า done อ่านคีย์ก่อนแล้วเขียนกลับ "หลัง" unmute1 ลบ
      = คีย์ mute: โผล่กลับมาแบบติดป้าย done (ค้าง 48 ชม. · จีทูเงียบ · กินโควตา list 400 ของ /ctl/board จนบังเคสจริง)
      แก้: ยิง done ให้จบก่อน แล้วค่อย unmute1 (ลบคีย์เป็นลำดับสุดท้ายเสมอ) · ผลลัพธ์/ข้อความเดิมทุกตัวอักษร */
-  const rs=[]; try{ rs[0]=await fetch(q('/ctl/done?uid='+enc(uid)),{method:'POST'}); }catch(e){ rs[0]=null; }
-  try{ rs[1]=await fetch(q('/ctl/unmute1?uid='+enc(uid)),{method:'POST'}); }catch(e){ rs[1]=null; }
+  const rs=[]; try{ rs[0]=await fetch(q(by('/ctl/done?uid='+enc(uid))),{method:'POST'}); }catch(e){ rs[0]=null; }
+  try{ rs[1]=await fetch(q(by('/ctl/unmute1?uid='+enc(uid))),{method:'POST'}); }catch(e){ rs[1]=null; }
   const okDone=!!(rs[0]&&rs[0].ok), okUn=!!(rs[1]&&rs[1].ok);
   if(rs.some(x=>x&&x.status===403)){ forbidden(); return; }
   if(okDone&&okUn){ pendSet(uid,false); setMuted(uid,false); bumpDone(); doneHide(uid); const c=CACHE[SHOP]; if(c) c.queue=c.queue.filter(it=>it.uid!==uid); renderWork(); toast('เก็บเคสแล้ว — จีทูกลับมาดูแลแชทนี้ต่อ ✨'); }
@@ -1142,14 +1156,15 @@ function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.mute
 async function mute1(uid,btn){
   if(btn) btn.textContent='⏸…';
   pendSet(uid,true); setMuted(uid,true);
-  try{ const r=await fetchJ(q('/ctl/mute1?uid='+enc(uid)),{method:'POST'}); if(!r.ok) throw new Error('mute '+r.status); toast('ปิดจีทูแชทนี้แล้ว — แอดมินคุมเอง'); }
+  try{ const r=await fetchJ(q(by('/ctl/mute1?uid='+enc(uid))),{method:'POST'}); if(!r.ok) throw new Error('mute '+r.status); toast('ปิดจีทูแชทนี้แล้ว — แอดมินคุมเอง'); }
   catch(e){ delete PENDING[uid]; setMuted(uid,false); if(e.message!=='forbidden') toast('ปิดไม่สำเร็จ กดใหม่อีกครั้ง',1); return; }
   setTimeout(()=>refresh(true),1500);
 }
 async function unmute1(uid,btn){
+  if(!askWho(false)) return;
   if(btn) btn.textContent='▶️…';
   pendSet(uid,false); setMuted(uid,false);
-  try{ const r=await fetchJ(q('/ctl/unmute1?uid='+enc(uid)),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('ให้เอวาตอบแชทนี้ต่อแล้ว'); }
+  try{ const r=await fetchJ(q(by('/ctl/unmute1?uid='+enc(uid))),{method:'POST'}); if(!r.ok) throw new Error('unmute '+r.status); toast('ให้เอวาตอบแชทนี้ต่อแล้ว'); }
   catch(e){ delete PENDING[uid]; setMuted(uid,true); if(e.message!=='forbidden') toast('ทำรายการไม่สำเร็จ กดใหม่อีกครั้ง',1); return; }
   setTimeout(()=>refresh(true),1500);
 }
@@ -1400,6 +1415,7 @@ async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
   $('keyscreen').classList.add('hidden'); $('app').classList.remove('hidden'); $('navbar').style.display='';
   await loadShops(); if(!KEY) return;
+  showWho(); if(!WHO) askWho(false);   /* 👤 cs6 */
   await refresh(true); startPoll(); refreshAllCounts(); pulse723();   /* 📡 k723: ถาม pulse ทันที (รู้เร็วว่า worker มี pulse ไหม) */
   probeStats();                                             // 📊 โชว์แท็บสรุปเฉพาะคนที่ /ctl/stats ตอบ 200 (ไม่ await · ไม่ block งาน)
 }
