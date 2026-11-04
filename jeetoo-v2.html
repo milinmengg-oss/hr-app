@@ -611,7 +611,7 @@ function selectShop(id){
 
 /* ── แท็บ ── */
 /* 📈 cs8: แดชบอร์ดออดิต CS ฝังในหลังบ้าน · ตอนนี้ = ไฟล์ GitHub (เม้งลากขึ้นวันละครั้ง) · หลังรอบ 66 เปลี่ยนเป็น W+'/cs-audit' (อัพเดตเองทุก 30 นาที) */
-const AUDIT_URL='https://milinmengg-oss.github.io/hr-app/cs-audit.html';
+const AUDIT_URL=W+'/cs-audit';   /* cs9: หน้าออดิตในเอวา (k902) อัพเดตเองทุก 30 นาที · เดิม = ไฟล์ GitHub */
 function loadAudit(force){ const f=$('auditframe'); const u=AUDIT_URL+'?v='+Math.floor(Date.now()/60000); $('auditopen').href=AUDIT_URL; if(force||!f.dataset.loaded){ f.src=u; f.dataset.loaded='1'; } }
 function go(n){
   TAB=n;
