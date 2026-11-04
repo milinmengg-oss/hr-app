@@ -286,6 +286,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
     <div class="tab hidden" id="tab4" onclick="go(4)">📊 สรุป</div>
     <div class="tab" id="tab5" onclick="go(5)">🔁 ซื้อซ้ำ</div>
+    <div class="tab hidden" id="tab7" onclick="go(7)">📈 ออดิต CS</div>
   </div>
 
   <!-- ═══ แท็บ 1: งาน ═══ -->
@@ -412,6 +413,10 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   </section>
 
   <!-- ═══ แท็บ 5: ซื้อซ้ำ (#293 REBUY · เอวาทักลูกค้าเก่าตอนของใกล้หมด) ═══ -->
+  <section id="p7" class="hidden">
+    <div class="stbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><b>📈 ออดิต CS</b><span class="mut">แดชบอร์ดออดิตทีมหลังการขาย (AI อ่านแชท LINE ทุก 30 นาที · ใครกดเคส · ลูกค้าชม/บ่น/ด่า)</span><button class="s" onclick="loadAudit(true)">🔄 โหลดใหม่</button><a class="s" style="text-decoration:none" id="auditopen" href="#" target="_blank" rel="noopener">↗ เปิดเต็มจอ</a></div>
+    <iframe id="auditframe" style="width:100%;height:calc(100vh - 170px);border:1px solid var(--line);border-radius:12px;background:#0f1115;" loading="lazy"></iframe>
+  </section>
   <section id="p5" class="hidden">
     <div class="stbar">
       <select id="rbshop" onchange="loadRebuy()"></select>
@@ -453,6 +458,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <button class="navbtn" id="n3" onclick="go(3)"><i>⚙️</i>ตั้งค่า</button>
   <button class="navbtn hidden" id="n4" onclick="go(4)"><i>📊</i>สรุป</button>
   <button class="navbtn" id="n5" onclick="go(5)"><i>🔁</i>ซื้อซ้ำ</button>
+  <button class="navbtn hidden" id="n7" onclick="go(7)"><i>📈</i>ออดิต</button>
 </div>
 <div id="toast"></div>
 
@@ -604,9 +610,13 @@ function selectShop(id){
 }
 
 /* ── แท็บ ── */
+/* 📈 cs8: แดชบอร์ดออดิต CS ฝังในหลังบ้าน · ตอนนี้ = ไฟล์ GitHub (เม้งลากขึ้นวันละครั้ง) · หลังรอบ 66 เปลี่ยนเป็น W+'/cs-audit' (อัพเดตเองทุก 30 นาที) */
+const AUDIT_URL='https://milinmengg-oss.github.io/hr-app/cs-audit.html';
+function loadAudit(force){ const f=$('auditframe'); const u=AUDIT_URL+'?v='+Math.floor(Date.now()/60000); $('auditopen').href=AUDIT_URL; if(force||!f.dataset.loaded){ f.src=u; f.dataset.loaded='1'; } }
 function go(n){
   TAB=n;
-  [1,2,3,4,5,6].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });   /* cs5: +6 */
+  [1,2,3,4,5,6,7].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });   /* cs5: +6 · cs8: +7 */
+  if(n===7) loadAudit(false);                              // 📈 cs8 ออดิต CS
   window.scrollTo(0,0);
   if(n===2) renderChats();
   if(n===3) loadSettings();
@@ -625,6 +635,7 @@ async function probeStats(){
   try{ const r=await fetchRaw(W+'/ctl/stats?key='+enc(KEY)+'&day='+thaiDay()+'&shop=all'); on=!!(r&&r.ok); }catch(e){ on=false; }
   STATS_ON=on;
   $('tab4').classList.toggle('hidden',!on); $('n4').classList.toggle('hidden',!on);
+  $('tab7').classList.toggle('hidden',!on); $('n7').classList.toggle('hidden',!on);   /* 📈 cs8: ออดิต CS เฉพาะเจ้านาย/เจ้าของ (เกตเดียวกับ สรุป) */
   if(on){ if(!$('stday').value) $('stday').value=thaiDay(); fillStatsShops(); }
   else if(TAB===4) go(1);
 }
