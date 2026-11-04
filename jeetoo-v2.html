@@ -505,7 +505,7 @@ async function whoHist(uid,btn,shop){
   if(btn){ btn.disabled=true; btn.textContent='🕓…'; }
   try{ const r=await fetchJ(qs('/ctl/who?uid='+enc(uid),shop||SHOP)); const h=(r.d&&r.d.history)||[];
     const html='<div class="msg" id="wh_'+sid(uid)+'" data-open="1" style="margin-top:6px;">'+(h.length?'🕓 <b>ใครกดเคสนี้</b><br>'+h.slice().reverse().map(x=>dmy(x.t)+' '+hhmm(x.t)+' · <b>'+esc(x.by||'?')+'</b> <span class="tag">'+esc(TEAM_TH[x.team]||x.team||'-')+'</span> '+esc(KIND_TH[x.k]||x.k)).join('<br>'):'🕓 ยังไม่มีใครกดเคสนี้ (จดตั้งแต่ 4 พ.ย.)')+'</div>';
-    const card=btn?btn.closest('.row'):null; if(card){ const d=card.querySelector('.d'); if(d) d.insertAdjacentHTML('beforeend',html); }
+    const card=btn?btn.closest('.row,.crow'):null; const d=card?card.querySelector('.d,.cn'):null; if(d) d.insertAdjacentHTML('beforeend',html); else if(btn) btn.insertAdjacentHTML('afterend',html);
   }catch(e){ if(e.message!=='forbidden') toast('ดูประวัติไม่ได้ ลองใหม่',1); }
   if(btn){ btn.disabled=false; btn.textContent='🕓 ใครกด'; }
 }
@@ -1174,7 +1174,7 @@ function renderChats(){
   const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1) return false; return true; });
   $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
   setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(nmOf(it))+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
-    +(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
+    +'<button class="s" onclick="event.stopPropagation();whoHist(\''+esc(it.uid)+'\',this)">🕓</button>'+(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
 }
 function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
 /* ⏸ = POST /ctl/mute1 · ▶️ = POST /ctl/unmute1 (k161 optimistic + k338 pending) */
@@ -1238,7 +1238,7 @@ function renderConvActs(){
   a.classList.remove('hidden');
   const muted=c?!!c.muted:false;
   st.classList.remove('hidden'); st.textContent=c?(muted?'⏸ จีทูหยุดตอบ':'🤖 เอวาตอบอยู่'):'ไม่อยู่ใน 30 แชทล่าสุด'; st.className='pill '+(c?(muted?'off':'ok'):'');
-  a.innerHTML=(muted?'<button class="g" onclick="unmute1(\''+esc(CUR_UID)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="w" onclick="mute1(\''+esc(CUR_UID)+'\',this)">⏸ ปิดจีทูแชทนี้</button>');
+  a.innerHTML=(muted?'<button class="g" onclick="unmute1(\''+esc(CUR_UID)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="w" onclick="mute1(\''+esc(CUR_UID)+'\',this)">⏸ ปิดจีทูแชทนี้</button>')+' <button onclick="whoHist(\''+esc(CUR_UID)+'\',this)">🕓 ใครกด</button>';
   const ord=((CACHE[SHOP]||{}).orders||[]).filter(o=>o.uid===CUR_UID)[0];
   $('convchips').innerHTML=ord?chipsFromBlock(ord.block).replace('<div class="chips">','').replace(/<\/div>$/,''):'<span class="mut">ยังไม่มีออเดอร์ค้างของลูกค้าคนนี้ — ชิปคัดลอกจะขึ้นเมื่อมีออเดอร์</span>';
   $('convline').classList.toggle('hidden',!SHOP_LINE_ID[String(SHOP).toLowerCase()]);
