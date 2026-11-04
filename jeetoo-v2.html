@@ -495,6 +495,29 @@ function askWho(force){
 }
 function showWho(){ const el=$('pillwho'); if(el) el.textContent='👤 '+(WHO||'ยังไม่ใส่ชื่อ'); }
 const by=p=>p+'&by='+enc(WHO||'-');
+/* 🕓 cs7: ประวัติใครกด (k900 GET /ctl/who?shop&uid) */
+const KIND_TH={accept:'👨‍💼 รับเคส',done:'✅ เก็บเคส',unmute:'▶️ เปิดเอวา',mute:'⏸ ปิดเอวา',unmute_all:'▶️ เปิดเอวาทั้งร้าน'};
+const TEAM_TH={team1:'CS',team2:'ขาย',team3:'PT',team4:'CRM',boss:'เจ้านาย',owner:'เจ้าของ'};
+const hhmm=t=>new Date(t).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+const dmy=t=>new Date(t).toLocaleDateString('th-TH',{day:'numeric',month:'short'});
+async function whoHist(uid,btn,shop){
+  const box=document.getElementById('wh_'+sid(uid)); if(box&&box.dataset.open==='1'){ box.remove(); return; }
+  if(btn){ btn.disabled=true; btn.textContent='🕓…'; }
+  try{ const r=await fetchJ(qs('/ctl/who?uid='+enc(uid),shop||SHOP)); const h=(r.d&&r.d.history)||[];
+    const html='<div class="msg" id="wh_'+sid(uid)+'" data-open="1" style="margin-top:6px;">'+(h.length?'🕓 <b>ใครกดเคสนี้</b><br>'+h.slice().reverse().map(x=>dmy(x.t)+' '+hhmm(x.t)+' · <b>'+esc(x.by||'?')+'</b> <span class="tag">'+esc(TEAM_TH[x.team]||x.team||'-')+'</span> '+esc(KIND_TH[x.k]||x.k)).join('<br>'):'🕓 ยังไม่มีใครกดเคสนี้ (จดตั้งแต่ 4 พ.ย.)')+'</div>';
+    const card=btn?btn.closest('.row'):null; if(card){ const d=card.querySelector('.d'); if(d) d.insertAdjacentHTML('beforeend',html); }
+  }catch(e){ if(e.message!=='forbidden') toast('ดูประวัติไม่ได้ ลองใหม่',1); }
+  if(btn){ btn.disabled=false; btn.textContent='🕓 ใครกด'; }
+}
+/* 🕓 cs7: การ์ดที่รับแล้ว → เติมชื่อคนรับอัตโนมัติ (ยิงทีละการ์ด เฉพาะที่ยังไม่มี) */
+const ACC_BY={};
+async function fillAcceptedBy(){
+  const rows=[...document.querySelectorAll('.row.acc[data-uid]')].filter(r=>!r.querySelector('.accby')); let n=0;
+  for(const r of rows){ if(n++>=12) break; const uid=r.dataset.uid; try{
+    if(!ACC_BY[uid]){ const j=await fetchJ(q('/ctl/who?uid='+enc(uid))); const h=(j.d&&j.d.history)||[]; const a=h.slice().reverse().find(x=>x.k==='accept'); ACC_BY[uid]=a?a.by+' '+hhmm(a.t):'-'; }
+    const tag=r.querySelector('.tag.acc'); if(tag&&!r.querySelector('.accby')) tag.insertAdjacentHTML('afterend',' <span class="tag accby" style="color:#c9a6ff">โดย '+esc(ACC_BY[uid])+'</span>');
+  }catch(e){ break; } }
+}
 
 /* ── toast (ห้ามโชว์สำเร็จถ้า request พลาด) ── */
 let _tt=null;
@@ -699,7 +722,7 @@ async function loadRebuyList(shop){
   setHTML('sec_rb', list.length? list.map(it=>'<div class="row" id="rb_'+sid(it.uid)+'"><div class="d"><span class="who">'+esc(nmOf(it))+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+' <span class="t">· เอวาทักล่าสุด '+esc(ago(it.last))+'</span>'
     +'<div class="why">🛒 '+esc(it.items||'')+(it.amt?' · '+Number(it.amt).toLocaleString('th-TH')+' ฿':'')+'</div>'
     +'<div class="mut" style="margin-top:6px;">ทักไปเสนอส่วนลด/โปรเอง แล้วกด "ทักแล้ว" ให้หายจากลิสต์</div></div>'
-    +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button><button class="p" onclick="rebuyAdminDone(\''+escA(it.uid)+'\',this'+(it.shop?',\''+escA(it.shop)+'\'':'')+')">✅ ทักแล้ว</button></div></div>').join('')
+    +'<div class="acts"><button class="s" onclick="whoHist(\''+escA(it.uid)+'\',this'+(it.shop?',\''+escA(it.shop)+'\'':'')+')">🕓</button><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button><button class="p" onclick="rebuyAdminDone(\''+escA(it.uid)+'\',this'+(it.shop?',\''+escA(it.shop)+'\'':'')+')">✅ ทักแล้ว</button></div></div>').join('')
     : '<div class="empty">ยังไม่มีเคสค้าง 🎉</div>');
 }
 /* k716 · ทักรายวัน จาก /ctl/rebuy?op=days (worker k801+) — worker เก่าไม่ได้อาร์เรย์ = ซ่อนตาราง/บรรทัดเล็กเงียบ ๆ */
@@ -764,7 +787,7 @@ function renderRebuyWho(){
   setHTML('rbw_list', L.length? L.map(x=>'<div class="row"><div class="d"><span class="who">'+esc(nmOf(x))+'</span>'+(x.shop?' <span class="pill">'+esc(shopLabel(x.shop))+'</span>':'')
     +' <span class="t">· ทัก '+esc(fmt(x.sentAt))+' → '+(isDone?'กลับมาซื้อ ':'ตอบ ')+esc(fmt(x.t))+esc(gap(x))+'</span>'
     +'<div class="why" style="color:var(--txt);">🛒 '+esc(x.items||'—')+(Number(x.amt||0)>0?' · <b style="color:var(--ok)">'+Number(x.amt).toLocaleString('th-TH')+' ฿</b>':'')+'</div></div>'
-    +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(x.uid||'')+'\',\''+escA(x.name||'')+'\''+(x.shop?',\''+escA(x.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
+    +'<div class="acts"><button class="s" onclick="whoHist(\''+escA(x.uid||'')+'\',this'+(x.shop?',\''+escA(x.shop)+'\'':'')+')">🕓</button><button class="s" onclick="openConvFrom(\''+escA(x.uid||'')+'\',\''+escA(x.name||'')+'\''+(x.shop?',\''+escA(x.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
     : '<div class="empty">'+(isDone?'ยังไม่มีใครกลับมาซื้อในช่วงนี้':'ยังไม่มีใครตอบกลับในช่วงนี้')+'</div>');
   $('grp_rbw').style.display='';
 }
@@ -903,7 +926,7 @@ function renderRebuyQueue(){
   if(RQ_FILTER==='sent') LIST=LIST.slice().sort((a,b)=>(b.last||0)-(a.last||0));   /* ทักล่าสุดก่อน */
   setHTML('sec_rq', dash + (LIST.length? LIST.map(it=>'<div class="row"><div class="d"><span class="who">'+esc(nmOf(it))+'</span>'+(it.shop?' <span class="pill">'+esc(shopLabel(it.shop))+'</span>':'')+(it.test?' <span class="pill">ทดลอง</span>':'')+' <span class="t">· ซื้อ '+D(esc(fmt(it.t)),'var(--acc)')+'</span>'
     +'<div class="why" style="color:var(--txt);">🛒 '+esc(it.items||'')+(it.amt?' · '+D(Number(it.amt).toLocaleString('th-TH')+' ฿','var(--ok)'):'')+'</div><div style="margin-top:4px;font-size:14px;color:var(--txt);">'+stTxt(it)+'</div></div>'
-    +'<div class="acts"><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
+    +'<div class="acts"><button class="s" onclick="whoHist(\''+escA(it.uid)+'\',this'+(it.shop?',\''+escA(it.shop)+'\'':'')+')">🕓</button><button class="s" onclick="openConvFrom(\''+escA(it.uid)+'\',\''+escA(it.name||'')+'\''+(it.shop?',\''+escA(it.shop)+'\'':'')+')">💬 เปิดแชท</button></div></div>').join('')
     : (RQ_STATE==='loading' ? '<div class="empty">⏳ กำลังโหลดคิว… (ร้านใหญ่ใช้เวลา 20–40 วิ)</div>'
       : RQ_STATE==='fail' ? '<div class="empty">⚠️ โหลดคิวไม่ทัน/ไม่สำเร็จ — กดรีเฟรช 🔄 อีกครั้ง</div>'
       : RQ_DATA.length ? '<div class="empty">ไม่มีใครในกลุ่มนี้</div>'
@@ -1008,7 +1031,7 @@ function setHTML(id,html){ if(_last[id]===html) return; const box=$(id);
   //  ⌨️ k711: เคอร์เซอร์อยู่ในช่องพิมพ์ข้างในกล่องนี้ (เช่น ช่องค่าส่งด่วน) → ข้ามรอบนี้ ไม่จำ _last (ออกจากช่องแล้ววาดรอบถัดไป)
   try{ const a=document.activeElement; if(a&&box&&box!==a&&typeof box.contains==='function'&&box.contains(a)&&inputFocused()) return; }catch(e){}
   _last[id]=html; box.innerHTML=html; }
-function renderWork(){
+function renderWork(){ setTimeout(fillAcceptedBy,300);
   const c=CACHE[SHOP]||{queue:[],orders:[]};
   const byOld=(a,b)=>(a.t||0)-(b.t||0);
   const qEvery=doneHideApply(c.queue).filter(it=>!FEE_RE.test(String(it.reason||''))).sort(byOld);
@@ -1031,7 +1054,7 @@ function renderWork(){
   const rowQ=it=>{
     const rs=String(it.reason||''), urg=URG_RE.test(rs), w=waitMin(it.t);
     const tip=urg?(/สลิป/.test(rs)?'เช็คเงินเข้าบัญชีจริงก่อนกดเก็บเคส':/ยกเลิก/.test(rs)?'ลูกค้าขอยกเลิก — เช็คว่าลงออเดอร์ไปแล้วหรือยัง':'ตอบลูกค้าใน LINE ให้จบก่อนกดเก็บเคส'):'';
-    return '<div class="row'+(urg?' urg':'')+(it.accepted?' acc':'')+'" id="qc_'+sid(it.uid)+'"><div class="d">'
+    return '<div class="row'+(urg?' urg':'')+(it.accepted?' acc':'')+'" id="qc_'+sid(it.uid)+'" data-uid="'+escA(it.uid)+'"><div class="d">'
       +(urg?'<span class="tag urg">ด่วน</span>':'')+(it.accepted?'<span class="tag acc">👨‍💼 รับแล้ว</span>':'')
       +'<span class="who">'+esc(nmOf(it))+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
       +'<div class="why">'+esc(rs)+'</div>'+(it.msg?'<div class="msg">“'+esc(it.msg)+'”</div>':'')
@@ -1039,6 +1062,7 @@ function renderWork(){
       +'</div><div class="acts">'
       +(it.accepted?'<button class="p big" disabled>👨‍💼 กำลังดูแล</button>':'<button class="p big" onclick="acceptCase(\''+esc(it.uid)+'\',this)">👨‍💼 รับเคส</button>')
       +'<button class="big" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬 เปิดแชท</button>'
+      +'<button class="big" onclick="whoHist(\''+esc(it.uid)+'\',this)">🕓 ใครกด</button>'
       +'<button class="g big" onclick="markDone(\''+esc(it.uid)+'\','+(urg?1:0)+',this)">✅ เก็บเคส</button></div></div>';
   };
   setHTML('sec_q', qWait.length? qWait.map(rowQ).join('') : '<div class="empty">✅ ไม่มีลูกค้ารอคน — จีทูดูแลอยู่ทั้งหมด</div>');
@@ -1058,6 +1082,7 @@ function renderWork(){
       +'<div class="mut" style="margin-top:6px;">เปิดแผนที่ → ดูค่าส่งในแอปแกร็บ → กรอกตัวเลข → ส่งราคา (ระบบคิดยอดใหม่ + ส่งการ์ดให้ลูกค้าเอง)</div></div>'
       +'<div class="acts">'+mapBtn+'<div class="fee2"><input type="number" inputmode="numeric" placeholder="฿" id="ef_'+sid(it.uid)+'"'+(FEE711[it.uid]?' value="'+esc(FEE711[it.uid])+'"':'')+' oninput="FEE711[\''+esc(it.uid)+'\']=this.value"><button class="g big" onclick="sendExpFee(\''+esc(it.uid)+'\',this)">ส่งราคา</button></div>'
       +'<button class="s" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')">💬</button>'
+      +'<button class="s" onclick="whoHist(\''+esc(it.uid)+'\',this)">🕓</button>'
       +'<button class="s" onclick="markDone(\''+esc(it.uid)+'\',0,this)">✅ เก็บเคส</button></div></div>';
   }).join('') : '<div class="empty">ไม่มีเคสรอค่าส่งด่วน</div>');
 
