@@ -312,7 +312,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <section id="p2" class="hidden">
     <div class="split">
       <div>
-        <input id="csearch" placeholder="🔍 ค้นหาชื่อลูกค้า" oninput="renderChats()" style="margin-bottom:10px;">
+        <input id="csearch" placeholder="🔍 ค้นหาชื่อลูกค้า / ชื่อใน LINE OA / 6 ตัวท้ายรหัส" oninput="renderChats();findSoon()" style="margin-bottom:10px;">
         <div class="filters">
           <span class="chip on" data-f="all" onclick="setFilter('all')">ทั้งหมด</span>
           <span class="chip" data-f="wait" onclick="setFilter('wait')">รอคน</span>
@@ -612,7 +612,7 @@ function selectShop(id){
 /* ── แท็บ ── */
 /* 📈 cs8: แดชบอร์ดออดิต CS ฝังในหลังบ้าน · ตอนนี้ = ไฟล์ GitHub (เม้งลากขึ้นวันละครั้ง) · หลังรอบ 66 เปลี่ยนเป็น W+'/cs-audit' (อัพเดตเองทุก 30 นาที) */
 const AUDIT_URL=W+'/cs-audit';   /* cs9: หน้าออดิตในเอวา (k902) อัพเดตเองทุก 30 นาที · เดิม = ไฟล์ GitHub */
-function loadAudit(force){ const f=$('auditframe'); const u=AUDIT_URL+'?key='+encodeURIComponent(KEY)+'&v='+Math.floor(Date.now()/60000); /* cs10: iframe ข้ามโดเมนเก็บ cookie ไม่ได้ → ส่งรหัสหลังบ้านไปด้วย (k903) */ $('auditopen').href=AUDIT_URL; if(force||!f.dataset.loaded){ f.src=u; f.dataset.loaded='1'; } }
+function loadAudit(force){ const f=$('auditframe'); const u=AUDIT_URL+'?key='+encodeURIComponent(KEY)+(function(){ let w=''; try{ w=(localStorage.getItem('g2who')||'').trim(); }catch(e){} return w?'&who='+encodeURIComponent(w):''; })()+'&v='+Math.floor(Date.now()/60000); /* cs10: iframe ข้ามโดเมนเก็บ cookie ไม่ได้ → ส่งรหัสหลังบ้านไปด้วย (k903) · cs11: + &who= ชื่อเล่นจาก g2who → โน้ตหัวหน้า CS ลงชื่อถูก (k906 อ่าน ?who=) */ $('auditopen').href=AUDIT_URL; if(force||!f.dataset.loaded){ f.src=u; f.dataset.loaded='1'; } }
 function go(n){
   TAB=n;
   [1,2,3,4,5,6,7].forEach(i=>{ $('tab'+i).classList.toggle('on',i===n); $('p'+i).classList.toggle('hidden',i!==n); $('n'+i).classList.toggle('on',i===n); });   /* cs5: +6 · cs8: +7 */
@@ -1182,12 +1182,43 @@ async function orderDone(uid,name,el){
 function setFilter(f){ FILTER=f; document.querySelectorAll('.filters .chip').forEach(c=>c.classList.toggle('on',c.dataset.f===f)); renderChats(); }
 function renderChats(){
   const kw=($('csearch').value||'').trim().toLowerCase();
-  const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1) return false; return true; });
+  const list=CHATS.filter(c=>{ if(FILTER==='wait'&&!c.muted) return false; if(FILTER==='bot'&&c.muted) return false; if(kw&&String(c.name||'').toLowerCase().indexOf(kw)===-1&&String(c.oaName||'').toLowerCase().indexOf(kw)===-1) return false; return true; });   /* cs12: ค้นชื่อ OA ได้ด้วย (ถ้า item มี oaName) */
   $('folcnt').textContent=list.length+' / '+CHATS.length+' แชท';
-  setHTML('chatlist', list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(nmOf(it))+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
-    +'<button class="s" onclick="event.stopPropagation();whoHist(\''+esc(it.uid)+'\',this)">🕓</button>'+(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>');
+  setHTML('chatlist', (list.length? list.map(it=>'<div class="crow'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(it.name||'')+'\')"><div class="cn"><b>'+esc(nmOf(it))+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่'):'🤖 เอวาคุยอยู่ · '+esc(timeAgo(it.t)))+'</i></div>'
+    +'<button class="s" onclick="event.stopPropagation();whoHist(\''+esc(it.uid)+'\',this)">🕓</button>'+(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>').join('') : '<div class="empty">ไม่พบแชทที่ตรงเงื่อนไข</div>')+findHTML(kw,list));
 }
-function setMuted(uid,val,reason){ for(const c of CHATS) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
+/* 🔍 cs12 · งานรอบ 77 (worker k917 GET /ctl/findchat): พิมพ์ ≥ 2 ตัว หยุด 400ms → ในลิสต์ 30 คนเจอ < 3 = ค้นทั้งร้าน (ทักใน 7 วัน · ชื่อ LINE + ชื่อ OA + 6 ตัวท้ายรหัส)
+   แถวผลค้นหาใช้ปุ่มเดิม (mute1 / unmute1 / whoHist / openConvFrom) · worker ยังไม่มีเส้นนี้ (404) = ขึ้นข้อความ ไม่ออกจากระบบ */
+const FIND_NONE='ไม่พบลูกค้าที่ทักใน 2 วันล่าสุด — ลองพิมพ์ชื่อ LINE จริง หรือ 6 ตัวท้ายรหัสลูกค้า';
+let FIND={kw:'',shop:'',items:null,busy:false,err:''}, _ft12=null, _fseq12=0;
+function findClear(){ _fseq12++; FIND={kw:'',shop:'',items:null,busy:false,err:''}; }
+function findSoon(){ clearTimeout(_ft12); const kw=($('csearch').value||'').trim(); if(Array.from(kw).length<2){ if(FIND.kw||FIND.busy){ findClear(); renderChats(); } return; } _ft12=setTimeout(()=>findRun(kw),400); }
+function localHits12(kw){ const k=kw.toLowerCase(); return CHATS.filter(c=>String(c.name||'').toLowerCase().indexOf(k)!==-1||String(c.oaName||'').toLowerCase().indexOf(k)!==-1).length; }
+async function findRun(kw){
+  if(kw!==($('csearch').value||'').trim()) return;
+  if(localHits12(kw)>=3){ if(FIND.kw){ findClear(); renderChats(); } return; }
+  const seq=++_fseq12, shop=SHOP; FIND={kw:kw.toLowerCase(),shop,items:null,busy:true,err:''}; renderChats();
+  let nx;
+  try{ const r=await fetchJ(qs('/ctl/findchat?q='+enc(Array.from(kw).slice(0,40).join('')),shop));
+    nx={kw:kw.toLowerCase(),shop,items:(r.ok&&r.d&&Array.isArray(r.d.items))?pendApply(r.d.items):null,busy:false,err:r.ok?'':(r.status===404?'ระบบยังไม่รองรับการค้นทั้งร้าน (รออัปเดต)':'ค้นทั้งร้านไม่ได้ ('+r.status+') ลองใหม่')}; }
+  catch(e){ nx={kw:kw.toLowerCase(),shop,items:null,busy:false,err:e.message==='forbidden'?'':'ค้นทั้งร้านไม่ได้ ลองใหม่'}; }
+  if(seq!==_fseq12) return;
+  FIND=nx; renderChats();
+}
+function findHTML(kw,shown){
+  if(!kw||FIND.kw!==kw) return '';
+  if(FIND.shop!==SHOP){ if(!FIND.busy) setTimeout(findSoon,0); return ''; }
+  let h='<div class="mut" id="findhd" style="margin:14px 0 6px;font-weight:600;">🔎 ผลค้นหาจากทั้งร้าน (ทักใน 2 วัน)</div>';
+  if(FIND.busy) return h+'<div class="empty">กำลังค้นทั้งร้าน…</div>';
+  if(FIND.err) return h+'<div class="empty">'+esc(FIND.err)+'</div>';
+  const seen=new Set((shown||[]).map(c=>c.uid)), its=(FIND.items||[]).filter(it=>!seen.has(it.uid));
+  if(!(FIND.items||[]).length) return h+'<div class="empty" id="findnone">'+esc(FIND_NONE)+'</div>';
+  if(!its.length) return h+'<div class="empty">ผลทั้งหมดอยู่ในรายการด้านบนแล้ว</div>';
+  return h+its.map(it=>{ const oa=String(it.oaName||'').trim(), ln=String(it.name||'').trim(), lab=oa?oa+(ln&&ln!==oa?' ('+ln+')':''):nmOf(it);
+    return '<div class="crow fc12'+(it.muted?' mut':'')+(it.uid===CUR_UID?' on':'')+'" data-uid="'+esc(it.uid)+'" onclick="openConvFrom(\''+esc(it.uid)+'\',\''+escA(oa||ln)+'\')"><div class="cn"><b>'+esc(lab)+'</b><i>'+(it.muted?'⏸ '+esc(it.reason||'แอดมินคุมอยู่')+' · ':'')+'ทักล่าสุด '+esc(it.t?dmy(it.t)+' '+hhmm(it.t):'-')+'</i></div>'
+    +'<button class="s" onclick="event.stopPropagation();whoHist(\''+esc(it.uid)+'\',this)">🕓</button>'+(it.muted?'<button class="s g" onclick="event.stopPropagation();unmute1(\''+esc(it.uid)+'\',this)">▶️ ให้เอวาตอบต่อ</button>':'<button class="s w" onclick="event.stopPropagation();mute1(\''+esc(it.uid)+'\',this)">⏸ ปิดจีทู</button>')+'</div>'; }).join('');
+}
+function setMuted(uid,val,reason){ for(const c of CHATS.concat(FIND.items||[])) if(c.uid===uid){ c.muted=val; if(val) c.reason=reason||c.reason||'แอดมินคุมอยู่'; } renderChats(); if(uid===CUR_UID) renderConvActs(); }
 /* ⏸ = POST /ctl/mute1 · ▶️ = POST /ctl/unmute1 (k161 optimistic + k338 pending) */
 async function mute1(uid,btn){
   if(btn) btn.textContent='⏸…';
@@ -1243,7 +1274,7 @@ function openLineChat_cs2(uid,name,shop,fallback){
 }
 function openConvFrom(uid,name,shop){ openLineChat_cs2(uid,name,shop,function(){ openConvFrom_before_cs3(uid,name,shop); }); }
 function openConvFrom_before_cs3(uid,name,shop){ if(shop&&shop!==SHOP&&SHOPS.some(s=>s['ร้าน']===shop)) selectShop(shop); if(TAB!==2) go(2); showConv(uid,name); }   /* k719: shop = แถวจาก "ทุกร้าน" */
-function chatRec(uid){ return CHATS.filter(c=>c.uid===uid)[0]; }
+function chatRec(uid){ return CHATS.filter(c=>c.uid===uid)[0]||((FIND&&FIND.items)||[]).filter(c=>c.uid===uid)[0]; }   /* cs12: แถวจากผลค้นทั้งร้านก็เห็นสถานะ/ปุ่มในกล่องแชท */
 function renderConvActs(){
   const c=chatRec(CUR_UID); const a=$('convacts'); const st=$('convstate');
   a.classList.remove('hidden');
