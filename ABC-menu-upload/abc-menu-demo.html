@@ -311,7 +311,7 @@ function sortCards(onlyHeld){
 /* ── v84 · ตัวกรองหมวดแบบการ์ด (01/02/03/08) ──
    เฉพาะที่มีของ = ซ่อนการ์ดที่หมดทุกรส · ช่วงราคา = ใช้ราคาที่พิมพ์บนการ์ด (เหมือนที่ใช้เรียง)
    ป้าย "เหลือน้อย" = มีของแต่เหลือไม่เกิน 2 รส หรือไม่เกินหนึ่งในสี่ของรสทั้งหมด · ไม่แสดงตัวเลขสต็อกให้ลูกค้าเห็น */
-let FILT={stock:false,b:null}, SORT="rec", FBUSED=[];
+let FILT={stock:false,b:null,f:[]}, SORT="rec", FBUSED=[];
 const BUCK=[{k:"lo",t:"ต่ำกว่า 300",f:function(v){return v<300;}},
             {k:"mid",t:"300–399",f:function(v){return v>=300&&v<400;}},
             {k:"hi",t:"400 ขึ้นไป",f:function(v){return v>=400;}}];
@@ -325,7 +325,7 @@ function cardPrice(p,ci){ const c=((CFG.cards||{})[p]||{list:[]}).list[ci]; if(!
 function lowOf(n,t){ return n>0 && (n<=2 || n*4<=t); }
 function filtBuild(){
   const bar=document.getElementById("fbar"); if(!bar) return;
-  FILT={stock:false,b:null}; SORT="rec"; FBUSED=[]; closeF();
+  FILT={stock:false,b:null,f:[]}; SORT="rec"; FBUSED=[]; closeF();
   const pages=(CFG.pages[CATNOW]||[]).filter(function(p){ return (CFG.cards||{})[p]; });
   if(!pages.length){ bar.className="fbar"; bar.innerHTML=""; filtApply(); return; }
   const cnt={lo:0,mid:0,hi:0};
@@ -338,6 +338,14 @@ function filtBuild(){
   bar.className="fbar on";
   filtApply();
 }
+function flvMap(){      /* รสยอดนิยม → การ์ด (p|ci) ที่มีรสนั้น "พร้อมขาย" ในหมวดที่เปิดอยู่ */
+  const pg=(CFG.pages[CATNOW]||[]).map(String).filter(function(p){ return (CFG.cards||{})[p]; }), M={};
+  QKW.forEach(function(k){ const t=norm(k), s={};
+    IDX.forEach(function(o){ if(pg.indexOf(String(o.p))<0 || o.k.indexOf(t)<0) return;
+      const sp=CFG.spots[o.p][o.i]; if(sp.c==null || !spOK(sp)) return; s[o.p+"|"+sp.c]=1; });
+    M[k]=s; });
+  return M;
+}
 function filtShown(){ return document.querySelectorAll("#catpages .card:not(.fhide)").length; }
 function filtApply(){
   const cards=document.querySelectorAll("#catpages .card");
@@ -345,19 +353,21 @@ function filtApply(){
   if(!bar) return;
   const bk=FILT.b?BUCK.find(function(b){return b.k===FILT.b;}):null;
   let shown=0, tot=0;
+  const FM = FILT.f.length ? flvMap() : null;
   cards.forEach(function(cd){
     tot++; const p=cd.dataset.p, ci=+cd.dataset.ci; let ok=true;
     if(FILT.stock && STOCK && cardCount(p,ci)===0) ok=false;
     if(bk){ const v=cardPrice(p,ci); if(v==null || !bk.f(v)) ok=false; }
+    if(FM && !FILT.f.some(function(k){ return FM[k] && FM[k][p+"|"+ci]; })) ok=false;
     cd.classList.toggle("fhide", !ok); if(ok) shown++; });
-  const nact=(FILT.stock?1:0)+(FILT.b?1:0);
+  const nact=(FILT.stock?1:0)+(FILT.b?1:0)+(FILT.f.length?1:0);
   const bd=document.getElementById("fbadge"); if(bd) bd.textContent = nact? String(nact):"";
   const bf=bar.querySelector('[data-o="filt"]'); if(bf) bf.classList.toggle("act", nact>0);
   const so=SORTS.find(function(x){return x.k===SORT;}), bs=bar.querySelector('[data-o="sort"]'), sl=document.getElementById("fsl");
   if(sl) sl.textContent = SORT==="rec" ? "เรียงลำดับ" : so.t;
   if(bs) bs.classList.toggle("act", SORT!=="rec");
   if(ct){
-    if(nact){ const parts=[]; if(FILT.stock) parts.push("เฉพาะที่มีของ"); if(bk) parts.push(bk.t);
+    if(nact){ const parts=[]; if(FILT.stock) parts.push("เฉพาะที่มีของ"); if(bk) parts.push(bk.t); if(FILT.f.length) parts.push("รส"+FILT.f.join("/"));
       ct.innerHTML="แสดง "+shown+" จาก "+tot+" รุ่น · "+parts.join(" · ")+'<button type="button" class="fclr" data-f="reset">ล้างตัวกรอง</button>'; }
     else ct.textContent="";
   }
@@ -382,6 +392,13 @@ function renderFilt(){
     FBUSED.forEach(function(b){ h+='<button type="button" class="fchip'+(FILT.b===b.k?' on':'')+'" data-fb="'+b.k+'">'+b.t+'</button>'; });
     h+='</div>';
   }
+  const FM=flvMap(), fl=QKW.filter(function(k){ const n=Object.keys(FM[k]).length; return n>0 || FILT.f.indexOf(k)>=0; });
+  if(fl.length){
+    h+='<div class="fsec">รสที่มีให้เลือก (แตะได้หลายรส)</div><div class="fchips">';
+    fl.forEach(function(k){ const n=Object.keys(FM[k]).length;
+      h+='<button type="button" class="fchip'+(FILT.f.indexOf(k)>=0?' on':'')+'" data-fk="'+esc(k)+'">'+esc(k)+(STOCK?' · '+n+' รุ่น':'')+'</button>'; });
+    h+='</div>';
+  }
   h+='<div class="fbtns"><button type="button" class="fb-clear" data-fx="clear">ล้างทั้งหมด</button><button type="button" class="fb-done" data-fx="done">แสดง '+filtShown()+' รุ่น</button></div>';
   document.getElementById("fsheet").innerHTML=h;
 }
@@ -391,13 +408,15 @@ function fsClick(ev){
   if(ev.target.closest("[data-fs]")){ FILT.stock=!FILT.stock; filtApply(); return; }
   const fb=ev.target.closest("[data-fb]");
   if(fb){ FILT.b=fb.dataset.fb||null; filtApply(); return; }
+  const fk=ev.target.closest("[data-fk]");
+  if(fk){ const k=fk.dataset.fk, i=FILT.f.indexOf(k); if(i>=0) FILT.f.splice(i,1); else FILT.f.push(k); filtApply(); return; }
   const fx=ev.target.closest("[data-fx]");
-  if(fx){ if(fx.dataset.fx==="clear"){ FILT={stock:false,b:null}; filtApply(); } else { closeF(); scrollTo({top:0,behavior:"smooth"}); } }
+  if(fx){ if(fx.dataset.fx==="clear"){ FILT={stock:false,b:null,f:[]}; filtApply(); } else { closeF(); scrollTo({top:0,behavior:"smooth"}); } }
 }
 function filtClick(ev){
   const o=ev.target.closest("[data-o]"); if(o){ openF(o.dataset.o); return; }
   const x=ev.target.closest("[data-f]"); if(!x) return;
-  if(x.dataset.f==="reset"){ FILT={stock:false,b:null}; filtApply(); }
+  if(x.dataset.f==="reset"){ FILT={stock:false,b:null,f:[]}; filtApply(); }
 }
 function paintAlloff(){
   if(!STOCK){ filtApply(); return; }
