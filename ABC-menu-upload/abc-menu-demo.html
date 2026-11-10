@@ -333,8 +333,7 @@ function filtBuild(){
     const v=cardPrice(p,ci); if(v==null) return; BUCK.forEach(function(b){ if(b.f(v)) cnt[b.k]++; }); }); });
   const used=BUCK.filter(function(b){ return cnt[b.k]>0; });
   FBUSED = used.length>=2 ? used : [];
-  bar.innerHTML='<div class="frow"><button type="button" class="fbtn" data-o="sort">'+IC_SORT+'<span id="fsl">เรียงลำดับ</span></button>'
-    +'<button type="button" class="fbtn" data-o="filt">'+IC_FILT+'<span>ตัวกรอง</span><em id="fbadge"></em></button></div><div class="fcnt" id="fcnt"></div>';
+  bar.innerHTML='<div class="frow"><button type="button" class="fbtn" data-o="filt">'+IC_FILT+'<span>ตัวกรอง</span><em id="fbadge"></em></button></div><div class="fcnt" id="fcnt"></div>';
   bar.className="fbar on";
   filtApply();
 }
@@ -961,4 +960,4 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
 })();
 </script>
 </body></html>
-<!-- build 84b -->
+<!-- build 84d -->
