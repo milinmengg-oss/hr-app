@@ -1056,8 +1056,9 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
   const orders=(c.orders||[]).slice().sort(byOld);
   const total=qWait.length+qAcc.length+qFee.length+orders.length;
   const chip=(k,cls,n,lb)=>'<span class="'+cls+(VIEW===k?' on':'')+'" onclick="setView(\''+k+'\')" title="กดเพื่อดูเฉพาะกลุ่มนี้"><b>'+n+'</b>'+lb+'</span>';
-  $('stat').innerHTML=chip('q',qWait.length?'bad':'',qWait.length,'ลูกค้ารอคน')+chip('a',qAcc.length?'acc':'',qAcc.length,'รับแล้ว')+chip('f',qFee.length?'warn':'',qFee.length,'รอค่าส่งด่วน')+chip('o',orders.length?'warn':'',orders.length,'รอลง XSelly')+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
+  $('stat').innerHTML=chip('q',qWait.length?'bad':'',qWait.length,'ลูกค้ารอคน')+chip('a',qAcc.length?'acc':'',qAcc.length,'รับแล้ว')+(qFee.length?chip('f','warn',qFee.length,'รอค่าส่งด่วน'):'')+chip('o',orders.length?'warn':'',orders.length,'รอลง XSelly')+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
   applyView();
+  if(!qFee.length){ $('grp_f').classList.add('hidden'); if(VIEW==='f'){ VIEW='all'; applyView(); $('grp_f').classList.add('hidden'); } }   /* cs13: ไม่มีเคสรอค่าส่งด่วน = ซ่อนกล่อง (เอวาคิดค่าส่งเอง k934) · มีเคสหลุดมา = โผล่เอง */
   $('tcount').textContent=total||''; const bd=$('bd1'); bd.textContent=total>99?'99+':total; bd.classList.toggle('z',total===0);
   $('cnt_q').textContent=qWait.length||''; $('cnt_a').textContent=qAcc.length||''; $('cnt_f').textContent=qFee.length||''; $('cnt_o').textContent=orders.length||'';
   const ns=$('noticestrip'); if(c.notice){ ns.textContent='📣 ประกาศที่ตั้งไว้: '+c.notice; ns.classList.remove('hidden'); } else ns.classList.add('hidden');
