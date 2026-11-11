@@ -332,6 +332,7 @@ function lowOf(n,t){ return n>0 && (n<=2 || n*4<=t); }
 function filtBuild(){
   const bar=document.getElementById("fbar"); if(!bar) return;
   FILT={stock:false,b:null,f:[]}; SORT="rec"; FBUSED=[]; closeF();
+  bar.className="fbar"; bar.innerHTML=""; filtApply(); return;   /* ฮั้นสั่งเอาปุ่มตัวกรองหน้าหมวดออก — ตัวกรองอยู่ที่ปุ่มข้าง ✕ ในแถบค้นหาแทน */
   const pages=(CFG.pages[CATNOW]||[]).filter(function(p){ return (CFG.cards||{})[p]; });
   if(!pages.length){ bar.className="fbar"; bar.innerHTML=""; filtApply(); return; }
   const cnt={lo:0,mid:0,hi:0};
@@ -1005,4 +1006,4 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
 })();
 </script>
 </body></html>
-<!-- build 84e -->
+<!-- build 84f -->
