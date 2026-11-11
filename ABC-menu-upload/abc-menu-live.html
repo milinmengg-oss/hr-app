@@ -56,6 +56,8 @@ button,input,select,textarea{font-family:inherit}
 .qb{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;white-space:nowrap}
 .qb.ok{background:#e6f6ea;color:#1d7c3d} .qb.no{background:#f0f0f0;color:#9a9a9a}
 .qn{padding:18px 14px;color:#8a8a8a;font-size:13.5px;text-align:center;line-height:1.7}
+.qmod .qm{font-size:14.5px;font-weight:700;color:#111}.qmod .qm b{font-weight:700}.qmod .qf{font-size:13px;font-weight:500;color:#666}
+.card.cflash{outline:3px solid #ff3b3b;outline-offset:3px;border-radius:14px}
 .hot.flash{box-shadow:0 0 0 3px #ff3b3b,0 0 0 9px rgba(255,59,59,.30)}
 .view{display:none}.view.on{display:block}
 /* เวทีภาพ — ภาพต้นฉบับคือเลเยอร์เดียวที่มองเห็น พิกัดเป็น % จึงตรงทุกความกว้างจอ */
@@ -75,6 +77,20 @@ button,input,select,textarea{font-family:inherit}
 .fbar.on{display:block}
 .frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .fchip{border:1px solid #3a3a3a;background:#171717;color:#e9e9e9;border-radius:99px;padding:8px 14px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
+#fsheet .fs2{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:700;color:#111;margin:16px 0 0;padding:16px 0 10px;border-top:1px solid #eee}
+#fsheet h3+.fs2{border-top:none;padding-top:10px;margin-top:0}
+#fsheet .fs2 em{font-style:normal;font-size:12px;font-weight:700;color:#111;background:#c6f45f;border-radius:99px;padding:3px 9px}
+#fsheet .fs2 small{font-size:11.5px;font-weight:500;color:#9a9a9a;margin-left:6px}
+#fsheet .fgrid{display:grid;gap:8px}
+#fsheet .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+#fsheet .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+#fsheet .fchip.ftile{border-radius:12px;height:44px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;min-width:0}
+#fsheet .fchip.ftile.ct{justify-content:space-between}
+#fsheet .fchip.ftile .tn{line-height:1.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fsheet .fchip.ftile small{flex:none;margin:0}
+#fsheet .g3 .ftile{padding:0 9px;font-size:12.5px;letter-spacing:-.2px}
+
+.fchip small{font-size:11px;font-weight:600;opacity:.6;margin-left:2px}
 .fchip.on{background:#c6f45f;border-color:#c6f45f;color:#111}
 .fcnt{color:#8f8f8f;font-size:12.5px;margin-top:9px;min-height:1px}
 .fempty{display:none;padding:38px 18px 46px;text-align:center;color:#a9a9a9;font-size:14.5px;line-height:1.9;background:#0b0b0b}
@@ -116,6 +132,7 @@ button,input,select,textarea{font-family:inherit}
 .fopt.on .fsw{background:#6cc24a}
 .fopt.on .fsw::after{left:22px}
 .fbtns{display:flex;gap:10px;margin-top:18px}
+#fsheet .fbtns{position:sticky;bottom:calc(-18px - env(safe-area-inset-bottom,0px));background:#fff;padding:12px 0 calc(18px + env(safe-area-inset-bottom,0px));margin-bottom:calc(-18px - env(safe-area-inset-bottom,0px))}
 .fbtns button{flex:1;padding:13px;border:none;border-radius:12px;font-family:inherit;font-size:14.5px;font-weight:700;cursor:pointer}
 .fb-clear{background:#f0f0f0;color:#333}
 .fb-done{background:linear-gradient(90deg,#4dc3c6 0%,#dae03e 100%);color:#111}
@@ -317,7 +334,7 @@ function sortCards(onlyHeld){
 /* ── v84 · ตัวกรองหมวดแบบการ์ด (01/02/03/08) ──
    เฉพาะที่มีของ = ซ่อนการ์ดที่หมดทุกรส · ช่วงราคา = ใช้ราคาที่พิมพ์บนการ์ด (เหมือนที่ใช้เรียง)
    ป้าย "เหลือน้อย" = มีของแต่เหลือไม่เกิน 2 รส หรือไม่เกินหนึ่งในสี่ของรสทั้งหมด · ไม่แสดงตัวเลขสต็อกให้ลูกค้าเห็น */
-let FILT={stock:false,b:null,f:[]}, SORT="rec", FBUSED=[];
+let FILT={stock:false,b:null,f:[],br:[],pf:[]}, SORT="rec", FBUSED=[];
 const BUCK=[{k:"lo",t:"ต่ำกว่า 300",f:function(v){return v<300;}},
             {k:"mid",t:"300–399",f:function(v){return v>=300&&v<400;}},
             {k:"hi",t:"400 ขึ้นไป",f:function(v){return v>=400;}}];
@@ -331,7 +348,7 @@ function cardPrice(p,ci){ const c=((CFG.cards||{})[p]||{list:[]}).list[ci]; if(!
 function lowOf(n,t){ return n>0 && (n<=2 || n*4<=t); }
 function filtBuild(){
   const bar=document.getElementById("fbar"); if(!bar) return;
-  FILT={stock:QSTOCK,b:QF.b,f:[]}; SORT=QSORT; FBUSED=[]; closeF();
+  FILT={stock:QSTOCK,b:QF.b,f:QF.f,br:QF.br,pf:QF.pf}; SORT=QSORT; FBUSED=[]; closeF();
   bar.innerHTML='<div class="fcnt" id="fcnt"></div>'; bar.className="fbar"; filtApply(); return;   /* ฮั้นสั่งเอาปุ่มตัวกรองหน้าหมวดออก — ตัวกรองอยู่ที่ปุ่มข้าง ✕ ในแถบค้นหาแทน */
   const pages=(CFG.pages[CATNOW]||[]).filter(function(p){ return (CFG.cards||{})[p]; });
   if(!pages.length){ bar.className="fbar"; bar.innerHTML=""; filtApply(); return; }
@@ -365,16 +382,19 @@ function filtApply(){
     if(FILT.stock && STOCK && cardCount(p,ci)===0) ok=false;
     if(bk){ const v=cardPrice(p,ci); if(v==null || !bk.f(v)) ok=false; }
     if(FM && !FILT.f.some(function(k){ return FM[k] && FM[k][p+"|"+ci]; })) ok=false;
+    const cm=(((CFG.cards||{})[p]||{list:[]}).list[ci]||{}).m;
+    if(ok && cm!=null && (!brOK(cm) || !pfOK(cm))) ok=false;
     cd.classList.toggle("fhide", !ok); if(ok) shown++; });
-  const nact=(FILT.stock?1:0)+(FILT.b?1:0)+(FILT.f.length?1:0), nsrt=(SORT!=="rec"?1:0), nall=nact+nsrt;
+  const nact=(FILT.stock?1:0)+(FILT.b?1:0)+(FILT.f.length?1:0)+(QF.br.length?1:0)+(QF.pf.length?1:0), nsrt=(SORT!=="rec"?1:0), nall=nact+nsrt;
   const bd=document.getElementById("fbadge"); if(bd) bd.textContent = nall? String(nall):"";
   const bf=bar.querySelector('[data-o="filt"]'); if(bf) bf.classList.toggle("act", nall>0);
   const so=SORTS.find(function(x){return x.k===SORT;});
   if(ct){
-    if(nall){ const parts=[]; if(nsrt) parts.push(so.t); if(FILT.stock) parts.push("เฉพาะที่มีของ"); if(bk) parts.push(bk.t); if(FILT.f.length) parts.push("รส"+FILT.f.join("/"));
+    if(nall){ const parts=[]; if(nsrt) parts.push(so.t); if(FILT.stock) parts.push("เฉพาะที่มีของ"); if(bk) parts.push(bk.t); if(FILT.f.length) parts.push("รส"+FILT.f.join("/")); if(QF.br.length) parts.push(QF.br.join("/")); if(QF.pf.length) parts.push(QF.pf.map(function(k){return PUFFB.find(function(b){return b.k===k;}).t;}).join("/"));
       ct.innerHTML=(nact?"แสดง "+shown+" จาก "+tot+" รุ่น · ":"")+parts.join(" · ")+'<button type="button" class="fclr" data-f="reset">ล้างทั้งหมด</button>'; }
     else ct.textContent="";
   }
+  CSHOWN=shown;
   bar.classList.toggle("on", nall>0 && tot>0);
   if(em) em.classList.toggle("on", !!(nact && tot>0 && shown===0));
   const fs=document.getElementById("fsheet"); if(fs && fs.classList.contains("on") && fs.dataset.k==="filt") renderFilt();
@@ -557,55 +577,93 @@ function bindUI(){
   });
   document.getElementById("qres").addEventListener("click",function(ev){
     const row=ev.target.closest(".qi"); if(!row) return;
-    goSpot(row.dataset.p, +row.dataset.i);
+    if(row.dataset.mm) goModel(row.dataset.p, +row.dataset.i); else goSpot(row.dataset.p, +row.dataset.i);
   });
 }
 
 // ── ช่องค้นหาสินค้า ──────────────────────────────────────────
-let IDX=[], CATOF={}, QSTOCK=false, QF={b:null}, QSORT="rec", QSHOWN=0, FCTX="cat";
+let IDX=[], CATOF={}, QSTOCK=false, QF={b:null,f:[],br:[],pf:[]}, QSORT="rec", QSHOWN=0, CSHOWN=0, QMM=false, FCTX="cat";
 const QSORTS=[{k:"rec",t:"แนะนำ"},{k:"pa",t:"ราคา ถูก → แพง"},{k:"pd",t:"ราคา แพง → ถูก"}];
 function inCardCat(){
   const v=document.getElementById("v_cat"); if(!v||!v.classList.contains("on")) return false;
   return (CFG.pages[CATNOW]||[]).some(function(p){ return (CFG.cards||{})[p]; });
 }
 function syncCat(){      /* ตัวกรองข้าง ✕ ใช้กับการ์ดในหน้าหมวดด้วย */
-  FILT.stock=QSTOCK; FILT.b=QF.b; SORT=QSORT;
+  FILT.stock=QSTOCK; FILT.b=QF.b; FILT.f=QF.f; FILT.br=QF.br; FILT.pf=QF.pf; SORT=QSORT;
   if(document.getElementById("v_cat").classList.contains("on")) sortCards(false);
   filtApply();
 }
 function resetAllF(){
-  QSORT="rec"; QSTOCK=false; QF.b=null; syncCat(); qfbUpdate();
+  QSORT="rec"; QSTOCK=false; QF.b=null; QF.f.length=0; QF.br.length=0; QF.pf.length=0; syncCat(); qfbUpdate();
   if(document.getElementById("sbar").classList.contains("on")) doSearch();
   const fs=document.getElementById("fsheet"); if(fs && fs.dataset.k==="qfilt") renderQFilt();
 }
+const BRANDS=[["RELX",/RELX/],["MARBO",/MARBO/],["KS",/(^|[^A-Z])KS([^A-Z]|$)/],["ABC",/(^|[^A-Z])ABC([^A-Z]|$)/],["JOIWAY",/JOIWAY/],["INFY",/(^|[^A-Z])INFY([^A-Z]|$)/],["ESKO",/ESKO/],["VAZER",/VAZER/],["M",/(^|[^A-Z])M (SWITCH|ZERO)/],["VOSOON",/VOSOON/],["STAR",/(^|[^A-Z])STAR([^A-Z]|$)/],["GARAM",/GARAM/],["INSTA BAR",/INSTA/],["V PLUS",/V PLUS/],["DUAL SMASH",/DUAL/],["PHATJUICE",/PHAT/],["IQOS",/IQOS|ILUMA/],["KARDINAL",/KARDINAL/],["ZAR",/(^|[^A-Z])ZAR([^A-Z]|$)/],["ZYN",/(^|[^A-Z])ZYN([^A-Z]|$)/]];
+const PUFFB=[{k:"s",t:"ไม่เกิน 6K",f:function(n){return n<=6000;}},{k:"m",t:"8K–12K",f:function(n){return n>6000&&n<=12000;}},{k:"l",t:"15K–18K",f:function(n){return n>12000&&n<20000;}},{k:"x",t:"20K ขึ้นไป",f:function(n){return n>=20000;}}];
+const BRC={}, PFC={};
+function brandOf(m){ m=String(m); if(BRC[m]!==undefined) return BRC[m]; const u=m.toUpperCase(); let r=null;
+  for(let i=0;i<BRANDS.length;i++){ if(BRANDS[i][1].test(u)){ r=BRANDS[i][0]; break; } } return (BRC[m]=r); }
+function puffOf(m){ m=String(m); if(PFC[m]!==undefined) return PFC[m]; let r=null, x=m.match(/(\d+(?:\.\d+)?)\s*K(?![A-Za-z])/i);
+  if(x) r=Math.round(parseFloat(x[1])*1000); else { x=m.match(/(\d{1,2}),(\d{3})/); if(x) r=parseInt(x[1]+x[2],10); } return (PFC[m]=r); }
+function pfOK(m){ if(!QF.pf.length) return true; const n=puffOf(m); return n!=null && QF.pf.some(function(k){ return PUFFB.find(function(b){return b.k===k;}).f(n); }); }
+function brOK(m){ return !QF.br.length || QF.br.indexOf(brandOf(m))>=0; }
+function qNarrow(){ return !!(QSTOCK||QF.b||QF.f.length||QF.br.length||QF.pf.length); }
+function qAct(){ return qNarrow()||QSORT!=="rec"; }
+function qNtog(a,v){ const i=a.indexOf(v); if(i>=0) a.splice(i,1); else a.push(v); }
+function qCounts(){      /* จำนวนรุ่น (ไม่ซ้ำชื่อ) ต่อยี่ห้อ / ช่วงพัฟ / รส ที่มีของ */
+  const B={}, P={}, F={}, seen={};
+  IDX.forEach(function(o){ if(!seen[o.m]){ seen[o.m]=1; const b=brandOf(o.m); if(b) B[b]=(B[b]||0)+1; const n=puffOf(o.m);
+      if(n!=null) PUFFB.forEach(function(x){ if(x.f(n)) P[x.k]=(P[x.k]||0)+1; }); } });
+  QKW.forEach(function(k){ const t=norm(k), ms={};
+    IDX.forEach(function(o){ if(o.k.indexOf(t)>=0 && spOK(CFG.spots[o.p][o.i])) ms[o.m]=1; }); F[k]=Object.keys(ms).length; });
+  return {B:B,P:P,F:F};
+}
 function qfbUpdate(){
-  const n=(QSTOCK?1:0)+(QF.b?1:0)+(QSORT!=="rec"?1:0), b=document.getElementById("qfb"); if(!b) return;
+  const n=(QSTOCK?1:0)+(QF.b?1:0)+(QSORT!=="rec"?1:0)+(QF.f.length?1:0)+(QF.br.length?1:0)+(QF.pf.length?1:0), b=document.getElementById("qfb"); if(!b) return;
   document.getElementById("qfbadge").textContent=n?String(n):""; b.classList.toggle("act",n>0);
 }
 function renderQFilt(){
-  let h='<h3>ตัวกรอง</h3><div class="fsec">เรียงราคา</div><div class="fchips">';
-  QSORTS.forEach(function(x){ h+='<button type="button" class="fchip'+(QSORT===x.k?' on':'')+'" data-qs="'+x.k+'">'+x.t+'</button>'; });
-  h+='</div><div class="fsec">สถานะสินค้า</div>'
-    +'<button type="button" class="fopt'+(QSTOCK?' on':'')+'" data-qst="1" style="border-bottom:none"><span>เฉพาะที่มีของ<small>ซ่อนรายการที่หมด</small></span><i class="fsw"></i></button>'
-    +'<div class="fsec">ช่วงราคา (บาท)</div><div class="fchips"><button type="button" class="fchip'+(QF.b?'':' on')+'" data-qb="">ทุกราคา</button>';
-  BUCK.forEach(function(b){ h+='<button type="button" class="fchip'+(QF.b===b.k?' on':'')+'" data-qb="'+b.k+'">'+b.t+'</button>'; });
-  h+='</div><div class="fbtns"><button type="button" class="fb-clear" data-qx="clear">ล้างทั้งหมด</button><button type="button" class="fb-done" data-qx="done">'+(QSHOWN<0?'ปิด':'แสดง '+QSHOWN+' รายการ')+'</button></div>';
+  const C=qCounts();
+  function sec(t,n,note){ return '<div class="fs2"><span>'+t+(note?'<small>'+note+'</small>':'')+'</span>'+(n?'<em>เลือก '+n+'</em>':'')+'</div>'; }
+  function tile(on,attr,txt,cnt){ return '<button type="button" class="fchip ftile'+(cnt==null?'':' ct')+(on?' on':'')+'" '+attr+'><span class="tn"'+(String(txt).length>9&&/^[A-Z ]+$/.test(txt)?' style="font-size:11px"':'')+'>'+txt+'</span>'+(cnt==null?'':'<small>'+cnt+'</small>')+'</button>'; }
+  let h='<h3>ตัวกรอง</h3>'+sec('เรียงราคา',0)+'<div class="fgrid g3">';
+  QSORTS.forEach(function(x){ h+=tile(QSORT===x.k,'data-qs="'+x.k+'"',x.t); });
+  h+='</div>'+sec('สถานะสินค้า',0)
+    +'<button type="button" class="fopt'+(QSTOCK?' on':'')+'" data-qst="1" style="border-bottom:none;padding:4px 2px"><span>เฉพาะที่มีของ<small>ซ่อนรายการที่หมด</small></span><i class="fsw"></i></button>'
+    +sec('ช่วงราคา (บาท)',0)+'<div class="fgrid g2">'+tile(!QF.b,'data-qb=""','ทุกราคา');
+  BUCK.forEach(function(b){ h+=tile(QF.b===b.k,'data-qb="'+b.k+'"',b.t); });
+  h+='</div>'+sec('ยี่ห้อ',QF.br.length,'จำนวนรุ่น')+'<div class="fgrid g3">';
+  BRANDS.forEach(function(x){ const n=C.B[x[0]]; if(!n && QF.br.indexOf(x[0])<0) return;
+    h+=tile(QF.br.indexOf(x[0])>=0,'data-qbr="'+esc(x[0])+'"',esc(x[0]),n||0); });
+  h+='</div>'+sec('จำนวนพัฟ',QF.pf.length,'จำนวนรุ่น')+'<div class="fgrid g2">';
+  PUFFB.forEach(function(x){ const n=C.P[x.k]; if(!n && QF.pf.indexOf(x.k)<0) return;
+    h+=tile(QF.pf.indexOf(x.k)>=0,'data-qpf="'+x.k+'"',x.t,n||0); });
+  h+='</div>'+sec('รสที่มีให้เลือก',QF.f.length,'จำนวนรุ่นที่มีของ')+'<div class="fgrid g2">';
+  QKW.forEach(function(k){ const n=C.F[k]; if(!n && QF.f.indexOf(k)<0) return;
+    h+=tile(QF.f.indexOf(k)>=0,'data-qf="'+esc(k)+'"',esc(k),n); });
+  const nn=(inCardCat() && document.getElementById("q").value.trim().length<2)?CSHOWN:QSHOWN;
+  h+='</div><div class="fbtns"><button type="button" class="fb-clear" data-qx="clear">ล้างทั้งหมด</button><button type="button" class="fb-done" data-qx="done">'+(nn<0?'ปิด':'แสดง '+nn+((QMM&&!(inCardCat()&&document.getElementById("q").value.trim().length<2))?' รุ่น':' รายการ'))+'</button></div>';
   document.getElementById("fsheet").innerHTML=h;
 }
 function openQF(){
   FCTX="q"; const fs=document.getElementById("fsheet"); fs.dataset.k="qfilt";
-  if(document.getElementById("q").value.trim().length<2 && !(QSTOCK||QF.b||QSORT!=="rec")) QSHOWN=-1;
+  if(document.getElementById("q").value.trim().length<2 && !qAct()) QSHOWN=-1;
   renderQFilt(); document.getElementById("fsbg").style.display="block"; fs.classList.add("on");
 }
 function qfClick(ev){
   const t=ev.target;
-  const a=t.closest("[data-qs]"), b=t.closest("[data-qst]"), c=t.closest("[data-qb]"), d=t.closest("[data-qx]");
-  if(!(a||b||c||d)) return false;
+  const a=t.closest("[data-qs]"), b=t.closest("[data-qst]"), c=t.closest("[data-qb]"), d=t.closest("[data-qx]"),
+        e1=t.closest("[data-qbr]"), e2=t.closest("[data-qpf]"), e3=t.closest("[data-qf]");
+  if(!(a||b||c||d||e1||e2||e3)) return false;
+  const sc=document.getElementById("fsheet").scrollTop;
   if(a) QSORT=a.dataset.qs;
   else if(b) QSTOCK=!QSTOCK;
   else if(c) QF.b=c.dataset.qb||null;
-  else if(d){ if(d.dataset.qx==="clear"){ QSORT="rec"; QSTOCK=false; QF.b=null; } else { closeF(); return true; } }
-  syncCat(); doSearch(); renderQFilt(); return true;
+  else if(e1) qNtog(QF.br,e1.dataset.qbr);
+  else if(e2) qNtog(QF.pf,e2.dataset.qpf);
+  else if(e3) qNtog(QF.f,e3.dataset.qf);
+  else if(d){ if(d.dataset.qx==="clear"){ QSORT="rec"; QSTOCK=false; QF.b=null; QF.f.length=0; QF.br.length=0; QF.pf.length=0; } else { closeF(); return true; } }
+  syncCat(); doSearch(); qfbUpdate(); renderQFilt(); document.getElementById("fsheet").scrollTop=sc; return true;
 }
 const THC={"หัวพอต RELX INFINITY":0,"หัวพอต RELX LARGE":1,"หัวพอต RELX ULTRA":2,"หัวพอต INFY PLUS":3,"หัวพอต MARBO ZERO":4,"หัวพอต KS LUMINA 2":5,"RELX POD CLEAR 18K":6,"RELX BOOST POD":7,"ABC LEGO 20K":8,"ABC TANK 22K":9,"DUAL SMASH 20K":10,"VAZER RELOAD 15K":11,"M SWITCH":12,"ESKO BAR SWITCH 20K":13,"STAR 2,500":14,"KS Quik 6K":15,"GARAM 6K":16,"ABC 8K":17,"MARBO 9K":18,"MARBO 9K (โคลน)":19,"MARBO 10K":20,"MARBO 10K (โคลน)":21,"RELX SMASH GO 12K":22,"JOIWAY 12K":23,"INSTA BAR 15K":24,"V PLUS 16K":25,"RELX LUMI 18K":26,"ESKO BAR 20K":27,"RELX SPARTA 20K":28,"INFY 20K":29,"JOIWAY TWINS 20K":30,"VOSOON 23K":31,"RELX ACE 35K":32,"VAZER RELOAD 15K (KIT)":33,"M SWITCH 15K (KIT)":34,"ESKO BAR SWITCH 20K (KIT)":35}, THS={"04":[36,37,38,39,40,41,42,43,44,45,46],"05":[47,48,49,50,51,52,53,54,55,56],"06":[57,58,59,60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83],"07":[84,85,86,87,88,89,90,91],"09":[92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148],"10":[149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164],"11":[165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192]};
 /* รูปย่อสินค้าในผลค้นหา (v84) — sprite เดียว img/menu4/th_v84.webp · การ์ด = รูปสินค้าของรุ่น · หน้าเต็ม = รูปช่องนั้น · โหลดตอนเปิดค้นหาครั้งแรกเท่านั้น · ไม่มีไฟล์ = ไม่แสดงรูป */
@@ -682,9 +740,9 @@ function smartFind(q){
 function doSearch(){
   const box=document.getElementById("qres");
   const q=norm(document.getElementById("q").value);
-  const qAll=q.length<2&&document.getElementById("sbar").classList.contains("on")&&(QSTOCK||QF.b||QSORT!=="rec")&&!inCardCat();
+  const qAll=q.length<2&&document.getElementById("sbar").classList.contains("on")&&qAct()&&!inCardCat();
   if(q.length<2&&!qAll){
-    if(document.getElementById("sbar").classList.contains("on") && (QSTOCK||QF.b||QSORT!=="rec") && inCardCat()){ box.classList.remove("on"); box.innerHTML=""; }   /* อยู่หน้าหมวดการ์ด: ให้เห็นการ์ดที่กรองอยู่ข้างหลังชีต */
+    if(document.getElementById("sbar").classList.contains("on") && qAct() && inCardCat()){ box.classList.remove("on"); box.innerHTML=""; }   /* อยู่หน้าหมวดการ์ด: ให้เห็นการ์ดที่กรองอยู่ข้างหลังชีต */
     else if(document.getElementById("sbar").classList.contains("on")) qChips(box);   /* ช่องค้นหาเปิดอยู่แต่ยังไม่พิมพ์ → โชว์ปุ่มลัดรสยอดนิยม */
     else { box.classList.remove("on"); box.innerHTML=""; }
     return;
@@ -696,18 +754,25 @@ function doSearch(){
   if(!r.length){ box.innerHTML='<div class="qn">ไม่พบ "'+document.getElementById("q").value+'"<br>ลองพิมพ์ชื่อรุ่นหรือชื่อกลิ่นสั้น ๆ</div>'; return; }
   const all=r.length, has=r.filter(o=>o.ok).length;
   if(QSTOCK) r=r.filter(o=>o.ok);
+  if(QF.f.length) r=r.filter(function(o){ return o.ok && QF.f.some(function(k){ return o.k.indexOf(norm(k))>=0; }); });
+  if(QF.br.length||QF.pf.length) r=r.filter(function(o){ return brOK(o.m) && pfOK(o.m); });
   const qbk=QF.b?BUCK.find(function(b){return b.k===QF.b;}):null;
   if(qbk) r=r.filter(function(o){ const v=priceOf(o.m); return v!=null && qbk.f(v); });
   if(QSORT!=="rec"){ const dir=(QSORT==="pa")?1:-1;
     r.sort(function(a,b){ const pa=priceOf(a.m), pb=priceOf(b.m);
       return ((pa==null)-(pb==null))||((pa-pb)*dir)||(b.ok-a.ok)||a.m.localeCompare(b.m,"th")||a.f.localeCompare(b.f,"th"); }); }
+  QMM = !!(qAll && (QF.br.length||QF.pf.length) && !QF.f.length);
+  if(QMM){ const g={}, ord=[];
+    r.forEach(function(o){ if(!g[o.m]){ g[o.m]=o; o._n=0; ord.push(o); } if(o.ok) g[o.m]._n++; });
+    ord.forEach(function(o){ o._t=IDX.filter(function(x){return x.m===o.m;}).length; o.mm=true; });
+    r=ord; }
   QSHOWN=r.length; qfbUpdate();
-  let h='<div class="qh"><span>'+((QSTOCK||qbk)?'แสดง '+r.length+' จาก '+all+' รายการ':(qAll?'ทุกรายการ '+all:'พบ '+all+' รายการ · มีของ '+has))+'</span><button type="button" class="fchip qtog'+(QSTOCK?' on':'')+'">เฉพาะที่มีของ</button></div>';
+  let h='<div class="qh"><span>'+(QMM?('พบ '+r.length+' รุ่น'+(QF.br.length?' · '+QF.br.join(" / "):'')):(qNarrow())?'แสดง '+r.length+' จาก '+all+' รายการ':(qAll?'ทุกรายการ '+all:'พบ '+all+' รายการ · มีของ '+has))+'</span><button type="button" class="fchip qtog'+(QSTOCK?' on':'')+'">เฉพาะที่มีของ</button></div>';
   if(!r.length) h+='<div class="qn">ไม่มีรายการที่ตรงกับตัวกรองตอนนี้<br>เปิดตัวกรอง (ปุ่มข้าง ✕) แล้วกด "ล้างทั้งหมด" เพื่อดูทั้งหมด</div>';
   r.slice(0,80).forEach(o=>{
     const pz=priceOf(o.m);
-    h+='<div class="qi" data-p="'+esc(o.p)+'" data-i="'+o.i+'"><div class="qt">'
-      +'<div class="qm">'+esc(o.m)+(pz==null?'':' · <b>'+pz.toLocaleString("th-TH")+' บาท</b>')+'</div><div class="qf">'+esc(o.f)+'</div></div>'
+    h+='<div class="qi'+(o.mm?' qmod':'')+'" data-p="'+esc(o.p)+'" data-i="'+o.i+'"'+(o.mm?' data-mm="1"':'')+'><div class="qt">'
+      +'<div class="qm">'+esc(o.m)+(pz==null?'':' · <b>'+pz.toLocaleString("th-TH")+' บาท</b>')+'</div><div class="qf">'+(o.mm?(o._n?'มีของ '+o._n+' จาก '+o._t+' รส':'หมดทุกรส ('+o._t+' รส)'):esc(o.f))+'</div></div>'
       +thImg(o)+'<span class="qb '+(o.ok?'ok':'no')+'">'+(o.ok?'มีของ':'หมด')+'</span></div>';
   });
   if(r.length>80) h+='<div class="qn">แสดง 80 จาก '+r.length+' รายการ — พิมพ์เพิ่มเพื่อกรองให้แคบลง</div>';
@@ -728,6 +793,15 @@ function closeSearch(){
   document.getElementById("sbtn").style.display="";   /* ล้าง inline ให้กลับไปใช้ display:flex จาก CSS (ถ้าใส่ block ปุ่มจะไหลไปชิดซ้าย) */
 }
 function clearQ(){ document.getElementById("q").value=""; doSearch(); }
+function goModel(p,i){      /* แตะรุ่นในผลค้นหา → เปิดหมวดนั้น แล้วเลื่อนไปที่การ์ดรุ่น (ตัวกรองยังค้างอยู่ จึงเห็นเฉพาะรุ่นที่เลือก) */
+  const sp=CFG.spots[p][i], cat=CATOF[p];
+  document.getElementById("qres").classList.remove("on"); document.getElementById("q").blur();
+  if(cat) openCat(cat);
+  setTimeout(function(){
+    const el = (sp&&sp.c!=null) ? document.querySelector('#catpages .card[data-p="'+p+'"][data-ci="'+sp.c+'"]') : document.querySelector('#catpages .hot[data-p="'+p+'"][data-i="'+i+'"]');
+    if(el){ el.scrollIntoView({block:"start"}); el.classList.add("cflash"); setTimeout(function(){ el.classList.remove("cflash"); },1800); }
+  },120);
+}
 function goSpot(p,i){
   const cat=CATOF[p];
   document.getElementById("qres").classList.remove("on");
@@ -1023,4 +1097,3 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
 })();
 </script>
 </body></html>
-<!-- build 84i -->
