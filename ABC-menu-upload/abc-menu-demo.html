@@ -75,6 +75,19 @@ button,input,select,textarea{font-family:inherit}
 .fbar.on{display:block}
 .frow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .fchip{border:1px solid #3a3a3a;background:#171717;color:#e9e9e9;border-radius:99px;padding:8px 14px;font-size:13.5px;font-weight:700;font-family:inherit;cursor:pointer;line-height:1;-webkit-tap-highlight-color:transparent}
+#fsheet .fs2{display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:700;color:#111;margin:16px 0 0;padding:16px 0 10px;border-top:1px solid #eee}
+#fsheet h3+.fs2{border-top:none;padding-top:10px;margin-top:0}
+#fsheet .fs2 em{font-style:normal;font-size:12px;font-weight:700;color:#111;background:#c6f45f;border-radius:99px;padding:3px 9px}
+#fsheet .fs2 small{font-size:11.5px;font-weight:500;color:#9a9a9a;margin-left:6px}
+#fsheet .fgrid{display:grid;gap:8px}
+#fsheet .g2{grid-template-columns:repeat(2,minmax(0,1fr))}
+#fsheet .g3{grid-template-columns:repeat(3,minmax(0,1fr))}
+#fsheet .fchip.ftile{border-radius:12px;height:44px;padding:0 12px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:13.5px;min-width:0}
+#fsheet .fchip.ftile.ct{justify-content:space-between}
+#fsheet .fchip.ftile .tn{line-height:1.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#fsheet .fchip.ftile small{flex:none;margin:0}
+#fsheet .g3 .ftile{padding:0 9px;font-size:12.5px;letter-spacing:-.2px}
+
 .fchip small{font-size:11px;font-weight:600;opacity:.6;margin-left:2px}
 .fchip.on{background:#c6f45f;border-color:#c6f45f;color:#111}
 .fcnt{color:#8f8f8f;font-size:12.5px;margin-top:9px;min-height:1px}
@@ -608,22 +621,24 @@ function qfbUpdate(){
   document.getElementById("qfbadge").textContent=n?String(n):""; b.classList.toggle("act",n>0);
 }
 function renderQFilt(){
-  let h='<h3>ตัวกรอง</h3><div class="fsec">เรียงราคา</div><div class="fchips">';
-  QSORTS.forEach(function(x){ h+='<button type="button" class="fchip'+(QSORT===x.k?' on':'')+'" data-qs="'+x.k+'">'+x.t+'</button>'; });
-  h+='</div><div class="fsec">สถานะสินค้า</div>'
-    +'<button type="button" class="fopt'+(QSTOCK?' on':'')+'" data-qst="1" style="border-bottom:none"><span>เฉพาะที่มีของ<small>ซ่อนรายการที่หมด</small></span><i class="fsw"></i></button>'
-    +'<div class="fsec">ช่วงราคา (บาท)</div><div class="fchips"><button type="button" class="fchip'+(QF.b?'':' on')+'" data-qb="">ทุกราคา</button>';
-  BUCK.forEach(function(b){ h+='<button type="button" class="fchip'+(QF.b===b.k?' on':'')+'" data-qb="'+b.k+'">'+b.t+'</button>'; });
   const C=qCounts();
-  h+='</div><div class="fsec">ยี่ห้อ</div><div class="fchips">';
+  function sec(t,n,note){ return '<div class="fs2"><span>'+t+(note?'<small>'+note+'</small>':'')+'</span>'+(n?'<em>เลือก '+n+'</em>':'')+'</div>'; }
+  function tile(on,attr,txt,cnt){ return '<button type="button" class="fchip ftile'+(cnt==null?'':' ct')+(on?' on':'')+'" '+attr+'><span class="tn"'+(String(txt).length>9&&/^[A-Z ]+$/.test(txt)?' style="font-size:11px"':'')+'>'+txt+'</span>'+(cnt==null?'':'<small>'+cnt+'</small>')+'</button>'; }
+  let h='<h3>ตัวกรอง</h3>'+sec('เรียงราคา',0)+'<div class="fgrid g3">';
+  QSORTS.forEach(function(x){ h+=tile(QSORT===x.k,'data-qs="'+x.k+'"',x.t); });
+  h+='</div>'+sec('สถานะสินค้า',0)
+    +'<button type="button" class="fopt'+(QSTOCK?' on':'')+'" data-qst="1" style="border-bottom:none;padding:4px 2px"><span>เฉพาะที่มีของ<small>ซ่อนรายการที่หมด</small></span><i class="fsw"></i></button>'
+    +sec('ช่วงราคา (บาท)',0)+'<div class="fgrid g2">'+tile(!QF.b,'data-qb=""','ทุกราคา');
+  BUCK.forEach(function(b){ h+=tile(QF.b===b.k,'data-qb="'+b.k+'"',b.t); });
+  h+='</div>'+sec('ยี่ห้อ',QF.br.length,'จำนวนรุ่น')+'<div class="fgrid g3">';
   BRANDS.forEach(function(x){ const n=C.B[x[0]]; if(!n && QF.br.indexOf(x[0])<0) return;
-    h+='<button type="button" class="fchip'+(QF.br.indexOf(x[0])>=0?' on':'')+'" data-qbr="'+esc(x[0])+'">'+(x[0]==='M'?'M SWITCH / ZERO':esc(x[0]))+' <small>'+(n||0)+'</small></button>'; });
-  h+='</div><div class="fsec">จำนวนพัฟ</div><div class="fchips">';
+    h+=tile(QF.br.indexOf(x[0])>=0,'data-qbr="'+esc(x[0])+'"',esc(x[0]),n||0); });
+  h+='</div>'+sec('จำนวนพัฟ',QF.pf.length,'จำนวนรุ่น')+'<div class="fgrid g2">';
   PUFFB.forEach(function(x){ const n=C.P[x.k]; if(!n && QF.pf.indexOf(x.k)<0) return;
-    h+='<button type="button" class="fchip'+(QF.pf.indexOf(x.k)>=0?' on':'')+'" data-qpf="'+x.k+'">'+x.t+' <small>'+(n||0)+'</small></button>'; });
-  h+='</div><div class="fsec">รสที่มีให้เลือก <small style="color:#aaa">(เฉพาะรสที่มีของ)</small></div><div class="fchips">';
+    h+=tile(QF.pf.indexOf(x.k)>=0,'data-qpf="'+x.k+'"',x.t,n||0); });
+  h+='</div>'+sec('รสที่มีให้เลือก',QF.f.length,'จำนวนรุ่นที่มีของ')+'<div class="fgrid g2">';
   QKW.forEach(function(k){ const n=C.F[k]; if(!n && QF.f.indexOf(k)<0) return;
-    h+='<button type="button" class="fchip'+(QF.f.indexOf(k)>=0?' on':'')+'" data-qf="'+esc(k)+'">'+esc(k)+' <small>'+n+' รุ่น</small></button>'; });
+    h+=tile(QF.f.indexOf(k)>=0,'data-qf="'+esc(k)+'"',esc(k),n); });
   const nn=(inCardCat() && document.getElementById("q").value.trim().length<2)?CSHOWN:QSHOWN;
   h+='</div><div class="fbtns"><button type="button" class="fb-clear" data-qx="clear">ล้างทั้งหมด</button><button type="button" class="fb-done" data-qx="done">'+(nn<0?'ปิด':'แสดง '+nn+' รายการ')+'</button></div>';
   document.getElementById("fsheet").innerHTML=h;
