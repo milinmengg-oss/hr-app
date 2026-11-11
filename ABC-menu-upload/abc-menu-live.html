@@ -289,12 +289,12 @@ function cardOrder(p,CD){
   const full=rest.filter(function(i){return cnt[i]>0 && cnt[i]*2>=tot[i];}).sort(cmp);
   const few=rest.filter(function(i){return cnt[i]>0 && cnt[i]*2<tot[i];}).sort(cmp);
   const dead=rest.filter(function(i){return cnt[i]===0;});
-  if(SORT!=="rec"){      /* ผู้ใช้เลือกเรียงเอง (v84) · รุ่นที่หมดทุกรสอยู่ท้ายสุดเสมอ */
+  if(SORT!=="rec"){      /* ผู้ใช้เลือกเรียงเอง (v84) */
     const alive=rest.filter(function(i){return cnt[i]>0;}), dd=rest.filter(function(i){return cnt[i]===0;});
     const f2={pa:function(a,b){return (pr(a)-pr(b))||(cnt[b]-cnt[a])||(a-b);},
               pd:function(a,b){return (pr(b)-pr(a))||(cnt[b]-cnt[a])||(a-b);},
               mo:function(a,b){return (cnt[b]-cnt[a])||(pr(a)-pr(b))||(a-b);}}[SORT];
-    return pinned.concat(alive.sort(f2),dd);
+    return pinned.concat(rest.slice().sort(f2));   /* เรียงราคาล้วน — รุ่นที่หมดก็แสดงตามราคา (สีเทา) ถ้าไม่อยากเห็นให้เปิด "เฉพาะที่มีของ" */
   }
   return pinned.concat(full,few,dead);
 }
@@ -700,7 +700,7 @@ function doSearch(){
   if(qbk) r=r.filter(function(o){ const v=priceOf(o.m); return v!=null && qbk.f(v); });
   if(QSORT!=="rec"){ const dir=(QSORT==="pa")?1:-1;
     r.sort(function(a,b){ const pa=priceOf(a.m), pb=priceOf(b.m);
-      return (b.ok-a.ok)||((pa==null)-(pb==null))||((pa-pb)*dir)||a.m.localeCompare(b.m,"th")||a.f.localeCompare(b.f,"th"); }); }
+      return ((pa==null)-(pb==null))||((pa-pb)*dir)||(b.ok-a.ok)||a.m.localeCompare(b.m,"th")||a.f.localeCompare(b.f,"th"); }); }
   QSHOWN=r.length; qfbUpdate();
   let h='<div class="qh"><span>'+((QSTOCK||qbk)?'แสดง '+r.length+' จาก '+all+' รายการ':(qAll?'ทุกรายการ '+all:'พบ '+all+' รายการ · มีของ '+has))+'</span><button type="button" class="fchip qtog'+(QSTOCK?' on':'')+'">เฉพาะที่มีของ</button></div>';
   if(!r.length) h+='<div class="qn">ไม่มีรายการที่ตรงกับตัวกรองตอนนี้<br>เปิดตัวกรอง (ปุ่มข้าง ✕) แล้วกด "ล้างทั้งหมด" เพื่อดูทั้งหมด</div>';
@@ -1023,4 +1023,4 @@ buildHome(); buildIndex(); bindUI(); loadStock(); loadPrice(); loadReviews();
 })();
 </script>
 </body></html>
-<!-- build 84h -->
+<!-- build 84i -->
