@@ -1379,8 +1379,8 @@ function sf103Num(v){ let s=String(v==null?'':v).trim(); if(/^\d+(\.\d+)?e\+?\d+
 function sf103Parse(rows){
   let hi=-1, ci={};
   for(let i=0;i<Math.min(rows.length,10);i++){ const h=(rows[i]||[]).map(x=>String(x==null?'':x).trim().toLowerCase());
-    const f=(rx)=>h.findIndex(x=>rx.test(x)); const c=f(/consign|tracking|เลขพัสดุ/);
-    if(c!==-1){ hi=i; ci={c,n:f(/recipient_name|ชื่อ/),t:f(/tel|phone|เบอร์/),z:f(/zip|postal|ไปรษณีย์/)}; break; } }
+    const f=(rx)=>h.findIndex(x=>rx.test(x)); const c=f(/consign|tracking|เลขพัสดุ|เลขนำส่ง/);
+    if(c!==-1){ hi=i; ci={c,n:f(/recipient_name|ชื่อ|^ผู้รับ$/),t:f(/tel|phone|เบอร์/),z:f(/zip|postal|ไปรษณีย์/)}; break; } }
   if(hi<0||ci.n<0||ci.t<0||ci.z<0) return {err:'ไม่พบหัวคอลัมน์ Consignment_no / Recipient_name / Recipient_telephone / Recipient_zipcode — เช็คว่าเป็นไฟล์ขนส่งประจำวัน'};
   const out=[], badAt=[]; let total=0;
   for(let i=hi+1;i<rows.length;i++){ const r=rows[i]||[]; const g=(k)=>r[ci[k]];
