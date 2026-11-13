@@ -202,6 +202,7 @@ details.tech summary{cursor:pointer;font-size:13px;padding:8px 0;}
 details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:11.5px;overflow:auto;max-height:260px;color:#b9c3d9;}
 .result-list{font-size:13px;line-height:1.8;margin-top:8px;}
 .result-list .okk{color:#7be0a5;} .result-list .bd{color:#ff9c9c;}
+.sfdrop{border:2px dashed var(--line);border-radius:12px;padding:18px;text-align:center;color:var(--mut);font-size:14px;} .sfdrop.on{border-color:var(--acc);color:var(--txt);} .sfpick{color:var(--acc);cursor:pointer;font-weight:600;}   /* 📦 cs14 */
 
 /* ── toast ── */
 #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(14px);z-index:90;background:#1c3b1c;border:1.5px solid #2e7d32;color:#d8ffd8;padding:12px 18px;border-radius:14px;font-size:13.5px;font-weight:700;max-width:88vw;text-align:center;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;box-shadow:0 8px 26px rgba(0,0,0,.5);white-space:pre-wrap;}
@@ -348,6 +349,21 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
 
   <!-- ═══ แท็บ 3: ตั้งค่า ═══ -->
   <section id="p3" class="hidden">
+    <!-- 📦 cs14 · งานรอบ 103: อัปไฟล์ขนส่งประจำวัน (เห็นเฉพาะรหัสเจ้าของ · GET /ctl/shipfile ไม่ผ่าน = ซ่อน) -->
+    <div class="set hidden" id="sfbox">
+      <h4>📦 อัปไฟล์ขนส่งประจำวัน <span class="pill" id="sfpill">—</span></h4>
+      <p>ไฟล์ที่ขนส่งส่งมาทุกวัน (เช่น ZERO_10-11-69.xlsx) · เอวาใช้เลขพัสดุในไฟล์แทนเลขเดิม เมื่อขนส่งเปลี่ยนเลขใหม่ (เฉพาะออเดอร์ที่ ชื่อผู้รับ + เบอร์ 4 ตัวท้าย + ไปรษณีย์ ตรงแถวเดียว) · อ่านไฟล์ในเครื่องนี้ ส่งขึ้นแค่ 4 ช่องนี้ · ระบบเก็บ 21 วัน</p>
+      <div class="sfdrop" id="sfdrop" ondragover="event.preventDefault();this.classList.add('on')" ondragleave="this.classList.remove('on')" ondrop="sfDrop(event)">ลากไฟล์ .xlsx / .csv มาวางที่นี่ หรือ <label class="sfpick">📂 กดเลือกไฟล์<input type="file" id="sffile" accept=".xlsx,.csv" style="display:none" onchange="sfPick(this.files&&this.files[0]);this.value=''"></label></div>
+      <div id="sfsum" class="hidden" style="margin-top:10px;">
+        <div class="mut">ไฟล์: <b id="sffname"></b></div>
+        <div class="acts" style="justify-content:flex-start;align-items:center;gap:10px;margin:6px 0;"><label class="mut" for="sfday">ไฟล์ของวันที่ (แก้ได้)</label><input type="date" id="sfday" style="width:170px;"></div>
+        <div id="sfcount" style="font-size:13.5px;"></div>
+        <div class="acts"><button onclick="$('sfsum').classList.add('hidden');SF103.rows=null;">ยกเลิก</button><div class="sp"></div><button class="p big" id="sfsend" onclick="sfSend()">✅ ยืนยันอัป</button></div>
+      </div>
+      <div class="result-list" id="sfres"></div>
+      <div class="result-list" id="sfdays"></div>
+    </div>
+
     <div class="set">
       <h4>📣 ประกาศให้จีทูรู้ <span class="pill" id="noticeshop"></span></h4>
       <p>พิมพ์อะไรที่นี่ จีทูจะรู้ทันทีและเอาไปตอบลูกค้าได้เลย เช่น "MARBO องุ่นของเข้าแล้ว" · ลบข้อความให้ว่างแล้วบันทึก = ยกเลิกประกาศ</p>
@@ -1318,7 +1334,110 @@ function openLineChat(){
 }
 
 /* ── แท็บ ตั้งค่า ── */
-async function loadSettings(){ loadNotice(); loadPromo(); loadPay(); loadHealth(); }
+/* 📦 cs14 · งานรอบ 103 (worker k1061 · PUT/GET /ctl/shipfile · เจ้าของเท่านั้น): อัปไฟล์ขนส่งประจำวัน (ZERO_dd-mm-yy.xlsx)
+   อ่านไฟล์ในเบราว์เซอร์ (ตัวอ่าน xlsx ขั้นต่ำในหน้า: unzip + sharedStrings + sheet1 · ไม่โหลด CDN · .csv ก็ได้) → ส่งขึ้นแค่ [{c,n,t4,z}] = เลขพัสดุ/ชื่อผู้รับ/เบอร์ 4 ตัวท้าย/ไปรษณีย์ (ไม่ส่งไฟล์ดิบ)
+   ⚠️ ห้ามใช้ fetchJ: 403 = รหัสนี้ไม่ใช่เจ้าของ → แค่ซ่อนกล่อง ห้าม logout · โค้ดตัวอ่าน = tools/r103/xlsx103.mjs (เทสกับไฟล์จริงในเครื่อง) */
+let SF103={rows:null,bad:0,badAt:[],total:0,name:'',busy:false};
+async function sf103Unzip(buf){
+  const u8=new Uint8Array(buf), dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength), out={};
+  let eo=-1; for(let i=u8.length-22;i>=Math.max(0,u8.length-65557);i--) if(dv.getUint32(i,true)===0x06054b50){ eo=i; break; }
+  if(eo<0) throw new Error('not_zip');
+  const n=dv.getUint16(eo+10,true); let p=dv.getUint32(eo+16,true);
+  for(let k=0;k<n;k++){
+    if(dv.getUint32(p,true)!==0x02014b50) throw new Error('bad_zip');
+    const meth=dv.getUint16(p+10,true), csz=dv.getUint32(p+20,true), fnl=dv.getUint16(p+28,true), exl=dv.getUint16(p+30,true), cml=dv.getUint16(p+32,true), lho=dv.getUint32(p+42,true);
+    out[new TextDecoder().decode(u8.subarray(p+46,p+46+fnl))]={meth,csz,lho}; p+=46+fnl+exl+cml;
+  }
+  const get=async(name)=>{ const e=out[name]; if(!e) return null; const lfn=dv.getUint16(e.lho+26,true), lex=dv.getUint16(e.lho+28,true), st=e.lho+30+lfn+lex, raw=u8.subarray(st,st+e.csz);
+    if(e.meth===0) return new TextDecoder().decode(raw); if(e.meth!==8) throw new Error('zip_method');
+    return await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); };
+  return {names:Object.keys(out),get};
+}
+function sf103Xml(s){ return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(m,d)=>String.fromCharCode(+d)).replace(/&amp;/g,'&'); }
+async function sf103ReadXlsx(buf){
+  const z=await sf103Unzip(buf), ssx=(await z.get('xl/sharedStrings.xml'))||'', ss=[];
+  ssx.replace(/<si>([\s\S]*?)<\/si>/g,(m,si)=>{ let t=''; si.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(m2,x)=>{ t+=x; return ''; }); ss.push(sf103Xml(t)); return ''; });
+  let sh=await z.get('xl/worksheets/sheet1.xml');
+  if(sh==null){ const nm=z.names.filter(x=>/^xl\/worksheets\/sheet\d+\.xml$/.test(x)).sort()[0]; sh=nm?await z.get(nm):null; }
+  if(sh==null) throw new Error('no_sheet');
+  const rows=[];
+  sh.replace(/<row[^>]*>([\s\S]*?)<\/row>/g,(m,rx)=>{ const r=[];
+    rx.replace(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,(m2,at,inner)=>{ const ref=(at.match(/r="([A-Z]+)\d+"/)||[])[1]||''; let col=0; for(const ch of ref) col=col*26+(ch.charCodeAt(0)-64);
+      const t=(at.match(/t="(\w+)"/)||[])[1]||''; let v=inner?((inner.match(/<v>([\s\S]*?)<\/v>/)||[])[1]):undefined;
+      if(t==='inlineStr'&&inner){ v=''; inner.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(m3,x)=>{ v+=x; return ''; }); }
+      if(v===undefined) return ''; v=t==='s'?(ss[+v]||''):sf103Xml(v); r[(col||r.length+1)-1]=v; return ''; });
+    rows.push(r); return ''; });
+  return rows;
+}
+function sf103Csv(t){ const rows=[]; let r=[], f='', q=false; t=String(t).replace(/^﻿/,'');
+  for(let i=0;i<t.length;i++){ const ch=t[i];
+    if(q){ if(ch==='"'){ if(t[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=ch; }
+    else if(ch==='"') q=true; else if(ch===','||ch==='\t'){ r.push(f); f=''; } else if(ch==='\n'||ch==='\r'){ if(ch==='\r'&&t[i+1]==='\n') i++; r.push(f); rows.push(r); r=[]; f=''; } else f+=ch; }
+  if(f!==''||r.length){ r.push(f); rows.push(r); } return rows; }
+function sf103Num(v){ let s=String(v==null?'':v).trim(); if(/^\d+(\.\d+)?e\+?\d+$/i.test(s)){ const x=Number(s); if(isFinite(x)) s=BigInt(Math.round(x)).toString(); } else if(/^\d+\.0+$/.test(s)) s=s.replace(/\.0+$/,''); return s; }
+/* แถว → {c,n,t4,z} · หัวคอลัมน์ Consignment_no / Recipient_name / Recipient_telephone (******6008 · 089XXX6008; · ตัวเลข 8.1E8) / Recipient_zipcode (10110.0) · แถวรวมท้าย/แถวว่าง = ข้าม */
+function sf103Parse(rows){
+  let hi=-1, ci={};
+  for(let i=0;i<Math.min(rows.length,10);i++){ const h=(rows[i]||[]).map(x=>String(x==null?'':x).trim().toLowerCase());
+    const f=(rx)=>h.findIndex(x=>rx.test(x)); const c=f(/consign|tracking|เลขพัสดุ/);
+    if(c!==-1){ hi=i; ci={c,n:f(/recipient_name|ชื่อ/),t:f(/tel|phone|เบอร์/),z:f(/zip|postal|ไปรษณีย์/)}; break; } }
+  if(hi<0||ci.n<0||ci.t<0||ci.z<0) return {err:'ไม่พบหัวคอลัมน์ Consignment_no / Recipient_name / Recipient_telephone / Recipient_zipcode — เช็คว่าเป็นไฟล์ขนส่งประจำวัน'};
+  const out=[], badAt=[]; let total=0;
+  for(let i=hi+1;i<rows.length;i++){ const r=rows[i]||[]; const g=(k)=>r[ci[k]];
+    const c=sf103Num(g('c')), nm=String(g('n')==null?'':g('n')).replace(/\s+/g,' ').trim();
+    if(!c&&!nm) continue;                                     // แถวว่าง / แถวรวมท้ายไฟล์
+    total++;
+    const td=sf103Num(g('t')).replace(/\D/g,''), t4=td.length>=4?td.slice(-4):'', z=sf103Num(g('z'));
+    if(!/^[A-Za-z0-9-]{6,40}$/.test(c)||nm.length<2||!/^\d{4}$/.test(t4)||!/^\d{5}$/.test(z)){ badAt.push(i+1); continue; }
+    out.push({c,n:nm,t4,z}); }
+  return {rows:out,total,bad:badAt.length,badAt};
+}
+/* วันที่จากชื่อไฟล์ ZERO_dd-mm-yy (ปี พ.ศ. 2 หลัก เช่น 69 = 2569 = 2026) · ไม่เจอ = เมื่อวาน (เวลาไทย) */
+function sf103GuessDay(name){
+  const m=String(name||'').match(/(\d{1,2})[-_.](\d{1,2})[-_.](\d{2,4})(?!\d)/);
+  if(m){ let d=+m[1], mo=+m[2], y=+m[3]; if(y<100) y=y>=50?2500+y-543:2000+y; else if(y>2400) y-=543;
+    const s=y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'); if(d>=1&&d<=31&&mo>=1&&mo<=12&&new Date(s+'T00:00:00Z').toISOString().slice(0,10)===s) return s; }
+  return thaiDay(Date.now()-864e5);
+}
+function sf103Dmy(day){ const s=String(day||'').replace(/-/g,''); return s.length===8?(+s.slice(6,8))+'/'+(+s.slice(4,6))+'/'+s.slice(0,4):String(day||''); }
+async function sf103Fetch(method,path,body){ let _ac=null; const o={method}; try{ _ac=new AbortController(); o.signal=_ac.signal; setTimeout(()=>{ try{ _ac.abort(); }catch(e){} },30000); }catch(e){}
+  if(body!==undefined){ o.body=body; o.headers={'Content-Type':'application/json'}; }
+  const r=await fetch(W+path+(path.indexOf('?')<0?'?':'&')+'key='+enc(KEY),o); let j=null; try{ j=await r.json(); }catch(e){ j=null; } return {st:r.status,ok:r.ok,j}; }
+async function sfLoad(){
+  const box=$('sfbox'); if(!box) return;
+  let r=null; try{ r=await sf103Fetch('GET','/ctl/shipfile'); }catch(e){ r=null; }
+  const on=!!(r&&r.ok&&r.j&&Array.isArray(r.j.days)); box.classList.toggle('hidden',!on); if(!on) return;
+  const days=r.j.days.slice(0,21), y=thaiDay(Date.now()-864e5).replace(/-/g,''), hasY=days.some(x=>x.day===y);
+  $('sfpill').textContent=days.length?('มี '+days.length+' วัน'):'ยังไม่มีไฟล์'; $('sfpill').className='pill'+(hasY?'':' warn');
+  $('sfdays').innerHTML=(hasY?'':'<div class="bd" style="margin:6px 0;">⚠️ ยังไม่มีไฟล์ของเมื่อวาน ('+esc(sf103Dmy(y))+') — อัปไฟล์ที่ขนส่งส่งมาวันนี้ได้เลย</div>')
+    +(days.length?'<div class="mut" style="margin-top:6px;">📅 ไฟล์ที่อัปแล้ว (เก็บ 21 วันล่าสุด)</div>'+days.map(x=>'<div>'+esc(sf103Dmy(x.day))+' · <b>'+Number(x.n||0).toLocaleString('th-TH')+'</b> แถว'+(x.bad?' <span class="mut">(อ่านไม่ได้ '+Number(x.bad)+')</span>':'')+(x.t?' <span class="mut">· อัปเมื่อ '+esc(dmy(x.t)+' '+hhmm(x.t))+'</span>':'')+'</div>').join(''):'<div class="mut" style="margin-top:6px;">ยังไม่มีไฟล์ที่อัป</div>');
+}
+async function sfPick(file){
+  if(!file||SF103.busy) return; SF103={rows:null,bad:0,badAt:[],total:0,name:file.name,busy:false}; $('sfres').innerHTML=''; $('sfsum').classList.add('hidden');
+  if(file.size>15e6){ $('sfres').innerHTML='<div class="bd">ไฟล์ใหญ่เกิน 15 MB — เช็คว่าเลือกไฟล์ขนส่งประจำวันถูกไฟล์</div>'; return; }
+  let rows=null; $('sfres').innerHTML='<div class="mut">กำลังอ่านไฟล์…</div>';
+  try{ if(/\.csv$/i.test(file.name)) rows=sf103Csv(await file.text()); else rows=await sf103ReadXlsx(await file.arrayBuffer()); }
+  catch(e){ $('sfres').innerHTML='<div class="bd">อ่านไฟล์ไม่ได้ ('+esc(e.message||e)+') — ใช้ไฟล์ .xlsx หรือ .csv ที่ขนส่งส่งมา</div>'; return; }
+  const p=sf103Parse(rows); if(p.err){ $('sfres').innerHTML='<div class="bd">'+esc(p.err)+'</div>'; return; }
+  SF103.rows=p.rows; SF103.total=p.total; SF103.bad=p.bad; SF103.badAt=p.badAt;
+  $('sfday').value=sf103GuessDay(file.name); $('sffname').textContent=file.name;
+  $('sfcount').innerHTML='อ่านได้ <b>'+p.rows.length.toLocaleString('th-TH')+'</b> แถว'+(p.bad?' · <span class="bd">อ่านไม่ได้ '+p.bad+' แถว (แถวที่ '+p.badAt.slice(0,8).join(', ')+(p.bad>8?' …':'')+')</span>':' · อ่านไม่ได้ 0 แถว');
+  $('sfsend').disabled=!p.rows.length; $('sfsum').classList.remove('hidden'); $('sfres').innerHTML='';
+}
+async function sfSend(){
+  if(!SF103.rows||!SF103.rows.length||SF103.busy) return;
+  const day=String($('sfday').value||'').replace(/-/g,''); if(!/^\d{8}$/.test(day)){ toast('ใส่วันที่ของไฟล์ก่อนค่ะ',1); return; }
+  SF103.busy=true; $('sfsend').disabled=true; $('sfsend').textContent='กำลังอัป…';
+  try{ const r=await sf103Fetch('PUT','/ctl/shipfile?day='+day,JSON.stringify(SF103.rows));
+    if(r.ok&&r.j&&r.j.ok){ $('sfres').innerHTML='<div class="okk">✅ อัปแล้ว '+Number(r.j.n).toLocaleString('th-TH')+' แถว ของวัน '+esc(sf103Dmy(r.j.day))+(r.j.multi?' <span class="mut">(คนเดียวกันหลายกล่อง '+Number(r.j.multi)+' ราย = เอวาไม่ใช้เลขจากไฟล์ให้รายนั้น)</span>':'')+'</div>'; $('sfsum').classList.add('hidden'); SF103.rows=null; toast('อัปไฟล์ขนส่งแล้ว'); sfLoad(); }
+    else if(r.st===413) $('sfres').innerHTML='<div class="bd">'+esc((r.j&&r.j.msg)||'ไฟล์ใหญ่เกิน')+'</div>';
+    else if(r.st===401||r.st===403) $('sfres').innerHTML='<div class="bd">รหัสนี้อัปไฟล์ขนส่งไม่ได้ (เฉพาะรหัสเจ้าของ)</div>';
+    else $('sfres').innerHTML='<div class="bd">อัปไม่สำเร็จ ('+esc((r.j&&(r.j.msg||r.j.error))||r.st)+')</div>';
+  }catch(e){ $('sfres').innerHTML='<div class="bd">อัปไม่สำเร็จ (เน็ต/หมดเวลา) ลองใหม่อีกครั้ง</div>'; }
+  SF103.busy=false; $('sfsend').disabled=!(SF103.rows&&SF103.rows.length); $('sfsend').textContent='✅ ยืนยันอัป';
+}
+function sfDrop(ev){ ev.preventDefault(); $('sfdrop').classList.remove('on'); const f=ev.dataTransfer&&ev.dataTransfer.files&&ev.dataTransfer.files[0]; if(f) sfPick(f); }
+async function loadSettings(){ loadNotice(); loadPromo(); loadPay(); loadHealth(); if(typeof sfLoad==='function') sfLoad(); }   /* 📦 cs14: + กล่องไฟล์ขนส่ง (เจ้าของ) */
 function setScope(s){ SCOPE=s; $('sc1').classList.toggle('on',s==='one'); $('sc2').classList.toggle('on',s==='all'); renderHeader(); $('noticeres').innerHTML=''; loadNotice(); }
 /* 📣 k588: GET คืน {ประกาศ(ที่ใช้อยู่), ร้านนี้:{text,until}, ทุกร้าน:{text,until}, ที่ใช้อยู่} · หลังบ้านเก่า/worker เก่า = string อย่างเดียว */
 let NOTICE_ALL=null;
