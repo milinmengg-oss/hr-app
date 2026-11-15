@@ -1086,6 +1086,7 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
       +(urg?'<span class="tag urg">ด่วน</span>':'')+(it.accepted?'<span class="tag acc">👨‍💼 รับแล้ว</span>':'')
       +'<span class="who">'+esc(nmOf(it))+'</span> <span class="t'+(w.late?' late':'')+'">· '+esc(w.txt)+'</span>'
       +'<div class="why">'+esc(rs)+'</div>'+(it.msg?'<div class="msg">“'+esc(it.msg)+'”</div>':'')
+      +lmHtml110(it)
       +(urg?'<div class="owarn"><span class="blink">🚨</span><span>'+esc(tip)+'</span></div>':'')
       +'</div><div class="acts">'
       +(it.accepted?'<button class="p big" disabled>👨‍💼 กำลังดูแล</button>':'<button class="p big" onclick="acceptCase(\''+esc(it.uid)+'\',this)">👨‍💼 รับเคส</button>')
@@ -1097,6 +1098,7 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
   setHTML('sec_a', qAcc.length? qAcc.map(rowQ).join('') : '<div class="empty">ไม่มีเคสที่รับไว้ — กด "รับเคส" ด้านบนแล้วเคสจะย้ายมาที่นี่</div>');
   try{ setHTML('sec_q6', qWait6.length? qWait6.map(rowQ).join('') : '<div class="empty">✅ ไม่มีเคสหลังการขายรอคน</div>');
        setHTML('sec_a6', qAcc6.length? qAcc6.map(rowQ).join('') : '<div class="empty">ไม่มีเคสหลังการขายที่รับไว้</div>'); }catch(e){}   /* cs5 */
+  try{ lmLoad110([].concat(qWait,qAcc,qWait6,qAcc6)); }catch(e){}   /* cs15 */
 
   setHTML('sec_f', qFee.length? qFee.map(it=>{
     const w=waitMin(it.t); const nm=String(it.name||'').trim();
@@ -1283,13 +1285,32 @@ function openLineChat_cs2(uid,name,shop,fallback){
   fetchJ(qs('/ctl/chatmap',sh)+'&uid='+enc(uid)).then(r=>{
     const d=(r&&r.ok&&r.d)||{};
     if(d.url&&d.chatId){ if(w) w.location=d.url; else location.href=d.url; return; }
-    if(d.url){ try{ navigator.clipboard&&navigator.clipboard.writeText(name||''); }catch(e){}
-      toast&&toast('ยังไม่มีรหัส LINE ของลูกค้าคนนี้ · ก๊อปชื่อ "'+(name||'')+'" ไว้แล้ว วางในช่องค้นหาของ LINE'); if(w) w.location=d.url; return; }
+    if(d.url){ const lm=LM110[sh+'|'+uid], cp=(name&&!/^ลูกค้า (…|\(ไม่ทราบชื่อ\))/.test(name))?name:((lm&&lm.oname)||(lm&&lm.u)||name||'');   /* cs15: ไม่มีชื่อ = ก๊อปชื่อจากออเดอร์/ข้อความล่าสุดแทน */
+      try{ navigator.clipboard&&navigator.clipboard.writeText(cp); }catch(e){}
+      toast&&toast(cp===name?'ยังไม่มีรหัส LINE ของลูกค้าคนนี้ · ก๊อปชื่อ "'+(name||'')+'" ไว้แล้ว วางในช่องค้นหาของ LINE':'ยังไม่มีรหัส LINE ของลูกค้าคนนี้ · ก๊อป'+(lm&&lm.oname&&cp===lm.oname?'ชื่อในออเดอร์':'ข้อความล่าสุดของลูกค้า')+'ไว้แล้ว'+(lm&&lm.t?' (ทักมา '+hhmm(lm.t)+')':'')+' ใช้ค้น/ไล่หาใน LINE'); if(w) w.location=d.url; return; }
     if(w) try{ w.close(); }catch(e){}
     if(typeof fallback==='function') fallback();
   }).catch(()=>{ if(w) try{ w.close(); }catch(e){} if(typeof fallback==='function') fallback(); });
 }
 function openConvFrom(uid,name,shop){ openLineChat_cs2(uid,name,shop,function(){ openConvFrom_before_cs3(uid,name,shop); }); }
+/* cs15 (รอบ 110 · เม้ง 12 พ.ย. 14:29): การ์ดเคสรอแอดมิน บอกว่า "เปิดแชท" เด้งตรงคนได้ไหม · ยังไม่มีคู่ = โชว์ข้อความล่าสุดของลูกค้า + เวลา (+ ชื่อผู้รับในออเดอร์ถ้ามี) ให้แอดมินไล่หาใน LINE ได้
+   อ่าน /ctl/chatmap (คู่) + /ctl/log (ข้อความ) ทีละ 3 ใบ · จำผล · ยังไม่มีคู่ = เช็คใหม่ทุก 3 นาที (ลูปออดิตจับคู่เคสในคิวก่อน) · ไม่เขียนอะไร */
+const LM110={}, LM110_BUSY={};
+function lmText110(e){ if(!e) return '<span class="mut">🔗 กำลังเช็คแชท LINE…</span>';
+  if(e.paired) return '<span class="mut">🔗 กด "เปิดแชท" = เด้งไปแชท LINE ของลูกค้าคนนี้</span>';
+  return '🔎 <b>ยังจับคู่แชท LINE ไม่ได้</b>'+(e.oname?' · ชื่อในออเดอร์: <b>'+esc(e.oname)+'</b>':'')+(e.u?'<br>ข้อความล่าสุดของลูกค้า '+(e.t?esc(dmy(e.t)+' '+hhmm(e.t)):'')+': “'+esc(String(e.u).slice(0,120))+'”':'')+'<br><span class="mut">กด "เปิดแชท" = เปิดหน้าแชทร้าน'+(e.oname?' + ก๊อปชื่อไว้ วางในช่องค้นหา':e.u?' + ก๊อปข้อความไว้ ไล่หาตามเวลา/ข้อความนี้':' แล้วไล่หาตามเวลาที่เคสเข้า')+'</span>'; }
+function lmHtml110(it){ const sh=it.shop||SHOP; return '<div class="msg" data-lm110="'+escA(sh+'|'+it.uid)+'">'+lmText110(LM110[sh+'|'+it.uid])+'</div>'; }
+function lmOname110(sh,uid){ try{ const o=((CACHE[sh]||{}).orders||[]).filter(x=>x.uid===uid)[0]; const m=o&&String(o.block||'').match(/ชื่อผู้รับ:[ \t]*(.+)/); return m?m[1].trim().slice(0,60):''; }catch(e){ return ''; } }
+async function lmLoad110(items){
+  const now=Date.now(), todo=[];
+  for(const it of items||[]){ const sh=it.shop||SHOP, k=sh+'|'+it.uid; if(!/^U[0-9a-f]{32}$/.test(String(it.uid||''))||LM110_BUSY[k]) continue;
+    const e=LM110[k]; if(e&&(e.paired||now-e.at<180000)) continue; todo.push([sh,it.uid,k]); }
+  for(let i=0;i<todo.length;i+=3) await Promise.all(todo.slice(i,i+3).map(async([sh,uid,k])=>{ LM110_BUSY[k]=1;
+    try{ const r=await fetchJ(qs('/ctl/chatmap',sh)+'&uid='+enc(uid)); const d=(r&&r.ok&&r.d)||{}; let e={at:Date.now(),paired:!!(d.url&&d.chatId)};
+      if(!e.paired){ e.oname=lmOname110(sh,uid); try{ const l=await fetchJ(qs('/ctl/log',sh)+'&uid='+enc(uid)); const lg=((l&&l.d&&l.d.log)||[]).filter(x=>x&&String(x.u||'').trim()); const x=lg[lg.length-1]; if(x){ e.u=String(x.u).trim(); e.t=x.t; } }catch(e2){} }
+      LM110[k]=e; document.querySelectorAll('[data-lm110]').forEach(el=>{ if(el.getAttribute('data-lm110')===k) el.innerHTML=lmText110(e); });
+    }catch(e){} delete LM110_BUSY[k]; }));
+}
 function openConvFrom_before_cs3(uid,name,shop){ if(shop&&shop!==SHOP&&SHOPS.some(s=>s['ร้าน']===shop)) selectShop(shop); if(TAB!==2) go(2); showConv(uid,name); }   /* k719: shop = แถวจาก "ทุกร้าน" */
 function chatRec(uid){ return CHATS.filter(c=>c.uid===uid)[0]||((FIND&&FIND.items)||[]).filter(c=>c.uid===uid)[0]; }   /* cs12: แถวจากผลค้นทั้งร้านก็เห็นสถานะ/ปุ่มในกล่องแชท */
 function renderConvActs(){
