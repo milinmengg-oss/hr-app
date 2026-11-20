@@ -162,7 +162,10 @@ h3 b{color:var(--txt);}
 #grp_o h3.xh{font-size:15px;letter-spacing:0;color:#ffd08a;background:#2a2112;border:1px solid #6b4a14;border-radius:10px;padding:8px 12px;margin-top:14px;}
 #grp_o h3.ph{font-size:15px;letter-spacing:0;color:var(--txt);margin-top:18px;}
 .row.xp{border-left:4px solid var(--warn);}
-.tag.cod{background:#3a2a4a;color:#e0c2ff;font-weight:700;font-size:12px;}
+.tag.cod{display:block;background:#5b2d8a;color:#fff;border:1px solid #b07cff;font-weight:800;font-size:15px;padding:6px 10px;margin:0 0 8px;border-radius:8px;}
+/* 💵 รอบ 135b: กองที่ 3 เก็บปลายทาง (COD) — สีม่วง ต่างจากด่วน (ส้ม) / พัสดุ (ปกติ) · กันแอดมินลง COD เป็นพัสดุโอน */
+#grp_o h3.ch{font-size:15px;letter-spacing:0;color:#ecd9ff;background:#2a1a3d;border:1px solid #7a4bb0;border-radius:10px;padding:8px 12px;margin-top:18px;}
+.row.cd{border-left:4px solid #b07cff;}
 .tag.unk{background:#2a2d36;color:#aab2c4;}
 .row.bad.ok .odone{opacity:1;}
 .row.bad.ok .oack{display:none;}
@@ -303,7 +306,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="grp" id="grp_q"><h3>🚨 ลูกค้ารอคน — ยังไม่มีใครรับ <b id="cnt_q"></b></h3><div id="sec_q"></div></div>
     <div class="grp" id="grp_a"><h3>👨‍💼 รับแล้ว — กำลังดูแลอยู่ <b id="cnt_a"></b></h3><div id="sec_a"></div></div>
     <div class="grp" id="grp_f"><h3>🛵 ใส่ค่าส่งด่วน <b id="cnt_f"></b></h3><div id="sec_f"></div></div>
-    <div class="grp" id="grp_o"><h3 class="xh">🛵 รอลง · ส่งด่วน (แกร็บ) <b id="cnt_ox"></b></h3><div id="sec_ox"></div><h3 class="ph">📦 รอลง · พัสดุ <b id="cnt_o"></b></h3><div id="sec_o"></div></div>
+    <div class="grp" id="grp_o"><h3 class="xh">🛵 รอลง · ส่งด่วน (แกร็บ) <b id="cnt_ox"></b></h3><div id="sec_ox"></div><h3 class="ph">📦 รอลง · พัสดุ <b id="cnt_o"></b></h3><div id="sec_o"></div><h3 class="ch">💵 รอลง · เก็บปลายทาง (COD) <b id="cnt_oc"></b></h3><div id="sec_oc"></div></div>
     <div class="mut hidden" id="viewhint" style="margin:6px 0 0;">กำลังดูเฉพาะกลุ่มนี้ · <a href="#" onclick="setView('all');return false;">ดูทุกกลุ่ม</a></div>
     <div class="mut" style="margin-top:18px;line-height:1.7;">💡 ลูกค้ามีปัญหา/ส่งสลิป/ขอแอดมิน → จีทูเงียบแชทนั้นแล้วขึ้นที่นี่เอง · ตอบลูกค้าใน LINE แล้วกด ✅ เก็บเคส (จีทูกลับมาดูแลแชทนั้นต่อทันที) · อยากให้เงียบต่อ ใช้ ⏸ ในแท็บแชท</div>
   </section>
@@ -1084,14 +1087,14 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
   try{ const t6=qCS.length; $('tcount6').textContent=t6||''; const b6=$('bd6'); b6.textContent=t6>99?'99+':t6; b6.classList.toggle('z',t6===0); $('cnt_q6').textContent=qWait6.length||''; $('cnt_a6').textContent=qAcc6.length||''; }catch(e){}
   const qFee=c.queue.filter(it=>FEE_RE.test(String(it.reason||''))).sort(byOld);
   const orders=(c.orders||[]).slice().sort(byOld);
-  const oX=orders.filter(it=>ordKind135(it)==='xp'), oP=orders.filter(it=>ordKind135(it)!=='xp');   /* 🛵 รอบ 135: เก่าสุดก่อนทั้ง 2 กอง */
+  const oX=orders.filter(it=>ordKind135(it)==='xp'), oC=orders.filter(it=>ordKind135(it)==='cod'), oP=orders.filter(it=>!/^(xp|cod)$/.test(ordKind135(it)));   /* 🛵 รอบ 135 / 💵 135b: 3 กอง เก่าสุดก่อน */
   const total=qWait.length+qAcc.length+qFee.length+orders.length;
   const chip=(k,cls,n,lb)=>'<span class="'+cls+(VIEW===k?' on':'')+'" onclick="setView(\''+k+'\')" title="กดเพื่อดูเฉพาะกลุ่มนี้"><b>'+n+'</b>'+lb+'</span>';
   $('stat').innerHTML=chip('q',qWait.length?'bad':'',qWait.length,'ลูกค้ารอคน')+chip('a',qAcc.length?'acc':'',qAcc.length,'รับแล้ว')+(qFee.length?chip('f','warn',qFee.length,'รอค่าส่งด่วน'):'')+chip('o',orders.length?'warn':'',orders.length,'รอลง XSelly')+(total===0?'<span>🎉 ร้านนี้ไม่มีงานค้าง</span>':'');
   applyView();
   if(!qFee.length){ $('grp_f').classList.add('hidden'); if(VIEW==='f'){ VIEW='all'; applyView(); $('grp_f').classList.add('hidden'); } }   /* cs13: ไม่มีเคสรอค่าส่งด่วน = ซ่อนกล่อง (เอวาคิดค่าส่งเอง k934) · มีเคสหลุดมา = โผล่เอง */
   $('tcount').textContent=total||''; const bd=$('bd1'); bd.textContent=total>99?'99+':total; bd.classList.toggle('z',total===0);
-  $('cnt_q').textContent=qWait.length||''; $('cnt_a').textContent=qAcc.length||''; $('cnt_f').textContent=qFee.length||''; $('cnt_ox').textContent=oX.length||''; $('cnt_o').textContent=oP.length||'';
+  $('cnt_q').textContent=qWait.length||''; $('cnt_a').textContent=qAcc.length||''; $('cnt_f').textContent=qFee.length||''; $('cnt_ox').textContent=oX.length||''; $('cnt_o').textContent=oP.length||''; $('cnt_oc').textContent=oC.length||'';
   const ns=$('noticestrip'); if(c.notice){ ns.textContent='📣 ประกาศที่ตั้งไว้: '+c.notice; ns.classList.remove('hidden'); } else ns.classList.add('hidden');
 
   const rowQ=it=>{
@@ -1134,10 +1137,11 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
   const rowO=it=>{
     const bid='b_'+sid(it.uid), b=String(it.block||''), st=String(it.status||''), bad=BAD_RE.test(st), ok=!!ACKED[it.uid];
     const kd=ordKind135(it), am=kd==='cod'?codAmt135(it):'';
-    const kt=kd==='cod'?'<span class="tag cod">🧾 เก็บปลายทาง'+(am?' · เก็บ '+esc(am)+' บาท':'')+'</span>':kd==='unk'?'<span class="tag unk">ไม่ระบุวิธีส่ง</span>':'';
+    const kt=kd==='unk'?'<span class="tag unk">ไม่ระบุวิธีส่ง</span>':'';
+    const kc=kd==='cod'?'<div class="tag cod">💵 เก็บปลายทาง · '+(am?'ยอดที่ต้องเก็บ '+esc(am)+' บาท':'⚠️ ไม่พบยอดที่ต้องเก็บ — ดูในข้อความออเดอร์')+'</div>':'';
     const why=bad?(/code 1014/.test(st)?'สลิปนี้เคยถูกใช้มาแล้ว (สลิปซ้ำ)':/ยอดไม่ตรง/.test(st)?'ยอดเงินในสลิปไม่ตรงกับยอดออเดอร์':'ระบบตรวจสลิปไม่ผ่าน'):'';
     const tag=bad?'<span class="tag urg">'+esc(st)+'</span>':'<span class="tag pay">'+esc(st)+'</span>';
-    return '<div class="row'+(bad?' bad':'')+(ok?' ok':'')+(kd==='xp'?' xp':'')+'" id="oc_'+sid(it.uid)+'"><div class="d">'+tag+kt+'<span class="who">'+esc(it.name||'ลูกค้า')+'</span> <span class="t">· '+esc(timeAgo(it.t))+'</span>'
+    return '<div class="row'+(bad?' bad':'')+(ok?' ok':'')+(kd==='xp'?' xp':'')+(kd==='cod'?' cd':'')+'" id="oc_'+sid(it.uid)+'"><div class="d">'+kc+tag+kt+'<span class="who">'+esc(it.name||'ลูกค้า')+'</span> <span class="t">· '+esc(timeAgo(it.t))+'</span>'
       +(bad?'<div class="owarn"><span class="blink">🚨</span><span>ห้ามลงออเดอร์นี้จนกว่าจะเช็คเงินเข้าจริง — '+esc(why)+'</span></div>':'')
       +'<div class="oblock" id="'+bid+'">'+esc(b)+'</div>'+chipsFromBlock(b)+'</div>'
       +'<div class="acts">'
@@ -1148,6 +1152,7 @@ function renderWork(){ setTimeout(fillAcceptedBy,300);
   };
   setHTML('sec_ox', oX.length? oX.map(rowO).join('') : '<div class="empty">ไม่มีออเดอร์ส่งด่วนรอลง</div>');
   setHTML('sec_o', oP.length? oP.map(rowO).join('') : '<div class="empty">'+(orders.length?'ไม่มีออเดอร์พัสดุรอลง':'ยังไม่มีออเดอร์รอลง')+'</div>');
+  setHTML('sec_oc', oC.length? oC.map(rowO).join('') : '<div class="empty">ไม่มีออเดอร์เก็บปลายทางรอลง</div>');
 }
 function chipsFromBlock(b){
   const pick=re=>{ const m=String(b||'').match(re); return m?m[1].trim():''; };
