@@ -515,6 +515,9 @@ const enc=encodeURIComponent;
 /* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
 const qs=(p,shop)=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+enc(KEY)+'&shop='+enc(shop);
 const q=p=>qs(p,SHOP);
+/* 💸 cs18 · รอบ 142 (ค่า Cloudflare): กดปุ่มที่เขียนข้อมูล (POST ไป worker) → 15 วิถัดไปดึงกระดาน &fresh=1 = worker k1421 อ่านสด ไม่ใช้แคช (หลังกดเห็นผลทันที) · worker เก่าไม่รู้จัก fresh = ไม่มีผล */
+let _act142=0; try{ const _f142=window.fetch.bind(window); window.fetch=function(u,o){ try{ if(o&&o.method&&String(o.method).toUpperCase()!=='GET'&&String(u).indexOf(W)===0) _act142=Date.now(); }catch(e){} return _f142(u,o); }; }catch(e){}
+const fr142=()=>(Date.now()-_act142<15000)?'&fresh=1':'';
 /* 👤 cs6: ชื่อเล่นแอดมิน (จำในเครื่องนี้) — แนบไปกับทุกปุ่มที่กด เพื่อรู้ว่าใครรับ/เก็บ/ปิดเคส */
 let WHO=''; try{ WHO=(localStorage.getItem('g2who')||'').trim(); }catch(e){}
 function askWho(force){
@@ -1012,7 +1015,7 @@ async function refresh(force){
   try{
     //  ⚡ k712: มี v/h ของร้านนี้ (worker k777+) → ถามว่า "เปลี่ยนไหม" · worker เก่าไม่มี h → URL เดิมเป๊ะ
     const c0=CACHE[shop]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):'';
-    const r=await fetchJ(q('/ctl/board'+sq));
+    const r=await fetchJ(q('/ctl/board'+sq)+fr142());
     if(!r.ok) throw new Error('board '+r.status);
     if(shop!==SHOP) return;                                 // สลับร้านระหว่างรอ — ทิ้งผลเก่า
     const b=r.d;
@@ -1047,7 +1050,7 @@ async function refreshAllCounts(){
     const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
     //  🚦 26 ก.ย.: ยิงทีละ 5 ร้าน (เดิม 22 ร้านพร้อมกันทุกนาที × ทุกเครื่องแอดมิน = กระแทก worker/KV) · ผลเหมือนเดิม
     for(let i=0;i<others.length;i+=5){
-      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));   /* k722: ถามว่าเปลี่ยนไหม (เบา) */ if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
+      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id)+fr142());   /* k722: ถามว่าเปลี่ยนไหม (เบา) */ if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
       renderShops();
     }
   }finally{ _allBusy=false; }
@@ -1591,6 +1594,7 @@ async function loadHealth(){
 /* POST /seed/stockmap + /seed/skumap (key เท่านั้น · สต็อกใช้ร่วมทุกร้าน) */
 
 /* ── วงจรชีวิต ── */
+/* 💸 cs18 · รอบ 142: pulse 3 → 10 วิ · ตาข่ายร้านอื่น 60 → 120 วิ (ร้านที่เปิดยัง 60 วิ) — ค่า KV ต่อแท็บลด ~70% · งานใหม่ขึ้นจอช้าลงไม่เกิน ~7 วิ */
 /* ── 📡 k723 · งานรอบ 34 ข้อ 2: ถาม /ctl/pulse (worker k844) ทุก 3 วิ → ดึง /ctl/board เฉพาะร้านที่ป้ายขยับ ──
    ร้านที่เปิด = วาดใหม่ทันที · ร้านอื่น = อัปเดตตัวเลข badge · แชทร้านที่เปิด (c) ขยับ = ดึงได้ไม่ถี่กว่า 5 วิ (เท่า k722)
    ป้ายขยับแต่กระดานยังตอบ same (KV ตามไม่ทัน) → ถามซ้ำอีก ≤2 ครั้ง ห่าง 5 วิ
@@ -1612,7 +1616,7 @@ function pulseOff723(status){
   _probe723=setTimeout(()=>{ _probe723=null; pulse723(); }, status===404?300000:60000);
 }
 async function boardOne723(id){   // ร้านอื่น: ถามแบบเดียวกับ refreshAllCounts (since/h) → 'new' | 'same' | 'err'
-  try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));
+  try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id)+fr142());
     if(!r.ok) return 'err'; if(r.d.same) return 'same';
     CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; return 'new';
   }catch(e){ return 'err'; }
@@ -1641,7 +1645,7 @@ async function pulse723(){
 function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); if(_pulse723) clearInterval(_pulse723); _poll=_pollAll=_pulse723=null; }
 function startPoll(){ stopPoll();
   if(_pulseMode723===-1){ _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,20000); }   /* k722 เดิม (worker เก่า / pulse ล้ม) */   // ⚡ k712: 15 → 5 วิ · k722: 90 → 20 วิ
-  else{ _poll=setInterval(()=>refresh(false),60000); _pollAll=setInterval(refreshAllCounts,60000); _pulse723=setInterval(pulse723,3000); }   /* 📡 k723: pulse 3 วิ + ตาข่ายดึงเต็ม 60/60 วิ */
+  else{ _poll=setInterval(()=>refresh(false),60000); _pollAll=setInterval(refreshAllCounts,120000); _pulse723=setInterval(pulse723,10000); }   /* 📡 k723: pulse 3 วิ + ตาข่ายดึงเต็ม 60/60 วิ */
 }
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }

@@ -810,6 +810,7 @@ async function refresh(){
   /* k111: โหลดทีเดียวจบ — สถานะ+คิว+ออเดอร์+แชท ในคำขอเดียว (เดิม 4 คำขอ) */
   /* ⚡ PF1-C3: กันรอบซ้อน — รอบเก่ายังไม่จบ (เน็ตช้า/ปลุกจอ) = ข้ามรอบนี้ · จังหวะ poll 15 วิเดิมทุกประการ */
   if(_busyPF1) return;
+  if(typeof document!=='undefined'&&document.hidden) return;   /* 💸 รอบ 142 (ค่า Cloudflare): แท็บซ่อน = ไม่ดึง · กลับมาดูจอ wakeRefresh459 ดึงทันที */
   _busyPF1=true;
   try{
     const r=await fetch(q('/ctl/board'));
