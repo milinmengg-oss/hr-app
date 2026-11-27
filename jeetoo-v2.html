@@ -220,6 +220,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
 
 /* ── มือถือ ── */
 .chipstrip{display:none;}
+.mhint{display:none;}
 .navbar{display:none;}
 .convoverlay{display:none;}
 @media(max-width:900px){
@@ -247,6 +248,31 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   .navbtn .bdg{position:absolute;top:2px;right:calc(50% - 26px);min-width:19px;height:19px;line-height:19px;background:var(--bad);color:#fff;border-radius:19px;font-size:11px;font-weight:800;padding:0 5px;}
   .navbtn .bdg.z{display:none;}
   .shopname{font-size:18px;}
+  /* 28 พ.ย. มือถือสำหรับ CS (เม้งสั่ง): เมนูย้ายขึ้นบน (ไม่โดนแถบเบราว์เซอร์บัง) · เลือกร้านแบบดรอปดาวน์+ตัวเลขเคสรอ · หัวจอย่อ · ปุ่มใหญ่ · จอคอมไม่เปลี่ยน */
+  .app{padding-top:50px;}
+  .navbar{top:0;bottom:auto;border-top:0;border-bottom:1px solid var(--line);padding:4px;}
+  .navbtn{padding:6px 2px;font-size:12px;display:flex;align-items:center;justify-content:center;gap:5px;min-height:42px;}
+  .navbtn.hidden{display:none;}
+  .navbtn i{display:inline;font-size:17px;margin:0;}
+  .navbtn .bdg{position:static;margin-left:2px;}
+  section{padding-bottom:28px;}
+  .conv{padding-bottom:28px;}
+  .chipstrip{display:block;overflow:visible;padding:8px var(--g);}
+  .sdd{width:100%;display:flex;align-items:center;gap:8px;border:1px solid #34405a;background:#232a3a;color:var(--txt);border-radius:12px;padding:11px 12px;font-size:15px;font-weight:700;text-align:left;min-height:48px;}
+  .sdd .tot{font-size:12px;font-weight:700;color:var(--mut);white-space:nowrap;}
+  .sdd .tot.hot{color:#ff9d9d;}
+  .sddlist{margin-top:6px;border:1px solid var(--line);border-radius:12px;background:#1b202a;max-height:62vh;overflow:auto;-webkit-overflow-scrolling:touch;}
+  .sddrow{display:flex;align-items:center;gap:8px;padding:12px;border-bottom:1px solid var(--line);font-size:15px;min-height:48px;}
+  .sddrow:last-child{border-bottom:0;}
+  .sddrow.on{background:#232a3a;font-weight:700;}
+  .sddrow .zero{color:var(--mut);font-size:12px;}
+  header{padding:6px var(--g);gap:6px;flex-wrap:nowrap;}
+  header .shopname,#pillbuild,#pillpoll,#pillready{display:none !important;}
+  .mhide{display:none;}
+  .mhide.mshow{display:block;}
+  .mhint{display:inline-block;font-size:12px;color:var(--mut);margin:0 0 8px;text-decoration:underline;}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .acts button{min-height:48px;font-size:15px;}
 }
 </style>
 </head>
@@ -314,10 +340,11 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <!-- ═══ แท็บ 2: แชท ═══ -->
   <!-- ═══ แท็บ 6: หลังการขาย (cs5) ═══ -->
   <section id="p6" class="hidden">
-    <div class="mut" style="margin:0 0 8px;font-size:13px;">🛠 เคสที่เอวาติดป้าย <b>หลังการขาย / เคลม / ของไม่ถึง / ส่งผิด / ยกเลิก / คืนเงิน / พัสดุ</b> — ทีม CS ดูหน้านี้ · ทีมขายดูแท็บ "งาน"</div>
+    <span class="mhint" onclick="document.querySelectorAll('#p6 .mhide').forEach(function(e){e.classList.toggle('mshow')})">ⓘ หน้านี้คืออะไร (แตะเพื่อดู)</span>
+    <div class="mut mhide" style="margin:0 0 8px;font-size:13px;">🛠 เคสที่เอวาติดป้าย <b>หลังการขาย / เคลม / ของไม่ถึง / ส่งผิด / ยกเลิก / คืนเงิน / พัสดุ</b> — ทีม CS ดูหน้านี้ · ทีมขายดูแท็บ "งาน"</div>
     <div class="grp" id="grp_q6"><h3>🚨 เคสหลังการขายรอคน — ยังไม่มีใครรับ <b id="cnt_q6"></b></h3><div id="sec_q6"></div></div>
     <div class="grp" id="grp_a6"><h3>👨‍💼 รับแล้ว — CS กำลังดูแลอยู่ <b id="cnt_a6"></b></h3><div id="sec_a6"></div></div>
-    <div class="mut" style="margin-top:18px;line-height:1.7;">💡 ตอบลูกค้าใน LINE ให้จบ แล้วกด ✅ เก็บเคส · เคสไหนอยู่ผิดฝั่ง บอก Claude เพื่อปรับเกณฑ์</div>
+    <div class="mut mhide" style="margin-top:18px;line-height:1.7;">💡 ตอบลูกค้าใน LINE ให้จบ แล้วกด ✅ เก็บเคส · เคสไหนอยู่ผิดฝั่ง บอก Claude เพื่อปรับเกณฑ์</div>
   </section>
   <section id="p2" class="hidden">
     <div class="split">
@@ -601,6 +628,7 @@ async function loadShops(){
 }
 /* เรียงร้าน: ตามเลขร้าน (V1, V2, … V22) · ร้านที่ไม่มีเลข (Easy) ไว้ท้ายสุด — เม้ง 25 ก.ย. */
 function shopOrder(a,b){ const num=s=>{ const m=String(s['ร้าน']||'').match(/(\d+)$/); return m?parseInt(m[1],10):Infinity; }; const na=num(a),nb=num(b); if(na!==nb) return na-nb; return String(a['ร้าน']).localeCompare(String(b['ร้าน'])); }
+var SDD_OPEN=false;   // 28 พ.ย.: สถานะดรอปดาวน์ร้าน (มือถือ)
 function renderShops(){
   //  🔴 k713: ร้านที่มีเคสแดง (ลูกค้ารอคน) ขึ้นก่อน · ในกลุ่มเดียวกันเรียงตามเลขร้านเหมือนเดิม
   const red713=s=>urgentCount(s['ร้าน'])>0?0:1;
@@ -612,7 +640,14 @@ function renderShops(){
   $('shoplbl').textContent='ร้านที่ฉันดูแล ('+SHOPS.length+' ร้าน)';
   $('shoplist').innerHTML=items.map(it=>'<div class="shop'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span><span class="n">'+esc(it.name)+(it.warn?' <span class="c" title="ยังไม่ตั้ง: '+esc(it.miss.join(' + '))+'">⚠️</span>':'')+'</span>'+it.badge+'</div>').join('')||'<div class="empty">ไม่มีร้านในสิทธิ์</div>';
   if(STATS_ON) fillStatsShops();
-  $('chipstrip').innerHTML=items.map(it=>'<span class="schip'+(it.on?' on':'')+'" onclick="selectShop(\''+esc(it.id)+'\')"><span class="dot" style="background:'+it.col+'"></span>'+esc(it.name)+(it.warn?' ⚠️':'')+it.badge.replace('id="bdg_','id="bdgm_')+'</span>').join('');
+  //  28 พ.ย. (เม้งสั่ง): มือถือ = ดรอปดาวน์เลือกร้าน + ตัวเลขเคสรอ (ตัวเลขเดียวกับ badge จอคอม) · ร้านที่มีเคสขึ้นบน (ด่วนก่อน แล้วมาก→น้อย) · ยอดรวมทุกร้านบนปุ่ม
+  { const rows=SHOPS.map(s=>{ const id=s['ร้าน']; return {id,name:s['ชื่อ']||id,col:shopColorOf(id),on:id===SHOP,n:pendingCount(id)||0,u:urgentCount(id)||0,s}; }).sort((a,b)=>((b.u>0)-(a.u>0))||(b.n-a.n)||shopOrder(a.s,b.s));
+    const tot=rows.reduce((x,r)=>x+r.n,0), nsh=rows.filter(r=>r.n>0).length, cur=rows.find(r=>r.on)||{name:'เลือกร้าน',col:'#888',n:0,u:0};
+    const bd=r=>r.n?'<span class="badge'+(r.u>0?'':' o')+'">'+r.n+'</span>':'<span class="zero">ไม่มีเคส</span>';
+    const oldL=$('sddlist'), st=oldL?oldL.scrollTop:0;
+    $('chipstrip').innerHTML='<button class="sdd" onclick="SDD_OPEN=!SDD_OPEN;renderShops()"><span class="dot" style="background:'+cur.col+'"></span><span>'+esc(cur.name)+'</span>'+(cur.n?'<span class="badge'+(cur.u>0?'':' o')+'">'+cur.n+'</span>':'')+'<span class="sp"></span><span class="tot'+(tot?' hot':'')+'">'+(tot?('รอทั้งหมด '+tot+' เคส · '+nsh+' ร้าน'):'ไม่มีเคสรอ')+' '+(SDD_OPEN?'▴':'▾')+'</span></button>'
+      +(SDD_OPEN?'<div class="sddlist" id="sddlist">'+rows.map(r=>'<div class="sddrow'+(r.on?' on':'')+'" onclick="SDD_OPEN=false;selectShop(\''+esc(r.id)+'\');renderShops()"><span class="dot" style="background:'+r.col+'"></span><span>'+esc(r.name)+'</span><span class="sp"></span>'+bd(r)+'</div>').join('')+'</div>':'');
+    if(SDD_OPEN&&st){ const nw=$('sddlist'); if(nw) nw.scrollTop=st; } }
 }
 function renderHeader(){
   const c=shopRec(SHOP); const col=shopColorOf(SHOP);
