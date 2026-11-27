@@ -295,7 +295,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
     <div class="tab" id="tab2" onclick="go(2)">💬 แชท</div>
     <div class="tab" id="tab3" onclick="go(3)">⚙️ ตั้งค่า</div>
     <div class="tab hidden" id="tab4" onclick="go(4)">📊 สรุป</div>
-    <div class="tab" id="tab5" onclick="go(5)" style="display:none">🔁 ซื้อซ้ำ</div><!-- 27 พ.ย.: เม้งสั่งซ่อนแท็บซื้อซ้ำ (ไม่ได้ใช้ · /ctl/rebuy active=false ส่ง 0 ใน 30 วัน) · เอา style ออก = กลับมา -->
+    <div class="tab" id="tab5" onclick="go(5)" style="display:none">🔁 ซื้อซ้ำ</div><!-- 27 พ.ย.: เม้งสั่งซ่อนแท็บซื้อซ้ำ (ไม่ได้ใช้) · เอา style ออก = กลับมา -->
     <div class="tab hidden" id="tab7" onclick="go(7)">📈 ออดิต CS</div>
   </div>
 
@@ -515,6 +515,9 @@ const enc=encodeURIComponent;
 /* helper เดิมคำต่อคำ: key + shop เป็น query เสมอ */
 const qs=(p,shop)=>W+p+(p.indexOf('?')<0?'?':'&')+'key='+enc(KEY)+'&shop='+enc(shop);
 const q=p=>qs(p,SHOP);
+/* 💸 cs18 · รอบ 142 (ค่า Cloudflare): กดปุ่มที่เขียนข้อมูล (POST ไป worker) → 15 วิถัดไปดึงกระดาน &fresh=1 = worker k1421 อ่านสด ไม่ใช้แคช (หลังกดเห็นผลทันที) · worker เก่าไม่รู้จัก fresh = ไม่มีผล */
+let _act142=0; try{ const _f142=window.fetch.bind(window); window.fetch=function(u,o){ try{ if(o&&o.method&&String(o.method).toUpperCase()!=='GET'&&String(u).indexOf(W)===0) _act142=Date.now(); }catch(e){} return _f142(u,o); }; }catch(e){}
+const fr142=()=>(Date.now()-_act142<15000)?'&fresh=1':'';
 /* 👤 cs6: ชื่อเล่นแอดมิน (จำในเครื่องนี้) — แนบไปกับทุกปุ่มที่กด เพื่อรู้ว่าใครรับ/เก็บ/ปิดเคส */
 let WHO=''; try{ WHO=(localStorage.getItem('g2who')||'').trim(); }catch(e){}
 function askWho(force){
@@ -1012,7 +1015,7 @@ async function refresh(force){
   try{
     //  ⚡ k712: มี v/h ของร้านนี้ (worker k777+) → ถามว่า "เปลี่ยนไหม" · worker เก่าไม่มี h → URL เดิมเป๊ะ
     const c0=CACHE[shop]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):'';
-    const r=await fetchJ(q('/ctl/board'+sq));
+    const r=await fetchJ(q('/ctl/board'+sq)+fr142());
     if(!r.ok) throw new Error('board '+r.status);
     if(shop!==SHOP) return;                                 // สลับร้านระหว่างรอ — ทิ้งผลเก่า
     const b=r.d;
@@ -1047,7 +1050,7 @@ async function refreshAllCounts(){
     const others=SHOPS.map(s=>s['ร้าน']).filter(id=>id!==SHOP);
     //  🚦 26 ก.ย.: ยิงทีละ 5 ร้าน (เดิม 22 ร้านพร้อมกันทุกนาที × ทุกเครื่องแอดมิน = กระแทก worker/KV) · ผลเหมือนเดิม
     for(let i=0;i<others.length;i+=5){
-      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));   /* k722: ถามว่าเปลี่ยนไหม (เบา) */ if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
+      await Promise.all(others.slice(i,i+5).map(async id=>{ try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id)+fr142());   /* k722: ถามว่าเปลี่ยนไหม (เบา) */ if(r.ok&&!r.d.same) CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; }catch(e){} }));
       renderShops();
     }
   }finally{ _allBusy=false; }
@@ -1383,35 +1386,73 @@ function openLineChat(){
    อ่านไฟล์ในเบราว์เซอร์ (ตัวอ่าน xlsx ขั้นต่ำในหน้า: unzip + sharedStrings + sheet1 · ไม่โหลด CDN · .csv ก็ได้) → ส่งขึ้นแค่ [{c,n,t4,z}] = เลขพัสดุ/ชื่อผู้รับ/เบอร์ 4 ตัวท้าย/ไปรษณีย์ (ไม่ส่งไฟล์ดิบ)
    ⚠️ ห้ามใช้ fetchJ: 403 = รหัสนี้ไม่ใช่เจ้าของ → แค่ซ่อนกล่อง ห้าม logout · โค้ดตัวอ่าน = tools/r103/xlsx103.mjs (เทสกับไฟล์จริงในเครื่อง) */
 let SF103={rows:null,bad:0,badAt:[],total:0,name:'',busy:false};
-async function sf103Unzip(buf){
-  const u8=new Uint8Array(buf), dv=new DataView(u8.buffer,u8.byteOffset,u8.byteLength), out={};
-  let eo=-1; for(let i=u8.length-22;i>=Math.max(0,u8.length-65557);i--) if(dv.getUint32(i,true)===0x06054b50){ eo=i; break; }
+/* 📦 cs19 (23 พ.ย.) · ไฟล์ขนส่ง 17 พ.ย. = 62 MB (sheet1.xml คลายแล้ว 525 MB · ทุกแถวมีเซลล์ว่างที่มีรูปแบบยาวถึงคอลัมน์ XDT · ข้อมูลจริงแค่ A–G 2,079 แถว) → เดิมติดเพดาน 15 MB อัปไม่ได้เลย
+   ตัวอ่านแบบสตรีม: อ่าน zip จากไฟล์ทีละช่วง (Blob.slice · ไม่โหลดทั้งไฟล์) → คลายทีละก้อน (DecompressionStream) → สแกน XML ทีละแถว เก็บแค่คอลัมน์ A–J แล้วกระโดดไป </row> (ไม่สร้างออบเจกต์ให้เซลล์ที่เหลือ) · หยุดที่ </sheetData>
+   เพดานใหม่ 200 MB · ปฏิเสธ/อ่านไม่ได้ = แสดง ชื่อไฟล์ + ขนาด MB + ชนิด + จำนวนไฟล์ที่ลากมา · PUT วันเดิม = worker k1061 เขียนทับ → ห้ามแบ่งส่ง (เกิน 8,000 แถว / 1.9 MB = แจ้งตัวเลข) */
+const SF19_MAX=200e6, SF19_COLS=10, SF19_ROWS=8000, SF19_BODY=1.9e6;
+async function sf103Unzip(blob){
+  const sz=blob.size, hd=new Uint8Array(await blob.slice(0,8).arrayBuffer());
+  if(hd[0]===0xD0&&hd[1]===0xCF&&hd[2]===0x11&&hd[3]===0xE0) throw new Error('xls_old');
+  const tl=Math.min(sz,65557), tb=new Uint8Array(await blob.slice(sz-tl).arrayBuffer()), tv=new DataView(tb.buffer);
+  let eo=-1; for(let i=tb.length-22;i>=0;i--) if(tv.getUint32(i,true)===0x06054b50){ eo=i; break; }
   if(eo<0) throw new Error('not_zip');
-  const n=dv.getUint16(eo+10,true); let p=dv.getUint32(eo+16,true);
+  const n=tv.getUint16(eo+10,true), cds=tv.getUint32(eo+12,true), cdo=tv.getUint32(eo+16,true), out={};
+  if(cdo===0xFFFFFFFF||cdo+cds>sz) throw new Error('bad_zip');
+  const u8=new Uint8Array(await blob.slice(cdo,cdo+cds).arrayBuffer()), dv=new DataView(u8.buffer); let p=0;
   for(let k=0;k<n;k++){
-    if(dv.getUint32(p,true)!==0x02014b50) throw new Error('bad_zip');
+    if(p+46>u8.length||dv.getUint32(p,true)!==0x02014b50) throw new Error('bad_zip');
     const meth=dv.getUint16(p+10,true), csz=dv.getUint32(p+20,true), fnl=dv.getUint16(p+28,true), exl=dv.getUint16(p+30,true), cml=dv.getUint16(p+32,true), lho=dv.getUint32(p+42,true);
     out[new TextDecoder().decode(u8.subarray(p+46,p+46+fnl))]={meth,csz,lho}; p+=46+fnl+exl+cml;
   }
-  const get=async(name)=>{ const e=out[name]; if(!e) return null; const lfn=dv.getUint16(e.lho+26,true), lex=dv.getUint16(e.lho+28,true), st=e.lho+30+lfn+lex, raw=u8.subarray(st,st+e.csz);
-    if(e.meth===0) return new TextDecoder().decode(raw); if(e.meth!==8) throw new Error('zip_method');
-    return await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text(); };
-  return {names:Object.keys(out),get};
+  const open=async(name,onBytes)=>{ const e=out[name]; if(!e) return null; const lh=new DataView(await blob.slice(e.lho,e.lho+30).arrayBuffer());
+    if(lh.getUint32(0,true)!==0x04034b50) throw new Error('bad_zip');
+    const st=e.lho+30+lh.getUint16(26,true)+lh.getUint16(28,true); let s=blob.slice(st,st+e.csz).stream();
+    if(onBytes) s=s.pipeThrough(new TransformStream({transform(c,ctl){ onBytes(c.byteLength); ctl.enqueue(c); }}));
+    if(e.meth===0) return s; if(e.meth!==8) throw new Error('zip_method');
+    return s.pipeThrough(new DecompressionStream('deflate-raw')); };
+  const get=async(name)=>{ const s=await open(name); return s?await new Response(s).text():null; };
+  return {names:Object.keys(out),get,open,csz:(name)=>out[name]?out[name].csz:0};
 }
 function sf103Xml(s){ return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(m,d)=>String.fromCharCode(+d)).replace(/&amp;/g,'&'); }
-async function sf103ReadXlsx(buf){
-  const z=await sf103Unzip(buf), ssx=(await z.get('xl/sharedStrings.xml'))||'', ss=[];
+async function sf103ReadXlsx(blob,prog){
+  const z=await sf103Unzip(blob), ssx=(await z.get('xl/sharedStrings.xml'))||'', ss=[];
   ssx.replace(/<si>([\s\S]*?)<\/si>/g,(m,si)=>{ let t=''; si.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(m2,x)=>{ t+=x; return ''; }); ss.push(sf103Xml(t)); return ''; });
-  let sh=await z.get('xl/worksheets/sheet1.xml');
-  if(sh==null){ const nm=z.names.filter(x=>/^xl\/worksheets\/sheet\d+\.xml$/.test(x)).sort()[0]; sh=nm?await z.get(nm):null; }
-  if(sh==null) throw new Error('no_sheet');
-  const rows=[];
-  sh.replace(/<row[^>]*>([\s\S]*?)<\/row>/g,(m,rx)=>{ const r=[];
-    rx.replace(/<c ([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g,(m2,at,inner)=>{ const ref=(at.match(/r="([A-Z]+)\d+"/)||[])[1]||''; let col=0; for(const ch of ref) col=col*26+(ch.charCodeAt(0)-64);
-      const t=(at.match(/t="(\w+)"/)||[])[1]||''; let v=inner?((inner.match(/<v>([\s\S]*?)<\/v>/)||[])[1]):undefined;
-      if(t==='inlineStr'&&inner){ v=''; inner.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(m3,x)=>{ v+=x; return ''; }); }
-      if(v===undefined) return ''; v=t==='s'?(ss[+v]||''):sf103Xml(v); r[(col||r.length+1)-1]=v; return ''; });
-    rows.push(r); return ''; });
+  let nm='xl/worksheets/sheet1.xml'; if(z.names.indexOf(nm)<0) nm=z.names.filter(x=>/^xl\/worksheets\/sheet\d+\.xml$/.test(x)).sort()[0];
+  if(!nm) throw new Error('no_sheet');
+  const tot=z.csz(nm)||1; let got=0, tp=0;
+  const rd=(await z.open(nm,(k)=>{ got+=k; })).getReader(), td=new TextDecoder();
+  const rows=[]; let buf='', p=0, st=0, r=null, lc=0, done=false;   // st 0 = นอกแถว · 1 = ในแถว (เก็บ A–J) · 2 = ข้ามถึง </row>
+  const more=async()=>{ if(done) return false; const x=await rd.read();
+    if(x.done){ done=true; buf=buf.slice(p)+td.decode(); } else buf=buf.slice(p)+td.decode(x.value,{stream:true}); p=0;
+    if(buf.length>32e6) throw new Error('cell_too_big');
+    if(prog&&Date.now()-tp>150){ tp=Date.now(); prog(Math.min(99,Math.floor(got*100/tot))); await new Promise(f=>setTimeout(f,0)); }
+    return true; };
+  for(;;){
+    if(st===2){ const i=buf.indexOf('</row>',p); if(i<0){ p=Math.max(p,buf.length-5); if(!(await more())) break; continue; } rows.push(r); st=0; p=i+6; continue; }
+    if(st===0){ const i=buf.indexOf('<row',p), e=buf.indexOf('</sheetData>',p);
+      if(e>=0&&(i<0||e<i)) break;
+      if(i<0){ p=Math.max(p,buf.length-12); if(!(await more())) break; continue; }
+      const g=buf.indexOf('>',i); if(g<0){ p=i; if(!(await more())) break; continue; }
+      const ch=buf[i+4]; if(ch!==' '&&ch!=='>'&&ch!=='/'&&ch!=='\t'&&ch!=='\n'&&ch!=='\r'){ p=i+4; continue; }
+      if(buf[g-1]==='/'){ rows.push([]); p=g+1; continue; }
+      r=[]; lc=0; st=1; p=g+1; continue; }
+    const i=buf.indexOf('<',p); if(i<0){ p=buf.length; if(!(await more())) break; continue; }
+    if(buf.length-i<7&&!done){ p=i; await more(); continue; }
+    if(buf.startsWith('</row>',i)){ rows.push(r); st=0; p=i+6; continue; }
+    const g=buf.indexOf('>',i); if(g<0){ p=i; if(!(await more())) break; continue; }
+    const ch=buf[i+2];
+    if(buf[i+1]!=='c'||(ch!==' '&&ch!=='>'&&ch!=='/'&&ch!=='\t'&&ch!=='\n'&&ch!=='\r')){ p=g+1; continue; }
+    const sc=buf[g-1]==='/', at=buf.slice(i+2,sc?g-1:g), ref=(at.match(/r="([A-Z]+)\d+"/)||[])[1]||''; let col=0; for(const c of ref) col=col*26+(c.charCodeAt(0)-64);
+    if(!col) col=lc+1; lc=col;
+    if(col>SF19_COLS){ st=2; p=g+1; continue; }
+    if(sc){ p=g+1; continue; }
+    const ce=buf.indexOf('</c>',g); if(ce<0){ p=i; if(!(await more())) break; continue; }
+    const inner=buf.slice(g+1,ce), t=(at.match(/t="(\w+)"/)||[])[1]||''; let v=(inner.match(/<v>([\s\S]*?)<\/v>/)||[])[1];
+    if(t==='inlineStr'){ v=''; inner.replace(/<t[^>]*>([\s\S]*?)<\/t>/g,(m3,x)=>{ v+=x; return ''; }); }
+    p=ce+4; if(v===undefined) continue; r[col-1]=t==='s'?(ss[+v]||''):sf103Xml(v);
+  }
+  try{ rd.cancel().catch(()=>{}); }catch(e){}
+  if(prog) prog(100);
   return rows;
 }
 function sf103Csv(t){ const rows=[]; let r=[], f='', q=false; t=String(t).replace(/^﻿/,'');
@@ -1457,23 +1498,34 @@ async function sfLoad(){
   $('sfdays').innerHTML=(hasY?'':'<div class="bd" style="margin:6px 0;">⚠️ ยังไม่มีไฟล์ของเมื่อวาน ('+esc(sf103Dmy(y))+') — อัปไฟล์ที่ขนส่งส่งมาวันนี้ได้เลย</div>')
     +(days.length?'<div class="mut" style="margin-top:6px;">📅 ไฟล์ที่อัปแล้ว (เก็บ 21 วันล่าสุด)</div>'+days.map(x=>'<div>'+esc(sf103Dmy(x.day))+' · <b>'+Number(x.n||0).toLocaleString('th-TH')+'</b> แถว'+(x.bad?' <span class="mut">(อ่านไม่ได้ '+Number(x.bad)+')</span>':'')+(x.t?' <span class="mut">· อัปเมื่อ '+esc(dmy(x.t)+' '+hhmm(x.t))+'</span>':'')+'</div>').join(''):'<div class="mut" style="margin-top:6px;">ยังไม่มีไฟล์ที่อัป</div>');
 }
-async function sfPick(file){
+function sf19Info(file,cnt){ const b=Number(file.size)||0; return 'ไฟล์: '+file.name+' · ขนาด '+(b/1e6).toFixed(1)+' MB ('+b.toLocaleString('th-TH')+' ไบต์) · ชนิด '+(file.type||'ไม่ระบุ')+' · ลากมา '+cnt+' ไฟล์'; }
+async function sfPick(file,o){
   if(!file||SF103.busy) return; SF103={rows:null,bad:0,badAt:[],total:0,name:file.name,busy:false}; $('sfres').innerHTML=''; $('sfsum').classList.add('hidden');
-  if(file.size>15e6){ $('sfres').innerHTML='<div class="bd">ไฟล์ใหญ่เกิน 15 MB — เช็คว่าเลือกไฟล์ขนส่งประจำวันถูกไฟล์</div>'; return; }
-  let rows=null; $('sfres').innerHTML='<div class="mut">กำลังอ่านไฟล์…</div>';
-  try{ if(/\.csv$/i.test(file.name)) rows=sf103Csv(await file.text()); else rows=await sf103ReadXlsx(await file.arrayBuffer()); }
-  catch(e){ $('sfres').innerHTML='<div class="bd">อ่านไฟล์ไม่ได้ ('+esc(e.message||e)+') — ใช้ไฟล์ .xlsx หรือ .csv ที่ขนส่งส่งมา</div>'; return; }
-  const p=sf103Parse(rows); if(p.err){ $('sfres').innerHTML='<div class="bd">'+esc(p.err)+'</div>'; return; }
+  const cnt=(o&&o.cnt)||1, multi=cnt>1?'<div class="bd">ลากมา '+cnt+' ไฟล์ — อัปได้ทีละไฟล์ · ใช้ไฟล์แรก: <b>'+esc(file.name)+'</b></div>':'';
+  const bad=(m)=>{ $('sfres').innerHTML=multi+'<div class="bd">'+m+'</div><div class="mut">'+esc(sf19Info(file,cnt))+' · แคปหน้าจอนี้ส่งให้เม้งได้</div>'; };
+  if(o&&o.dir) return bad('ที่ลากมาเป็นโฟลเดอร์ — เปิดโฟลเดอร์แล้วลากไฟล์ .xlsx มาไฟล์เดียว');
+  if(file.size>SF19_MAX) return bad('ไฟล์ใหญ่เกิน 200 MB — เช็คว่าเลือกไฟล์ขนส่งประจำวันถูกไฟล์');
+  let rows=null; SF103.busy=true; $('sfres').innerHTML=multi+'<div class="mut">กำลังอ่าน… <span id="sfprog">0</span>%</div>';
+  try{ if(/\.csv$/i.test(file.name)) rows=sf103Csv(await file.text()); else rows=await sf103ReadXlsx(file,(pc)=>{ const e=$('sfprog'); if(e) e.textContent=pc; }); }
+  catch(e){ SF103.busy=false; const m=String((e&&e.message)||e), nm=String((e&&e.name)||'');
+    if(m==='xls_old'||(m==='not_zip'&&/\.xls$/i.test(file.name))) return bad('เป็นไฟล์ Excel แบบเก่า (.xls) — เปิดใน Excel แล้ว บันทึกเป็น (Save As) .xlsx แล้วอัปใหม่');
+    if(/NotFound|NotReadable/.test(nm)) return bad('อ่านไฟล์ไม่ได้ ('+esc(nm)+') — อาจเป็นโฟลเดอร์ หรือไฟล์ยังโหลดไม่เสร็จ (iCloud/มือถือ) · เปิดไฟล์ในเครื่องก่อนแล้วลากใหม่');
+    return bad('อ่านไฟล์ไม่ได้ ('+esc(m)+') — ใช้ไฟล์ .xlsx หรือ .csv ที่ขนส่งส่งมา'); }
+  SF103.busy=false;
+  const p=sf103Parse(rows); if(p.err) return bad(esc(p.err));
   SF103.rows=p.rows; SF103.total=p.total; SF103.bad=p.bad; SF103.badAt=p.badAt;
   $('sfday').value=sf103GuessDay(file.name); $('sffname').textContent=file.name;
   $('sfcount').innerHTML='อ่านได้ <b>'+p.rows.length.toLocaleString('th-TH')+'</b> แถว'+(p.bad?' · <span class="bd">อ่านไม่ได้ '+p.bad+' แถว (แถวที่ '+p.badAt.slice(0,8).join(', ')+(p.bad>8?' …':'')+')</span>':' · อ่านไม่ได้ 0 แถว');
-  $('sfsend').disabled=!p.rows.length; $('sfsum').classList.remove('hidden'); $('sfres').innerHTML='';
+  $('sfsend').disabled=!p.rows.length; $('sfsum').classList.remove('hidden');
+  $('sfres').innerHTML=multi+(file.size>5e6?'<div class="mut">ℹ️ ไฟล์นี้ '+(file.size/1e6).toFixed(1)+' MB (ปกติ ~0.2 MB) — ใน Excel มีเซลล์ว่างที่มีรูปแบบติดมาเยอะ · อ่านได้ตามปกติ</div>':'');
 }
 async function sfSend(){
   if(!SF103.rows||!SF103.rows.length||SF103.busy) return;
   const day=String($('sfday').value||'').replace(/-/g,''); if(!/^\d{8}$/.test(day)){ toast('ใส่วันที่ของไฟล์ก่อนค่ะ',1); return; }
+  const body=JSON.stringify(SF103.rows);   /* cs19: worker k1061 เขียนทับทั้งวัน (ไม่ต่อท้าย) → แบ่งส่งไม่ได้ · เกินเพดาน = บอกตัวเลข ไม่ส่ง */
+  if(SF103.rows.length>SF19_ROWS||body.length>SF19_BODY){ $('sfres').innerHTML='<div class="bd">ส่งไม่ได้: ไฟล์นี้มี '+SF103.rows.length.toLocaleString('th-TH')+' แถว / ข้อมูลที่จะส่ง '+(body.length/1e6).toFixed(2)+' MB — ระบบรับได้สูงสุด 8,000 แถว / 1.9 MB ต่อวัน (อัปซ้ำวันเดิม = เขียนทับ จึงแบ่งส่งไม่ได้) · แคปหน้าจอนี้ส่งให้เม้ง</div>'; return; }
   SF103.busy=true; $('sfsend').disabled=true; $('sfsend').textContent='กำลังอัป…';
-  try{ const r=await sf103Fetch('PUT','/ctl/shipfile?day='+day,JSON.stringify(SF103.rows));
+  try{ const r=await sf103Fetch('PUT','/ctl/shipfile?day='+day,body);
     if(r.ok&&r.j&&r.j.ok){ $('sfres').innerHTML='<div class="okk">✅ อัปแล้ว '+Number(r.j.n).toLocaleString('th-TH')+' แถว ของวัน '+esc(sf103Dmy(r.j.day))+(r.j.multi?' <span class="mut">(คนเดียวกันหลายกล่อง '+Number(r.j.multi)+' ราย = เอวาไม่ใช้เลขจากไฟล์ให้รายนั้น)</span>':'')+'</div>'; $('sfsum').classList.add('hidden'); SF103.rows=null; toast('อัปไฟล์ขนส่งแล้ว'); sfLoad(); }
     else if(r.st===413) $('sfres').innerHTML='<div class="bd">'+esc((r.j&&r.j.msg)||'ไฟล์ใหญ่เกิน')+'</div>';
     else if(r.st===401||r.st===403) $('sfres').innerHTML='<div class="bd">รหัสนี้อัปไฟล์ขนส่งไม่ได้ (เฉพาะรหัสเจ้าของ)</div>';
@@ -1481,7 +1533,10 @@ async function sfSend(){
   }catch(e){ $('sfres').innerHTML='<div class="bd">อัปไม่สำเร็จ (เน็ต/หมดเวลา) ลองใหม่อีกครั้ง</div>'; }
   SF103.busy=false; $('sfsend').disabled=!(SF103.rows&&SF103.rows.length); $('sfsend').textContent='✅ ยืนยันอัป';
 }
-function sfDrop(ev){ ev.preventDefault(); $('sfdrop').classList.remove('on'); const f=ev.dataTransfer&&ev.dataTransfer.files&&ev.dataTransfer.files[0]; if(f) sfPick(f); }
+function sfDrop(ev){ ev.preventDefault(); $('sfdrop').classList.remove('on'); const dt=ev.dataTransfer, fs=(dt&&dt.files)||[]; let dir=false;
+  try{ const it=dt&&dt.items&&dt.items[0], en=it&&it.webkitGetAsEntry&&it.webkitGetAsEntry(); dir=!!(en&&en.isDirectory); }catch(e){}
+  if(!fs.length){ $('sfres').innerHTML='<div class="bd">ไม่ได้รับไฟล์จากการลาก — ใช้ปุ่ม 📂 กดเลือกไฟล์ แทน</div>'; return; }
+  sfPick(fs[0],{cnt:fs.length,dir}); }
 async function loadSettings(){ loadNotice(); loadPromo(); loadPay(); loadHealth(); if(typeof sfLoad==='function') sfLoad(); }   /* 📦 cs14: + กล่องไฟล์ขนส่ง (เจ้าของ) */
 function setScope(s){ SCOPE=s; $('sc1').classList.toggle('on',s==='one'); $('sc2').classList.toggle('on',s==='all'); renderHeader(); $('noticeres').innerHTML=''; loadNotice(); }
 /* 📣 k588: GET คืน {ประกาศ(ที่ใช้อยู่), ร้านนี้:{text,until}, ทุกร้าน:{text,until}, ที่ใช้อยู่} · หลังบ้านเก่า/worker เก่า = string อย่างเดียว */
@@ -1591,6 +1646,7 @@ async function loadHealth(){
 /* POST /seed/stockmap + /seed/skumap (key เท่านั้น · สต็อกใช้ร่วมทุกร้าน) */
 
 /* ── วงจรชีวิต ── */
+/* 💸 cs18 · รอบ 142: pulse 3 → 10 วิ · ตาข่ายร้านอื่น 60 → 120 วิ (ร้านที่เปิดยัง 60 วิ) — ค่า KV ต่อแท็บลด ~70% · งานใหม่ขึ้นจอช้าลงไม่เกิน ~7 วิ */
 /* ── 📡 k723 · งานรอบ 34 ข้อ 2: ถาม /ctl/pulse (worker k844) ทุก 3 วิ → ดึง /ctl/board เฉพาะร้านที่ป้ายขยับ ──
    ร้านที่เปิด = วาดใหม่ทันที · ร้านอื่น = อัปเดตตัวเลข badge · แชทร้านที่เปิด (c) ขยับ = ดึงได้ไม่ถี่กว่า 5 วิ (เท่า k722)
    ป้ายขยับแต่กระดานยังตอบ same (KV ตามไม่ทัน) → ถามซ้ำอีก ≤2 ครั้ง ห่าง 5 วิ
@@ -1612,7 +1668,7 @@ function pulseOff723(status){
   _probe723=setTimeout(()=>{ _probe723=null; pulse723(); }, status===404?300000:60000);
 }
 async function boardOne723(id){   // ร้านอื่น: ถามแบบเดียวกับ refreshAllCounts (since/h) → 'new' | 'same' | 'err'
-  try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id));
+  try{ const c0=CACHE[id]; const sq=(c0&&c0.h)?'?since='+enc(c0.v)+'&h='+enc(c0.h):''; const r=await fetchJ(qs('/ctl/board'+sq,id)+fr142());
     if(!r.ok) return 'err'; if(r.d.same) return 'same';
     CACHE[id]={queue:r.d.queue||[],orders:r.d.orders||[],chats:r.d.chats||[],on:r.d.on!==false,muted:r.d.muted||0,notice:r.d['ประกาศ']||'',t:Date.now(),v:r.d.v,h:r.d.h}; return 'new';
   }catch(e){ return 'err'; }
@@ -1641,7 +1697,7 @@ async function pulse723(){
 function stopPoll(){ if(_poll) clearInterval(_poll); if(_pollAll) clearInterval(_pollAll); if(_pulse723) clearInterval(_pulse723); _poll=_pollAll=_pulse723=null; }
 function startPoll(){ stopPoll();
   if(_pulseMode723===-1){ _poll=setInterval(()=>refresh(false),5000); _pollAll=setInterval(refreshAllCounts,20000); }   /* k722 เดิม (worker เก่า / pulse ล้ม) */   // ⚡ k712: 15 → 5 วิ · k722: 90 → 20 วิ
-  else{ _poll=setInterval(()=>refresh(false),60000); _pollAll=setInterval(refreshAllCounts,60000); _pulse723=setInterval(pulse723,3000); }   /* 📡 k723: pulse 3 วิ + ตาข่ายดึงเต็ม 60/60 วิ */
+  else{ _poll=setInterval(()=>refresh(false),60000); _pollAll=setInterval(refreshAllCounts,120000); _pulse723=setInterval(pulse723,10000); }   /* 📡 k723: pulse 3 วิ + ตาข่ายดึงเต็ม 60/60 วิ */
 }
 async function init(){
   if(!KEY){ $('app').classList.add('hidden'); $('keyscreen').classList.remove('hidden'); $('navbar').style.display='none'; return; }
