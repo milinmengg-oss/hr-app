@@ -386,6 +386,7 @@ details.tech pre{background:#0f1115;border:1px solid var(--line);border-radius:8
   <!-- ═══ แท็บ 3: ตั้งค่า ═══ -->
   <section id="p3" class="hidden">
     <!-- 📦 cs14 · งานรอบ 103: อัปไฟล์ขนส่งประจำวัน (เห็นเฉพาะรหัสเจ้าของ · GET /ctl/shipfile ไม่ผ่าน = ซ่อน) -->
+    <div class="set hidden" id="orbox"><h4>💰 เงิน OpenRouter คงเหลือ <span class="pill" id="orpill">—</span></h4></div>
     <div class="set hidden" id="sfbox">
       <h4>📦 อัปไฟล์ขนส่งประจำวัน <span class="pill" id="sfpill">—</span></h4>
       <p>ไฟล์ที่ขนส่งส่งมาทุกวัน (เช่น ZERO_10-11-69.xlsx) · เอวาใช้เลขพัสดุในไฟล์แทนเลขเดิม เมื่อขนส่งเปลี่ยนเลขใหม่ (เฉพาะออเดอร์ที่ ชื่อผู้รับ + เบอร์ 4 ตัวท้าย + ไปรษณีย์ ตรงแถวเดียว) · อ่านไฟล์ในเครื่องนี้ ส่งขึ้นแค่ 4 ช่องนี้ · ระบบเก็บ 21 วัน</p>
@@ -1417,6 +1418,9 @@ function openLineChat(){
 }
 
 /* ── แท็บ ตั้งค่า ── */
+/* 💰 cs20 (28 พ.ย.) · ยอด OpenRouter คงเหลือ (worker k1981 GET /ctl/orbal · เจ้าของเท่านั้น · ไม่ผ่าน = ซ่อน) */
+async function orbal198(){ try{ const r=await fetch(W+'/ctl/orbal?key='+enc(KEY)); if(!r.ok) return; const d=await r.json(); if(!d||!d.ok||typeof d.left!=='number') return;
+  $('orpill').textContent=d.left.toFixed(2)+' USD'; $('orpill').className='pill'+(d.left<15?' warn':''); $('orbox').classList.remove('hidden'); }catch(e){} }
 /* 📦 cs14 · งานรอบ 103 (worker k1061 · PUT/GET /ctl/shipfile · เจ้าของเท่านั้น): อัปไฟล์ขนส่งประจำวัน (ZERO_dd-mm-yy.xlsx)
    อ่านไฟล์ในเบราว์เซอร์ (ตัวอ่าน xlsx ขั้นต่ำในหน้า: unzip + sharedStrings + sheet1 · ไม่โหลด CDN · .csv ก็ได้) → ส่งขึ้นแค่ [{c,n,t4,z}] = เลขพัสดุ/ชื่อผู้รับ/เบอร์ 4 ตัวท้าย/ไปรษณีย์ (ไม่ส่งไฟล์ดิบ)
    ⚠️ ห้ามใช้ fetchJ: 403 = รหัสนี้ไม่ใช่เจ้าของ → แค่ซ่อนกล่อง ห้าม logout · โค้ดตัวอ่าน = tools/r103/xlsx103.mjs (เทสกับไฟล์จริงในเครื่อง) */
@@ -1530,6 +1534,7 @@ async function sfLoad(){
   const on=!!(r&&r.ok&&r.j&&Array.isArray(r.j.days)); box.classList.toggle('hidden',!on); if(!on) return;
   const days=r.j.days.slice(0,21), y=thaiDay(Date.now()-864e5).replace(/-/g,''), hasY=days.some(x=>x.day===y);
   $('sfpill').textContent=days.length?('มี '+days.length+' วัน'):'ยังไม่มีไฟล์'; $('sfpill').className='pill'+(hasY?'':' warn');
+  orbal198();
   $('sfdays').innerHTML=(hasY?'':'<div class="bd" style="margin:6px 0;">⚠️ ยังไม่มีไฟล์ของเมื่อวาน ('+esc(sf103Dmy(y))+') — อัปไฟล์ที่ขนส่งส่งมาวันนี้ได้เลย</div>')
     +(days.length?'<div class="mut" style="margin-top:6px;">📅 ไฟล์ที่อัปแล้ว (เก็บ 21 วันล่าสุด)</div>'+days.map(x=>'<div>'+esc(sf103Dmy(x.day))+' · <b>'+Number(x.n||0).toLocaleString('th-TH')+'</b> แถว'+(x.bad?' <span class="mut">(อ่านไม่ได้ '+Number(x.bad)+')</span>':'')+(x.t?' <span class="mut">· อัปเมื่อ '+esc(dmy(x.t)+' '+hhmm(x.t))+'</span>':'')+'</div>').join(''):'<div class="mut" style="margin-top:6px;">ยังไม่มีไฟล์ที่อัป</div>');
 }
